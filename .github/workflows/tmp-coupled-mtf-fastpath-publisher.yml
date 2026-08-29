@@ -1,0 +1,101 @@
+name: TEMP coupled MTF fast-path publisher
+
+on:
+  push:
+    branches:
+      - agent/tmp-coupled-mtf-fastpath-publisher-20260829
+
+permissions:
+  contents: write
+  packages: read
+
+jobs:
+  validate-and-publish:
+    runs-on: ubuntu-24.04
+    container:
+      image: ghcr.io/janhubicka/color-screen-ci:ubuntu-24.04
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    env:
+      LC_ALL: C.UTF-8
+      LANG: C.UTF-8
+      CC: "ccache gcc"
+      CXX: "ccache g++"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Configure optimized build
+        shell: bash
+        run: |
+          set -euxo pipefail
+          CXXFLAGS="-Ofast -flto=auto" CFLAGS="$CXXFLAGS" ./configure --enable-qtgui
+      - name: Build baseline
+        shell: bash
+        run: |
+          set -euxo pipefail
+          make -j"$(nproc)"
+          make -C src/libcolorscreen -j"$(nproc)" focus-analysis-unittests
+      - name: Benchmark baseline coupled focus regression
+        shell: bash
+        run: |
+          set -euxo pipefail
+          /usr/bin/time -f 'BASELINE_SECONDS=%e' \
+            ./src/libcolorscreen/focus-analysis-unittests 2>&1 | tee /tmp/baseline-focus.log
+      - name: Apply exact coupled fast path
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cp agent/apply-coupled-mtf-fastpath.py /tmp/apply-coupled-mtf-fastpath.py
+          python3 /tmp/apply-coupled-mtf-fastpath.py
+          git diff --check
+          git diff --stat
+      - name: Build optimized code
+        shell: bash
+        run: |
+          set -euxo pipefail
+          make -C src/libcolorscreen -j"$(nproc)" focus-analysis-unittests unittests
+      - name: Benchmark optimized coupled focus regression
+        shell: bash
+        run: |
+          set -euxo pipefail
+          /usr/bin/time -f 'OPTIMIZED_SECONDS=%e' \
+            ./src/libcolorscreen/focus-analysis-unittests 2>&1 | tee /tmp/optimized-focus.log
+      - name: Run low-level transfer regressions
+        shell: bash
+        run: |
+          set -euxo pipefail
+          ./src/libcolorscreen/unittests
+      - name: Publish clean source branch
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git config user.name "OpenAI Agent"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git checkout -B agent/focus-coupled-mtf-fastpath origin/main
+          python3 /tmp/apply-coupled-mtf-fastpath.py
+          git diff --check
+          expected="$(cat <<'EOF' | sort
+          src/libcolorscreen/finetune.C
+          src/libcolorscreen/focus-analysis-unittests.C
+          src/libcolorscreen/mtf.C
+          src/libcolorscreen/mtf.h
+          src/libcolorscreen/screen.C
+          src/libcolorscreen/unittests.C
+          EOF
+          )"
+          actual="$(git diff --name-only | sort)"
+          printf 'Expected changed files:\n%s\nActual changed files:\n%s\n' "$expected" "$actual"
+          test "$actual" = "$expected"
+          git add \
+            src/libcolorscreen/finetune.C \
+            src/libcolorscreen/focus-analysis-unittests.C \
+            src/libcolorscreen/mtf.C \
+            src/libcolorscreen/mtf.h \
+            src/libcolorscreen/screen.C \
+            src/libcolorscreen/unittests.C
+          git commit -m "finetune: reuse physical transfer for coupled MTF fits" \
+            -m "Factor residual Gaussian sigma out of the prepared physical-transfer cache so fixed-source sigma and sigma+defocus fits can reuse the source spectra and direct periodic OTF path. Preserve the exact signed physical model and broad-halo semantics while avoiding repeated PSF construction and kernel FFTs at simplex vertices. Extend transfer-equivalence and coupled-focus profiling regressions."
+          git push --force-with-lease origin HEAD:agent/focus-coupled-mtf-fastpath
