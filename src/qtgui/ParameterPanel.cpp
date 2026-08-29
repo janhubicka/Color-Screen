@@ -314,8 +314,8 @@ ParameterPanel::~ParameterPanel() = default;
 /** Override the generic dynamic dock host for specialized panel owners. */
 void ParameterPanel::setDetachableHost(QMainWindow *host) {
   m_detachableHost = host;
-  for (DetachableSection *section : findChildren<DetachableSection *>())
-    section->setHost(host);
+  for (const auto &updateHost : m_detachableHostUpdaters)
+    updateHost(host);
 }
 
 void ParameterPanel::updateUI() {
@@ -1220,8 +1220,15 @@ QWidget *
 ParameterPanel::createDetachableSection(
     const QString &title, QWidget *content,
     std::function<void()> beforeDetach) {
-  return new DetachableSection(title, content, std::move(beforeDetach),
-                               m_detachableHost.data());
+  auto *section = new DetachableSection(title, content, std::move(beforeDetach),
+                                        m_detachableHost.data(), this);
+  QPointer<DetachableSection> guardedSection(section);
+  m_detachableHostUpdaters.push_back(
+      [guardedSection](QMainWindow *host) {
+        if (guardedSection)
+          guardedSection->setHost(host);
+      });
+  return section;
 }
 
 
