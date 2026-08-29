@@ -2,7 +2,8 @@ from pathlib import Path
 
 main = Path('src/qtgui/main.cpp')
 text = main.read_text()
-old = '''        // Reproduce the MTF-detach failure with the source and specialized
+if 'QPointer<QWidget> guardedMtfSection(mtfSection);' not in text:
+    old = '''        // Reproduce the MTF-detach failure with the source and specialized
         // reference visible as MDI tiles.  The reference owns its Sharpness
         // panel, so the detached chart must be adopted by a dock belonging to
         // that view rather than disappearing from the detachable section.
@@ -65,7 +66,7 @@ old = '''        // Reproduce the MTF-detach failure with the source and special
           return;
         }
 '''
-new = '''        // Reproduce reference-panel detachment while source and reference are
+    new = '''        // Reproduce reference-panel detachment while source and reference are
         // visible as MDI tiles.  The section must use the actual top-level
         // presentation host, exactly like every other ParameterPanel section.
         workspace->tileDocuments();
@@ -150,23 +151,21 @@ new = '''        // Reproduce reference-panel detachment while source and refere
           return;
         }
 '''
-if old not in text:
-    raise SystemExit('reference MTF smoke block not found')
-main.write_text(text.replace(old, new, 1))
+    if old not in text:
+        raise SystemExit('reference MTF smoke block not found')
+    main.write_text(text.replace(old, new, 1))
 
 workflow = Path('.github/workflows/build-ubuntu.yml')
 text = workflow.read_text()
-old = '''          --smoke-test 30000 --smoke-test-expect-windows 2 \\
+if '--smoke-test 60000 --smoke-test-expect-windows 2' not in text:
+    old = '''          --smoke-test 30000 --smoke-test-expect-windows 2 \\
           --smoke-test-tile-activation-stable --smoke-test-menu-order \\
           --smoke-test-new-view --smoke-test-slanted-reference \\
 '''
-new = '''          # ARM64 ASan is substantially slower than the ordinary GUI build.  The
-          # combined New View + reference smoke is intentionally comprehensive,
-          # so give it enough time to finish instead of racing the shutdown timer.
-          --smoke-test 60000 --smoke-test-expect-windows 2 \\
+    new = '''          --smoke-test 60000 --smoke-test-expect-windows 2 \\
           --smoke-test-tile-activation-stable --smoke-test-menu-order \\
           --smoke-test-new-view --smoke-test-slanted-reference \\
 '''
-if old not in text:
-    raise SystemExit('Ubuntu checking smoke timeout block not found')
-workflow.write_text(text.replace(old, new, 1))
+    if old not in text:
+        raise SystemExit('Ubuntu checking smoke timeout block not found')
+    workflow.write_text(text.replace(old, new, 1))
