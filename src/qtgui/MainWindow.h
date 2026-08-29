@@ -207,9 +207,18 @@ public:
   /** Return the document's primary image view. */
   ImageWidget *primaryImageWidget() const { return m_imageWidget; }
 
-  /** Return the transient per-document progress controls shown while this
-      document is the active workspace document. */
+  /** Return this document's transient progress presentation. Attached
+      workspaces host it globally regardless of the selected tab. */
   QWidget *workspaceStatusWidget() const { return m_progressContainer; }
+
+  /** Remove/restore transient progress from this document's private bar. */
+  QWidget *takeWorkspaceStatusWidget();
+  void restoreWorkspaceStatusWidget();
+
+  /** Return whether transient progress has passed the display delay. */
+  bool hasVisibleTransientProgress() const {
+    return m_transientProgressVisible;
+  }
 
   /** Return this document's persistent user-visible progress rows.
 
@@ -260,6 +269,8 @@ signals:
   void documentStateChanged();
   /** Emitted when this document gains or loses dedicated progress rows. */
   void userVisibleProgressVisibilityChanged(bool visible);
+  /** Emitted when delayed transient progress appears or disappears. */
+  void transientProgressVisibilityChanged(bool visible);
 
 private slots:
   void onZoomIn();
@@ -591,15 +602,13 @@ private:
   QVBoxLayout *m_userVisibleProgressLayout = nullptr;
   QDockWidget *m_userVisibleProgressDock = nullptr;
   QWidget *m_transientProgressRow = nullptr;
+  bool m_transientProgressVisible = false;
 
   // Progress switcher UI (for multiple transient progresses)
   QLabel *m_progressCountLabel;
   QPushButton *m_prevProgressButton;
   QPushButton *m_nextProgressButton;
 
-  QDockWidget *m_sharpnessFinetuneImagesDock = nullptr;
-  AdaptiveSharpeningChart *m_adaptiveSharpeningChart = nullptr;
-  QDockWidget *m_adaptiveSharpeningDock = nullptr;
 
   QTimer *m_progressTimer;
   QTimer *m_recoveryTimer;  // Auto-save timer for crash recovery
@@ -635,6 +644,9 @@ private:
   /** Return focus from a disappearing long-task row to an image canvas. */
   void releaseUserVisibleProgressFocus(QWidget *row);
 
+  /** Set delayed transient visibility and notify the workspace. */
+  void setTransientProgressVisible(bool visible);
+
   /** Synchronize visibility of the outer progress container. */
   void updateProgressContainerVisibility();
 
@@ -663,24 +675,7 @@ private:
   std::vector<ParameterPanel *> m_panels;
 
   // Docks
-  QDockWidget *m_mtfDock;
-  QDockWidget *m_dotSpreadDock;
-  QDockWidget *m_spectraDock;
-  QDockWidget *m_tilesDock;
-  QDockWidget *m_colorTilesDock;
-  QDockWidget *m_correctedColorTilesDock;
-  QDockWidget *m_screenPreviewDock;
-  QDockWidget *m_deformationDock;
-  QDockWidget *m_lensDock;
-  QDockWidget *m_perspectiveDock;
-  QDockWidget *m_nonlinearDock;
-  QDockWidget *m_backlightDock;
   BacklightChartWidget *m_backlightChart;
-  QDockWidget *m_finetuneImagesDock; // Finetune diagnostic images dock (Geometry)
-  QDockWidget *m_gamutDock; // Gamut visualization dock
-  QDockWidget *m_hdCurveDock; // Added
-  QDockWidget *m_toneCurveDock; // Added
-  QDockWidget *m_correctedGamutDock; // Corrected gamut visualization dock
 
   // Current parameters file path
   QString m_currentImageFile;

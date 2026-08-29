@@ -46,88 +46,6 @@ QIcon viewIcon(const char *resource) {
   return QIcon(QString::fromLatin1(resource));
 }
 
-/** Run CALLBACK when a floating reference-view chart dock is closed. */
-class ReferenceDockCloseEventFilter final : public QObject {
-public:
-  ReferenceDockCloseEventFilter(QObject *parent, std::function<void()> callback)
-      : QObject(parent), m_callback(std::move(callback)) {}
-
-protected:
-  bool eventFilter(QObject *object, QEvent *event) override {
-    if (event && event->type() == QEvent::Close && m_callback)
-      m_callback();
-    return QObject::eventFilter(object, event);
-  }
-
-private:
-  std::function<void()> m_callback;
-};
-
-/** Move WIDGET into a floating DOCK using the standard resizable wrapper. */
-void detachReferenceWidget(QDockWidget *dock, QWidget *widget) {
-  if (!dock || !widget || dock->widget())
-    return;
-
-  auto *wrapper = new QFrame();
-  wrapper->setObjectName(QStringLiteral("DetachedReferenceWrapper"));
-  wrapper->setFrameStyle(QFrame::Box | QFrame::Plain);
-  wrapper->setLineWidth(1);
-  wrapper->setStyleSheet(
-      QStringLiteral("QFrame#DetachedReferenceWrapper { border: 1px solid #555; "
-                     "background: Palette(Window); }"));
-
-  auto *outerLayout = new QVBoxLayout(wrapper);
-  outerLayout->setContentsMargins(1, 1, 1, 1);
-  outerLayout->setSpacing(0);
-
-  auto *container = new QWidget(wrapper);
-  auto *gridLayout = new QGridLayout(container);
-  gridLayout->setContentsMargins(0, 0, 0, 0);
-  gridLayout->setSpacing(0);
-  gridLayout->addWidget(widget, 0, 0);
-  gridLayout->addWidget(new QSizeGrip(container), 0, 0,
-                        Qt::AlignRight | Qt::AlignBottom);
-  outerLayout->addWidget(container);
-
-  dock->setWidget(wrapper);
-  widget->show();
-  dock->setFloating(true);
-  dock->show();
-  if (widget->sizeHint().isValid()) {
-    const QSize size = widget->sizeHint();
-    dock->resize(size.width() + 4, size.height() + 4);
-  }
-}
-
-/** Reattach the non-grip widget currently hosted by DOCK through REATTACH. */
-void reattachReferenceWidget(
-    QDockWidget *dock, const std::function<void(QWidget *)> &reattach) {
-  if (!dock || !dock->widget())
-    return;
-
-  QWidget *wrapper = dock->widget();
-  QWidget *originalWidget = nullptr;
-  if (wrapper->layout() && wrapper->layout()->count() > 0) {
-    QLayoutItem *containerItem = wrapper->layout()->itemAt(0);
-    QWidget *container = containerItem ? containerItem->widget() : nullptr;
-    if (container && container->layout()) {
-      QLayout *layout = container->layout();
-      for (int i = 0; i < layout->count(); ++i) {
-        QWidget *child = layout->itemAt(i)->widget();
-        if (child && !qobject_cast<QSizeGrip *>(child)) {
-          originalWidget = child;
-          break;
-        }
-      }
-    }
-  }
-
-  if (originalWidget && reattach)
-    reattach(originalWidget);
-  dock->setWidget(nullptr);
-  wrapper->deleteLater();
-}
-
 } // namespace
 
 /** Return the one status bar belonging to the current top-level window. */
@@ -230,7 +148,6 @@ ImageViewWindow::~ImageViewWindow() {
     m_referenceLoadCondition.wait(
         locker, [this]() { return !m_referenceWorkerActive; });
   }
-  restoreReferenceChartDocks();
   releaseDocumentInspector();
 }
 
@@ -504,7 +421,6 @@ void ImageViewWindow::setupReferenceInspector() {
           });
   connect(m_sharpnessPanel, &SharpnessPanel::measureMtfRequested, this,
           &ImageViewWindow::onMeasureMtfRequested);
-  setupReferenceChartDocks();
 
   splitter->setStretchFactor(0, 0);
   splitter->setStretchFactor(1, 1);
@@ -522,79 +438,7 @@ void ImageViewWindow::setupReferenceInspector() {
 }
 
 /** Create floating diagnostic docks owned by this specialized reference view. */
-void ImageViewWindow::setupReferenceChartDocks() {
-  if (!m_slantedEdgeReference || !m_sharpnessPanel)
-    return;
-
-  auto createDock = [this](const QString &title, const QString &objectName,
-                           Qt::DockWidgetArea area) {
-    auto *dock = new QDockWidget(title, this);
-    dock->setObjectName(objectName);
-    dock->setVisible(false);
-    addDockWidget(area, dock);
-    return dock;
-  };
-
-  m_referenceMtfDock =
-      createDock(tr("MTF Chart"), QStringLiteral("SlantedEdgeMTFChartDock"),
-                 Qt::BottomDockWidgetArea);
-  m_referenceDotSpreadDock = createDock(
-      tr("Dot Spread Function"), QStringLiteral("SlantedEdgeDotSpreadDock"),
-      Qt::BottomDockWidgetArea);
-  m_referenceFinetuneDock = createDock(
-      tr("Finetune Diagnostic Images"),
-      QStringLiteral("SlantedEdgeFinetuneImagesDock"),
-      Qt::RightDockWidgetArea);
-  m_referenceAdaptiveDock = createDock(
-      tr("Adaptive Sharpening"), QStringLiteral("SlantedEdgeAdaptiveDock"),
-      Qt::BottomDockWidgetArea);
-
-  auto setupDock = [this](QDockWidget *dock, auto detachSignal,
-                          auto reattachMethod) {
-    connect(m_sharpnessPanel, detachSignal, this,
-            [dock](QWidget *widget) { detachReferenceWidget(dock, widget); });
-    dock->installEventFilter(new ReferenceDockCloseEventFilter(
-        dock, [this, dock, reattachMethod]() {
-          if (!m_sharpnessPanel)
-            return;
-          reattachReferenceWidget(dock, [this, reattachMethod](QWidget *widget) {
-            (m_sharpnessPanel->*reattachMethod)(widget);
-          });
-        }));
-  };
-
-  setupDock(m_referenceMtfDock, &SharpnessPanel::detachMTFChartRequested,
-            &SharpnessPanel::reattachMTFChart);
-  setupDock(m_referenceDotSpreadDock,
-            &SharpnessPanel::detachDotSpreadRequested,
-            &SharpnessPanel::reattachDotSpread);
-  setupDock(m_referenceFinetuneDock,
-            &SharpnessPanel::detachFinetuneImagesRequested,
-            &SharpnessPanel::reattachFinetuneImages);
-  setupDock(m_referenceAdaptiveDock,
-            &SharpnessPanel::detachAdaptiveChartRequested,
-            &SharpnessPanel::reattachAdaptiveChart);
-}
-
 /** Return any floating reference diagnostics to the Sharpness panel. */
-void ImageViewWindow::restoreReferenceChartDocks() {
-  if (!m_sharpnessPanel)
-    return;
-
-  reattachReferenceWidget(m_referenceMtfDock, [this](QWidget *widget) {
-    m_sharpnessPanel->reattachMTFChart(widget);
-  });
-  reattachReferenceWidget(m_referenceDotSpreadDock, [this](QWidget *widget) {
-    m_sharpnessPanel->reattachDotSpread(widget);
-  });
-  reattachReferenceWidget(m_referenceFinetuneDock, [this](QWidget *widget) {
-    m_sharpnessPanel->reattachFinetuneImages(widget);
-  });
-  reattachReferenceWidget(m_referenceAdaptiveDock, [this](QWidget *widget) {
-    m_sharpnessPanel->reattachAdaptiveChart(widget);
-  });
-}
-
 /** Load the reference scan asynchronously without touching document filenames. */
 void ImageViewWindow::loadReferenceImage(const QString &fileName) {
   if (!m_slantedEdgeReference || fileName.isEmpty() || m_referenceLoadPending)

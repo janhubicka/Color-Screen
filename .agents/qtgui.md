@@ -22,8 +22,8 @@ background work and cancellation state.
 ### Key Components
 
 - **`ColorScreenApplication`**: The application-level document manager. It creates and tracks `MainWindow` instances, routes open requests, manages tab/detached presentation, cycles between documents, and restores per-document crash-recovery sessions.
-- **`WorkspaceWindow`**: The primary top-level application shell. Its central `QMdiArea` provides tabbed and subwindow views, while the shell temporarily presents the active document's menu bar, toolbar, and inspector. It owns presentation state only, never image-processing state.
-- **`MainWindow`**: One complete image document. It owns the scan, parameters, undo stack, image/navigation widgets, panels, task queues, workers, progress entries, detached docks, and a unique recovery directory. Mutable document state must never be shared between different `MainWindow` instances.
+- **`WorkspaceWindow`**: The primary top-level application shell. Its central `QMdiArea` provides tabbed and subwindow views, while the shell temporarily presents the active document's menu bar, toolbar, and inspector. It permanently hosts progress presentation for every logical document represented by an attached primary or secondary view. It owns presentation state only, never image-processing state.
+- **`MainWindow`**: One complete image document. It owns the scan, parameters, undo stack, image/navigation widgets, panels, task queues, workers, progress entries, and a unique recovery directory. Mutable document state must never be shared between different `MainWindow` instances.
 - **`NavigationView`**: This shows the whole image and indicates zoom and position of ImageWidget.
 It lets user to effectively move around the image
 - **`ImageWidget`**: This displays the image and provides high-performance interaction. It uses a modular architecture for rendering and event handling to manage complex interaction modes (Pan, Select, SetCenter, etc.).
@@ -69,9 +69,12 @@ dock. The workspace owns the one status bar for the whole top-level window.
 Every attached `MainWindow` and `ImageViewWindow` routes `statusBar()` directly
 to that same `QStatusBar`; tabs must not keep private status-message state or
 mirror messages when activation changes. Only detached top-level windows use
-their private status bars. The active document's transient progress controls are
-temporarily moved into the shared status line, while dedicated long-running task
-rows remain in the workspace task strip. Their Stop/Cancel buttons use
+their private status bars. Every represented document's transient progress controls are attached to the
+workspace once, independently of active chrome. The shared status line displays
+the most recently started visible document task and provides document-level
+previous/next controls when several documents work concurrently; changing tabs
+must never choose or hide progress. Dedicated long-running task rows remain in
+the workspace task strip. Their Stop/Cancel buttons use
 `Qt::TabFocus`: keyboard users can reach them, but a mouse click must not steal
 keyboard focus from the active MDI image. Before a keyboard-focused task control
 is disabled or its row is removed, return focus to the image presentation that is
@@ -134,11 +137,14 @@ uses the source `MainWindow` as the authoritative parameter/undo/recovery
 model. It never owns or suggests another `.par` file. Its inspector keeps the
 standard `NavigationView` above a single **Sharpness** tab, and rendering is
 limited to **Original digital capture** and **Image layer**. Measurements are
-applied through the source document's undoable parameter path. Detachable
-Sharpness diagnostics (MTF, dot spread, finetune images, and adaptive-sharpening
-charts) are presentation owned by that reference view and detach into its own
-floating docks; they must never be handed to the source document's diagnostic
-docks. **Reload and demosaic** reloads both the source scan and every associated
+applied through the source document's undoable parameter path. Every panel section created by `ParameterPanel::createDetachableSection()` owns
+its own standard floating-dock lifecycle. This is the only detach implementation:
+document windows, ordinary views, and specialized reference views do not create
+parallel chart docks or probe nested layouts during reattachment. A detached
+section follows the top-level window currently presenting its inspector and always
+returns its content when closed. Sharpness diagnostics in a slanted-edge reference
+therefore remain presentation-owned by that reference inspector without any
+special-case dock wiring. **Reload and demosaic** reloads both the source scan and every associated
 slanted-edge reference from its own filename using the current demosaic mode.
 
 **Window → New View** creates another MDI view of the same document. Ordinary

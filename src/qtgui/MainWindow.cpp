@@ -553,41 +553,15 @@ MainWindow::~MainWindow() {
     m_mainSplitter = nullptr;
   }
 
-  // Also manually delete docks as they might hold detached panels
-  if (m_mtfDock)
-    delete m_mtfDock;
-  if (m_dotSpreadDock)
-    delete m_dotSpreadDock;
-  if (m_spectraDock)
-    delete m_spectraDock;
-  if (m_tilesDock)
-    delete m_tilesDock;
-  if (m_colorTilesDock)
-    delete m_colorTilesDock;
-  if (m_correctedColorTilesDock)
-    delete m_correctedColorTilesDock;
-  if (m_screenPreviewDock)
-    delete m_screenPreviewDock;
-  if (m_deformationDock)
-    delete m_deformationDock;
-  if (m_lensDock)
-    delete m_lensDock;
-  if (m_perspectiveDock)
-    delete m_perspectiveDock;
-  if (m_nonlinearDock)
-    delete m_nonlinearDock;
-  if (m_gamutDock)
-    delete m_gamutDock;
 }
 
 /** Build the entire main window UI.
    Creates the horizontal splitter (image widget | right column), the right
-   column (navigation view + tab widget with all panels), all dock widgets
-   for detachable charts and diagnostic images, the status bar with progress
-   reporting, and wires up the extensive network of signal/slot connections
-   between panels, ImageWidget, NavigationView, and MainWindow.  The dock
-   wiring uses a generic setupDock lambda that handles detach (wrapping the
-   widget in a resizable frame) and reattach (via DockCloseEventFilter).  */
+   column (navigation view + tab widget with all panels), the status bar with
+   document progress reporting, and the signal/slot connections between
+   panels, ImageWidget, NavigationView, and MainWindow. Detachable panel
+   sections own their dock lifecycle in ParameterPanel; the document window
+   no longer duplicates that presentation machinery. */
 void MainWindow::setupUi() {
 
   m_mainSplitter = new QSplitter(Qt::Horizontal, this);
@@ -659,7 +633,6 @@ void MainWindow::setupUi() {
                       [this]() { return m_scan; }, this);
 
   // Create Color Panel (after Sharpness)
-  // Create Color Panel (after Sharpness)
   m_contactCopyPanel = new ContactCopyPanel(
       [this]() { return getCurrentState(); },
       [this](const ParameterState &s, const QString &desc) {
@@ -717,247 +690,16 @@ void MainWindow::setupUi() {
           &MainWindow::removeProgress);
 
   m_configTabs->setObjectName("ConfigTabs");
-  m_mtfDock = new QDockWidget("MTF Chart", this);
 
-  m_mtfDock->setObjectName("MTFChartDock");
-  m_mtfDock->setVisible(false);
-  addDockWidget(Qt::BottomDockWidgetArea, m_mtfDock);
 
-  m_adaptiveSharpeningDock = new QDockWidget("Adaptive Sharpening", this);
-  m_adaptiveSharpeningDock->setObjectName("adaptiveSharpeningDock");
-  m_adaptiveSharpeningDock->setVisible(false);
-  addDockWidget(Qt::BottomDockWidgetArea, m_adaptiveSharpeningDock);
 
-  m_tilesDock = new QDockWidget("Sharpness Preview", this);
-  m_tilesDock->setObjectName("TilesDock");
-  m_tilesDock->setVisible(false);
-  addDockWidget(Qt::BottomDockWidgetArea, m_tilesDock);
 
-  // Create Docks for Color components
-  m_colorTilesDock = new QDockWidget("Color Preview", this);
-  m_colorTilesDock->setObjectName("ColorTilesDock");
-  m_colorTilesDock->setVisible(false);
-  addDockWidget(Qt::BottomDockWidgetArea, m_colorTilesDock);
 
-  m_correctedColorTilesDock = new QDockWidget("Corrected Color Preview", this);
-  m_correctedColorTilesDock->setObjectName("CorrectedColorPreviewDock");
-  m_correctedColorTilesDock->setAllowedAreas(Qt::AllDockWidgetAreas);
-  addDockWidget(Qt::RightDockWidgetArea, m_correctedColorTilesDock);
-  m_correctedColorTilesDock->hide(); // Initially hidden
 
-  // Screen Preview Dock
-  m_screenPreviewDock = new QDockWidget("Screen Preview", this);
-  m_screenPreviewDock->setObjectName("ScreenPreviewDock");
-  m_screenPreviewDock->setAllowedAreas(Qt::AllDockWidgetAreas);
-  addDockWidget(Qt::RightDockWidgetArea, m_screenPreviewDock);
-  m_screenPreviewDock->hide(); // Initially hidden
 
-  // Connection for Color Panel Spectra Chart
-  m_spectraDock = new QDockWidget("Spectral Transmitance", this);
-  m_spectraDock->setObjectName("SpectraDock");
-  addDockWidget(Qt::RightDockWidgetArea, m_spectraDock);
-  m_spectraDock->hide(); // Initially hidden
 
-  // Gamut Dock
-  m_gamutDock = new QDockWidget("Gamut", this);
-  m_gamutDock->setObjectName("GamutDock");
-  addDockWidget(Qt::RightDockWidgetArea, m_gamutDock);
-  m_gamutDock->hide();
 
-  // Corrected Gamut Dock
-  m_correctedGamutDock = new QDockWidget("Corrected Gamut", this);
-  m_correctedGamutDock->setObjectName("CorrectedGamutDock");
-  addDockWidget(Qt::RightDockWidgetArea, m_correctedGamutDock);
-  m_correctedGamutDock->hide();
 
-  // H&D Curve Dock
-  m_hdCurveDock = new QDockWidget("H&D Curve", this);
-  m_hdCurveDock->setObjectName("HDCurveDock");
-  addDockWidget(Qt::RightDockWidgetArea, m_hdCurveDock);
-  m_hdCurveDock->hide();
-
-  // Deformation Chart Dock
-  m_deformationDock = new QDockWidget("Deformation Visualization", this);
-  m_deformationDock->setObjectName("DeformationDock");
-  addDockWidget(Qt::RightDockWidgetArea, m_deformationDock);
-  m_deformationDock->hide();
-
-  m_toneCurveDock = new QDockWidget("Tone Curve", this);
-  m_toneCurveDock->setObjectName("ToneCurveDock");
-  addDockWidget(Qt::RightDockWidgetArea, m_toneCurveDock);
-  m_toneCurveDock->hide();
-
-  m_lensDock = new QDockWidget("Lens Correction", this);
-  m_lensDock->setObjectName("LensDock");
-  addDockWidget(Qt::RightDockWidgetArea, m_lensDock);
-  m_lensDock->hide();
-
-  m_perspectiveDock = new QDockWidget("Perspective", this);
-  m_perspectiveDock->setObjectName("PerspectiveDock");
-  addDockWidget(Qt::RightDockWidgetArea, m_perspectiveDock);
-  m_perspectiveDock->hide();
-
-  m_nonlinearDock = new QDockWidget("Nonlinear transformation", this);
-  m_nonlinearDock->setObjectName("NonlinearDock");
-  addDockWidget(Qt::RightDockWidgetArea, m_nonlinearDock);
-  m_nonlinearDock->hide();
-
-  m_backlightDock = new QDockWidget("Backlight", this);
-  m_backlightDock->setObjectName("BacklightDock");
-  m_backlightDock->setVisible(false);
-  addDockWidget(Qt::RightDockWidgetArea, m_backlightDock);
-
-  m_finetuneImagesDock =
-      new QDockWidget("Finetune Diagnostic Images (Geometry)", this);
-  m_sharpnessFinetuneImagesDock =
-      new QDockWidget("Finetune Diagnostic Images (Sharpness)", this);
-  m_finetuneImagesDock->setObjectName("FinetuneImagesDock");
-  m_finetuneImagesDock->setVisible(false);
-  addDockWidget(Qt::RightDockWidgetArea, m_finetuneImagesDock);
-
-  m_sharpnessFinetuneImagesDock->setObjectName("SharpnessFinetuneImagesDock");
-  m_sharpnessFinetuneImagesDock->setVisible(false);
-  addDockWidget(Qt::RightDockWidgetArea, m_sharpnessFinetuneImagesDock);
-
-  // Event Filter for robust Close detection
-  class DockCloseEventFilter : public QObject {
-    std::function<void()> m_onClose;
-
-  public:
-    DockCloseEventFilter(QObject *parent, std::function<void()> onClose)
-        : QObject(parent), m_onClose(onClose) {}
-
-  protected:
-    bool eventFilter(QObject *obj, QEvent *event) override {
-      if (event->type() == QEvent::Close) {
-        if (m_onClose)
-          m_onClose();
-      }
-      return QObject::eventFilter(obj, event);
-    }
-  };
-
-  // Generic helper for docking connections
-  auto setupDock = [this](QDockWidget *dock, auto *panel, auto detachSignal,
-                          auto reattachMethod) {
-    // Connect Detach
-    connect(panel, detachSignal, this, [dock](QWidget *w) {
-      if (!w)
-        return;
-
-      // Wrap widget in a frame to provide better resize borders
-      QFrame *wrapper = new QFrame();
-      wrapper->setObjectName("DetachedWrapper");
-      wrapper->setFrameStyle(QFrame::Box | QFrame::Plain);
-      wrapper->setLineWidth(1);
-      // Modern sleek border
-      wrapper->setStyleSheet("QFrame#DetachedWrapper { border: 1px solid #555; "
-                             "background: Palette(Window); }");
-
-      QVBoxLayout *outerLayout = new QVBoxLayout(wrapper);
-      outerLayout->setContentsMargins(1, 1, 1, 1);
-      outerLayout->setSpacing(0);
-
-      QWidget *container = new QWidget();
-      QGridLayout *gLayout = new QGridLayout(container);
-      gLayout->setContentsMargins(0, 0, 0, 0);
-      gLayout->setSpacing(0);
-
-      gLayout->addWidget(w, 0, 0);
-
-      QSizeGrip *grip = new QSizeGrip(container);
-      gLayout->addWidget(grip, 0, 0, Qt::AlignRight | Qt::AlignBottom);
-
-      outerLayout->addWidget(container);
-
-      dock->setWidget(wrapper);
-      w->show(); // Ensure widget is visible
-      dock->setFloating(true);
-      dock->show();
-
-      // Use size hint of the original widget + some margins
-      if (w->sizeHint().isValid()) {
-        QSize s = w->sizeHint();
-        dock->resize(s.width() + 4, s.height() + 4);
-      }
-    });
-
-    // Connect Close/Reattach via Event Filter
-    dock->installEventFilter(
-        new DockCloseEventFilter(dock, [dock, panel, reattachMethod]() {
-          if (dock->widget()) {
-            // Find the original widget inside the wrapper
-            QWidget *wrapper = dock->widget();
-            QWidget *originalWidget = nullptr;
-            // The structure is Wrapper -> QVBoxLayout -> Container ->
-            // QGridLayout -> Widget
-            if (wrapper->layout() && wrapper->layout()->count() > 0) {
-              QLayoutItem *containerItem = wrapper->layout()->itemAt(0);
-              if (containerItem && containerItem->widget() &&
-                  containerItem->widget()->layout()) {
-                QLayout *gLayout = containerItem->widget()->layout();
-                for (int i = 0; i < gLayout->count(); ++i) {
-                  QWidget *child = gLayout->itemAt(i)->widget();
-                  if (child && !qobject_cast<QSizeGrip *>(child)) {
-                    originalWidget = child;
-                    break;
-                  }
-                }
-              }
-            }
-
-            if (originalWidget) {
-              (panel->*reattachMethod)(originalWidget);
-            }
-            dock->setWidget(nullptr);
-            wrapper->deleteLater();
-          }
-        }));
-  };
-
-  // Wire up docks
-  setupDock(m_mtfDock, m_sharpnessPanel,
-            &SharpnessPanel::detachMTFChartRequested,
-            &SharpnessPanel::reattachMTFChart);
-
-  m_dotSpreadDock = new QDockWidget("Dot Spread Function", this);
-  m_dotSpreadDock->setObjectName("DotSpreadDock");
-  m_dotSpreadDock->setVisible(false);
-  addDockWidget(Qt::BottomDockWidgetArea, m_dotSpreadDock);
-
-  setupDock(m_dotSpreadDock, m_sharpnessPanel,
-            &SharpnessPanel::detachDotSpreadRequested,
-            &SharpnessPanel::reattachDotSpread);
-
-  setupDock(m_tilesDock, m_sharpnessPanel,
-            &SharpnessPanel::detachTilesRequested,
-            &SharpnessPanel::reattachTiles);
-
-  setupDock(m_colorTilesDock, m_colorPanel, &ColorPanel::detachTilesRequested,
-            &ColorPanel::reattachTiles);
-
-  setupDock(m_correctedColorTilesDock, m_colorPanel,
-            &ColorPanel::detachCorrectedTilesRequested,
-            &ColorPanel::reattachCorrectedTiles);
-
-  setupDock(m_spectraDock, m_colorPanel,
-            &ColorPanel::detachSpectraChartRequested,
-            &ColorPanel::reattachSpectraChart);
-
-  setupDock(m_gamutDock, m_colorPanel, &ColorPanel::detachGamutChartRequested,
-            &ColorPanel::reattachGamutChart);
-
-  setupDock(m_correctedGamutDock, m_colorPanel,
-            &ColorPanel::detachCorrectedGamutChartRequested,
-            &ColorPanel::reattachCorrectedGamutChart);
-
-  setupDock(m_toneCurveDock, m_colorPanel,
-            &ColorPanel::detachToneCurveRequested,
-            &ColorPanel::reattachToneCurve);
-
-  setupDock(m_hdCurveDock, m_contactCopyPanel,
-            &ContactCopyPanel::detachHDCurveRequested,
-            &ContactCopyPanel::reattachHDCurve);
 
   connect(m_sharpnessPanel, &SharpnessPanel::focusAnalysisRequested, this,
           &MainWindow::onFocusAnalysisRequested);
@@ -974,9 +716,6 @@ void MainWindow::setupUi() {
   connect(m_sharpnessPanel, &SharpnessPanel::measureMtfRequested, this,
           &MainWindow::onMeasureMtfRequested);
 
-  setupDock(m_screenPreviewDock, m_screenPanel,
-            &ScreenPanel::detachPreviewRequested,
-            &ScreenPanel::reattachPreview);
 
   // Create Digital Capture Panel
   m_capturePanel =
@@ -996,33 +735,12 @@ void MainWindow::setupUi() {
                         },
                         [this]() { return m_scan; }, this);
 
-  setupDock(m_deformationDock, m_geometryPanel,
-            &GeometryPanel::detachDeformationChartRequested,
-            &GeometryPanel::reattachDeformationChart);
 
-  setupDock(m_lensDock, m_geometryPanel,
-            &GeometryPanel::detachLensChartRequested,
-            &GeometryPanel::reattachLensChart);
 
-  setupDock(m_perspectiveDock, m_geometryPanel,
-            &GeometryPanel::detachPerspectiveChartRequested,
-            &GeometryPanel::reattachPerspectiveChart);
 
-  setupDock(m_nonlinearDock, m_geometryPanel,
-            &GeometryPanel::detachNonlinearChartRequested,
-            &GeometryPanel::reattachNonlinearChart);
 
-  setupDock(m_finetuneImagesDock, m_geometryPanel,
-            &GeometryPanel::detachFinetuneImagesRequested,
-            &GeometryPanel::reattachFinetuneImages);
 
-  setupDock(m_sharpnessFinetuneImagesDock, m_sharpnessPanel,
-            &SharpnessPanel::detachFinetuneImagesRequested,
-            &SharpnessPanel::reattachFinetuneImages);
 
-  setupDock(m_adaptiveSharpeningDock, m_sharpnessPanel,
-            &SharpnessPanel::detachAdaptiveChartRequested,
-            &SharpnessPanel::reattachAdaptiveChart);
 
   m_configTabs->addTab(m_capturePanel, "Digital capture");
   m_configTabs->addTab(m_tilesPanel, "Tiles");
@@ -1034,9 +752,6 @@ void MainWindow::setupUi() {
           &MainWindow::onFlatFieldRequested);
   connect(m_capturePanel, &CapturePanel::autodetectRequested, this,
           &MainWindow::onAutodetectScreen);
-  setupDock(m_backlightDock, m_capturePanel,
-            &CapturePanel::detachBacklightRequested,
-            &CapturePanel::reattachBacklight);
 
   connect(m_imageWidget, &ImageWidget::interactionModeChanged, this,
           [this](ImageWidget::InteractionMode mode) {
@@ -1398,6 +1113,7 @@ void MainWindow::setupUi() {
   m_progressContainer->setMinimumHeight(m_transientProgressRow->sizeHint().height());
 
   m_transientProgressRow->hide();
+  m_progressContainer->hide();
   statusBar->addPermanentWidget(m_progressContainer, 1);
 
   // Initialize manual selection tracking
@@ -2705,7 +2421,7 @@ void MainWindow::removeProgress(
 
   const std::vector<ProgressEntry *> transient = transientProgresses();
   if (transient.empty()) {
-    m_transientProgressRow->hide();
+    setTransientProgressVisible(false);
     m_currentlyDisplayedProgress.reset();
     m_manuallySelectedProgressIndex = -1;
   } else if (m_manuallySelectedProgressIndex >= (int)transient.size()) {
@@ -2799,6 +2515,18 @@ void MainWindow::updateProgressWidgets(const ProgressEntry &entry, QLabel *label
   }
 }
 
+/** Show or hide this document's one-line transient progress presentation. */
+void MainWindow::setTransientProgressVisible(bool visible) {
+  if (m_transientProgressRow)
+    m_transientProgressRow->setVisible(visible);
+  if (m_progressContainer)
+    m_progressContainer->setVisible(visible);
+  if (m_transientProgressVisible == visible)
+    return;
+  m_transientProgressVisible = visible;
+  emit transientProgressVisibilityChanged(visible);
+}
+
 /** Synchronize the one-line transient status and dedicated task dock. */
 void MainWindow::updateProgressContainerVisibility() {
   bool hasUserVisibleRows = false;
@@ -2818,16 +2546,12 @@ void MainWindow::updateProgressContainerVisibility() {
   if (visibilityChanged)
     emit userVisibleProgressVisibilityChanged(hasUserVisibleRows);
 
-  const bool transientVisible =
-      m_transientProgressRow && !m_transientProgressRow->isHidden();
-  // m_progressContainer->setVisible(transientVisible);
 }
 
 /** Periodically update transient progress and every dedicated long-task row. */
 void MainWindow::onProgressTimer() {
   if (m_activeProgresses.empty()) {
-    m_transientProgressRow->hide();
-    // m_progressContainer->hide();
+    setTransientProgressVisible(false);
     m_currentlyDisplayedProgress.reset();
     m_manuallySelectedProgressIndex = -1;
     m_progressTimer->stop();
@@ -2853,7 +2577,7 @@ void MainWindow::onProgressTimer() {
 
   const std::vector<ProgressEntry *> transient = transientProgresses();
   if (transient.empty()) {
-    m_transientProgressRow->hide();
+    setTransientProgressVisible(false);
     m_currentlyDisplayedProgress.reset();
     m_manuallySelectedProgressIndex = -1;
     updateProgressContainerVisibility();
@@ -2878,7 +2602,7 @@ void MainWindow::onProgressTimer() {
   }
 
   if (!task) {
-    m_transientProgressRow->hide();
+    setTransientProgressVisible(false);
     updateProgressContainerVisibility();
     return;
   }
@@ -2894,9 +2618,9 @@ void MainWindow::onProgressTimer() {
 
   if (task->startTime.elapsed() > 300) {
     updateProgressWidgets(*task, m_statusLabel, m_progressBar, QString());
-    m_transientProgressRow->show();
+    setTransientProgressVisible(true);
   } else {
-    m_transientProgressRow->hide();
+    setTransientProgressVisible(false);
   }
 
   updateProgressContainerVisibility();
@@ -3094,6 +2818,26 @@ void MainWindow::updateRecentFileActions() {
 void MainWindow::refreshWindowMenu() {
   if (ColorScreenApplication *application = documentApplication())
     application->populateWindowMenu(m_windowMenu, this);
+}
+
+/** Remove transient progress from the private status bar for workspace hosting. */
+QWidget *MainWindow::takeWorkspaceStatusWidget() {
+  if (!m_progressContainer)
+    return nullptr;
+  standaloneStatusBar()->removeWidget(m_progressContainer);
+  m_progressContainer->setParent(nullptr);
+  return m_progressContainer;
+}
+
+/** Return transient progress to this document's private status bar. */
+void MainWindow::restoreWorkspaceStatusWidget() {
+  if (!m_progressContainer)
+    return;
+  if (m_progressContainer->parentWidget() != standaloneStatusBar()) {
+    m_progressContainer->setParent(standaloneStatusBar());
+    standaloneStatusBar()->addPermanentWidget(m_progressContainer, 1);
+  }
+  m_progressContainer->setVisible(m_transientProgressVisible);
 }
 
 /** Remove persistent progress rows from the local task-progress dock. */
@@ -3835,14 +3579,6 @@ void MainWindow::updateUIFromState(const ParameterState &state) {
   if (m_geometryPanel) {
     m_geometryPanel->updateDeformationChart();
   }
-
-  // Handle backlight dock visibility
-  if (m_backlightDock) {
-    bool hasBacklight = state.rparams.backlight_correction != nullptr;
-    m_backlightDock->setVisible(hasBacklight &&
-                                m_backlightDock->widget() != nullptr);
-  }
-
   updateRegistrationGroupVisibility();
 
   if (m_sharpnessPanel) {
@@ -4132,27 +3868,6 @@ void MainWindow::restoreWindowState() {
     restoreGeometry(settings.value("windowGeometry").toByteArray());
     restoreState(settings.value("windowState").toByteArray());
     restoreState(settings.value("windowState").toByteArray());
-
-    // Fix for docks showing up empty if restored as visible but content is in
-    // panel (not detached)
-    auto fixDockVisibility = [](QDockWidget *dock) {
-      if (dock && dock->widget() == nullptr) {
-        dock->hide();
-        dock->setFloating(false); // Ensure it's not floating empty
-      }
-    };
-    fixDockVisibility(m_mtfDock);
-    fixDockVisibility(m_tilesDock);
-    fixDockVisibility(m_colorTilesDock);
-    fixDockVisibility(m_correctedColorTilesDock);
-
-    // Add missing chart docks
-    fixDockVisibility(m_spectraDock);
-    fixDockVisibility(m_deformationDock);
-    fixDockVisibility(m_lensDock);
-    fixDockVisibility(m_perspectiveDock);
-    fixDockVisibility(m_nonlinearDock);
-    fixDockVisibility(m_screenPreviewDock);
   } else {
     // Default size and position
     resize(1200, 800);

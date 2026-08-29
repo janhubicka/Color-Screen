@@ -26,6 +26,7 @@
 #include <QStyleFactory>
 #include <QStatusBar>
 #include <QTabBar>
+#include <QThread>
 #include <QThreadPool>
 #include <QToolBar>
 #include <QTimer>
@@ -539,7 +540,8 @@ int main(int argc, char *argv[]) {
         if (!candidate || !workspace->containsDocument(candidate))
           continue;
         if (candidate->statusBar() != workspaceStatus ||
-            candidate->standaloneStatusBar()->isVisible()) {
+            candidate->standaloneStatusBar()->isVisible() ||
+            !workspaceStatus->isAncestorOf(candidate->workspaceStatusWidget())) {
           qCritical() << "Attached document has a private status bar";
           app.exit(11);
           return;
@@ -662,24 +664,33 @@ int main(int argc, char *argv[]) {
         return;
       }
 
-      // A short-lived transient task may occupy the bottom status line but must
-      // not reparent dedicated rows or alter the height of that line.
+      // Transient work belongs to the workspace, not the selected tab. Start
+      // work in the second document while the first remains active and require
+      // the shared status line to present it after the normal display delay.
       auto transientProgress = std::make_shared<colorscreen::progress_info>();
-      transientProgress->set_task("transient smoke task", 100);
+      transientProgress->set_task("inactive document transient smoke task", 100);
       transientProgress->set_progress(10);
-      cancelDocument->addProgress(transientProgress);
+      stopDocument->addProgress(transientProgress);
+      QThread::msleep(350);
       QCoreApplication::processEvents();
-      if (workspaceStatus->height() != statusHeight ||
+      QWidget *workspaceProgress = workspace->findChild<QWidget *>(
+          QStringLiteral("WorkspaceProgressArea"));
+      if (!workspaceProgress || workspaceProgress->isHidden() ||
+          workspace->currentDocument() != cancelDocument ||
+          workspace->displayedProgressDocument() != stopDocument ||
+          !workspaceProgress->isAncestorOf(stopDocument->workspaceStatusWidget()) ||
+          workspaceStatus->height() != statusHeight ||
           !taskStack->isAncestorOf(cancelContainer) ||
           !taskStack->isAncestorOf(stopContainer)) {
-        qCritical() << "Transient progress disturbed the dedicated task strip";
+        qCritical() << "Inactive document transient progress was not presented globally";
         app.exit(13);
         return;
       }
-      cancelDocument->removeProgress(transientProgress);
+      stopDocument->removeProgress(transientProgress);
       QCoreApplication::processEvents();
-      if (workspaceStatus->height() != statusHeight) {
-        qCritical() << "Transient progress changed status-bar height on exit";
+      if (workspace->currentDocument() != cancelDocument ||
+          workspaceStatus->height() != statusHeight) {
+        qCritical() << "Transient progress exit changed tab or status-bar height";
         app.exit(13);
         return;
       }
@@ -1381,23 +1392,97 @@ int main(int argc, char *argv[]) {
         }
         detachMtf->click();
         QCoreApplication::processEvents();
-        QDockWidget *mtfDock = reference->findChild<QDockWidget *>(
-            QStringLiteral("SlantedEdgeMTFChartDock"));
+        QDockWidget *mtfDock = nullptr;
+        for (QDockWidget *candidate : workspace->findChildren<QDockWidget *>()) {
+          if (candidate && candidate->property("detachablePanel").toBool() &&
+              candidate->property("detachableTitle").toString() ==
+                  QStringLiteral("MTF Chart") &&
+              candidate->isAncestorOf(mtfChart)) {
+            mtfDock = candidate;
+            break;
+          }
+        }
         if (!mtfDock || !mtfDock->isVisible() || !mtfDock->isFloating() ||
             !mtfDock->widget() || !mtfDock->isAncestorOf(mtfChart)) {
           qCritical() << "Reference MTF chart disappeared instead of detaching";
           app.exit(15);
           return;
         }
+        QPointer<QDockWidget> guardedMtfDock(mtfDock);
         mtfDock->close();
         QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
         QCoreApplication::processEvents();
-        if (mtfDock->widget() ||
-            !reference->workspaceInspectorWidget()->isAncestorOf(mtfChart)) {
+        if (guardedMtfDock && guardedMtfDock->widget()) {
+          qCritical() << "Generic MTF dock retained its content after close";
+          app.exit(15);
+          return;
+        }
+        if (!reference->workspaceInspectorWidget()->isAncestorOf(mtfChart) ||
+            detachMtf->text() != QStringLiteral("Detach")) {
           qCritical() << "Reference MTF chart did not reattach after dock close";
           app.exit(15);
           return;
         }
+
+        // Exercise the same implementation in two unrelated document panels.
+        workspace->activateDocument(source);
+        QCoreApplication::processEvents();
+        auto exerciseDetachable = [workspace, source](const QString &title) {
+          QWidget *inspector = source->workspaceInspectorWidget();
+          QWidget *section = nullptr;
+          for (QWidget *candidate : inspector->findChildren<QWidget *>()) {
+            if (candidate->objectName() == QStringLiteral("DetachableSection") &&
+                candidate->property("detachableTitle").toString() == title) {
+              section = candidate;
+              break;
+            }
+          }
+          QPushButton *button = section
+                                    ? section->findChild<QPushButton *>(
+                                          QStringLiteral("DetachableSectionButton"))
+                                    : nullptr;
+          QWidget *content = nullptr;
+          if (section) {
+            for (QWidget *candidate : section->findChildren<QWidget *>()) {
+              if (candidate->property("detachableContentTitle").toString() ==
+                  title) {
+                content = candidate;
+                break;
+              }
+            }
+          }
+          if (!section || !button || !content)
+            return false;
+          button->click();
+          QCoreApplication::processEvents();
+          QDockWidget *dock = nullptr;
+          for (QDockWidget *candidate : workspace->findChildren<QDockWidget *>()) {
+            if (candidate->property("detachablePanel").toBool() &&
+                candidate->property("detachableTitle").toString() == title &&
+                candidate->isAncestorOf(content)) {
+              dock = candidate;
+              break;
+            }
+          }
+          if (!dock || !dock->isVisible() || !dock->isFloating() ||
+              button->text() != QStringLiteral("Reattach"))
+            return false;
+          QPointer<QDockWidget> guardedDock(dock);
+          dock->close();
+          QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+          QCoreApplication::processEvents();
+          return (!guardedDock || !guardedDock->widget()) &&
+                 inspector->isAncestorOf(content) &&
+                 button->text() == QStringLiteral("Detach");
+        };
+        if (!exerciseDetachable(QStringLiteral("H&D Curve")) ||
+            !exerciseDetachable(QStringLiteral("Backlight"))) {
+          qCritical() << "Unrelated panels do not share the generic detach lifecycle";
+          app.exit(15);
+          return;
+        }
+        workspace->activateView(reference);
+        QCoreApplication::processEvents();
         workspace->showTabbedDocuments();
         workspace->activateView(reference);
         QCoreApplication::processEvents();

@@ -91,7 +91,6 @@ TilePreviewPanel::TilePreviewPanel(StateGetter stateGetter,
   m_updateTimer = new QTimer(this);
   m_updateTimer->setSingleShot(true);
   m_updateTimer->setInterval(30);
-  m_updateTimer->setInterval(30);
   // Debounce -> Request Render in Queue
   connect(m_updateTimer, &QTimer::timeout, this, [this](){
       // Capture state at the end of debounce (request time)
