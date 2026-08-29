@@ -31,6 +31,7 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
+          cd "$GITHUB_WORKSPACE"
           export CXXFLAGS="-Ofast -flto=auto"
           export CFLAGS="$CXXFLAGS"
           ./configure --enable-qtgui
@@ -38,11 +39,13 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
+          cd "$GITHUB_WORKSPACE"
           make -C src/libcolorscreen -j"$(nproc)" focus-analysis-unittests
       - name: Benchmark baseline coupled focus regression
         shell: bash
         run: |
           set -euxo pipefail
+          cd "$GITHUB_WORKSPACE"
           python3 - <<'PY'
           import subprocess
           import sys
@@ -57,19 +60,26 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
+          cd "$GITHUB_WORKSPACE"
           cp agent/apply-coupled-mtf-fastpath.py /tmp/apply-coupled-mtf-fastpath.py
+          git -C "$GITHUB_WORKSPACE" rev-parse --show-toplevel
           python3 /tmp/apply-coupled-mtf-fastpath.py
-          git diff --check
-          git diff --stat
+          pwd
+          ls -ld "$GITHUB_WORKSPACE/.git"
+          git -C "$GITHUB_WORKSPACE" rev-parse --show-toplevel
+          git -C "$GITHUB_WORKSPACE" diff --check
+          git -C "$GITHUB_WORKSPACE" diff --stat
       - name: Build optimized code
         shell: bash
         run: |
           set -euxo pipefail
+          cd "$GITHUB_WORKSPACE"
           make -C src/libcolorscreen -j"$(nproc)" focus-analysis-unittests unittests
       - name: Benchmark optimized coupled focus regression
         shell: bash
         run: |
           set -euxo pipefail
+          cd "$GITHUB_WORKSPACE"
           python3 - <<'PY'
           import subprocess
           import sys
@@ -84,17 +94,19 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
+          cd "$GITHUB_WORKSPACE"
           ./src/libcolorscreen/unittests
       - name: Publish clean source branch
         shell: bash
         run: |
           set -euxo pipefail
-          git config user.name "OpenAI Agent"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git fetch origin main
-          git checkout -B agent/focus-coupled-mtf-fastpath origin/main
+          cd "$GITHUB_WORKSPACE"
+          git -C "$GITHUB_WORKSPACE" config user.name "OpenAI Agent"
+          git -C "$GITHUB_WORKSPACE" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C "$GITHUB_WORKSPACE" fetch origin main
+          git -C "$GITHUB_WORKSPACE" checkout -B agent/focus-coupled-mtf-fastpath origin/main
           python3 /tmp/apply-coupled-mtf-fastpath.py
-          git diff --check
+          git -C "$GITHUB_WORKSPACE" diff --check
           expected="$(cat <<'EOF' | sort
           src/libcolorscreen/finetune.C
           src/libcolorscreen/focus-analysis-unittests.C
@@ -104,16 +116,16 @@ jobs:
           src/libcolorscreen/unittests.C
           EOF
           )"
-          actual="$(git diff --name-only | sort)"
+          actual="$(git -C "$GITHUB_WORKSPACE" diff --name-only | sort)"
           printf 'Expected changed files:\n%s\nActual changed files:\n%s\n' "$expected" "$actual"
           test "$actual" = "$expected"
-          git add \
+          git -C "$GITHUB_WORKSPACE" add \
             src/libcolorscreen/finetune.C \
             src/libcolorscreen/focus-analysis-unittests.C \
             src/libcolorscreen/mtf.C \
             src/libcolorscreen/mtf.h \
             src/libcolorscreen/screen.C \
             src/libcolorscreen/unittests.C
-          git commit -m "finetune: reuse physical transfer for coupled MTF fits" \
+          git -C "$GITHUB_WORKSPACE" commit -m "finetune: reuse physical transfer for coupled MTF fits" \
             -m "Factor residual Gaussian sigma out of the prepared physical-transfer cache so fixed-source sigma and sigma+defocus fits can reuse the source spectra and direct periodic OTF path. Preserve the exact signed physical model and broad-halo semantics while avoiding repeated PSF construction and kernel FFTs at simplex vertices. Extend transfer-equivalence and coupled-focus profiling regressions."
-          git push --force-with-lease origin HEAD:agent/focus-coupled-mtf-fastpath
+          git -C "$GITHUB_WORKSPACE" push --force-with-lease origin HEAD:agent/focus-coupled-mtf-fastpath
