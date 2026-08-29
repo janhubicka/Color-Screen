@@ -1,0 +1,120 @@
+name: TEMP focus multistart prune benchmark
+
+on:
+  push:
+    branches:
+      - agent/tmp-focus-multistart-prune-20260829
+
+permissions:
+  contents: write
+  packages: read
+
+jobs:
+  benchmark-and-publish:
+    runs-on: ubuntu-24.04
+    container:
+      image: ghcr.io/janhubicka/color-screen-ci:ubuntu-24.04
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    env:
+      LC_ALL: C.UTF-8
+      LANG: C.UTF-8
+      PATH: /usr/lib/qt6/libexec:/usr/lib/x86_64-linux-gnu/qt6/libexec:/usr/lib/qt6/bin:/usr/lib/x86_64-linux-gnu/qt6/bin:/usr/lib64/qt6/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      CC: "ccache gcc"
+      CXX: "ccache g++"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Configure optimized build
+        shell: bash
+        run: |
+          set -euxo pipefail
+          export CXXFLAGS="-Ofast -flto=auto"
+          export CFLAGS="$CXXFLAGS"
+          ./configure --enable-qtgui
+      - name: Add temporary result/timing diagnostics
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("src/libcolorscreen/focus-analysis-unittests.C")
+          s = p.read_text()
+          s = s.replace('#include <cmath>\n', '#include <chrono>\n#include <cmath>\n', 1)
+          old = '''static bool\ntest_coupled_physical_focus_recovers_screen_mtf ()\n{\n'''
+          new = '''static bool\ntest_coupled_physical_focus_recovers_screen_mtf ()\n{\n  const auto coupled_benchmark_start = std::chrono::steady_clock::now ();\n'''
+          if s.count(old) != 1:
+              raise SystemExit("benchmark function start not found")
+          s = s.replace(old, new, 1)
+          old = '''      return false;\n    }\n  return true;\n}\n\nstatic bool\ntest_grayscale_image_search ()\n'''
+          new = '''      return false;\n    }\n  const double coupled_seconds =\n      std::chrono::duration<double> (std::chrono::steady_clock::now ()\n                                    - coupled_benchmark_start)\n          .count ();\n  fprintf (stderr,\n           "COUPLED_RESULT seconds=%.9f cold_bad=%.15g cold_mtf=%.12g "\n           "cold_sigma=%.12g cold_defocus=%.12g warm_bad=%.15g "\n           "warm_mtf=%.12g warm_sigma=%.12g warm_defocus=%.12g\\n",\n           coupled_seconds, (double)cold.joint_fit.badness,\n           (double)cold.joint_screen_mtf,\n           (double)cold.joint_fit.scanner_mtf_sigma,\n           (double)cold.joint_fit.scanner_mtf_defocus,\n           (double)warm.joint_fit.badness, (double)warm.joint_screen_mtf,\n           (double)warm.joint_fit.scanner_mtf_sigma,\n           (double)warm.joint_fit.scanner_mtf_defocus);\n  return true;\n}\n\nstatic bool\ntest_grayscale_image_search ()\n'''
+          if s.count(old) != 1:
+              raise SystemExit("benchmark function end not found")
+          p.write_text(s.replace(old, new, 1))
+          PY
+      - name: Build and benchmark baseline
+        shell: bash
+        run: |
+          set -euxo pipefail
+          make -C src/libcolorscreen -j"$(nproc)" focus-analysis-unittests
+          ./src/libcolorscreen/focus-analysis-unittests 2>&1 | tee /tmp/baseline.log
+          grep 'COUPLED_RESULT' /tmp/baseline.log
+      - name: Apply multistart pruning
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cp agent/apply-focus-multistart-prune.py /tmp/apply-focus-multistart-prune.py
+          python3 /tmp/apply-focus-multistart-prune.py
+      - name: Build and benchmark pruned solver
+        shell: bash
+        run: |
+          set -euxo pipefail
+          make -C src/libcolorscreen -j"$(nproc)" focus-analysis-unittests
+          ./src/libcolorscreen/focus-analysis-unittests 2>&1 | tee /tmp/pruned.log
+          grep 'COUPLED_RESULT' /tmp/pruned.log
+      - name: Compare quality and speed
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python3 - <<'PY'
+          import re
+          def read(path):
+              text = open(path).read()
+              line = next(x for x in text.splitlines() if x.startswith("COUPLED_RESULT"))
+              return {k: float(v) for k, v in re.findall(r'(\w+)=([-+0-9.eE]+)', line)}
+          base = read('/tmp/baseline.log')
+          new = read('/tmp/pruned.log')
+          print('BASE', base)
+          print('PRUNED', new)
+          print(f"SPEEDUP={base['seconds']/new['seconds']:.3f}x")
+          # The optimization is search-schedule-only.  Require essentially the
+          # same effective result, and never accept a worse pixel objective.
+          if new['cold_bad'] > base['cold_bad'] + 2e-9:
+              raise SystemExit('cold objective regressed')
+          if abs(new['cold_mtf'] - base['cold_mtf']) > 2e-3:
+              raise SystemExit('cold carrier MTF moved too far')
+          if new['warm_bad'] > base['warm_bad'] + 2e-9:
+              raise SystemExit('warm objective regressed')
+          if abs(new['warm_mtf'] - base['warm_mtf']) > 1e-7:
+              raise SystemExit('warm carrier MTF changed')
+          if new['seconds'] >= base['seconds'] * 0.9:
+              raise SystemExit('speedup below 10%')
+          PY
+      - name: Publish clean source branch
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config user.name "OpenAI Agent"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git checkout -B agent/focus-multistart-performance origin/main
+          python3 /tmp/apply-focus-multistart-prune.py
+          git diff --check
+          test "$(git diff --name-only)" = "src/libcolorscreen/focus-analysis.C"
+          git add src/libcolorscreen/focus-analysis.C
+          git commit -m "focus: prune redundant coupled MTF searches" \
+            -m "Keep the exact finite-PSF forward model, but avoid rerunning coupled sigma/defocus searches from already evaluated warm focus states. For cold starts, defer scalar-basin coupled releases while the sigma-then-defocus continuation succeeds, and release directly from that staged point instead of rebuilding the PSF for an immediately superseded sigma-only polish. Preserve the old scalar releases as fallback if continuation fails."
+          git push --force-with-lease origin HEAD:agent/focus-multistart-performance
