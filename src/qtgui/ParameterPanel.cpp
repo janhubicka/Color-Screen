@@ -34,10 +34,10 @@ namespace {
 class DetachableSection final : public QWidget {
 public:
   DetachableSection(const QString &title, QWidget *content,
-                    std::function<void()> beforeDetach,
+                    std::function<void()> beforeDetach, QMainWindow *host,
                     QWidget *parent = nullptr)
       : QWidget(parent), m_title(title), m_content(content),
-        m_beforeDetach(std::move(beforeDetach)) {
+        m_beforeDetach(std::move(beforeDetach)), m_pinnedHost(host) {
     setObjectName(QStringLiteral("DetachableSection"));
     setProperty("detachableTitle", title);
 
@@ -81,6 +81,12 @@ public:
 
   ~DetachableSection() override { reattach(false); }
 
+  /** Pin this section to HOST, or resume following its containing window. */
+  void setHost(QMainWindow *host) {
+    m_pinnedHost = host;
+    migrateDockToCurrentHost();
+  }
+
 protected:
   bool eventFilter(QObject *watched, QEvent *event) override {
     if (watched == m_dock.data() && event && event->type() == QEvent::Close) {
@@ -109,6 +115,8 @@ private:
   };
 
   QMainWindow *currentHost() const {
+    if (m_pinnedHost)
+      return m_pinnedHost.data();
     return qobject_cast<QMainWindow *>(window());
   }
 
@@ -263,6 +271,7 @@ private:
   QString m_title;
   QPointer<QWidget> m_content;
   std::function<void()> m_beforeDetach;
+  QPointer<QMainWindow> m_pinnedHost;
   QVBoxLayout *m_layout = nullptr;
   QPushButton *m_button = nullptr;
   QPointer<QDockWidget> m_dock;
@@ -301,6 +310,13 @@ ParameterPanel::ParameterPanel(StateGetter stateGetter, StateSetter stateSetter,
 }
 
 ParameterPanel::~ParameterPanel() = default;
+
+/** Override the generic dynamic dock host for specialized panel owners. */
+void ParameterPanel::setDetachableHost(QMainWindow *host) {
+  m_detachableHost = host;
+  for (DetachableSection *section : findChildren<DetachableSection *>())
+    section->setHost(host);
+}
 
 void ParameterPanel::updateUI() {
   ParameterState state = m_stateGetter();
@@ -1204,7 +1220,8 @@ QWidget *
 ParameterPanel::createDetachableSection(
     const QString &title, QWidget *content,
     std::function<void()> beforeDetach) {
-  return new DetachableSection(title, content, std::move(beforeDetach));
+  return new DetachableSection(title, content, std::move(beforeDetach),
+                               m_detachableHost.data());
 }
 
 

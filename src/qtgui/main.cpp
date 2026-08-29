@@ -19,6 +19,7 @@
 #include <QPalette>
 #include <QPushButton>
 #include <QMdiArea>
+#include <QMenu>
 #include <QMenuBar>
 #include <QMdiSubWindow>
 #include <QMouseEvent>
@@ -927,6 +928,30 @@ int main(int argc, char *argv[]) {
         return;
       }
 
+      QMenu *viewFileMenu = nullptr;
+      for (QAction *action : view->menuBar()->actions()) {
+        if (QString(action->text()).remove('&') == QStringLiteral("File")) {
+          viewFileMenu = action->menu();
+          break;
+        }
+      }
+      QStringList viewFileActions;
+      if (viewFileMenu) {
+        for (QAction *action : viewFileMenu->actions())
+          if (action && !action->isSeparator())
+            viewFileActions << QString(action->text()).remove('&');
+      }
+      if (!viewFileMenu ||
+          !viewFileActions.contains(QStringLiteral("Save Parameters")) ||
+          !viewFileActions.contains(QStringLiteral("Exit")) ||
+          !viewFileActions.contains(QStringLiteral("Close View")) ||
+          viewFileActions.contains(QStringLiteral("Close Window"))) {
+        qCritical() << "New View File menu does not mirror document commands"
+                    << viewFileActions;
+        app.exit(14);
+        return;
+      }
+
       QCheckBox *viewColorToggle = nullptr;
       bool hasSelectTool = false;
       bool hasAddPointTool = false;
@@ -1393,7 +1418,7 @@ int main(int argc, char *argv[]) {
         detachMtf->click();
         QCoreApplication::processEvents();
         QDockWidget *mtfDock = nullptr;
-        for (QDockWidget *candidate : workspace->findChildren<QDockWidget *>()) {
+        for (QDockWidget *candidate : reference->findChildren<QDockWidget *>()) {
           if (candidate && candidate->property("detachablePanel").toBool() &&
               candidate->property("detachableTitle").toString() ==
                   QStringLiteral("MTF Chart") &&

@@ -294,7 +294,7 @@ void ImageViewWindow::setupUi() {
     m_document->appendOrdinaryViewToolActions(m_toolbar);
 
   QMenu *fileMenu = menuBar()->addMenu(tr("&File"));
-  QAction *closeView = fileMenu->addAction(tr("&Close View"));
+  QAction *closeView = new QAction(tr("&Close View"), this);
   closeView->setShortcut(QKeySequence::Close);
   connect(closeView, &QAction::triggered, this, [this]() {
     if (auto *application =
@@ -303,6 +303,33 @@ void ImageViewWindow::setupUi() {
     else
       close();
   });
+
+  QMenu *documentFileMenu = nullptr;
+  if (m_document) {
+    for (QAction *menuAction : m_document->menuBar()->actions()) {
+      if (menuAction && QString(menuAction->text()).remove('&') ==
+                            QStringLiteral("File")) {
+        documentFileMenu = menuAction->menu();
+        break;
+      }
+    }
+  }
+  bool addedCloseView = false;
+  if (documentFileMenu) {
+    for (QAction *action : documentFileMenu->actions()) {
+      if (!action)
+        continue;
+      if (QString(action->text()).remove('&') ==
+          QStringLiteral("Close Window")) {
+        fileMenu->addAction(closeView);
+        addedCloseView = true;
+      } else {
+        fileMenu->addAction(action);
+      }
+    }
+  }
+  if (!addedCloseView)
+    fileMenu->addAction(closeView);
 
   if (!m_slantedEdgeReference && m_document)
     if (QAction *edit = m_document->ordinaryViewEditMenuAction())
@@ -411,6 +438,7 @@ void ImageViewWindow::setupReferenceInspector() {
           m_document->applySharedDocumentState(state, description);
       },
       [this]() { return m_scan; }, m_referenceTabs);
+  m_sharpnessPanel->setDetachableHost(this);
   m_referenceTabs->addTab(m_sharpnessPanel, tr("Sharpness"));
 
   connect(m_sharpnessPanel,

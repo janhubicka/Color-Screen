@@ -140,18 +140,19 @@ limited to **Original digital capture** and **Image layer**. Measurements are
 applied through the source document's undoable parameter path. Every panel section created by `ParameterPanel::createDetachableSection()` owns
 its own standard floating-dock lifecycle. This is the only detach implementation:
 document windows, ordinary views, and specialized reference views do not create
-parallel chart docks or probe nested layouts during reattachment. A detached
+parallel chart docks or probe nested layouts during reattachment. By default a detached
 section follows the top-level window currently presenting its inspector and always
-returns its content when closed. Sharpness diagnostics in a slanted-edge reference
-therefore remain presentation-owned by that reference inspector without any
-special-case dock wiring. **Reload and demosaic** reloads both the source scan and every associated
+returns its content when closed. Specialized inspectors may pin that same generic
+dock lifecycle to their logical presentation; slanted-edge Sharpness sections use
+the reference `ImageViewWindow` as that host. This keeps reference diagnostics
+presentation-owned without reintroducing panel-specific dock wiring. **Reload and demosaic** reloads both the source scan and every associated
 slanted-edge reference from its own filename using the current demosaic mode.
 
 **Window → New View** creates another MDI view of the same document. Ordinary
 views present the same complete Navigation + parameter-panel inspector as the
 primary view; the document owns one inspector instance and the active ordinary
 view merely presents it, so panel state, undo routing, and detached diagnostic
-widgets are never duplicated. Ordinary views also expose the document's Edit
+widgets are never duplicated. Ordinary views also expose the document's complete File commands, Edit
 and Registration menus and the same canvas-tool toolbar actions as the primary
 presentation; render mode, Color/IR, and coordinate controls remain view-local.
 Navigation and panel tools that act on an image (crop/area selection, distance

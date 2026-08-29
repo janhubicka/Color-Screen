@@ -3,6 +3,7 @@
 
 #include "ParameterState.h"
 #include <QComboBox>
+#include <QPointer>
 #include <QString>
 #include <QToolButton>
 #include <QWidget>
@@ -15,6 +16,7 @@ namespace colorscreen {
 class image_data;
 }
 
+class QMainWindow;
 class QVBoxLayout;
 class QFormLayout;
 class QGroupBox;
@@ -35,6 +37,10 @@ public:
 
   // Called when the external state changes (Undo/Redo, Code Load)
   virtual void updateUI();
+
+  /** Pin detachable sections to HOST instead of following this panel's current
+      top-level window. Passing nullptr restores dynamic host selection. */
+  void setDetachableHost(QMainWindow *host);
 
 protected:
   /*
@@ -174,6 +180,7 @@ protected:
   StateGetter m_stateGetter;
   StateSetter m_stateSetter;
   ImageGetter m_imageGetter;
+  QPointer<QMainWindow> m_detachableHost;
   QFormLayout *m_currentGroupForm = nullptr;
 
   QVBoxLayout *m_layout;
