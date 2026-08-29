@@ -21,18 +21,21 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          from textwrap import dedent
 
           source = Path('src/libcolorscreen/scr-detect-colors.C')
           text = source.read_text()
-          marker = '''bool
+          marker = dedent('''\
+          bool
           compare_priorities(struct entry &e1, struct entry &e2)
           {
             return e2.priority < e1.priority;
           }
 
           }
-          '''.replace('          ', '')
-          replacement = '''bool
+          ''')
+          replacement = dedent('''\
+          bool
           compare_priorities(struct entry &e1, struct entry &e2)
           {
             return e2.priority < e1.priority;
@@ -76,32 +79,34 @@ jobs:
           }
 
           }
-          '''.replace('          ', '')
+          ''')
           if text.count(marker) != 1:
               raise SystemExit('primary helper insertion marker did not match')
           text = text.replace(marker, replacement, 1)
 
-          old = '''  optimize_screen_colors (param, reds.data (), reds.size (), greens.data (), greens.size (), blues.data (), blues.size (), progress, report);
-          return true;
-          '''.replace('          ', '')
-          new = '''  optimize_screen_colors (param, reds.data (), reds.size (), greens.data (),
-                                  greens.size (), blues.data (), blues.size (), progress,
-                                  report);
-            luminosity_t separation = minimum_primary_separation (*param);
-            if (report)
-              fprintf (report,
-                       "optimized screen primary separation: %f (minimum %f)\\n",
-                       (double)separation,
-                       (double)minimum_screen_primary_separation);
-            if (separation < minimum_screen_primary_separation)
-              {
-                if (report)
-                  fprintf (report,
-                           "screen primaries are too close; skipping search region.\\n");
-                return false;
-              }
-            return true;
-          '''.replace('          ', '')
+          old = (
+              '  optimize_screen_colors (param, reds.data (), reds.size (), greens.data (), greens.size (), blues.data (), blues.size (), progress, report);\n'
+              '  return true;\n'
+          )
+          new = (
+              '  optimize_screen_colors (param, reds.data (), reds.size (), greens.data (),\n'
+              '                          greens.size (), blues.data (), blues.size (), progress,\n'
+              '                          report);\n'
+              '  luminosity_t separation = minimum_primary_separation (*param);\n'
+              '  if (report)\n'
+              '    fprintf (report,\n'
+              '             "optimized screen primary separation: %f (minimum %f)\\n",\n'
+              '             (double)separation,\n'
+              '             (double)minimum_screen_primary_separation);\n'
+              '  if (separation < minimum_screen_primary_separation)\n'
+              '    {\n'
+              '      if (report)\n'
+              '        fprintf (report,\n'
+              '                 "screen primaries are too close; skipping search region.\\n");\n'
+              '      return false;\n'
+              '    }\n'
+              '  return true;\n'
+          )
           if text.count(old) != 1:
               raise SystemExit('area optimizer return marker did not match')
           source.write_text(text.replace(old, new, 1))
@@ -111,7 +116,8 @@ jobs:
           marker = '### DG-015 — color optimization can rebuild image-wide state for every search cell\n'
           if text.count(marker) != 1:
               raise SystemExit('DG-015 tracker marker did not match')
-          section = '''### DG-028 — collapsed optimized primaries trigger impossible grid searches
+          section = dedent('''\
+          ### DG-028 — collapsed optimized primaries trigger impossible grid searches
 
           **Severity:** high failure-time/performance
 
@@ -151,7 +157,7 @@ jobs:
           not a replacement for lattice validation.  DG-015 remains open for broader
           reuse of image-wide detector state across regions that survive this gate.
 
-          '''.replace('          ', '')
+          ''')
           tracker.write_text(text.replace(marker, section + marker, 1))
           PY
 
