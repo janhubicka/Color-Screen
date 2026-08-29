@@ -1,0 +1,96 @@
+name: TEMP focus blockwise refinement benchmark
+
+on:
+  push:
+    branches:
+      - agent/tmp-focus-blockwise-refine-20260829
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-24.04
+    container:
+      image: ghcr.io/janhubicka/color-screen-ci:ubuntu-24.04
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    env:
+      LC_ALL: C.UTF-8
+      LANG: C.UTF-8
+      PATH: /usr/lib/qt6/libexec:/usr/lib/x86_64-linux-gnu/qt6/libexec:/usr/lib/qt6/bin:/usr/lib/x86_64-linux-gnu/qt6/bin:/usr/lib64/qt6/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      CC: "ccache gcc"
+      CXX: "ccache g++"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure optimized build
+        shell: bash
+        run: |
+          set -euxo pipefail
+          export CXXFLAGS="-Ofast -flto=auto"
+          export CFLAGS="$CXXFLAGS"
+          ./configure --enable-qtgui
+      - name: Make coupled regression representative of five-area position fit
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('src/libcolorscreen/focus-analysis-unittests.C')
+          s = p.read_text()
+          s = s.replace('#include <cmath>\n', '#include <chrono>\n#include <cmath>\n', 1)
+          s = s.replace('''  constexpr int width = 384;\n  constexpr int height = 96;\n  constexpr int regions = 3;\n  const point_t locations[regions]\n      = { { 64, 48 }, { 192, 48 }, { 320, 48 } };\n  const rgbdata truth[regions]\n      = { { 0.80, 0.12, 0.08 }, { 0.10, 0.75, 0.20 },\n          { 0.10, 0.12, 0.80 } };\n''', '''  constexpr int width = 640;\n  constexpr int height = 96;\n  constexpr int regions = 5;\n  const point_t locations[regions]\n      = { { 64, 48 }, { 192, 48 }, { 320, 48 }, { 448, 48 },\n          { 576, 48 } };\n  const rgbdata truth[regions]\n      = { { 0.80, 0.12, 0.08 }, { 0.10, 0.75, 0.20 },\n          { 0.10, 0.12, 0.80 }, { 0.55, 0.35, 0.10 },\n          { 0.18, 0.32, 0.50 } };\n''', 1)
+          s = s.replace('''      candidate.fit.screen_coord_adjust = { 0, 0 };\n''', '''      const coord_t dx = (i & 1) ? (coord_t)0.075 : (coord_t)-0.060;\n      const coord_t dy = (coord_t)((i % 3) - 1) * (coord_t)0.055;\n      candidate.fit.screen_coord_adjust = { dx, dy };\n''', 1)
+          s = s.replace('''  fparam.flags = finetune_scanner_mtf_sigma | finetune_scanner_mtf_defocus\n                 | finetune_bw | finetune_no_normalize\n                 | finetune_no_data_collection;\n''', '''  fparam.flags = finetune_scanner_mtf_sigma | finetune_scanner_mtf_defocus\n                 | finetune_position | finetune_bw | finetune_no_normalize\n                 | finetune_no_data_collection;\n''', 1)
+          s = s.replace('''  analysis.selection.min_areas = 3;\n  analysis.selection.max_areas = 3;\n''', '''  analysis.selection.min_areas = regions;\n  analysis.selection.max_areas = regions;\n''', 1)
+          marker = '''  finetune_focus_analysis_result cold;\n'''
+          if s.count(marker) != 1:
+              raise SystemExit('cold marker mismatch')
+          s = s.replace(marker, '''  const auto benchmark_start = std::chrono::steady_clock::now ();\n  finetune_focus_analysis_result cold;\n''', 1)
+          end = '''  return true;\n}\n\nstatic bool\ntest_grayscale_image_search ()\n'''
+          replacement = '''  const double seconds =\n      std::chrono::duration<double> (std::chrono::steady_clock::now ()\n                                    - benchmark_start)\n          .count ();\n  fprintf (stderr,\n           "BLOCKWISE_RESULT seconds=%.9f cold_bad=%.15g cold_mtf=%.12g "\n           "cold_sigma=%.12g cold_defocus=%.12g warm_bad=%.15g "\n           "warm_mtf=%.12g warm_sigma=%.12g warm_defocus=%.12g\\n",\n           seconds, (double)cold.joint_fit.badness,\n           (double)cold.joint_screen_mtf,\n           (double)cold.joint_fit.scanner_mtf_sigma,\n           (double)cold.joint_fit.scanner_mtf_defocus,\n           (double)warm.joint_fit.badness, (double)warm.joint_screen_mtf,\n           (double)warm.joint_fit.scanner_mtf_sigma,\n           (double)warm.joint_fit.scanner_mtf_defocus);\n  return true;\n}\n\nstatic bool\ntest_grayscale_image_search ()\n'''
+          if s.count(end) != 1:
+              raise SystemExit('function end mismatch')
+          p.write_text(s.replace(end, replacement, 1))
+          PY
+      - name: Build and benchmark simultaneous baseline
+        shell: bash
+        run: |
+          set -euxo pipefail
+          make -C src/libcolorscreen -j"$(nproc)" focus-analysis-unittests
+          ./src/libcolorscreen/focus-analysis-unittests 2>&1 | tee /tmp/simultaneous.log
+          grep BLOCKWISE_RESULT /tmp/simultaneous.log
+      - name: Apply blockwise refinement
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python3 agent/apply-focus-blockwise-refine.py
+      - name: Build and benchmark blockwise refinement
+        shell: bash
+        run: |
+          set -euxo pipefail
+          make -C src/libcolorscreen -j"$(nproc)" focus-analysis-unittests
+          ./src/libcolorscreen/focus-analysis-unittests 2>&1 | tee /tmp/blockwise.log
+          grep BLOCKWISE_RESULT /tmp/blockwise.log
+      - name: Compare quality and speed
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python3 - <<'PY'
+          import re
+          def result(path):
+              line = next(l for l in open(path) if l.startswith('BLOCKWISE_RESULT'))
+              return {k: float(v) for k,v in re.findall(r'(\w+)=([-+0-9.eE]+)', line)}
+          a = result('/tmp/simultaneous.log')
+          b = result('/tmp/blockwise.log')
+          print('SIMULTANEOUS', a)
+          print('BLOCKWISE', b)
+          print(f"SPEEDUP={a['seconds']/b['seconds']:.3f}x")
+          for prefix in ('cold','warm'):
+              if b[prefix+'_bad'] > a[prefix+'_bad'] + 2e-6:
+                  raise SystemExit(prefix + ' objective regressed materially')
+              if abs(b[prefix+'_mtf'] - a[prefix+'_mtf']) > 0.01:
+                  raise SystemExit(prefix + ' carrier MTF moved over one point')
+          PY
