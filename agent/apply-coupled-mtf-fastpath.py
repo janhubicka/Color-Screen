@@ -109,7 +109,7 @@ bool
 mtf_focus_transfer::precompute (
     double defocus, double sigma, precomputed_function<double> &transfer) const
 {
-  if (!m_impl || !my_isfinite (sigma))
+  if (!m_impl || !my_isfinite (sigma) || sigma < 0)
     return false;
 """,
 )
@@ -218,6 +218,30 @@ replace_once(
 """,
 )
 
+# Generate the synthetic coupled-focus fixture with the same exact periodic
+# analytical transfer used by the prepared-source finetune path.  The ordinary
+# screen overload intentionally retains its historical sampled-PSF numerical
+# path, so mixing the two implementations would test discretization differences
+# rather than cold/warm optimizer stability.
+replace_once(
+    "src/libcolorscreen/focus-analysis-unittests.C",
+    """  screen source, filtered;
+  source.initialize (Paget);
+  sharpen_parameters *sp[3] = { &capture, &capture, &capture };
+  if (!filtered.initialize_with_sharpen_parameters (source, sp, false, false))
+    return false;
+""",
+    """  screen source, filtered;
+  source.initialize (Paget);
+  screen_filter_source prepared_source;
+  if (!source.prepare_filter_source (prepared_source))
+    return false;
+  sharpen_parameters *sp[3] = { &capture, &capture, &capture };
+  if (!filtered.initialize_with_sharpen_parameters (
+          prepared_source, sp, false, false))
+    return false;
+""",
+)
 replace_once(
     "src/libcolorscreen/focus-analysis-unittests.C",
     """  fparam.flags = finetune_scanner_mtf_sigma | finetune_scanner_mtf_defocus
