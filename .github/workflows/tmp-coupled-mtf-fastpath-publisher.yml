@@ -32,6 +32,7 @@ jobs:
         run: |
           set -euxo pipefail
           cd "$GITHUB_WORKSPACE"
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           cp agent/apply-coupled-mtf-fastpath.py /tmp/apply.py
           cp agent/instrument-coupled-fastpath.py /tmp/instrument.py
           git fetch origin main
