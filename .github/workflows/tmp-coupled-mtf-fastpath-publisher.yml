@@ -36,7 +36,8 @@ jobs:
           cp agent/apply-coupled-mtf-fastpath.py /tmp/apply-coupled-mtf-fastpath.py
           git fetch origin main
           git checkout --detach origin/main
-          echo "VALIDATION_BASE=$(git rev-parse HEAD)"
+          VALIDATION_BASE="$(git rev-parse HEAD)"
+          echo "VALIDATION_BASE=$VALIDATION_BASE" | tee -a "$GITHUB_ENV"
       - name: Configure optimized build
         shell: bash
         run: |
@@ -108,10 +109,9 @@ jobs:
           cd "$GITHUB_WORKSPACE"
           git config user.name "OpenAI Agent"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git fetch origin main
-          git reset --hard origin/main
+          git reset --hard "$VALIDATION_BASE"
           git clean -fdx
-          git checkout -B agent/focus-coupled-mtf-fastpath origin/main
+          git checkout -B agent/focus-coupled-mtf-fastpath "$VALIDATION_BASE"
           python3 /tmp/apply-coupled-mtf-fastpath.py
           git diff --check
           expected="$(cat <<'EOF' | sort
