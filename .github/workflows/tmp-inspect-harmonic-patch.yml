@@ -1,0 +1,20 @@
+name: TEMP inspect harmonic focus patch
+on:
+  push:
+    branches: [agent/tmp-harmonic-focus-test-trigger3]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Decode relevant patch sections
+        shell: bash
+        run: |
+          set -euo pipefail
+          base64 -d agent/focus-harmonic.patch.gz.b64 | gzip -dc > /tmp/focus-harmonic.patch
+          echo '=== FILES ==='
+          grep '^diff --git' /tmp/focus-harmonic.patch
+          echo '=== HARMONIC / TRANSFER SECTIONS ==='
+          grep -n -C 12 -Ei 'harmonic|carrier|screen_mtf|screen frequency|process_screen' /tmp/focus-harmonic.patch || true
