@@ -35,11 +35,13 @@ jobs:
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           cp agent/apply-coupled-mtf-fastpath.py /tmp/apply.py
           cp agent/try-raw-coupled-seeds.py /tmp/try-raw.py
+          cp agent/try-coupled-restart.py /tmp/try-restart.py
           cp agent/instrument-coupled-fastpath.py /tmp/instrument.py
           git fetch origin main
           git checkout --detach origin/main
           python3 /tmp/apply.py
           python3 /tmp/try-raw.py
+          python3 /tmp/try-restart.py
           python3 /tmp/instrument.py
           git diff --check
       - name: Configure
