@@ -1652,13 +1652,22 @@ int main(int argc, char *argv[]) {
         duration, &app,
         [&app, completionManagedSmoke, newViewSmokeDone,
          slantedReferenceSmokeDone]() {
-          if (completionManagedSmoke &&
-              (!*newViewSmokeDone || !*slantedReferenceSmokeDone)) {
-            qCritical() << "Structured GUI smoke test timed out before completion";
-            app.exit(17);
+          if (completionManagedSmoke) {
+            if (!*newViewSmokeDone || !*slantedReferenceSmokeDone) {
+              qCritical()
+                  << "Structured GUI smoke test timed out before completion";
+              app.exit(17);
+              return;
+            }
+            app.quit();
             return;
           }
-          app.quit();
+
+          // Ordinary smoke tests can leave Qt MDI mode-switch and activation
+          // work queued. Begin document teardown while the event loop is still
+          // running, then give deferred close processing one turn before quit.
+          app.closeAllDocumentWindows();
+          QTimer::singleShot(0, &app, [&app]() { app.quit(); });
         });
   }
 
