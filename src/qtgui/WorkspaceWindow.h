@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QList>
 #include <QMainWindow>
 #include <QPoint>
 #include <QPointer>
@@ -14,7 +15,10 @@ class QEvent;
 class ImageWidget;
 class QMdiArea;
 class QMdiSubWindow;
+class QHBoxLayout;
+class QLabel;
 class QStackedWidget;
+class QToolButton;
 class QTabBar;
 class QVBoxLayout;
 class QWidget;
@@ -93,6 +97,11 @@ public:
       active image presentation without changing the active MDI child. */
   bool restoreFocusFromTaskControl(QWidget *control);
 
+  /** Return the document whose transient progress the shell displays. */
+  MainWindow *displayedProgressDocument() const {
+    return m_displayedProgressDocument.data();
+  }
+
   /** Restore/save only the outer workspace geometry. */
   void restoreWorkspaceGeometry();
   void saveWorkspaceGeometry() const;
@@ -107,12 +116,10 @@ protected:
   /** Implement drag-out tab detachment while preserving ordinary tab moves. */
   bool eventFilter(QObject *watched, QEvent *event) override;
 
-  /** Freeze the shared status line at its initial document-control height.
+  /** Keep the one shared status line at a stable one-row height.
 
-      The first show occurs after the active document's transient progress
-      widget has been installed. Secondary views do not own such a widget, so
-      without this floor Qt would shrink the same shared QStatusBar when one of
-      those tabs becomes active. */
+      Transient progress pages are permanently owned by the workspace and tab
+      activation never adds or removes them. */
   void showEvent(QShowEvent *event) override {
     QMainWindow::showEvent(event);
     QStatusBar *bar = QMainWindow::statusBar();
@@ -148,7 +155,16 @@ private:
   /** Close the shell after its final hosted presentation has left. */
   void scheduleCloseIfEmpty();
 
-  /** Keep DOCUMENT's user-visible long tasks in the global status area. */
+  /** Attach both transient and long-running progress for DOCUMENT. */
+  void attachDocumentProgress(MainWindow *document);
+
+  /** Detach progress only after DOCUMENT has no workspace presentation. */
+  void detachDocumentProgressIfUnused(MainWindow *document);
+
+  /** Return whether DOCUMENT still has a primary or secondary MDI view. */
+  bool hasAttachedPresentation(MainWindow *document) const;
+
+  /** Keep DOCUMENT's user-visible long tasks in the global task strip. */
   void attachUserVisibleProgress(MainWindow *document);
 
   /** Return DOCUMENT's user-visible rows before detaching it. */
@@ -157,11 +173,14 @@ private:
   /** Show the task-progress dock iff any attached document has visible rows. */
   void updateUserVisibleProgressDockVisibility();
 
+  /** Select one visible transient document without following tab changes. */
+  void updateWorkspaceProgressPresentation();
+  void cycleWorkspaceProgress(int offset);
+
   /** Put DOCUMENT's shared inspector in the workspace and target IMAGEWIDGET. */
   void installDocumentInspector(MainWindow *document, ImageWidget *imageWidget);
 
-  /** Show DOCUMENT's menus, toolbar, inspector, and transient progress as the
-      active workspace chrome. */
+  /** Show DOCUMENT's menus, toolbar, and inspector as active chrome. */
   void installDocumentChrome(MainWindow *document);
 
   /** Return DOCUMENT's toolbar/menu visibility to its own window.
@@ -195,7 +214,14 @@ private:
   QDockWidget *m_inspectorDock = nullptr;
   QStackedWidget *m_inspectorStack = nullptr;
   QWidget *m_workspaceProgressArea = nullptr;
-  QVBoxLayout *m_workspaceProgressLayout = nullptr;
+  QHBoxLayout *m_workspaceProgressLayout = nullptr;
+  QStackedWidget *m_workspaceProgressStack = nullptr;
+  QLabel *m_workspaceProgressDocumentLabel = nullptr;
+  QToolButton *m_workspaceProgressPreviousButton = nullptr;
+  QToolButton *m_workspaceProgressNextButton = nullptr;
+  QList<QPointer<MainWindow>> m_progressDocuments;
+  QList<QPointer<MainWindow>> m_progressSignalDocuments;
+  QPointer<MainWindow> m_displayedProgressDocument;
   QWidget *m_userVisibleProgressStack = nullptr;
   QVBoxLayout *m_userVisibleProgressLayout = nullptr;
   QDockWidget *m_userVisibleProgressDock = nullptr;

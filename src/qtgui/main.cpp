@@ -19,6 +19,7 @@
 #include <QPalette>
 #include <QPushButton>
 #include <QMdiArea>
+#include <QMenu>
 #include <QMenuBar>
 #include <QMdiSubWindow>
 #include <QMouseEvent>
@@ -26,6 +27,7 @@
 #include <QStyleFactory>
 #include <QStatusBar>
 #include <QTabBar>
+#include <QThread>
 #include <QThreadPool>
 #include <QToolBar>
 #include <QTimer>
@@ -539,7 +541,8 @@ int main(int argc, char *argv[]) {
         if (!candidate || !workspace->containsDocument(candidate))
           continue;
         if (candidate->statusBar() != workspaceStatus ||
-            candidate->standaloneStatusBar()->isVisible()) {
+            candidate->standaloneStatusBar()->isVisible() ||
+            !workspaceStatus->isAncestorOf(candidate->workspaceStatusWidget())) {
           qCritical() << "Attached document has a private status bar";
           app.exit(11);
           return;
@@ -662,24 +665,33 @@ int main(int argc, char *argv[]) {
         return;
       }
 
-      // A short-lived transient task may occupy the bottom status line but must
-      // not reparent dedicated rows or alter the height of that line.
+      // Transient work belongs to the workspace, not the selected tab. Start
+      // work in the second document while the first remains active and require
+      // the shared status line to present it after the normal display delay.
       auto transientProgress = std::make_shared<colorscreen::progress_info>();
-      transientProgress->set_task("transient smoke task", 100);
+      transientProgress->set_task("inactive document transient smoke task", 100);
       transientProgress->set_progress(10);
-      cancelDocument->addProgress(transientProgress);
+      stopDocument->addProgress(transientProgress);
+      QThread::msleep(350);
       QCoreApplication::processEvents();
-      if (workspaceStatus->height() != statusHeight ||
+      QWidget *workspaceProgress = workspace->findChild<QWidget *>(
+          QStringLiteral("WorkspaceProgressArea"));
+      if (!workspaceProgress || workspaceProgress->isHidden() ||
+          workspace->currentDocument() != cancelDocument ||
+          workspace->displayedProgressDocument() != stopDocument ||
+          !workspaceProgress->isAncestorOf(stopDocument->workspaceStatusWidget()) ||
+          workspaceStatus->height() != statusHeight ||
           !taskStack->isAncestorOf(cancelContainer) ||
           !taskStack->isAncestorOf(stopContainer)) {
-        qCritical() << "Transient progress disturbed the dedicated task strip";
+        qCritical() << "Inactive document transient progress was not presented globally";
         app.exit(13);
         return;
       }
-      cancelDocument->removeProgress(transientProgress);
+      stopDocument->removeProgress(transientProgress);
       QCoreApplication::processEvents();
-      if (workspaceStatus->height() != statusHeight) {
-        qCritical() << "Transient progress changed status-bar height on exit";
+      if (workspace->currentDocument() != cancelDocument ||
+          workspaceStatus->height() != statusHeight) {
+        qCritical() << "Transient progress exit changed tab or status-bar height";
         app.exit(13);
         return;
       }
@@ -779,9 +791,27 @@ int main(int argc, char *argv[]) {
   // delays that processEvents() can overtake on slow or instrumented builds.
   const auto newViewSmokeDone =
       std::make_shared<bool>(!parser.isSet(newViewOption));
+  const auto slantedReferenceSmokeDone =
+      std::make_shared<bool>(!parser.isSet(slantedReferenceOption));
+  const bool completionManagedSmoke =
+      parser.isSet(smokeTestOption) &&
+      (parser.isSet(newViewOption) || parser.isSet(slantedReferenceOption)) &&
+      !parser.isSet(userVisibleProgressOption) &&
+      !parser.isSet(windowLifetimeOption) &&
+      !parser.isSet(closeToEmptyTabOption);
+  const auto maybeFinishStructuredSmoke =
+      std::make_shared<std::function<void()>>();
+  *maybeFinishStructuredSmoke =
+      [&app, newViewSmokeDone, slantedReferenceSmokeDone,
+       completionManagedSmoke]() {
+        if (completionManagedSmoke && *newViewSmokeDone &&
+            *slantedReferenceSmokeDone)
+          QTimer::singleShot(0, &app, [&app]() { app.quit(); });
+      };
 
   if (parser.isSet(newViewOption)) {
-    QTimer::singleShot(300, &app, [&app, newViewSmokeDone]() {
+    QTimer::singleShot(300, &app,
+                       [&app, newViewSmokeDone, maybeFinishStructuredSmoke]() {
       const QList<MainWindow *> documents = app.documentWindows();
       if (documents.isEmpty() || !documents.front()->sharedImageData()) {
         qCritical() << "New View smoke test requires a loaded document";
@@ -912,6 +942,30 @@ int main(int argc, char *argv[]) {
       if (viewMenus != expectedViewMenus) {
         qCritical() << "New View menu chrome differs from an ordinary document"
                     << viewMenus;
+        app.exit(14);
+        return;
+      }
+
+      QMenu *viewFileMenu = nullptr;
+      for (QAction *action : view->menuBar()->actions()) {
+        if (QString(action->text()).remove('&') == QStringLiteral("File")) {
+          viewFileMenu = action->menu();
+          break;
+        }
+      }
+      QStringList viewFileActions;
+      if (viewFileMenu) {
+        for (QAction *action : viewFileMenu->actions())
+          if (action && !action->isSeparator())
+            viewFileActions << QString(action->text()).remove('&');
+      }
+      if (!viewFileMenu ||
+          !viewFileActions.contains(QStringLiteral("Save Parameters")) ||
+          !viewFileActions.contains(QStringLiteral("Exit")) ||
+          !viewFileActions.contains(QStringLiteral("Close View")) ||
+          viewFileActions.contains(QStringLiteral("Close Window"))) {
+        qCritical() << "New View File menu does not mirror document commands"
+                    << viewFileActions;
         app.exit(14);
         return;
       }
@@ -1111,7 +1165,7 @@ int main(int argc, char *argv[]) {
           checkFinalPeerClose;
       *checkFinalPeerClose =
           [&app, guardedSource, guardedView, documentCount, newViewSmokeDone,
-           weakCheckFinalPeerClose](int attemptsLeft) {
+           maybeFinishStructuredSmoke, weakCheckFinalPeerClose](int attemptsLeft) {
             if (guardedSource || guardedView ||
                 app.documentWindows().size() != documentCount - 1) {
               if (attemptsLeft > 0) {
@@ -1127,6 +1181,7 @@ int main(int argc, char *argv[]) {
               return;
             }
             *newViewSmokeDone = true;
+            (*maybeFinishStructuredSmoke)();
           };
       QTimer::singleShot(0, &app, [checkFinalPeerClose]() {
         (*checkFinalPeerClose)(40);
@@ -1251,7 +1306,8 @@ int main(int argc, char *argv[]) {
     const std::weak_ptr<std::function<void(int)>> weakStartReferenceSmoke =
         startReferenceSmoke;
     *startReferenceSmoke =
-        [&app, newViewSmokeDone, weakStartReferenceSmoke](int attemptsLeft) {
+        [&app, newViewSmokeDone, slantedReferenceSmokeDone,
+         maybeFinishStructuredSmoke, weakStartReferenceSmoke](int attemptsLeft) {
       if (!*newViewSmokeDone) {
         if (attemptsLeft <= 0) {
           qCritical() << "Slanted reference smoke test timed out waiting for "
@@ -1309,7 +1365,9 @@ int main(int argc, char *argv[]) {
       const std::weak_ptr<std::function<void(int)>> weakCheckReference =
           checkReference;
       *checkReference = [&app, guardedSource, guardedReference, documentCount,
-                         tabCount, weakCheckReference](int attemptsLeft) {
+                         tabCount, slantedReferenceSmokeDone,
+                         maybeFinishStructuredSmoke,
+                         weakCheckReference](int attemptsLeft) {
         MainWindow *source = guardedSource.data();
         ImageViewWindow *reference = guardedReference.data();
         if (!source || !reference) {
@@ -1354,10 +1412,9 @@ int main(int argc, char *argv[]) {
           return;
         }
 
-        // Reproduce the MTF-detach failure with the source and specialized
-        // reference visible as MDI tiles.  The reference owns its Sharpness
-        // panel, so the detached chart must be adopted by a dock belonging to
-        // that view rather than disappearing from the detachable section.
+        // Reproduce reference-panel detachment while source and reference are
+        // visible as MDI tiles.  The section must use the actual top-level
+        // presentation host, exactly like every other ParameterPanel section.
         workspace->tileDocuments();
         workspace->activateView(reference);
         QCoreApplication::processEvents();
@@ -1374,30 +1431,131 @@ int main(int argc, char *argv[]) {
             }
           }
         }
-        if (!sharpness || !mtfChart || !detachMtf) {
+        if (!sharpness || !mtfChart || !mtfSection || !detachMtf) {
           qCritical() << "Could not locate reference MTF detachable section";
           app.exit(15);
           return;
         }
-        detachMtf->click();
+
+        // Teardown can be queued by another presentation operation while this
+        // check yields to Qt. Never retain raw child pointers across that turn.
+        QPointer<SharpnessPanel> guardedSharpness(sharpness);
+        QPointer<QWidget> guardedMtfChart(mtfChart);
+        QPointer<QWidget> guardedMtfSection(mtfSection);
+        QPointer<QPushButton> guardedDetachMtf(detachMtf);
+        guardedDetachMtf->click();
         QCoreApplication::processEvents();
-        QDockWidget *mtfDock = reference->findChild<QDockWidget *>(
-            QStringLiteral("SlantedEdgeMTFChartDock"));
+        if (!guardedReference || !guardedSharpness || !guardedMtfChart ||
+            !guardedMtfSection || !guardedDetachMtf) {
+          qCritical() << "Reference MTF section disappeared during detach";
+          app.exit(15);
+          return;
+        }
+
+        QMainWindow *mtfHost =
+            qobject_cast<QMainWindow *>(guardedMtfSection->window());
+        QDockWidget *mtfDock = nullptr;
+        if (mtfHost) {
+          for (QDockWidget *candidate : mtfHost->findChildren<QDockWidget *>()) {
+            if (candidate && candidate->property("detachablePanel").toBool() &&
+                candidate->property("detachableTitle").toString() ==
+                    QStringLiteral("MTF Chart") &&
+                candidate->isAncestorOf(guardedMtfChart.data())) {
+              mtfDock = candidate;
+              break;
+            }
+          }
+        }
         if (!mtfDock || !mtfDock->isVisible() || !mtfDock->isFloating() ||
-            !mtfDock->widget() || !mtfDock->isAncestorOf(mtfChart)) {
+            !mtfDock->widget() ||
+            !mtfDock->isAncestorOf(guardedMtfChart.data())) {
           qCritical() << "Reference MTF chart disappeared instead of detaching";
           app.exit(15);
           return;
         }
+        QPointer<QDockWidget> guardedMtfDock(mtfDock);
         mtfDock->close();
         QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
         QCoreApplication::processEvents();
-        if (mtfDock->widget() ||
-            !reference->workspaceInspectorWidget()->isAncestorOf(mtfChart)) {
+        if (!guardedReference || !guardedMtfChart || !guardedDetachMtf) {
+          qCritical() << "Reference MTF section disappeared during reattach";
+          app.exit(15);
+          return;
+        }
+        if (guardedMtfDock && guardedMtfDock->widget()) {
+          qCritical() << "Generic MTF dock retained its content after close";
+          app.exit(15);
+          return;
+        }
+        QWidget *referenceInspector =
+            guardedReference->workspaceInspectorWidget();
+        if (!referenceInspector ||
+            !referenceInspector->isAncestorOf(guardedMtfChart.data()) ||
+            guardedDetachMtf->text() != QStringLiteral("Detach")) {
           qCritical() << "Reference MTF chart did not reattach after dock close";
           app.exit(15);
           return;
         }
+
+        // Exercise the same implementation in two unrelated document panels.
+        workspace->activateDocument(source);
+        QCoreApplication::processEvents();
+        auto exerciseDetachable = [workspace, source](const QString &title) {
+          QWidget *inspector = source->workspaceInspectorWidget();
+          QWidget *section = nullptr;
+          for (QWidget *candidate : inspector->findChildren<QWidget *>()) {
+            if (candidate->objectName() == QStringLiteral("DetachableSection") &&
+                candidate->property("detachableTitle").toString() == title) {
+              section = candidate;
+              break;
+            }
+          }
+          QPushButton *button = section
+                                    ? section->findChild<QPushButton *>(
+                                          QStringLiteral("DetachableSectionButton"))
+                                    : nullptr;
+          QWidget *content = nullptr;
+          if (section) {
+            for (QWidget *candidate : section->findChildren<QWidget *>()) {
+              if (candidate->property("detachableContentTitle").toString() ==
+                  title) {
+                content = candidate;
+                break;
+              }
+            }
+          }
+          if (!section || !button || !content)
+            return false;
+          button->click();
+          QCoreApplication::processEvents();
+          QDockWidget *dock = nullptr;
+          for (QDockWidget *candidate : workspace->findChildren<QDockWidget *>()) {
+            if (candidate->property("detachablePanel").toBool() &&
+                candidate->property("detachableTitle").toString() == title &&
+                candidate->isAncestorOf(content)) {
+              dock = candidate;
+              break;
+            }
+          }
+          if (!dock || !dock->isVisible() || !dock->isFloating() ||
+              button->text() != QStringLiteral("Reattach"))
+            return false;
+          QPointer<QDockWidget> guardedDock(dock);
+          dock->close();
+          QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+          QCoreApplication::processEvents();
+          return (!guardedDock || !guardedDock->widget()) &&
+                 inspector->isAncestorOf(content) &&
+                 button->text() == QStringLiteral("Detach");
+        };
+        if (!exerciseDetachable(QStringLiteral("H&D Curve")) ||
+            !exerciseDetachable(QStringLiteral("Backlight"))) {
+          qCritical() << "Unrelated panels do not share the generic detach lifecycle";
+          app.exit(15);
+          return;
+        }
+        workspace->activateView(reference);
+        QCoreApplication::processEvents();
         workspace->showTabbedDocuments();
         workspace->activateView(reference);
         QCoreApplication::processEvents();
@@ -1408,6 +1566,7 @@ int main(int argc, char *argv[]) {
         const std::weak_ptr<std::function<void(int)>> weakCheckReload =
             checkReload;
         *checkReload = [&app, guardedSource, guardedReference, beforeReload,
+                        slantedReferenceSmokeDone, maybeFinishStructuredSmoke,
                         weakCheckReload](int attemptsLeft) {
           MainWindow *source = guardedSource.data();
           ImageViewWindow *reference = guardedReference.data();
@@ -1465,6 +1624,8 @@ int main(int argc, char *argv[]) {
           }
           for (ImageViewWindow *view : references)
             app.closeView(view);
+          *slantedReferenceSmokeDone = true;
+          (*maybeFinishStructuredSmoke)();
         };
         (*checkReload)(28);
       };
@@ -1480,11 +1641,25 @@ int main(int argc, char *argv[]) {
     int duration = parser.value(smokeTestOption).toInt(&converted);
     if (!converted || duration <= 0)
       duration = 5000;
-    qDebug() << "Smoke Test Mode: Will exit in" << duration << "ms...";
-    QTimer::singleShot(duration, &app, [&app]() {
-      app.closeAllDocumentWindows();
-      app.quit();
-    });
+    // New View and slanted-reference checks manipulate shared presentation
+    // serially. Give their watchdog enough room under instrumentation, but
+    // successful structured checks quit immediately when they are complete.
+    if (completionManagedSmoke && parser.isSet(newViewOption) &&
+        parser.isSet(slantedReferenceOption))
+      duration = qMax(duration, 60000);
+    qDebug() << "Smoke Test Mode: watchdog is" << duration << "ms";
+    QTimer::singleShot(
+        duration, &app,
+        [&app, completionManagedSmoke, newViewSmokeDone,
+         slantedReferenceSmokeDone]() {
+          if (completionManagedSmoke &&
+              (!*newViewSmokeDone || !*slantedReferenceSmokeDone)) {
+            qCritical() << "Structured GUI smoke test timed out before completion";
+            app.exit(17);
+            return;
+          }
+          app.quit();
+        });
   }
 
   // WorkspaceWindow deliberately survives Close while detached peer windows
