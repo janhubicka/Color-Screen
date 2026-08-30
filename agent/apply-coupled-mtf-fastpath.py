@@ -193,6 +193,18 @@ replace_once(
 """,
 )
 
+# The internal regression-test helper already exists specifically to obtain an
+# exact prepared-source finetune screen.  Give that narrow test hook default
+# visibility so shared-library test executables can call it without exporting
+# the lower-level screen_filter_source implementation.
+replace_once(
+    "src/libcolorscreen/finetune-int.h",
+    """std::shared_ptr<screen> finetune_get_cached_screen_for_test (
+""",
+    """DLL_PUBLIC std::shared_ptr<screen> finetune_get_cached_screen_for_test (
+""",
+)
+
 replace_once(
     "src/libcolorscreen/unittests.C",
     """  mtf_parameters comparison_parameters = physical[0].scanner_mtf;
@@ -218,11 +230,11 @@ replace_once(
 """,
 )
 
-# Generate the synthetic coupled-focus fixture with the same exact periodic
-# analytical transfer used by the prepared-source finetune path.  The ordinary
-# screen overload intentionally retains its historical sampled-PSF numerical
-# path, so mixing the two implementations would test discretization differences
-# rather than cold/warm optimizer stability.
+# Generate the synthetic coupled-focus fixture through the existing exact
+# prepared-source finetune test hook.  The ordinary screen overload retains its
+# historical sampled-PSF numerical path, so mixing the two implementations
+# would test discretization differences rather than cold/warm optimizer
+# stability.
 replace_once(
     "src/libcolorscreen/focus-analysis-unittests.C",
     """  screen source, filtered;
@@ -231,15 +243,20 @@ replace_once(
   if (!filtered.initialize_with_sharpen_parameters (source, sp, false, false))
     return false;
 """,
-    """  screen source, filtered;
-  source.initialize (Paget);
-  screen_filter_source prepared_source;
-  if (!source.prepare_filter_source (prepared_source))
+    """  std::array<sharpen_parameters, 3> exact_capture
+      = { capture, capture, capture };
+  bool fixture_cache_hit = false;
+  std::shared_ptr<screen> filtered = finetune_get_cached_screen_for_test (
+      Paget, 0, 0, false, exact_capture, false, &fixture_cache_hit);
+  if (!filtered)
     return false;
-  sharpen_parameters *sp[3] = { &capture, &capture, &capture };
-  if (!filtered.initialize_with_sharpen_parameters (
-          prepared_source, sp, false, false))
-    return false;
+""",
+)
+replace_once(
+    "src/libcolorscreen/focus-analysis-unittests.C",
+    """        const rgbdata screen_value = filtered.interpolated_mult (
+""",
+    """        const rgbdata screen_value = filtered->interpolated_mult (
 """,
 )
 replace_once(
