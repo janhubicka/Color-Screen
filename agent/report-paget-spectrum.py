@@ -3,8 +3,8 @@ from pathlib import Path
 
 p = Path("src/libcolorscreen/focus-analysis-unittests.C")
 text = p.read_text()
-old = '#include <string>\n'
-new = '#include <string>\n#include <complex>\n'
+old = '#include <vector>\n'
+new = '#include <vector>\n#include <complex>\n'
 if text.count(old) != 1:
     raise SystemExit("include anchor mismatch")
 text = text.replace(old, new, 1)
