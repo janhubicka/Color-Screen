@@ -1,0 +1,21 @@
+name: Agent source export
+
+on:
+  pull_request:
+    branches: [ "main" ]
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Archive exact pull-request source
+        run: git archive --format=tar.gz --prefix=Color-Screen/ HEAD > colorscreen-source.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: agent-current-source
+          path: colorscreen-source.tar.gz
+          if-no-files-found: error
