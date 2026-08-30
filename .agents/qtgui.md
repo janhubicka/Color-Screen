@@ -121,6 +121,16 @@ Do not create a replacement empty document merely because the last real document
 closed; once no image presentation remains, the workspace shell should disappear
 and normal Qt last-window lifetime rules apply.
 
+Sanitizer GUI coverage includes a completion-driven workspace-churn smoke test.
+Starting from two loaded documents, it creates an ordinary peer view, changes
+between tiled, cascaded, and tabbed MDI presentation, repeatedly detaches and
+reattaches both documents and the view, consolidates all top-level windows,
+closes the peer and one independent document, and finally exercises the sole-tab
+lifecycle. Each phase verifies live wrapper counts, document/view ownership,
+inspector routing, status-bar routing, and workspace visibility. Keep this probe
+in its own process: it intentionally stresses queued Qt presentation teardown,
+while the existing focused smoke tests isolate their own lifetime assumptions.
+
 Automatic solid-area focus analysis is also document-local.  The discovered
 candidate rectangles, individual fit results, selected subset, and validation
 diagnostics belong to the source `MainWindow`; they must never be static or

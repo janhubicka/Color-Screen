@@ -4,6 +4,7 @@
 #include "ImageWidget.h"
 #include "SharpnessPanel.h"
 #include "CoordinateTransformer.h"
+#include "WorkspaceChurnSmoke.h"
 #include "WorkspaceWindow.h"
 #include "progress-info.h"
 
@@ -154,12 +155,34 @@ int main(int argc, char *argv[]) {
       "Open the current image as a separate slanted-edge reference view");
   parser.addOption(slantedReferenceOption);
 
+  QCommandLineOption workspaceChurnOption(
+      "smoke-test-workspace-churn",
+      "Exercise staged multi-document/view MDI and detached-window churn");
+  parser.addOption(workspaceChurnOption);
+
   QCommandLineOption timeReportOption(
       "time-report", "Enable internal time reporting of tasks");
   parser.addOption(timeReportOption);
 
   parser.addPositionalArgument("image", "Image file(s) to open.", "[image...]");
   parser.process(app);
+
+  if (parser.isSet(workspaceChurnOption) &&
+      (parser.isSet(detachReattachOption) ||
+       parser.isSet(closeToEmptyTabOption) ||
+       parser.isSet(expectedTabBarOption) ||
+       parser.isSet(mdiArrangementOption) ||
+       parser.isSet(tileActivationStableOption) ||
+       parser.isSet(menuOrderOption) || parser.isSet(toolbarOrderOption) ||
+       parser.isSet(dragDetachOption) || parser.isSet(tabbedFillOption) ||
+       parser.isSet(globalStatusBarOption) ||
+       parser.isSet(userVisibleProgressOption) || parser.isSet(newViewOption) ||
+       parser.isSet(windowLifetimeOption) ||
+       parser.isSet(slantedReferenceOption))) {
+    qCritical() << "--smoke-test-workspace-churn must run without other "
+                   "action smoke options";
+    return 18;
+  }
 
   // Smoke tests need an explicit shutdown turn so queued widget destruction and
   // QtConcurrent work can be drained before sanitizers inspect process state.
@@ -793,9 +816,12 @@ int main(int argc, char *argv[]) {
       std::make_shared<bool>(!parser.isSet(newViewOption));
   const auto slantedReferenceSmokeDone =
       std::make_shared<bool>(!parser.isSet(slantedReferenceOption));
+  const auto workspaceChurnSmokeDone =
+      std::make_shared<bool>(!parser.isSet(workspaceChurnOption));
   const bool completionManagedSmoke =
       parser.isSet(smokeTestOption) &&
-      (parser.isSet(newViewOption) || parser.isSet(slantedReferenceOption)) &&
+      (parser.isSet(newViewOption) || parser.isSet(slantedReferenceOption) ||
+       parser.isSet(workspaceChurnOption)) &&
       !parser.isSet(userVisibleProgressOption) &&
       !parser.isSet(windowLifetimeOption) &&
       !parser.isSet(closeToEmptyTabOption);
@@ -803,9 +829,9 @@ int main(int argc, char *argv[]) {
       std::make_shared<std::function<void()>>();
   *maybeFinishStructuredSmoke =
       [&app, newViewSmokeDone, slantedReferenceSmokeDone,
-       completionManagedSmoke]() {
+       workspaceChurnSmokeDone, completionManagedSmoke]() {
         if (completionManagedSmoke && *newViewSmokeDone &&
-            *slantedReferenceSmokeDone)
+            *slantedReferenceSmokeDone && *workspaceChurnSmokeDone)
           QTimer::singleShot(0, &app, [&app]() { app.quit(); });
       };
 
@@ -1187,6 +1213,14 @@ int main(int argc, char *argv[]) {
         (*checkFinalPeerClose)(40);
       });
     });
+  }
+
+  if (parser.isSet(workspaceChurnOption)) {
+    startWorkspaceChurnSmoke(
+        app, [workspaceChurnSmokeDone, maybeFinishStructuredSmoke]() {
+          *workspaceChurnSmokeDone = true;
+          (*maybeFinishStructuredSmoke)();
+        });
   }
 
   if (parser.isSet(windowLifetimeOption)) {
@@ -1647,13 +1681,16 @@ int main(int argc, char *argv[]) {
     if (completionManagedSmoke && parser.isSet(newViewOption) &&
         parser.isSet(slantedReferenceOption))
       duration = qMax(duration, 60000);
+    if (completionManagedSmoke && parser.isSet(workspaceChurnOption))
+      duration = qMax(duration, 60000);
     qDebug() << "Smoke Test Mode: watchdog is" << duration << "ms";
     QTimer::singleShot(
         duration, &app,
         [&app, completionManagedSmoke, newViewSmokeDone,
-         slantedReferenceSmokeDone]() {
+         slantedReferenceSmokeDone, workspaceChurnSmokeDone]() {
           if (completionManagedSmoke) {
-            if (!*newViewSmokeDone || !*slantedReferenceSmokeDone) {
+            if (!*newViewSmokeDone || !*slantedReferenceSmokeDone ||
+                !*workspaceChurnSmokeDone) {
               qCritical()
                   << "Structured GUI smoke test timed out before completion";
               app.exit(17);
