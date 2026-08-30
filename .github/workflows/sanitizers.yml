@@ -109,6 +109,8 @@ jobs:
           OMP_TOOL_LIBRARIES=/usr/lib/llvm-18/lib/libarcher.so \
           TSAN_OPTIONS=halt_on_error=1:ignore_noninstrumented_modules=1:external_symbolizer_path=/usr/bin/llvm-symbolizer-18 \
           /tmp/tsan-openmp-smoke
+    - name: Verify generated build metadata
+      run: sh build-aux/check-generated-build-metadata.sh
     - name: Configure with ThreadSanitizer
       run: |
         SANITIZER_FLAGS="-O1 -g -fno-omit-frame-pointer -fno-optimize-sibling-calls -fsanitize=thread"
@@ -118,7 +120,21 @@ jobs:
           ./configure --enable-checking --disable-static-link \
           --disable-gtkgui --enable-qtgui
     - name: Build ThreadSanitizer variant
-      run: make -j$(nproc)
+      shell: bash
+      run: |
+        set -o pipefail
+        make -j$(nproc) 2>&1 | tee tsan-build.log
+    - name: Upload ThreadSanitizer build diagnostics
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-diagnostics-tsan-amd64
+        path: |
+          tsan-build.log
+          config.log
+          src/qtgui/Makefile
+          src/qtgui/Makefile.am
+          src/qtgui/Makefile.in
     - name: Qt GUI smoke probe (ThreadSanitizer)
       env:
         OMP_NUM_THREADS: "4"
@@ -198,6 +214,8 @@ jobs:
           ccache-${{ runner.os }}-${{ runner.arch }}-macos-
     - name: Reset compiler cache stats
       run: ccache --zero-stats
+    - name: Verify generated build metadata
+      run: sh build-aux/check-generated-build-metadata.sh
     - name: Configure with ASan and UBSan
       run: |
         QT6_PREFIX=$(brew --prefix qt6)
@@ -225,7 +243,20 @@ jobs:
           ./configure --enable-checking --disable-static-link --disable-openmp \
           --enable-qtgui MOC="$MOC_CANDIDATE"
     - name: Build sanitizer variant
-      run: make -j$(sysctl -n hw.logicalcpu)
+      run: |
+        set -o pipefail
+        make -j$(sysctl -n hw.logicalcpu) 2>&1 | tee macos-sanitizer-build.log
+    - name: Upload macOS sanitizer build diagnostics
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-diagnostics-sanitizers-macos
+        path: |
+          macos-sanitizer-build.log
+          config.log
+          src/qtgui/Makefile
+          src/qtgui/Makefile.am
+          src/qtgui/Makefile.in
     - name: Qt multi-window smoke test (ASan + UBSan)
       env:
         ASAN_OPTIONS: halt_on_error=1
@@ -236,6 +267,12 @@ jobs:
           --smoke-test 30000 --smoke-test-expect-windows 2 \
           --smoke-test-tile-activation-stable --smoke-test-menu-order \
           --smoke-test-new-view --smoke-test-slanted-reference \
+          "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif" \
+          "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
+
+        ./src/qtgui/colorscreen-qt \
+          --smoke-test 60000 --smoke-test-expect-windows 2 \
+          --smoke-test-workspace-churn \
           "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif" \
           "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
 
@@ -289,6 +326,9 @@ jobs:
           mingw-w64-clang-x86_64-qt6-base mingw-w64-clang-x86_64-qt6-tools
           mingw-w64-clang-x86_64-adwaita-icon-theme mingw-w64-clang-x86_64-qt6-svg
           mingw-w64-clang-x86_64-imagemagick mingw-w64-clang-x86_64-exiv2
+    - name: Verify generated build metadata
+      shell: msys2 {0}
+      run: sh build-aux/check-generated-build-metadata.sh
     - name: Update autotools
       shell: msys2 {0}
       run: autoreconf -fiv
@@ -312,12 +352,17 @@ jobs:
       run: |
         set -o pipefail
         make -j2 2>&1 | tee windows-asan-build.log
-    - name: Upload Windows ASan build log
+    - name: Upload Windows ASan build diagnostics
       if: always()
       uses: actions/upload-artifact@v4
       with:
         name: windows-asan-build-log
-        path: windows-asan-build.log
+        path: |
+          windows-asan-build.log
+          config.log
+          src/qtgui/Makefile
+          src/qtgui/Makefile.am
+          src/qtgui/Makefile.in
     - name: Qt multi-window smoke test (AddressSanitizer)
       shell: msys2 {0}
       env:
@@ -335,6 +380,12 @@ jobs:
         ./src/qtgui/colorscreen-qt \
           --smoke-test 30000 --smoke-test-expect-windows 2 \
           --smoke-test-new-view --smoke-test-slanted-reference \
+          "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif" \
+          "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
+
+        ./src/qtgui/colorscreen-qt \
+          --smoke-test 60000 --smoke-test-expect-windows 2 \
+          --smoke-test-workspace-churn \
           "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif" \
           "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
 

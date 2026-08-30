@@ -1,0 +1,474 @@
+#include "WorkspaceChurnSmoke.h"
+
+#include "ColorScreenApplication.h"
+#include "ImageViewWindow.h"
+#include "MainWindow.h"
+#include "WorkspaceWindow.h"
+
+#include <QCoreApplication>
+#include <QDebug>
+#include <QEvent>
+#include <QList>
+#include <QMdiArea>
+#include <QMdiSubWindow>
+#include <QPointer>
+#include <QStatusBar>
+#include <QString>
+#include <QTimer>
+#include <QWidget>
+
+#include <functional>
+#include <memory>
+#include <utility>
+
+namespace {
+
+constexpr int workspaceChurnFailure = 18;
+
+/** Live objects and completion callback shared by the staged smoke test. */
+struct WorkspaceChurnState {
+  QPointer<WorkspaceWindow> workspace;
+  QPointer<MainWindow> first;
+  QPointer<MainWindow> second;
+  QPointer<ImageViewWindow> view;
+  std::function<void()> completed;
+};
+
+} // namespace
+
+/** Exercise repeated MDI, detached-window, and peer-view ownership changes. */
+void startWorkspaceChurnSmoke(ColorScreenApplication &app,
+                              std::function<void()> completed) {
+  auto startWorkspaceChurn =
+      std::make_shared<std::function<void(int)>>();
+  const std::weak_ptr<std::function<void(int)>> weakStartWorkspaceChurn =
+      startWorkspaceChurn;
+  *startWorkspaceChurn =
+      [&app, completed = std::move(completed),
+       weakStartWorkspaceChurn](int attemptsLeft) {
+    const QList<MainWindow *> documents = app.documentWindows();
+    WorkspaceWindow *workspace = app.workspaceWindow();
+    bool ready = documents.size() == 2 && workspace && app.tabCount() == 2 &&
+                 workspace->isTabbedView();
+    for (MainWindow *document : documents) {
+      if (!workspace || !document || !document->sharedImageData() ||
+          !workspace->containsDocument(document)) {
+        ready = false;
+        break;
+      }
+    }
+    if (!ready) {
+      if (attemptsLeft > 0) {
+        if (auto retry = weakStartWorkspaceChurn.lock()) {
+          QTimer::singleShot(100, &app, [retry, attemptsLeft]() {
+            (*retry)(attemptsLeft - 1);
+          });
+          return;
+        }
+      }
+      qCritical()
+          << "Workspace churn smoke test requires two loaded document tabs";
+      app.exit(workspaceChurnFailure);
+      return;
+    }
+
+    auto state = std::make_shared<WorkspaceChurnState>();
+    state->workspace = workspace;
+    state->first = documents[0];
+    state->second = documents[1];
+    state->view = app.createViewWindow(state->first.data());
+    state->completed = completed;
+    if (!state->view) {
+      qCritical() << "Workspace churn smoke could not create an ordinary view";
+      app.exit(workspaceChurnFailure);
+      return;
+    }
+
+    auto runPhase =
+        std::make_shared<std::function<void(int, int)>>();
+    const std::weak_ptr<std::function<void(int, int)>> weakRunPhase = runPhase;
+    *runPhase = [&app, state, weakRunPhase](int phase, int attemptsLeft) {
+      auto fail = [&app](const QString &message) {
+        qCritical().noquote() << message;
+        app.exit(workspaceChurnFailure);
+      };
+      auto schedule = [&app, weakRunPhase](int nextPhase, int delay,
+                                           int attempts) {
+        if (auto callback = weakRunPhase.lock()) {
+          QTimer::singleShot(delay, &app,
+                             [callback, nextPhase, attempts]() {
+            (*callback)(nextPhase, attempts);
+          });
+          return true;
+        }
+        qCritical() << "Workspace churn smoke callback expired";
+        app.exit(workspaceChurnFailure);
+        return false;
+      };
+      auto retryOrFail = [&](const QString &message) {
+        if (attemptsLeft > 0) {
+          schedule(phase, 50, attemptsLeft - 1);
+          return true;
+        }
+        fail(message);
+        return false;
+      };
+
+      WorkspaceWindow *workspace = state->workspace.data();
+      MainWindow *first = state->first.data();
+      MainWindow *second = state->second.data();
+      ImageViewWindow *view = state->view.data();
+      if (!workspace || !first) {
+        fail(QStringLiteral(
+            "Workspace churn smoke lost its workspace or source document"));
+        return;
+      }
+
+      auto *mdiArea = workspace->findChild<QMdiArea *>(
+          QStringLiteral("documentMdiArea"));
+      auto hasExactWrappers = [mdiArea, first, second, view]() {
+        if (!mdiArea)
+          return false;
+        const int expected = 1 + (second ? 1 : 0) + (view ? 1 : 0);
+        const QList<QMdiSubWindow *> windows =
+            mdiArea->subWindowList(QMdiArea::CreationOrder);
+        if (windows.size() != expected)
+          return false;
+        bool foundFirst = false;
+        bool foundSecond = second == nullptr;
+        bool foundView = view == nullptr;
+        for (QMdiSubWindow *window : windows) {
+          QWidget *hosted = window ? window->widget() : nullptr;
+          if (!hosted)
+            return false;
+          foundFirst = foundFirst || hosted == first;
+          foundSecond = foundSecond || hosted == second;
+          foundView = foundView || hosted == view;
+        }
+        return foundFirst && foundSecond && foundView;
+      };
+
+      switch (phase) {
+      case 0:
+        if (!second || !view || view->sourceDocument() != first ||
+            view->sharedImageData() != first->sharedImageData() ||
+            app.documentWindows().size() != 2 ||
+            app.viewWindows().size() != 1 || app.tabCount() != 3 ||
+            !workspace->containsDocument(first) ||
+            !workspace->containsDocument(second) ||
+            !workspace->containsView(view) || !view->isWorkspaceEmbedded() ||
+            first->statusBar() != workspace->statusBar() ||
+            second->statusBar() != workspace->statusBar() ||
+            view->statusBar() != workspace->statusBar() ||
+            workspace->currentDocument() != first ||
+            first->inspectorImageWidget() != view->imageWidget()) {
+          fail(QStringLiteral(
+              "Workspace churn did not create a complete third peer tab"));
+          return;
+        }
+        workspace->tileDocuments();
+        schedule(1, 50, 40);
+        return;
+
+      case 1: {
+        if (!second || !view || workspace->isTabbedView() ||
+            !hasExactWrappers()) {
+          fail(QStringLiteral(
+              "Workspace churn lost presentations while entering tiled MDI"));
+          return;
+        }
+        const QList<QMdiSubWindow *> windows =
+            mdiArea->subWindowList(QMdiArea::CreationOrder);
+        for (int i = 0; i < windows.size(); ++i) {
+          if (!windows[i] || !windows[i]->geometry().isValid()) {
+            fail(QStringLiteral("Workspace churn produced an invalid tile"));
+            return;
+          }
+          for (int j = i + 1; j < windows.size(); ++j) {
+            if (!windows[i]->geometry()
+                     .intersected(windows[j]->geometry())
+                     .isEmpty()) {
+              fail(QStringLiteral(
+                  "Workspace churn produced overlapping MDI tiles"));
+              return;
+            }
+          }
+        }
+        workspace->activateDocument(second);
+        if (workspace->currentDocument() != second ||
+            second->inspectorImageWidget() != second->primaryImageWidget()) {
+          fail(QStringLiteral(
+              "Tiled activation did not install the second document chrome"));
+          return;
+        }
+        workspace->activateView(view);
+        if (workspace->currentDocument() != first ||
+            first->inspectorImageWidget() != view->imageWidget()) {
+          fail(QStringLiteral(
+              "Tiled activation did not route the shared inspector to the view"));
+          return;
+        }
+        workspace->activateDocument(first);
+        if (workspace->currentDocument() != first ||
+            first->inspectorImageWidget() != first->primaryImageWidget()) {
+          fail(QStringLiteral(
+              "Tiled activation did not return the inspector to the primary view"));
+          return;
+        }
+        workspace->cascadeDocuments();
+        schedule(2, 50, 40);
+        return;
+      }
+
+      case 2: {
+        if (!second || !view || workspace->isTabbedView() ||
+            !hasExactWrappers()) {
+          fail(QStringLiteral(
+              "Workspace churn lost presentations while cascading MDI"));
+          return;
+        }
+        const QList<QMdiSubWindow *> windows =
+            mdiArea->subWindowList(QMdiArea::CreationOrder);
+        bool offset = false;
+        for (int i = 1; i < windows.size(); ++i)
+          offset = offset || windows[i]->pos() != windows[0]->pos();
+        if (!offset) {
+          fail(QStringLiteral(
+              "Workspace churn cascade did not offset any subwindow"));
+          return;
+        }
+        workspace->showTabbedDocuments();
+        schedule(3, 50, 40);
+        return;
+      }
+
+      case 3:
+        if (!second || !view || !workspace->isTabbedView() ||
+            !workspace->isTabBarVisible() || app.tabCount() != 3 ||
+            !hasExactWrappers()) {
+          fail(QStringLiteral(
+              "Workspace churn did not restore the three-tab presentation"));
+          return;
+        }
+        app.detachView(view);
+        schedule(4, 50, 40);
+        return;
+
+      case 4:
+        if (!second || !view || !view->isWindow() ||
+            view->isWorkspaceEmbedded() || workspace->containsView(view) ||
+            app.tabCount() != 2 || !workspace->containsDocument(first) ||
+            !workspace->containsDocument(second) ||
+            view->statusBar() != view->standaloneStatusBar() ||
+            !view->standaloneStatusBar()->isVisible() ||
+            first->statusBar() != workspace->statusBar()) {
+          fail(QStringLiteral(
+              "Workspace churn did not detach the ordinary view cleanly"));
+          return;
+        }
+        app.attachView(view);
+        schedule(5, 50, 40);
+        return;
+
+      case 5:
+        if (!second || !view || !view->isWorkspaceEmbedded() ||
+            !workspace->containsView(view) || app.tabCount() != 3 ||
+            view->statusBar() != workspace->statusBar() ||
+            view->standaloneStatusBar()->isVisible() ||
+            workspace->currentDocument() != first ||
+            first->inspectorImageWidget() != view->imageWidget()) {
+          fail(QStringLiteral(
+              "Workspace churn did not reattach the ordinary view cleanly"));
+          return;
+        }
+        app.detachDocument(first);
+        schedule(6, 50, 40);
+        return;
+
+      case 6:
+        if (!second || !view || !first->isWindow() ||
+            first->isWorkspaceEmbedded() || workspace->containsDocument(first) ||
+            !workspace->containsDocument(second) ||
+            !workspace->containsView(view) || app.tabCount() != 2 ||
+            first->statusBar() != first->standaloneStatusBar() ||
+            !first->standaloneStatusBar()->isVisible() ||
+            view->statusBar() != workspace->statusBar() ||
+            view->sourceDocument() != first ||
+            view->sharedImageData() != first->sharedImageData()) {
+          fail(QStringLiteral(
+              "Workspace churn did not preserve a view across source detachment"));
+          return;
+        }
+        workspace->activateView(view);
+        schedule(7, 0, 40);
+        return;
+
+      case 7:
+        if (!view || workspace->currentDocument() != first ||
+            first->inspectorImageWidget() != view->imageWidget()) {
+          fail(QStringLiteral(
+              "Attached peer view could not control its detached source document"));
+          return;
+        }
+        app.attachDocument(first);
+        schedule(8, 50, 40);
+        return;
+
+      case 8:
+        if (!second || !view || !first->isWorkspaceEmbedded() ||
+            !workspace->containsDocument(first) ||
+            !workspace->containsDocument(second) ||
+            !workspace->containsView(view) || app.tabCount() != 3 ||
+            first->statusBar() != workspace->statusBar()) {
+          fail(QStringLiteral(
+              "Workspace churn did not restore the detached source document"));
+          return;
+        }
+        app.detachDocument(second);
+        app.detachView(view);
+        schedule(9, 50, 40);
+        return;
+
+      case 9:
+        if (!second || !view || !workspace->containsDocument(first) ||
+            workspace->containsDocument(second) || workspace->containsView(view) ||
+            app.tabCount() != 1 || !workspace->isTabBarVisible() ||
+            !workspace->isVisible() || !second->isWindow() || !view->isWindow()) {
+          fail(QStringLiteral(
+              "Workspace churn did not keep one normal tab during split presentation"));
+          return;
+        }
+        app.attachAllDocuments();
+        app.attachAllViews();
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+        schedule(10, 50, 40);
+        return;
+
+      case 10:
+        if (!second || !view || app.tabCount() != 3 ||
+            !workspace->containsDocument(first) ||
+            !workspace->containsDocument(second) ||
+            !workspace->containsView(view) || !first->isWorkspaceEmbedded() ||
+            !second->isWorkspaceEmbedded() || !view->isWorkspaceEmbedded() ||
+            first->statusBar() != workspace->statusBar() ||
+            second->statusBar() != workspace->statusBar() ||
+            view->statusBar() != workspace->statusBar()) {
+          fail(QStringLiteral(
+              "Workspace churn could not consolidate all presentations"));
+          return;
+        }
+        if (!hasExactWrappers()) {
+          if (retryOrFail(QStringLiteral(
+                  "Workspace churn left stale MDI wrappers after consolidation")))
+            return;
+          return;
+        }
+        workspace->tileDocuments();
+        schedule(11, 50, 40);
+        return;
+
+      case 11:
+        if (!second || !view || workspace->isTabbedView() ||
+            !hasExactWrappers()) {
+          fail(QStringLiteral(
+              "Workspace churn second MDI transition lost a presentation"));
+          return;
+        }
+        workspace->showTabbedDocuments();
+        schedule(12, 50, 40);
+        return;
+
+      case 12:
+        if (!second || !view || !workspace->isTabbedView() ||
+            app.tabCount() != 3 || !hasExactWrappers()) {
+          fail(QStringLiteral(
+              "Workspace churn second tabbed transition was incomplete"));
+          return;
+        }
+        if (!app.closeView(view)) {
+          fail(QStringLiteral(
+              "Workspace churn could not close the attached peer view"));
+          return;
+        }
+        schedule(13, 0, 40);
+        return;
+
+      case 13:
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+        if (state->view || !app.viewWindows().isEmpty()) {
+          if (retryOrFail(QStringLiteral(
+                  "Workspace churn peer view did not finish closing")))
+            return;
+          return;
+        }
+        if (!second || app.documentWindows().size() != 2 ||
+            app.tabCount() != 2 || !workspace->containsDocument(first) ||
+            !workspace->containsDocument(second) ||
+            !app.isDocumentPresentationOpen(first)) {
+          fail(QStringLiteral(
+              "Closing the churn peer damaged either source document"));
+          return;
+        }
+        if (!second->close()) {
+          fail(QStringLiteral(
+              "Workspace churn second document rejected an ordinary close"));
+          return;
+        }
+        schedule(14, 0, 40);
+        return;
+
+      case 14:
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+        if (state->second || app.documentWindows().size() != 1) {
+          if (retryOrFail(QStringLiteral(
+                  "Workspace churn second document did not finish closing")))
+            return;
+          return;
+        }
+        if (app.tabCount() != 1 || !workspace->containsDocument(first) ||
+            !workspace->isVisible() || !workspace->isTabBarVisible() ||
+            !app.isDocumentPresentationOpen(first)) {
+          fail(QStringLiteral(
+              "Workspace churn did not leave one healthy source tab"));
+          return;
+        }
+        app.detachDocument(first);
+        schedule(15, 50, 40);
+        return;
+
+      case 15:
+        if (!first->isWindow() || first->isWorkspaceEmbedded() ||
+            app.tabCount() != 0 || workspace->isVisible()) {
+          fail(QStringLiteral(
+              "Workspace churn final sole-document detachment was incomplete"));
+          return;
+        }
+        app.attachDocument(first);
+        schedule(16, 50, 40);
+        return;
+
+      case 16:
+        if (!first->isWorkspaceEmbedded() ||
+            !workspace->containsDocument(first) || app.tabCount() != 1 ||
+            !workspace->isVisible() || !workspace->isTabBarVisible() ||
+            first->statusBar() != workspace->statusBar()) {
+          fail(QStringLiteral(
+              "Workspace churn final sole-document reattachment was incomplete"));
+          return;
+        }
+        if (state->completed)
+          state->completed();
+        return;
+
+      default:
+        fail(QStringLiteral("Workspace churn reached an invalid phase"));
+        return;
+      }
+    };
+
+    QTimer::singleShot(0, &app, [runPhase]() { (*runPhase)(0, 40); });
+  };
+  QTimer::singleShot(300, &app, [startWorkspaceChurn]() {
+    (*startWorkspaceChurn)(80);
+  });
+}
