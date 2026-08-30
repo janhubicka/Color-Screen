@@ -6,11 +6,10 @@ on:
       - agent/tmp-coupled-mtf-fastpath-publisher-20260829
 
 permissions:
-  contents: write
   packages: read
 
 jobs:
-  diagnose-fast-basin:
+  report-paget-spectrum:
     runs-on: ubuntu-24.04
     container:
       image: ghcr.io/janhubicka/color-screen-ci:ubuntu-24.04
@@ -27,22 +26,16 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Apply fast path and diagnostics to current main
+      - name: Apply spectrum diagnostic to current main
         shell: bash
         run: |
           set -euxo pipefail
           cd "$GITHUB_WORKSPACE"
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          cp agent/apply-coupled-mtf-fastpath.py /tmp/apply.py
-          cp agent/try-raw-coupled-seeds.py /tmp/try-raw.py
-          cp agent/try-best-block-polish.py /tmp/try-block.py
-          cp agent/instrument-coupled-fastpath.py /tmp/instrument.py
+          cp agent/report-paget-spectrum.py /tmp/report.py
           git fetch origin main
           git checkout --detach origin/main
-          python3 /tmp/apply.py
-          python3 /tmp/try-raw.py
-          python3 /tmp/try-block.py
-          python3 /tmp/instrument.py
+          python3 /tmp/report.py
           git diff --check
       - name: Configure
         shell: bash
@@ -52,18 +45,10 @@ jobs:
           export CXXFLAGS="-Ofast -flto=auto"
           export CFLAGS="$CXXFLAGS"
           ./configure --enable-qtgui
-      - name: Build focused regression
+      - name: Build and report
         shell: bash
         run: |
           set -euxo pipefail
           cd "$GITHUB_WORKSPACE"
           make -C src/libcolorscreen -j"$(nproc)" focus-analysis-unittests
-      - name: Trace fast coupled basin
-        shell: bash
-        run: |
-          set -uxo pipefail
-          cd "$GITHUB_WORKSPACE"
-          ./src/libcolorscreen/focus-analysis-unittests
-          status=$?
-          echo "FOCUS_TEST_STATUS=$status"
-          exit 0
+          ./src/libcolorscreen/focus-analysis-unittests || true
