@@ -26,6 +26,43 @@ compare_priorities(struct entry &e1, struct entry &e2)
   return e2.priority < e1.priority;
 }
 
+/* Regions whose optimized process colors are closer than this cannot
+   provide three useful color classes for regular-screen detection.  */
+constexpr luminosity_t minimum_screen_primary_separation =
+    (luminosity_t)0.1;
+
+/* Return the Euclidean distance between unit-length scanner RGB colors A
+   and B.  Degenerate or non-finite colors have zero separation.  */
+luminosity_t
+primary_distance (rgbdata a, rgbdata b)
+{
+  luminosity_t alen2 =
+      a.red * a.red + a.green * a.green + a.blue * a.blue;
+  luminosity_t blen2 =
+      b.red * b.red + b.green * b.green + b.blue * b.blue;
+  if (!(alen2 > (luminosity_t)0) || !(blen2 > (luminosity_t)0)
+      || !my_isfinite (alen2) || !my_isfinite (blen2))
+    return 0;
+  a *= 1 / my_sqrt (alen2);
+  b *= 1 / my_sqrt (blen2);
+  rgbdata d = a - b;
+  return my_sqrt (d.red * d.red + d.green * d.green + d.blue * d.blue);
+}
+
+/* Return the smallest distance between unit-length optimized primaries in
+   P.  Subtract the optimized black point first so exposure and black level
+   do not affect the comparison.  */
+luminosity_t
+minimum_primary_separation (const scr_detect_parameters &p)
+{
+  rgbdata red = p.red - p.black;
+  rgbdata green = p.green - p.black;
+  rgbdata blue = p.blue - p.black;
+  return std::min (primary_distance (red, green),
+                   std::min (primary_distance (red, blue),
+                             primary_distance (green, blue)));
+}
+
 }
 
 /* Given known portion of screen collect color samples and optimize to PARAM.
@@ -206,7 +243,22 @@ optimize_screen_colors (scr_detect_parameters *param, const image_data *img,
   if (!reds.size () || !greens.size () || !blues.size ()
       || (reds.size () + greens.size () + blues.size ()) < 4 * 3)
     return false;
-  optimize_screen_colors (param, reds.data (), reds.size (), greens.data (), greens.size (), blues.data (), blues.size (), progress, report);
+  optimize_screen_colors (param, reds.data (), reds.size (), greens.data (),
+                          greens.size (), blues.data (), blues.size (), progress,
+                          report);
+  luminosity_t separation = minimum_primary_separation (*param);
+  if (report)
+    fprintf (report,
+             "optimized screen primary separation: %f (minimum %f)\n",
+             (double)separation,
+             (double)minimum_screen_primary_separation);
+  if (separation < minimum_screen_primary_separation)
+    {
+      if (report)
+        fprintf (report,
+                 "screen primaries are too close; skipping search region.\n");
+      return false;
+    }
   return true;
 }
 
