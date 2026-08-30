@@ -115,6 +115,7 @@ jobs:
           python3 /tmp/apply-coupled-mtf-fastpath.py
           git diff --check
           expected="$(cat <<'EOF' | sort
+          src/libcolorscreen/finetune-int.h
           src/libcolorscreen/finetune.C
           src/libcolorscreen/focus-analysis-unittests.C
           src/libcolorscreen/mtf.C
@@ -127,6 +128,7 @@ jobs:
           printf 'Expected changed files:\n%s\nActual changed files:\n%s\n' "$expected" "$actual"
           test "$actual" = "$expected"
           git add \
+            src/libcolorscreen/finetune-int.h \
             src/libcolorscreen/finetune.C \
             src/libcolorscreen/focus-analysis-unittests.C \
             src/libcolorscreen/mtf.C \
@@ -134,5 +136,5 @@ jobs:
             src/libcolorscreen/screen.C \
             src/libcolorscreen/unittests.C
           git commit -m "finetune: reuse physical transfer for coupled MTF fits" \
-            -m "Factor residual Gaussian sigma out of the prepared physical-transfer cache so fixed-source sigma and sigma+defocus fits can reuse the source spectra and direct periodic OTF path. Preserve the exact signed physical model and broad-halo semantics while avoiding repeated PSF construction and kernel FFTs at simplex vertices. Generate the coupled synthetic fixture through the same exact periodic analytical forward model and extend transfer/cache profiling regressions."
+            -m "Factor residual Gaussian sigma out of the prepared physical-transfer cache so fixed-source sigma and sigma+defocus fits can reuse the source spectra and direct periodic OTF path. Preserve the exact signed physical model and broad-halo semantics while avoiding repeated PSF construction and kernel FFTs at simplex vertices. Generate the coupled synthetic fixture through the existing exact focus-screen regression hook and extend transfer/cache profiling regressions."
           git push --force-with-lease origin HEAD:agent/focus-coupled-mtf-fastpath
