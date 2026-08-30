@@ -374,6 +374,12 @@ cancellation.  Clock sampling is disabled when there is no report file.  CPU
 time and finer per-screen-family seed counters remain optional follow-up if wall
 time does not identify the bottleneck clearly.
 
+**DG-014 telemetry follow-up (2026-08-29).**  Failed detections copied
+`detected_screen::patches_found` into the final statistics record even when no
+flood fill had run, but the result field itself was not initialized.  Initialize
+it to zero with the other failure-safe result state so negative-corpus reports
+no longer contain stack garbage in `patches=`.  Successful flood fills continue
+to overwrite the field with their measured patch count.
 ### DG-028 — collapsed optimized primaries trigger impossible grid searches
 
 **Severity:** high failure-time/performance
