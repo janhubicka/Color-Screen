@@ -10,7 +10,7 @@ permissions:
   packages: read
 
 jobs:
-  validate-and-publish:
+  diagnose-fast-basin:
     runs-on: ubuntu-24.04
     container:
       image: ghcr.io/janhubicka/color-screen-ci:ubuntu-24.04
@@ -27,18 +27,19 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Stage patch and select current main
+      - name: Apply fast path and diagnostics to current main
         shell: bash
         run: |
           set -euxo pipefail
           cd "$GITHUB_WORKSPACE"
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          cp agent/apply-coupled-mtf-fastpath.py /tmp/apply-coupled-mtf-fastpath.py
+          cp agent/apply-coupled-mtf-fastpath.py /tmp/apply.py
+          cp agent/instrument-coupled-fastpath.py /tmp/instrument.py
           git fetch origin main
           git checkout --detach origin/main
-          VALIDATION_BASE="$(git rev-parse HEAD)"
-          echo "VALIDATION_BASE=$VALIDATION_BASE" | tee -a "$GITHUB_ENV"
-      - name: Configure optimized build
+          python3 /tmp/apply.py
+          python3 /tmp/instrument.py
+          git diff --check
+      - name: Configure
         shell: bash
         run: |
           set -euxo pipefail
@@ -46,95 +47,18 @@ jobs:
           export CXXFLAGS="-Ofast -flto=auto"
           export CFLAGS="$CXXFLAGS"
           ./configure --enable-qtgui
-      - name: Build baseline focus test
+      - name: Build focused regression
         shell: bash
         run: |
           set -euxo pipefail
           cd "$GITHUB_WORKSPACE"
           make -C src/libcolorscreen -j"$(nproc)" focus-analysis-unittests
-      - name: Benchmark baseline coupled focus regression
+      - name: Trace fast coupled basin
         shell: bash
         run: |
-          set -euxo pipefail
+          set -uxo pipefail
           cd "$GITHUB_WORKSPACE"
-          python3 - <<'PY'
-          import subprocess
-          import sys
-          import time
-          start = time.perf_counter()
-          result = subprocess.run(["./src/libcolorscreen/focus-analysis-unittests"])
-          elapsed = time.perf_counter() - start
-          print(f"BASELINE_SECONDS={elapsed:.6f}", flush=True)
-          sys.exit(result.returncode)
-          PY
-      - name: Apply exact coupled fast path
-        shell: bash
-        run: |
-          set -euxo pipefail
-          cd "$GITHUB_WORKSPACE"
-          python3 /tmp/apply-coupled-mtf-fastpath.py
-          git diff --check
-          git diff --stat
-      - name: Build optimized code
-        shell: bash
-        run: |
-          set -euxo pipefail
-          cd "$GITHUB_WORKSPACE"
-          make -C src/libcolorscreen -j"$(nproc)" focus-analysis-unittests unittests
-      - name: Benchmark optimized coupled focus regression
-        shell: bash
-        run: |
-          set -euxo pipefail
-          cd "$GITHUB_WORKSPACE"
-          python3 - <<'PY'
-          import subprocess
-          import sys
-          import time
-          start = time.perf_counter()
-          result = subprocess.run(["./src/libcolorscreen/focus-analysis-unittests"])
-          elapsed = time.perf_counter() - start
-          print(f"OPTIMIZED_SECONDS={elapsed:.6f}", flush=True)
-          sys.exit(result.returncode)
-          PY
-      - name: Run low-level transfer regressions
-        shell: bash
-        run: |
-          set -euxo pipefail
-          cd "$GITHUB_WORKSPACE"
-          ./src/libcolorscreen/unittests
-      - name: Publish clean source branch
-        shell: bash
-        run: |
-          set -euxo pipefail
-          cd "$GITHUB_WORKSPACE"
-          git config user.name "OpenAI Agent"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git reset --hard "$VALIDATION_BASE"
-          git clean -fdx
-          git checkout -B agent/focus-coupled-mtf-fastpath "$VALIDATION_BASE"
-          python3 /tmp/apply-coupled-mtf-fastpath.py
-          git diff --check
-          expected="$(cat <<'EOF' | sort
-          src/libcolorscreen/finetune-int.h
-          src/libcolorscreen/finetune.C
-          src/libcolorscreen/focus-analysis-unittests.C
-          src/libcolorscreen/mtf.C
-          src/libcolorscreen/mtf.h
-          src/libcolorscreen/screen.C
-          src/libcolorscreen/unittests.C
-          EOF
-          )"
-          actual="$(git diff --name-only | sort)"
-          printf 'Expected changed files:\n%s\nActual changed files:\n%s\n' "$expected" "$actual"
-          test "$actual" = "$expected"
-          git add \
-            src/libcolorscreen/finetune-int.h \
-            src/libcolorscreen/finetune.C \
-            src/libcolorscreen/focus-analysis-unittests.C \
-            src/libcolorscreen/mtf.C \
-            src/libcolorscreen/mtf.h \
-            src/libcolorscreen/screen.C \
-            src/libcolorscreen/unittests.C
-          git commit -m "finetune: reuse physical transfer for coupled MTF fits" \
-            -m "Factor residual Gaussian sigma out of the prepared physical-transfer cache so fixed-source sigma and sigma+defocus fits can reuse the source spectra and direct periodic OTF path. Preserve the exact signed physical model and broad-halo semantics while avoiding repeated PSF construction and kernel FFTs at simplex vertices. Generate the coupled synthetic fixture through the existing exact focus-screen regression hook and extend transfer/cache profiling regressions."
-          git push --force-with-lease origin HEAD:agent/focus-coupled-mtf-fastpath
+          ./src/libcolorscreen/focus-analysis-unittests
+          status=$?
+          echo "FOCUS_TEST_STATUS=$status"
+          exit 0
