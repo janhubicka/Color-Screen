@@ -505,7 +505,24 @@ void MyPanel::updateData(const Data &data) {
 
 ## UI Guidelines
 
-1. **Aesthetics**: Use subtle gradients and consistent spacing. Avoid raw Qt default looks where possible (e.g., use `ParameterPanel`'s consistent layout).
+The beta-oriented architecture/robustness audit is in
+[`doc/qtgui-internal-cleanup.md`](../doc/qtgui-internal-cleanup.md), and the
+operator-facing workflow/design roadmap is in
+[`doc/qtgui-workflow-roadmap.md`](../doc/qtgui-workflow-roadmap.md).  Read both
+before making broad inspector/navigation changes.  The current nine-panel order
+is intentionally kept stable during beta hardening; post-beta regrouping should
+preserve the distinction between digital-capture correction, historical-process
+calibration, reconstruction, appearance, and view/session state.
+
+Classify every new control as a processing parameter, calibration result,
+one-shot operation, view option, or application preference.  That classification
+must determine dirty-state, undo, persistence and worker behaviour.  Do not copy
+a RAW editor's panel arrangement mechanically: Color-Screen needs additional
+physical-process and registration stages, but should borrow conventional
+non-destructive-editor behaviour for consistency, reversibility, feedback and
+precise numeric entry.
+
+1. **Aesthetics**: Prefer palette/theme-aware standard Qt presentation and consistent spacing. Use custom styling only where it adds functional value (for example wrapping inspector navigation or data-semantic charts).
 2. **Responsiveness**: Always use background workers for any task taking > 50ms.
 3. **Helpfulness**: Always provide tooltips for parameters using the `tooltip` argument in `ParameterPanel` helpers.
 4. **Validation**: Use the `enabledCheck` lambdas to disable controls that are not applicable in the current state.

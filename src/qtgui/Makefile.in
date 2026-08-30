@@ -671,14 +671,17 @@ EXTRA_DIST = ColorScreenApplication.h WorkspaceChurnSmoke.h \
 	ToneCurveWidget.h ColorPanel.h SpectraChartWidget.h \
 	CIEChartWidget.h ThamesAnimation.h PagetAnimation.h \
 	JolyAnimation.h HurleyAnimation.h TaskQueue.h \
-	SubtitleOverlay.h Logging.h colorscreen.rc icons/hand.svg \
+	SubtitleOverlay.h Logging.h colorscreen.rc resources.qrc \
+	icons/hand.svg \
 	icons/arrow.svg icons/plus.svg icons/crosshair.svg \
 	icons/rotate-left.svg icons/rotate-right.svg icons/zoom-in.svg \
 	icons/zoom-out.svg icons/zoom-100.svg icons/zoom-fit.svg \
 	icons/mirror.svg AdaptiveSharpeningWorker.h \
 	AdaptiveSharpeningParameters.h AdaptiveSharpeningChart.h \
 	RenderDialog.h ProfilePanel.h CoordinateOptimizationWorker.h \
-	TilesPanel.h ImageLayerPanel.h MeasureDialog.h MTFFitDialog.h \
+	ColorOptimizerWorker.h CoordinateTransformer.h FlowLayout.h \
+	FocusAnalysisWorker.h HistogramWorker.h MultiLineTabWidget.h \
+	ScalableImageLabel.h TilesPanel.h ImageLayerPanel.h MeasureDialog.h MTFFitDialog.h \
 	SlantedEdgeDialog.h
 
 # Add moc files to the build
