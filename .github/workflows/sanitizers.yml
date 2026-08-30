@@ -120,6 +120,7 @@ jobs:
           ./configure --enable-checking --disable-static-link \
           --disable-gtkgui --enable-qtgui
     - name: Build ThreadSanitizer variant
+      shell: bash
       run: |
         set -o pipefail
         make -j$(nproc) 2>&1 | tee tsan-build.log
