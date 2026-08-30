@@ -10,6 +10,8 @@
 #include <QCloseEvent>
 #include <QDockWidget>
 #include <QEvent>
+#include <QHBoxLayout>
+#include <QLabel>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMdiArea>
@@ -22,6 +24,8 @@
 #include <QTabBar>
 #include <QTimer>
 #include <QToolBar>
+#include <QToolButton>
+#include <utility>
 #include <QVBoxLayout>
 
 namespace {
@@ -116,16 +120,49 @@ WorkspaceWindow::WorkspaceWindow(QWidget *parent) : QMainWindow(parent) {
 
   statusBar()->setObjectName(QStringLiteral("WorkspaceStatusBar"));
 
-  // The ordinary status bar is always a single bottom line.  Only the active
-  // document's transient progress may occupy it.  Dedicated long-running tasks
-  // live in a frameless bottom dock above the status bar, so rapid transient
-  // progress cannot repeatedly change the window's bottom-line height.
+  // The status bar is workspace-global. Every attached logical document
+  // contributes one transient-progress page, and a small outer switcher
+  // selects among concurrently working documents without following tabs.
   m_workspaceProgressArea = new QWidget(statusBar());
   m_workspaceProgressArea->setObjectName(
       QStringLiteral("WorkspaceProgressArea"));
-  m_workspaceProgressLayout = new QVBoxLayout(m_workspaceProgressArea);
+  m_workspaceProgressLayout = new QHBoxLayout(m_workspaceProgressArea);
   m_workspaceProgressLayout->setContentsMargins(0, 0, 0, 0);
-  m_workspaceProgressLayout->setSpacing(0);
+  m_workspaceProgressLayout->setSpacing(6);
+
+  m_workspaceProgressStack = new QStackedWidget(m_workspaceProgressArea);
+  m_workspaceProgressStack->setObjectName(
+      QStringLiteral("WorkspaceTransientProgressStack"));
+  m_workspaceProgressLayout->addWidget(m_workspaceProgressStack, 1);
+
+  m_workspaceProgressDocumentLabel =
+      new QLabel(m_workspaceProgressArea);
+  m_workspaceProgressDocumentLabel->setObjectName(
+      QStringLiteral("WorkspaceProgressDocumentLabel"));
+  m_workspaceProgressLayout->addWidget(m_workspaceProgressDocumentLabel);
+
+  m_workspaceProgressPreviousButton =
+      new QToolButton(m_workspaceProgressArea);
+  m_workspaceProgressPreviousButton->setObjectName(
+      QStringLiteral("WorkspaceProgressPreviousButton"));
+  m_workspaceProgressPreviousButton->setText(QStringLiteral("<"));
+  m_workspaceProgressPreviousButton->setToolTip(
+      tr("Previous document progress"));
+  connect(m_workspaceProgressPreviousButton, &QToolButton::clicked, this,
+          [this]() { cycleWorkspaceProgress(-1); });
+  m_workspaceProgressLayout->addWidget(
+      m_workspaceProgressPreviousButton);
+
+  m_workspaceProgressNextButton = new QToolButton(m_workspaceProgressArea);
+  m_workspaceProgressNextButton->setObjectName(
+      QStringLiteral("WorkspaceProgressNextButton"));
+  m_workspaceProgressNextButton->setText(QStringLiteral(">"));
+  m_workspaceProgressNextButton->setToolTip(
+      tr("Next document progress"));
+  connect(m_workspaceProgressNextButton, &QToolButton::clicked, this,
+          [this]() { cycleWorkspaceProgress(1); });
+  m_workspaceProgressLayout->addWidget(m_workspaceProgressNextButton);
+  m_workspaceProgressArea->hide();
   statusBar()->addPermanentWidget(m_workspaceProgressArea, 1);
 
   m_userVisibleProgressStack = new QWidget();
@@ -183,9 +220,7 @@ void WorkspaceWindow::addDocument(MainWindow *document) {
     inspector->hide();
   }
 
-  attachUserVisibleProgress(document);
-  connect(document, &MainWindow::userVisibleProgressVisibilityChanged, this,
-          [this](bool) { updateUserVisibleProgressDockVisibility(); });
+  attachDocumentProgress(document);
 
   document->setWindowFlags(Qt::Widget);
   auto *subWindow = new DocumentSubWindow(document);
@@ -255,6 +290,7 @@ void WorkspaceWindow::addView(ImageViewWindow *view) {
       m_inspectorStack->addWidget(inspector);
     inspector->hide();
   }
+  attachDocumentProgress(view->sourceDocument());
   view->setAttribute(Qt::WA_DeleteOnClose, false);
   view->setWindowFlags(Qt::Widget);
 
@@ -275,8 +311,10 @@ void WorkspaceWindow::addView(ImageViewWindow *view) {
               setWindowTitle(title + tr(" — Color-Screen"));
             configureTabBar();
           });
-  connect(subWindow, &QObject::destroyed, this, [this]() {
-    QTimer::singleShot(0, this, [this]() {
+  QPointer<MainWindow> guardedSource(view->sourceDocument());
+  connect(subWindow, &QObject::destroyed, this, [this, guardedSource]() {
+    QTimer::singleShot(0, this, [this, guardedSource]() {
+      detachDocumentProgressIfUnused(guardedSource);
       onSubWindowActivated(m_mdiArea->currentSubWindow());
       configureTabBar();
       scheduleCloseIfEmpty();
@@ -673,6 +711,122 @@ void WorkspaceWindow::scheduleCloseIfEmpty() {
   });
 }
 
+/** Return whether DOCUMENT still has a presentation in this workspace. */
+bool WorkspaceWindow::hasAttachedPresentation(MainWindow *document) const {
+  if (!document || !m_mdiArea)
+    return false;
+  for (QMdiSubWindow *subWindow : m_mdiArea->subWindowList()) {
+    if (documentForSubWindow(subWindow) == document)
+      return true;
+    if (ImageViewWindow *view = viewForSubWindow(subWindow)) {
+      if (view->sourceDocument() == document)
+        return true;
+    }
+  }
+  return false;
+}
+
+/** Permanently attach one logical document's progress to the workspace shell. */
+void WorkspaceWindow::attachDocumentProgress(MainWindow *document) {
+  if (!document || !m_workspaceProgressStack)
+    return;
+
+  bool alreadyAttached = false;
+  for (const QPointer<MainWindow> &candidate : std::as_const(m_progressDocuments)) {
+    if (candidate == document) {
+      alreadyAttached = true;
+      break;
+    }
+  }
+
+  if (!alreadyAttached) {
+    QWidget *progress = document->takeWorkspaceStatusWidget();
+    if (progress) {
+      progress->setParent(m_workspaceProgressStack);
+      m_workspaceProgressStack->addWidget(progress);
+      m_progressDocuments.append(document);
+      const int stableHeight = qMax(
+          statusBar()->minimumHeight(),
+          qMax(progress->minimumHeight(), progress->sizeHint().height()));
+      statusBar()->setMinimumHeight(stableHeight);
+    }
+  }
+
+  bool signalsConnected = false;
+  for (const QPointer<MainWindow> &candidate :
+       std::as_const(m_progressSignalDocuments)) {
+    if (candidate == document) {
+      signalsConnected = true;
+      break;
+    }
+  }
+
+  if (!signalsConnected) {
+    m_progressSignalDocuments.append(document);
+    QPointer<MainWindow> guardedDocument(document);
+    connect(document, &MainWindow::transientProgressVisibilityChanged, this,
+            [this, guardedDocument](bool visible) {
+              if (visible)
+                m_displayedProgressDocument = guardedDocument;
+              updateWorkspaceProgressPresentation();
+            });
+    connect(document, &MainWindow::userVisibleProgressVisibilityChanged, this,
+            [this](bool) { updateUserVisibleProgressDockVisibility(); });
+    connect(document, &QWidget::windowTitleChanged, this,
+            [this, guardedDocument](const QString &) {
+              if (guardedDocument == m_displayedProgressDocument)
+                updateWorkspaceProgressPresentation();
+            });
+    connect(document, &QObject::destroyed, this, [this]() {
+      for (auto it = m_progressDocuments.begin();
+           it != m_progressDocuments.end();) {
+        if (it->isNull())
+          it = m_progressDocuments.erase(it);
+        else
+          ++it;
+      }
+      for (auto it = m_progressSignalDocuments.begin();
+           it != m_progressSignalDocuments.end();) {
+        if (it->isNull())
+          it = m_progressSignalDocuments.erase(it);
+        else
+          ++it;
+      }
+      if (!m_displayedProgressDocument)
+        m_displayedProgressDocument.clear();
+      updateWorkspaceProgressPresentation();
+      updateUserVisibleProgressDockVisibility();
+    });
+  }
+
+  attachUserVisibleProgress(document);
+  if (document->hasVisibleTransientProgress())
+    m_displayedProgressDocument = document;
+  updateWorkspaceProgressPresentation();
+}
+
+/** Return progress to DOCUMENT only after its final attached presentation leaves. */
+void WorkspaceWindow::detachDocumentProgressIfUnused(MainWindow *document) {
+  if (!document || hasAttachedPresentation(document))
+    return;
+
+  detachUserVisibleProgress(document);
+  QWidget *progress = document->workspaceStatusWidget();
+  if (progress && m_workspaceProgressStack->indexOf(progress) >= 0)
+    m_workspaceProgressStack->removeWidget(progress);
+  document->restoreWorkspaceStatusWidget();
+
+  for (auto it = m_progressDocuments.begin(); it != m_progressDocuments.end();) {
+    if (it->isNull() || it->data() == document)
+      it = m_progressDocuments.erase(it);
+    else
+      ++it;
+  }
+  if (m_displayedProgressDocument == document)
+    m_displayedProgressDocument.clear();
+  updateWorkspaceProgressPresentation();
+}
+
 /** Keep DOCUMENT's persistent long-running task rows globally visible. */
 void WorkspaceWindow::attachUserVisibleProgress(MainWindow *document) {
   if (!document || !m_userVisibleProgressLayout)
@@ -719,6 +873,66 @@ void WorkspaceWindow::updateUserVisibleProgressDockVisibility() {
     }
   }
   m_userVisibleProgressDock->setVisible(hasVisibleRows);
+}
+
+/** Show one working document in the shared one-line status presentation. */
+void WorkspaceWindow::updateWorkspaceProgressPresentation() {
+  if (!m_workspaceProgressArea || !m_workspaceProgressStack)
+    return;
+
+  QList<MainWindow *> visible;
+  for (auto it = m_progressDocuments.begin(); it != m_progressDocuments.end();) {
+    if (it->isNull()) {
+      it = m_progressDocuments.erase(it);
+      continue;
+    }
+    if ((*it)->hasVisibleTransientProgress())
+      visible.append(it->data());
+    ++it;
+  }
+
+  if (visible.isEmpty()) {
+    m_displayedProgressDocument.clear();
+    m_workspaceProgressDocumentLabel->clear();
+    m_workspaceProgressArea->hide();
+    return;
+  }
+
+  if (!visible.contains(m_displayedProgressDocument.data()))
+    m_displayedProgressDocument = visible.constLast();
+
+  MainWindow *document = m_displayedProgressDocument.data();
+  QWidget *progress = document ? document->workspaceStatusWidget() : nullptr;
+  if (progress && m_workspaceProgressStack->indexOf(progress) >= 0)
+    m_workspaceProgressStack->setCurrentWidget(progress);
+
+  const bool multiple = visible.size() > 1;
+  m_workspaceProgressDocumentLabel->setText(
+      document ? document->documentDisplayName() : QString());
+  m_workspaceProgressDocumentLabel->setVisible(multiple);
+  m_workspaceProgressPreviousButton->setVisible(multiple);
+  m_workspaceProgressNextButton->setVisible(multiple);
+  m_workspaceProgressArea->show();
+}
+
+/** Cycle among documents with visible transient progress. */
+void WorkspaceWindow::cycleWorkspaceProgress(int offset) {
+  QList<MainWindow *> visible;
+  for (const QPointer<MainWindow> &document : std::as_const(m_progressDocuments)) {
+    if (document && document->hasVisibleTransientProgress())
+      visible.append(document.data());
+  }
+  if (visible.isEmpty())
+    return;
+
+  int index = visible.indexOf(m_displayedProgressDocument.data());
+  if (index < 0)
+    index = 0;
+  index = (index + offset) % visible.size();
+  if (index < 0)
+    index += visible.size();
+  m_displayedProgressDocument = visible[index];
+  updateWorkspaceProgressPresentation();
 }
 
 /** Return keyboard focus from CONTROL in the global task strip to the current
@@ -799,15 +1013,6 @@ void WorkspaceWindow::installDocumentChrome(MainWindow *document) {
 
   installDocumentInspector(document, document->primaryImageWidget());
 
-  if (QWidget *statusWidget = document->workspaceStatusWidget()) {
-    if (statusWidget->parentWidget() != m_workspaceProgressArea) {
-      const bool explicitlyHidden = statusWidget->isHidden();
-      document->standaloneStatusBar()->removeWidget(statusWidget);
-      statusWidget->setParent(m_workspaceProgressArea);
-      m_workspaceProgressLayout->addWidget(statusWidget);
-      statusWidget->setVisible(!explicitlyHidden);
-    }
-  }
 
   document->refreshWindowMenu();
   setWindowTitle(document->documentDisplayName() + tr(" — Color-Screen"));
@@ -828,15 +1033,7 @@ void WorkspaceWindow::releaseDocumentChrome(MainWindow *document,
     toolbar->setVisible(showInWindow);
   }
 
-  if (QWidget *statusWidget = document->workspaceStatusWidget()) {
-    if (statusWidget->parentWidget() == m_workspaceProgressArea) {
-      const bool explicitlyHidden = statusWidget->isHidden();
-      m_workspaceProgressLayout->removeWidget(statusWidget);
-      document->standaloneStatusBar()->addPermanentWidget(statusWidget, 1);
-      statusWidget->setVisible(!explicitlyHidden);
-    }
-    document->standaloneStatusBar()->setVisible(showInWindow);
-  }
+  document->standaloneStatusBar()->setVisible(showInWindow);
   if (showInWindow)
     document->setWorkspaceStatusBar(nullptr);
 
@@ -968,7 +1165,6 @@ void WorkspaceWindow::takeDocumentFromWorkspace(MainWindow *document) {
     return;
 
   releaseDocumentChrome(document, true);
-  detachUserVisibleProgress(document);
   if (QWidget *inspector = document->workspaceInspectorWidget()) {
     m_inspectorStack->removeWidget(inspector);
     document->takeWorkspaceInspector();
@@ -980,6 +1176,7 @@ void WorkspaceWindow::takeDocumentFromWorkspace(MainWindow *document) {
   // here would delete it immediately and make deleteLater() unsafe.
   m_mdiArea->removeSubWindow(document);
   subWindow->deleteLater();
+  detachDocumentProgressIfUnused(document);
 
   document->setParent(nullptr);
   document->setWindowFlags(Qt::Window);
@@ -987,6 +1184,7 @@ void WorkspaceWindow::takeDocumentFromWorkspace(MainWindow *document) {
 
 /** Remove secondary VIEW's MDI wrapper while keeping VIEW alive. */
 void WorkspaceWindow::takeViewFromWorkspace(ImageViewWindow *view) {
+  MainWindow *sourceDocument = view ? view->sourceDocument() : nullptr;
   QMdiSubWindow *subWindow = subWindowForView(view);
   if (!subWindow)
     return;
@@ -1007,6 +1205,7 @@ void WorkspaceWindow::takeViewFromWorkspace(ImageViewWindow *view) {
   view->hide();
   m_mdiArea->removeSubWindow(view);
   subWindow->deleteLater();
+  detachDocumentProgressIfUnused(sourceDocument);
 
   view->setParent(nullptr);
   view->setWindowFlags(Qt::Window);

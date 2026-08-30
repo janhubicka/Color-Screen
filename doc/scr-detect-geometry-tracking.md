@@ -380,6 +380,45 @@ flood fill had run, but the result field itself was not initialized.  Initialize
 it to zero with the other failure-safe result state so negative-corpus reports
 no longer contain stack garbage in `patches=`.  Successful flood fills continue
 to overwrite the field with their measured patch count.
+### DG-028 — collapsed optimized primaries trigger impossible grid searches
+
+**Severity:** high failure-time/performance
+
+**Status:** fixed first-stage rejection
+
+Per-region color optimization runs before the expensive image-wide adjusted-RGB,
+color-class-map, and lattice-search work.  On images without an additive screen,
+the fitted red, green, and blue process colors often collapse to nearly the same
+scanner RGB direction.  Continuing with such a color basis cannot produce three
+useful screen classes and wastes the rest of that search-region attempt.
+
+Subtract the optimized black point from each fitted primary, normalize the three
+scanner-RGB vectors to unit length, and measure their minimum pairwise Euclidean
+distance.  Reject only the current search region when that separation is below
+0.10.  Degenerate or non-finite primary vectors count as zero separation.  The
+detector still advances to later regions, so a raster-free border or a locally
+low-chroma part of a real screen scan cannot reject the whole image.  Existing
+`color_opt_failures` telemetry counts these early exits.
+
+The threshold is intentionally conservative.  The difficult NGS00428 Tile01 and
+Tile05 scans measure approximately 0.321 and 0.410 respectively, and the real
+Nikon Dufay integration fixture measures approximately 1.328.  Their generated
+parameter files are unchanged with the guard enabled, and synthetic Finlay and
+Dufay discovery tests continue to pass.
+
+On deterministic 1200 by 1200 no-screen controls in the optimized local build,
+the region guard reduces failure wall time as follows:
+
+| input | baseline | guarded | regions rejected early |
+| --- | ---: | ---: | ---: |
+| grayscale | 0.79 s | 0.44 s | 36 / 36 |
+| low-chroma color | 1.70 s | 0.95 s | 36 / 36 |
+| colorful no-screen texture | 1.59 s | 1.02 s | 29 / 36 |
+
+The colorful control deliberately continues through the seven regions whose
+scene colors are sufficiently separated; this is a cheap impossibility test,
+not a replacement for lattice validation.  DG-015 remains open for broader
+reuse of image-wide detector state across regions that survive this gate.
 
 ### DG-015 — color optimization can rebuild image-wide state for every search cell
 

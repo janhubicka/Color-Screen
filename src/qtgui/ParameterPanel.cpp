@@ -2,17 +2,274 @@
 #include "../libcolorscreen/include/base.h"
 #include "SmartSpinBox.h"
 #include <QCheckBox>
+#include <QDockWidget>
+#include <QEvent>
+#include <QLayout>
 #include <QComboBox>
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QIcon>
 #include <QLabel>
+#include <QMainWindow>
+#include <QPointer>
+#include <QRegularExpression>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QSlider>
+#include <QShowEvent>
 #include <QToolButton>
+#include <QTimer>
+#include <utility>
 #include <QVBoxLayout>
+
+namespace {
+
+/** One uniform detachable section used by every parameter panel.
+
+    The section, rather than MainWindow or a specialized view, owns the floating
+    dock.  It therefore follows the panel into whichever QMainWindow currently
+    presents the inspector and can reattach its content without layout probing
+    or panel-specific callbacks. */
+class DetachableSection final : public QWidget {
+public:
+  DetachableSection(const QString &title, QWidget *content,
+                    std::function<void()> beforeDetach,
+                    QWidget *parent = nullptr)
+      : QWidget(parent), m_title(title), m_content(content),
+        m_beforeDetach(std::move(beforeDetach)) {
+    setObjectName(QStringLiteral("DetachableSection"));
+    setProperty("detachableTitle", title);
+
+    m_layout = new QVBoxLayout(this);
+    m_layout->setContentsMargins(0, 0, 0, 0);
+    m_layout->setSpacing(0);
+
+    auto *header = new QWidget(this);
+    auto *headerLayout = new QHBoxLayout(header);
+    headerLayout->setContentsMargins(0, 0, 0, 0);
+
+    auto *label = new QLabel(title, header);
+    QFont font = label->font();
+    font.setBold(true);
+    label->setFont(font);
+    headerLayout->addWidget(label);
+    headerLayout->addStretch(1);
+
+    m_button = new QPushButton(QIcon::fromTheme("view-restore"), tr("Detach"),
+                               header);
+    m_button->setObjectName(QStringLiteral("DetachableSectionButton"));
+    m_button->setProperty("detachableTitle", title);
+    m_button->setFlat(true);
+    m_button->setCursor(Qt::PointingHandCursor);
+    m_button->setMaximumHeight(24);
+    headerLayout->addWidget(m_button);
+
+    m_layout->addWidget(header);
+    if (m_content) {
+      m_content->setProperty("detachableContentTitle", title);
+      m_layout->addWidget(m_content);
+    }
+
+    connect(m_button, &QPushButton::clicked, this, [this]() {
+      if (m_dock)
+        reattach();
+      else
+        detach();
+    });
+  }
+
+  ~DetachableSection() override { reattach(false); }
+
+protected:
+  bool eventFilter(QObject *watched, QEvent *event) override {
+    if (watched == m_dock.data() && event && event->type() == QEvent::Close) {
+      event->ignore();
+      reattach();
+      return true;
+    }
+    return QWidget::eventFilter(watched, event);
+  }
+
+  void showEvent(QShowEvent *event) override {
+    QWidget::showEvent(event);
+    // Inspectors move between the workspace, ordinary detached views, and
+    // specialized reference views. Keep an already detached dock with the
+    // top-level window that currently presents this section.
+    QTimer::singleShot(0, this, [this]() { migrateDockToCurrentHost(); });
+  }
+
+private:
+  struct WidgetPresentation {
+    QPointer<QWidget> widget;
+    QSize minimumSize;
+    QSize maximumSize;
+    QSizePolicy sizePolicy;
+    Qt::Alignment alignment;
+  };
+
+  QMainWindow *currentHost() const {
+    return qobject_cast<QMainWindow *>(window());
+  }
+
+  void snapshotPresentation() {
+    m_presentation.clear();
+    if (!m_content)
+      return;
+
+    QList<QWidget *> widgets = m_content->findChildren<QWidget *>();
+    widgets.prepend(m_content);
+    for (QWidget *widget : widgets) {
+      WidgetPresentation state;
+      state.widget = widget;
+      state.minimumSize = widget->minimumSize();
+      state.maximumSize = widget->maximumSize();
+      state.sizePolicy = widget->sizePolicy();
+      if (QWidget *parent = widget->parentWidget()) {
+        if (QLayout *layout = parent->layout()) {
+          const int index = layout->indexOf(widget);
+          if (index >= 0 && layout->itemAt(index))
+            state.alignment = layout->itemAt(index)->alignment();
+        }
+      }
+      m_presentation.push_back(state);
+    }
+  }
+
+  void restorePresentation() {
+    for (const WidgetPresentation &state : std::as_const(m_presentation)) {
+      QWidget *widget = state.widget.data();
+      if (!widget)
+        continue;
+      widget->setMinimumSize(state.minimumSize);
+      widget->setMaximumSize(state.maximumSize);
+      widget->setSizePolicy(state.sizePolicy);
+      if (QWidget *parent = widget->parentWidget()) {
+        if (QLayout *layout = parent->layout())
+          layout->setAlignment(widget, state.alignment);
+      }
+    }
+    m_presentation.clear();
+  }
+
+  void detach() {
+    if (!m_content || m_dock)
+      return;
+
+    QMainWindow *host = currentHost();
+    if (!host)
+      return;
+
+    snapshotPresentation();
+    if (m_beforeDetach)
+      m_beforeDetach();
+
+    static quint64 serial = 0;
+    QString key = m_title;
+    key.remove(QRegularExpression(QStringLiteral("[^A-Za-z0-9]+")));
+    if (key.isEmpty())
+      key = QStringLiteral("Panel");
+
+    auto *dock = new QDockWidget(m_title, host);
+    dock->setObjectName(QStringLiteral("DetachedPanelDock_%1_%2")
+                            .arg(key)
+                            .arg(++serial));
+    dock->setProperty("detachablePanel", true);
+    dock->setProperty("detachableTitle", m_title);
+    dock->setAllowedAreas(Qt::AllDockWidgetAreas);
+    dock->setFeatures(QDockWidget::DockWidgetClosable |
+                      QDockWidget::DockWidgetMovable |
+                      QDockWidget::DockWidgetFloatable);
+    dock->installEventFilter(this);
+    connect(dock, &QObject::destroyed, this, [this]() {
+      m_dock.clear();
+      if (m_content && m_content->parentWidget() != this) {
+        m_content->setParent(this);
+        m_layout->addWidget(m_content);
+        m_content->show();
+        restorePresentation();
+      }
+      updateButton(false);
+    });
+
+    m_dock = dock;
+    host->addDockWidget(Qt::RightDockWidgetArea, dock);
+    dock->setWidget(m_content);
+    dock->setFloating(true);
+    if (m_content->sizeHint().isValid())
+      dock->resize(m_content->sizeHint().expandedTo(QSize(320, 220)));
+    dock->show();
+    dock->raise();
+    updateButton(true);
+  }
+
+  void reattach(bool restoreSizing = true) {
+    QDockWidget *dock = m_dock.data();
+    if (!dock) {
+      if (m_content && m_content->parentWidget() != this) {
+        m_content->setParent(this);
+        m_layout->addWidget(m_content);
+        m_content->show();
+      }
+      if (restoreSizing)
+        restorePresentation();
+      updateButton(false);
+      return;
+    }
+
+    dock->removeEventFilter(this);
+    if (QMainWindow *host = qobject_cast<QMainWindow *>(dock->parentWidget()))
+      host->removeDockWidget(dock);
+
+    if (m_content) {
+      m_content->setParent(this);
+      m_layout->addWidget(m_content);
+      m_content->show();
+    }
+    dock->setWidget(nullptr);
+    m_dock.clear();
+    dock->hide();
+    dock->deleteLater();
+
+    if (restoreSizing)
+      restorePresentation();
+    updateButton(false);
+  }
+
+  void migrateDockToCurrentHost() {
+    QDockWidget *dock = m_dock.data();
+    QMainWindow *host = currentHost();
+    if (!dock || !host || dock->parentWidget() == host)
+      return;
+
+    if (QMainWindow *oldHost =
+            qobject_cast<QMainWindow *>(dock->parentWidget()))
+      oldHost->removeDockWidget(dock);
+    dock->setParent(host);
+    host->addDockWidget(Qt::RightDockWidgetArea, dock);
+    dock->setFloating(true);
+    dock->show();
+    dock->raise();
+  }
+
+  void updateButton(bool detached) {
+    if (!m_button)
+      return;
+    m_button->setText(detached ? tr("Reattach") : tr("Detach"));
+    m_button->setToolTip(detached ? tr("Return this panel to the inspector")
+                                  : tr("Show this panel in a floating dock"));
+  }
+
+  QString m_title;
+  QPointer<QWidget> m_content;
+  std::function<void()> m_beforeDetach;
+  QVBoxLayout *m_layout = nullptr;
+  QPushButton *m_button = nullptr;
+  QPointer<QDockWidget> m_dock;
+  std::vector<WidgetPresentation> m_presentation;
+};
+
+} // namespace
 
 ParameterPanel::ParameterPanel(StateGetter stateGetter, StateSetter stateSetter,
                                ImageGetter imageGetter, QWidget *parent,
@@ -944,56 +1201,10 @@ QToolButton *ParameterPanel::addSeparator(const QString &title) {
 }
 
 QWidget *
-ParameterPanel::createDetachableSection(const QString &title, QWidget *content,
-                                        std::function<void()> onDetach) {
-  QWidget *container = new QWidget();
-  QVBoxLayout *layout = new QVBoxLayout(container);
-  layout->setContentsMargins(0, 0, 0, 0);
-  layout->setSpacing(0);
-
-  // Header
-  QWidget *header = new QWidget();
-  QHBoxLayout *headerLayout = new QHBoxLayout(header);
-  headerLayout->setContentsMargins(0, 0, 0, 0);
-
-  QLabel *label = new QLabel(title);
-  QFont f = label->font();
-  f.setBold(true);
-  label->setFont(f);
-  headerLayout->addWidget(label);
-
-  headerLayout->addStretch(1);
-
-  QPushButton *detachBtn =
-      new QPushButton(QIcon::fromTheme("view-restore"), "Detach");
-  detachBtn->setFlat(true);
-  detachBtn->setCursor(Qt::PointingHandCursor);
-  detachBtn->setMaximumHeight(24);
-
-  headerLayout->addWidget(detachBtn);
-
-  layout->addWidget(header);
-  layout->addWidget(content);
-
-  connect(detachBtn, &QPushButton::clicked, this,
-          [onDetach, container, title, header]() {
-            if (onDetach)
-              onDetach();
-
-            // Remove content from layout (it is reparented by Dock anyway)
-            // Add placeholder
-            if (container->layout()->count() > 1) { // Header + Content
-              container->layout()->takeAt(1);       // Remove content item
-            }
-
-            QWidget *placeholder = new QWidget();
-            placeholder->setVisible(false);
-            container->layout()->addWidget(placeholder);
-
-            header->hide();
-          });
-
-  return container;
+ParameterPanel::createDetachableSection(
+    const QString &title, QWidget *content,
+    std::function<void()> beforeDetach) {
+  return new DetachableSection(title, content, std::move(beforeDetach), this);
 }
 
 

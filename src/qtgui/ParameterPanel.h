@@ -156,9 +156,14 @@ protected:
 
   QToolButton *addSeparator(const QString &title);
 
-  // Helpers to create detachable sections
-  QWidget *createDetachableSection(const QString &title, QWidget *content,
-                                   std::function<void()> onDetach);
+  /** Wrap CONTENT in the standard detachable-panel presentation.
+      The returned section owns the floating QDockWidget lifecycle and
+      always reattaches CONTENT when the dock closes or its host changes.
+      BEFOREDETACH is retained for panel-specific sizing adjustments; the
+      section snapshots and restores widget constraints automatically. */
+  QWidget *createDetachableSection(
+      const QString &title, QWidget *content,
+      std::function<void()> beforeDetach = {});
 
   // Ends the current group (if any) so subsequent items are added to the main form
   void endGroup();
