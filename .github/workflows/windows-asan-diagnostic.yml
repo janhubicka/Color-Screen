@@ -1,0 +1,156 @@
+name: Windows ASan diagnostic
+
+on:
+  push:
+    branches: [ "agent/qtgui-beta-readiness" ]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-asan-diagnostic-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows-asan-diagnostic:
+    name: Windows clang64 ASan diagnostic
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: msys2/setup-msys2@v2
+      with:
+        msystem: CLANG64
+        update: false
+        cache: true
+        install: >
+          make mingw-w64-clang-x86_64-clang mingw-w64-clang-x86_64-gdb
+          mingw-w64-clang-x86_64-libtiff mingw-w64-clang-x86_64-llvm-openmp
+          mingw-w64-clang-x86_64-libjpeg-turbo git mingw-w64-clang-x86_64-libraw
+          mingw-w64-clang-x86_64-lcms2 mingw-w64-clang-x86_64-libzip
+          mingw-w64-clang-x86_64-gsl diffutils autoconf-archive
+          mingw-w64-clang-x86_64-autotools mingw-w64-clang-x86_64-fftw
+          mingw-w64-clang-x86_64-qt6-base mingw-w64-clang-x86_64-qt6-tools
+          mingw-w64-clang-x86_64-adwaita-icon-theme mingw-w64-clang-x86_64-qt6-svg
+          mingw-w64-clang-x86_64-imagemagick mingw-w64-clang-x86_64-exiv2
+    - name: Verify generated build metadata
+      shell: msys2 {0}
+      run: sh build-aux/check-generated-build-metadata.sh
+    - name: Update autotools
+      shell: msys2 {0}
+      run: autoreconf -fiv
+    - name: Configure with AddressSanitizer
+      shell: msys2 {0}
+      run: |
+        export PATH="/clang64/share/qt6/bin:$PATH"
+        SANITIZER_FLAGS="-O1 -g -fno-omit-frame-pointer -fno-optimize-sibling-calls -fsanitize=address"
+        CC=clang CXX=clang++ AR=llvm-ar NM=llvm-nm \
+          STRIP=llvm-strip RANLIB=llvm-ranlib \
+          CXXFLAGS="$SANITIZER_FLAGS" CFLAGS="$SANITIZER_FLAGS" \
+          LDFLAGS="-Wl,--stack,16777216 -fsanitize=address -lomp -lpthread" \
+          ./configure --enable-checking --disable-static-link --enable-qtgui
+    - name: Generate Windows icon
+      shell: msys2 {0}
+      run: |
+        magick images/icon.svg -background none -define icon:auto-resize=256,128,64,48,32,16 os/windows/icon.ico
+        cp os/windows/icon.ico src/qtgui/icon.ico
+    - name: Build AddressSanitizer variant
+      shell: msys2 {0}
+      run: |
+        set -o pipefail
+        make -j2 2>&1 | tee windows-asan-build.log
+    - name: Qt multi-window smoke with crash diagnostics
+      shell: msys2 {0}
+      env:
+        ASAN_OPTIONS: halt_on_error=1:abort_on_error=1:symbolize=1:log_path=windows-asan-runtime
+        ASAN_SYMBOLIZER_PATH: /clang64/bin/llvm-symbolizer.exe
+      run: |
+        set -uo pipefail
+        image="$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
+        failed_status=0
+        failed_name=
+
+        run_smoke () {
+          name="$1"
+          shift
+          echo "===== $name ====="
+          set +e
+          "$@" 2>&1 | tee "windows-asan-smoke-${name}.log"
+          status=${PIPESTATUS[0]}
+          set -e
+          echo "===== $name exit status: $status ====="
+          if test "$status" -ne 0; then
+            failed_status="$status"
+            failed_name="$name"
+            printf '%s\0' "$@" > windows-asan-failed-command.args0
+            return 1
+          fi
+        }
+
+        set -e
+        run_smoke mdi \
+          ./src/qtgui/colorscreen-qt \
+          --smoke-test 10000 --smoke-test-expect-windows 2 \
+          --smoke-test-tile-activation-stable --smoke-test-menu-order \
+          "$image" "$image" || true
+
+        if test "$failed_status" -eq 0; then
+          run_smoke views \
+            ./src/qtgui/colorscreen-qt \
+            --smoke-test 30000 --smoke-test-expect-windows 2 \
+            --smoke-test-new-view --smoke-test-slanted-reference \
+            "$image" "$image" || true
+        fi
+
+        if test "$failed_status" -eq 0; then
+          run_smoke churn \
+            ./src/qtgui/colorscreen-qt \
+            --smoke-test 60000 --smoke-test-expect-windows 2 \
+            --smoke-test-workspace-churn \
+            "$image" "$image" || true
+        fi
+
+        if test "$failed_status" -eq 0; then
+          run_smoke lifetime \
+            ./src/qtgui/colorscreen-qt \
+            --smoke-test 20000 --smoke-test-expect-windows 1 \
+            --smoke-test-window-lifetime \
+            "$image" || true
+        fi
+
+        if test "$failed_status" -ne 0; then
+          echo "Smoke scenario '$failed_name' failed with status $failed_status"
+          echo "--- AddressSanitizer runtime logs ---"
+          shopt -s nullglob
+          for log in windows-asan-runtime*; do
+            echo "===== $log ====="
+            cat "$log" || true
+          done
+
+          echo "--- GDB rerun of failing command ---"
+          mapfile -d '' -t failed_argv < windows-asan-failed-command.args0
+          ASAN_OPTIONS=halt_on_error=1:abort_on_error=1:symbolize=1 \
+            gdb --batch --nx \
+              -ex "set pagination off" \
+              -ex "set confirm off" \
+              -ex run \
+              -ex "thread apply all bt full" \
+              --args "${failed_argv[@]}" \
+              2>&1 | tee "windows-asan-smoke-${failed_name}-gdb.log" || true
+
+          exit "$failed_status"
+        fi
+    - name: Upload Windows ASan diagnostics
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: windows-asan-crash-diagnostics
+        if-no-files-found: warn
+        path: |
+          windows-asan-build.log
+          windows-asan-smoke-*.log
+          windows-asan-runtime*
+          windows-asan-failed-command.args0
+          config.log
+          testsuite/*.log
+          testsuite/*.txt
+          testsuite/*.par
