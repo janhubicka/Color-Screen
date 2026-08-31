@@ -3,6 +3,7 @@
 #include "ColorScreenApplication.h"
 #include "ImageViewWindow.h"
 #include "MainWindow.h"
+#include "MultiLineTabWidget.h"
 #include "WorkspaceWindow.h"
 
 #include <QCoreApplication>
@@ -15,7 +16,6 @@
 #include <QStatusBar>
 #include <QString>
 #include <QStringList>
-#include <QTabWidget>
 #include <QTimer>
 #include <QWidget>
 
@@ -191,7 +191,7 @@ void startWorkspaceChurnSmoke(ColorScreenApplication &app,
         // The beta workflow may reorder these panels as the UI is streamlined,
         // but presentation churn must never drop one. Check membership rather
         // than freezing the current order into the smoke test.
-        auto *processingTabs = first->findChild<QTabWidget *>(
+        auto *processingTabs = first->findChild<MultiLineTabWidget *>(
             QStringLiteral("ConfigTabs"));
         const QStringList expectedProcessingTabs = {
             QStringLiteral("Digital capture"), QStringLiteral("Tiles"),
