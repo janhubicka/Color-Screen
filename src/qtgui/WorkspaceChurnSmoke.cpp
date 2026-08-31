@@ -518,7 +518,7 @@ void startWorkspaceChurnSmoke(ColorScreenApplication &app,
         schedule(16, 50, 40);
         return;
 
-      case 16:
+      case 16: {
         if (!first->isWorkspaceEmbedded() ||
             !workspace->containsDocument(first) || app.tabCount() != 1 ||
             !workspace->isVisible() || !workspace->isTabBarVisible() ||
@@ -537,6 +537,7 @@ void startWorkspaceChurnSmoke(ColorScreenApplication &app,
         if (state->completed)
           state->completed();
         return;
+      }
 
       default:
         fail(QStringLiteral("Workspace churn reached an invalid phase"));
