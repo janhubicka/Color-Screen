@@ -309,6 +309,7 @@ jobs:
        contains(github.event.pull_request.body, '[ci:windows-asan]'))
     name: AddressSanitizer (Windows clang64)
     runs-on: windows-latest
+    timeout-minutes: 30
     steps:
     - uses: actions/checkout@v4
     - uses: msys2/setup-msys2@v2
@@ -317,8 +318,8 @@ jobs:
         update: false
         cache: true
         install: >
-          make mingw-w64-clang-x86_64-clang mingw-w64-clang-x86_64-libtiff
-          mingw-w64-clang-x86_64-llvm-openmp
+          make mingw-w64-clang-x86_64-clang mingw-w64-clang-x86_64-gdb
+          mingw-w64-clang-x86_64-libtiff mingw-w64-clang-x86_64-llvm-openmp
           mingw-w64-clang-x86_64-libjpeg-turbo git mingw-w64-clang-x86_64-libraw
           mingw-w64-clang-x86_64-lcms2 mingw-w64-clang-x86_64-libzip
           mingw-w64-clang-x86_64-gsl diffutils autoconf-archive
@@ -363,47 +364,143 @@ jobs:
           src/qtgui/Makefile
           src/qtgui/Makefile.am
           src/qtgui/Makefile.in
+    - name: Create bounded ASan process runner
+      shell: msys2 {0}
+      run: |
+        cat > windows-asan-watchdog.sh <<'EOF'
+        #!/usr/bin/env bash
+        # A Windows ASan process can occasionally wedge before Qt reaches
+        # main().  Bound it externally so the CI job never waits for hours,
+        # and attach only after a timeout so GDB does not stop on compiler-rt's
+        # intentional shadow-memory access violations during normal startup.
+        set -uo pipefail
+
+        if test "$#" -lt 3; then
+          echo "usage: $0 LABEL TIMEOUT_SECONDS PROGRAM [ARGS ...]" >&2
+          exit 2
+        fi
+        label=$1
+        timeout_seconds=$2
+        shift 2
+        output_log="windows-asan-${label}.log"
+        process_log="windows-asan-${label}-processes.log"
+        backtrace_log="windows-asan-${label}-backtrace.log"
+        runtime_prefix="windows-asan-runtime-${label}"
+
+        echo "command: $*" > "$output_log"
+        echo "timeout: ${timeout_seconds}s" >> "$output_log"
+        ASAN_OPTIONS="${ASAN_OPTIONS:-halt_on_error=1}:abort_on_error=1:symbolize=1:log_path=${runtime_prefix}" \
+        ASAN_SYMBOLIZER_PATH="${ASAN_SYMBOLIZER_PATH:-/clang64/bin/llvm-symbolizer.exe}" \
+          "$@" >> "$output_log" 2>&1 &
+        shell_pid=$!
+        deadline=$((SECONDS + timeout_seconds))
+
+        while kill -0 "$shell_pid" 2>/dev/null; do
+          if test "$SECONDS" -ge "$deadline"; then
+            echo "watchdog timeout after ${timeout_seconds}s (MSYS pid ${shell_pid})" | tee -a "$output_log"
+            {
+              echo "===== ps -efW ====="
+              ps -efW 2>&1 || ps -W 2>&1 || true
+              echo "===== tasklist ====="
+              timeout 10s tasklist.exe 2>&1 || true
+            } > "$process_log"
+
+            winpid=$(
+              timeout 10s powershell.exe -NoProfile -Command \
+                "(Get-Process -Name 'colorscreen-qt' -ErrorAction SilentlyContinue | Sort-Object StartTime -Descending | Select-Object -First 1).Id" \
+                2>/dev/null | tr -d '\r\n ' || true
+            )
+            if test -n "$winpid"; then
+              echo "attaching GDB to Windows pid ${winpid}" | tee -a "$output_log"
+              timeout 30s gdb --batch --nx \
+                -ex "set pagination off" \
+                -ex "set confirm off" \
+                -ex "info threads" \
+                -ex "thread apply all bt full" \
+                -p "$winpid" > "$backtrace_log" 2>&1 || true
+              timeout 10s taskkill.exe /PID "$winpid" /T /F >> "$process_log" 2>&1 || true
+            else
+              echo "could not locate colorscreen-qt.exe Windows pid" > "$backtrace_log"
+            fi
+
+            kill -KILL "$shell_pid" 2>/dev/null || true
+            wait "$shell_pid" 2>/dev/null || true
+            cat "$output_log"
+            echo "===== process state ====="
+            cat "$process_log" || true
+            echo "===== debugger backtrace ====="
+            cat "$backtrace_log" || true
+            exit 124
+          fi
+          sleep 1
+        done
+
+        wait "$shell_pid"
+        status=$?
+        cat "$output_log"
+        exit "$status"
+        EOF
+        chmod +x windows-asan-watchdog.sh
     - name: Qt multi-window smoke test (AddressSanitizer)
       shell: msys2 {0}
       env:
         ASAN_OPTIONS: halt_on_error=1
+        ASAN_SYMBOLIZER_PATH: /clang64/bin/llvm-symbolizer.exe
       run: |
+        set -euo pipefail
+        image="$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
         # Keep the native MDI mode-switch probe in its own process on Windows.
         # Combining it with the detached-view smoke triggers a Qt crash before
         # AddressSanitizer can produce a diagnostic.
-        ./src/qtgui/colorscreen-qt \
-          --smoke-test 10000 --smoke-test-expect-windows 2 \
-          --smoke-test-tile-activation-stable --smoke-test-menu-order \
-          "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif" \
-          "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
+        ./windows-asan-watchdog.sh mdi 45 \
+          ./src/qtgui/colorscreen-qt \
+            --smoke-test 10000 --smoke-test-expect-windows 2 \
+            --smoke-test-tile-activation-stable --smoke-test-menu-order \
+            "$image" "$image"
 
-        ./src/qtgui/colorscreen-qt \
-          --smoke-test 30000 --smoke-test-expect-windows 2 \
-          --smoke-test-new-view --smoke-test-slanted-reference \
-          "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif" \
-          "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
+        ./windows-asan-watchdog.sh detached-views 60 \
+          ./src/qtgui/colorscreen-qt \
+            --smoke-test 30000 --smoke-test-expect-windows 2 \
+            --smoke-test-new-view --smoke-test-slanted-reference \
+            "$image" "$image"
 
-        ./src/qtgui/colorscreen-qt \
-          --smoke-test 60000 --smoke-test-expect-windows 2 \
-          --smoke-test-workspace-churn \
-          "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif" \
-          "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
+        ./windows-asan-watchdog.sh workspace-churn 100 \
+          ./src/qtgui/colorscreen-qt \
+            --smoke-test 60000 --smoke-test-expect-windows 2 \
+            --smoke-test-workspace-churn \
+            "$image" "$image"
 
-        ./src/qtgui/colorscreen-qt \
-          --smoke-test 20000 --smoke-test-expect-windows 1 \
-          --smoke-test-window-lifetime \
-          "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
+        ./windows-asan-watchdog.sh window-lifetime 60 \
+          ./src/qtgui/colorscreen-qt \
+            --smoke-test 20000 --smoke-test-expect-windows 1 \
+            --smoke-test-window-lifetime "$image"
     - name: Test AddressSanitizer variant
       shell: msys2 {0}
       env:
-        ASAN_OPTIONS: halt_on_error=1
+        ASAN_OPTIONS: halt_on_error=1:abort_on_error=1:symbolize=1:log_path=windows-asan-runtime-check
+        ASAN_SYMBOLIZER_PATH: /clang64/bin/llvm-symbolizer.exe
       run: make -j2 check
+    - name: Print Windows ASan failure diagnostics
+      if: failure()
+      shell: msys2 {0}
+      run: |
+        shopt -s nullglob
+        for log in windows-asan-*.log windows-asan-runtime-*; do
+          echo "===== $log ====="
+          cat "$log" || true
+        done
+        if test -f testsuite/test-suite.log; then
+          echo "===== testsuite/test-suite.log ====="
+          cat testsuite/test-suite.log || true
+        fi
     - name: Upload sanitizer test results
       uses: actions/upload-artifact@v4
       if: always()
       with:
         name: testsuite-asan-windows-clang64
         path: |
+          windows-asan-*.log
+          windows-asan-runtime-*
           testsuite/*.txt
           testsuite/*.log
           testsuite/*.par
