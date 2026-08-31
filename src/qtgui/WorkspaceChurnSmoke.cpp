@@ -190,11 +190,14 @@ void startWorkspaceChurnSmoke(ColorScreenApplication &app,
           return;
         }
 
-        // The beta workflow may reorder or extend these panels as the UI is
-        // streamlined. Wait for the expected workflow to be constructed and
-        // check membership without freezing its exact size or order.
-        auto *processingTabs = first->findChild<MultiLineTabWidget *>(
-            QStringLiteral("ConfigTabs"));
+        // Attached documents deliberately reparent their inspector column into
+        // WorkspaceWindow's shared inspector stack.  Follow the document-owned
+        // inspector handle rather than relying on QObject parentage.
+        QWidget *inspector = first->workspaceInspectorWidget();
+        auto *processingTabs =
+            inspector ? inspector->findChild<MultiLineTabWidget *>(
+                            QStringLiteral("ConfigTabs"))
+                      : nullptr;
         const QStringList expectedProcessingTabs = {
             QStringLiteral("Digital capture"), QStringLiteral("Tiles"),
             QStringLiteral("Sharpness"), QStringLiteral("Image Layer"),
@@ -206,13 +209,19 @@ void startWorkspaceChurnSmoke(ColorScreenApplication &app,
           for (int i = 0; i < processingTabs->count(); ++i)
             actualProcessingTabs.append(processingTabs->tabText(i));
         }
-        bool completeProcessingWorkflow = processingTabs != nullptr;
-        for (const QString &name : expectedProcessingTabs)
-          completeProcessingWorkflow = completeProcessingWorkflow &&
-                                       actualProcessingTabs.count(name) == 1;
-        if (!completeProcessingWorkflow) {
-          if (retryOrFail(QStringLiteral(
-                  "Workspace churn source document lost part of the processing-panel workflow")))
+        QStringList missingProcessingTabs;
+        for (const QString &name : expectedProcessingTabs) {
+          if (actualProcessingTabs.count(name) != 1)
+            missingProcessingTabs.append(name);
+        }
+        if (!processingTabs || !missingProcessingTabs.isEmpty()) {
+          const QString detail = QStringLiteral(
+                                     "Workspace churn source document lost part of the processing-panel workflow; missing=[%1], actual=[%2]")
+                                     .arg(missingProcessingTabs.join(
+                                              QStringLiteral(", ")),
+                                          actualProcessingTabs.join(
+                                              QStringLiteral(", ")));
+          if (retryOrFail(detail))
             return;
           return;
         }
