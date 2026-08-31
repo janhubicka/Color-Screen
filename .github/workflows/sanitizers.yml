@@ -418,7 +418,7 @@ jobs:
                 -ex "info threads" \
                 -ex "thread apply all bt full" \
                 -p "$winpid" > "$backtrace_log" 2>&1 || true
-              timeout 10s taskkill.exe /PID "$winpid" /T /F >> "$process_log" 2>&1 || true
+              MSYS2_ARG_CONV_EXCL='*' timeout 10s taskkill.exe /PID "$winpid" /T /F >> "$process_log" 2>&1 || true
             else
               echo "could not locate colorscreen-qt.exe Windows pid" > "$backtrace_log"
             fi
