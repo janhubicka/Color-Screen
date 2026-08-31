@@ -15,6 +15,7 @@ jobs:
   windows-asan-diagnostic:
     name: Windows clang64 ASan diagnostic
     runs-on: windows-latest
+    timeout-minutes: 30
     steps:
     - uses: actions/checkout@v4
     - uses: msys2/setup-msys2@v2
@@ -58,19 +59,89 @@ jobs:
       run: |
         set -o pipefail
         make -j2 2>&1 | tee windows-asan-build.log
+    - name: Create bounded ASan process runner
+      shell: msys2 {0}
+      run: |
+        cat > windows-asan-watchdog.sh <<'EOF'
+        #!/usr/bin/env bash
+        set -uo pipefail
+
+        if test "$#" -lt 3; then
+          echo "usage: $0 LABEL TIMEOUT_SECONDS PROGRAM [ARGS ...]" >&2
+          exit 2
+        fi
+
+        label=$1
+        timeout_seconds=$2
+        shift 2
+        output_log="windows-asan-${label}.log"
+        process_log="windows-asan-${label}-processes.log"
+        backtrace_log="windows-asan-${label}-backtrace.log"
+        runtime_prefix="windows-asan-runtime-${label}"
+
+        echo "command: $*" > "$output_log"
+        echo "timeout: ${timeout_seconds}s" >> "$output_log"
+        ASAN_OPTIONS="${ASAN_OPTIONS:-halt_on_error=1}:abort_on_error=1:symbolize=1:log_path=${runtime_prefix}" \
+        ASAN_SYMBOLIZER_PATH=/clang64/bin/llvm-symbolizer.exe \
+          "$@" >> "$output_log" 2>&1 &
+        shell_pid=$!
+        deadline=$((SECONDS + timeout_seconds))
+
+        while kill -0 "$shell_pid" 2>/dev/null; do
+          if test "$SECONDS" -ge "$deadline"; then
+            echo "watchdog timeout after ${timeout_seconds}s (MSYS pid ${shell_pid})" | tee -a "$output_log"
+            {
+              echo "===== ps -efW ====="
+              ps -efW 2>&1 || ps -W 2>&1 || true
+              echo "===== tasklist ====="
+              tasklist.exe 2>&1 || true
+            } > "$process_log"
+
+            winpid=$(powershell.exe -NoProfile -Command \
+              "(Get-Process -Name 'colorscreen-qt' -ErrorAction SilentlyContinue | Sort-Object StartTime -Descending | Select-Object -First 1).Id" \
+              2>/dev/null | tr -d '\r\n ')
+            if test -n "$winpid"; then
+              echo "attaching GDB to Windows pid ${winpid}" | tee -a "$output_log"
+              timeout 30s gdb --batch --nx \
+                -ex "set pagination off" \
+                -ex "set confirm off" \
+                -ex "info threads" \
+                -ex "thread apply all bt full" \
+                -p "$winpid" > "$backtrace_log" 2>&1 || true
+              taskkill.exe /PID "$winpid" /T /F >> "$process_log" 2>&1 || true
+            else
+              echo "could not locate colorscreen-qt.exe Windows pid" > "$backtrace_log"
+            fi
+
+            kill -KILL "$shell_pid" 2>/dev/null || true
+            wait "$shell_pid" 2>/dev/null || true
+            cat "$output_log"
+            echo "===== process state ====="
+            cat "$process_log" || true
+            echo "===== debugger backtrace ====="
+            cat "$backtrace_log" || true
+            exit 124
+          fi
+          sleep 1
+        done
+
+        wait "$shell_pid"
+        status=$?
+        cat "$output_log"
+        exit "$status"
+        EOF
+        chmod +x windows-asan-watchdog.sh
     - name: Probe repeated ASan process startup
       shell: msys2 {0}
       run: |
         set -uo pipefail
         : > windows-asan-status.log
         failed=0
-        for i in $(seq 1 12); do
+        for i in $(seq 1 6); do
           echo "===== startup $i =====" | tee -a windows-asan-status.log
           set +e
-          ASAN_OPTIONS="halt_on_error=1:abort_on_error=1:symbolize=1:log_path=windows-asan-runtime-startup-${i}" \
-          ASAN_SYMBOLIZER_PATH=/clang64/bin/llvm-symbolizer.exe \
-            ./src/qtgui/colorscreen-qt --version \
-            >"windows-asan-startup-${i}.log" 2>&1
+          ./windows-asan-watchdog.sh "startup-${i}" 45 \
+            ./src/qtgui/colorscreen-qt --version
           status=$?
           set -e
           echo "startup $i exit status: $status" | tee -a windows-asan-status.log
@@ -79,21 +150,22 @@ jobs:
           fi
         done
         echo "startup failures: $failed" | tee -a windows-asan-status.log
+        if test "$failed" -ne 0; then
+          touch windows-asan-startup-failed
+        fi
     - name: Probe repeated window lifetime smoke
       shell: msys2 {0}
       run: |
         set -uo pipefail
         image="$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
         failed=0
-        for i in $(seq 1 6); do
+        for i in $(seq 1 3); do
           echo "===== lifetime $i =====" | tee -a windows-asan-status.log
           set +e
-          ASAN_OPTIONS="halt_on_error=1:abort_on_error=1:symbolize=1:log_path=windows-asan-runtime-lifetime-${i}" \
-          ASAN_SYMBOLIZER_PATH=/clang64/bin/llvm-symbolizer.exe \
+          ./windows-asan-watchdog.sh "lifetime-${i}" 60 \
             ./src/qtgui/colorscreen-qt \
               --smoke-test 20000 --smoke-test-expect-windows 1 \
-              --smoke-test-window-lifetime "$image" \
-              >"windows-asan-lifetime-${i}.log" 2>&1
+              --smoke-test-window-lifetime "$image"
           status=$?
           set -e
           echo "lifetime $i exit status: $status" | tee -a windows-asan-status.log
@@ -105,7 +177,7 @@ jobs:
         if test "$failed" -ne 0; then
           touch windows-asan-lifetime-failed
         fi
-    - name: Rerun lifetime smoke under GDB
+    - name: Rerun failed lifetime smoke under GDB
       if: ${{ hashFiles('windows-asan-lifetime-failed') != '' }}
       shell: msys2 {0}
       env:
@@ -116,7 +188,7 @@ jobs:
         # Windows ASan intentionally raises access violations while reserving
         # and committing shadow memory. Pass those through compiler-rt until
         # main() is reached; only then trap SIGSEGV as an application crash.
-        gdb --batch --nx \
+        timeout 90s gdb --batch --nx \
           -ex "set pagination off" \
           -ex "set confirm off" \
           -ex "handle SIGSEGV nostop noprint pass" \
@@ -156,3 +228,11 @@ jobs:
           testsuite/*.log
           testsuite/*.txt
           testsuite/*.par
+    - name: Fail on observed ASan diagnostic error
+      if: always()
+      shell: msys2 {0}
+      run: |
+        if test -e windows-asan-startup-failed || test -e windows-asan-lifetime-failed; then
+          echo "Windows ASan diagnostic observed a failed or timed-out probe." >&2
+          exit 1
+        fi
