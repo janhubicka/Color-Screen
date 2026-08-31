@@ -14,6 +14,8 @@
 #include <QPointer>
 #include <QStatusBar>
 #include <QString>
+#include <QStringList>
+#include <QTabWidget>
 #include <QTimer>
 #include <QWidget>
 
@@ -25,12 +27,17 @@ namespace {
 
 constexpr int workspaceChurnFailure = 18;
 
-/** Live objects and completion callback shared by the staged smoke test. */
+/** Live objects, durable document-state snapshots, and completion callback
+    shared by the staged smoke test. */
 struct WorkspaceChurnState {
   QPointer<WorkspaceWindow> workspace;
   QPointer<MainWindow> first;
   QPointer<MainWindow> second;
   QPointer<ImageViewWindow> view;
+  ParameterState originalFirstState;
+  ParameterState expectedFirstState;
+  ParameterState expectedSecondState;
+  bool expectedStatesSet = false;
   std::function<void()> completed;
 };
 
@@ -124,6 +131,20 @@ void startWorkspaceChurnSmoke(ColorScreenApplication &app,
         return;
       }
 
+      auto documentStatesPreserved = [state, first, second]() {
+        if (!state->expectedStatesSet)
+          return true;
+        if (!first || first->documentStateSnapshot() != state->expectedFirstState)
+          return false;
+        return !second ||
+               second->documentStateSnapshot() == state->expectedSecondState;
+      };
+      if (phase > 0 && !documentStatesPreserved()) {
+        fail(QStringLiteral(
+            "Workspace churn changed document parameters during a presentation-only operation"));
+        return;
+      }
+
       auto *mdiArea = workspace->findChild<QMdiArea *>(
           QStringLiteral("documentMdiArea"));
       auto hasExactWrappers = [mdiArea, first, second, view]() {
@@ -149,7 +170,7 @@ void startWorkspaceChurnSmoke(ColorScreenApplication &app,
       };
 
       switch (phase) {
-      case 0:
+      case 0: {
         if (!second || !view || view->sourceDocument() != first ||
             view->sharedImageData() != first->sharedImageData() ||
             app.documentWindows().size() != 2 ||
@@ -166,9 +187,55 @@ void startWorkspaceChurnSmoke(ColorScreenApplication &app,
               "Workspace churn did not create a complete third peer tab"));
           return;
         }
+
+        // The beta workflow may reorder these panels as the UI is streamlined,
+        // but presentation churn must never drop one. Check membership rather
+        // than freezing the current order into the smoke test.
+        auto *processingTabs = first->findChild<QTabWidget *>(
+            QStringLiteral("ConfigTabs"));
+        const QStringList expectedProcessingTabs = {
+            QStringLiteral("Digital capture"), QStringLiteral("Tiles"),
+            QStringLiteral("Sharpness"), QStringLiteral("Image Layer"),
+            QStringLiteral("Contact copy"), QStringLiteral("Screen"),
+            QStringLiteral("Geometry"), QStringLiteral("Color"),
+            QStringLiteral("Profile")};
+        QStringList actualProcessingTabs;
+        if (processingTabs) {
+          for (int i = 0; i < processingTabs->count(); ++i)
+            actualProcessingTabs.append(processingTabs->tabText(i));
+        }
+        bool completeProcessingWorkflow = processingTabs &&
+            actualProcessingTabs.size() == expectedProcessingTabs.size();
+        for (const QString &name : expectedProcessingTabs)
+          completeProcessingWorkflow = completeProcessingWorkflow &&
+                                       actualProcessingTabs.count(name) == 1;
+        if (!completeProcessingWorkflow) {
+          fail(QStringLiteral(
+              "Workspace churn source document lost part of the processing-panel workflow"));
+          return;
+        }
+
+        // Give the source a distinctive parameter state without dirtying the
+        // document (applyState is the same path used by undo/redo). The second
+        // document remains an isolation sentinel. Every later phase verifies
+        // that presentation-only operations preserve both snapshots.
+        state->originalFirstState = first->documentStateSnapshot();
+        state->expectedFirstState = state->originalFirstState;
+        state->expectedFirstState.rparams.scan_mirror =
+            !state->expectedFirstState.rparams.scan_mirror;
+        state->expectedSecondState = second->documentStateSnapshot();
+        first->applyState(state->expectedFirstState);
+        state->expectedStatesSet = true;
+        if (!documentStatesPreserved()) {
+          fail(QStringLiteral(
+              "Workspace churn could not establish independent document parameter states"));
+          return;
+        }
+
         workspace->tileDocuments();
         schedule(1, 50, 40);
         return;
+      }
 
       case 1: {
         if (!second || !view || workspace->isTabbedView() ||
@@ -456,6 +523,11 @@ void startWorkspaceChurnSmoke(ColorScreenApplication &app,
               "Workspace churn final sole-document reattachment was incomplete"));
           return;
         }
+        // Leave the document exactly as the caller opened it. applyState does
+        // not create an undo command, so the smoke test never introduces a
+        // save prompt while still exercising state preservation above.
+        first->applyState(state->originalFirstState);
+        state->expectedStatesSet = false;
         if (state->completed)
           state->completed();
         return;
