@@ -79,7 +79,14 @@ void ProfilePanel::setupUi()
     emit optimizeColorRequested(m_autoCheck->isChecked());
   });
   connect(m_autoCheck, &QCheckBox::toggled, this, [this](bool checked) {
-    if (checked)
+    if (!checked)
+      return;
+
+    // Record the current spot set before starting.  The optimizer itself
+    // changes render parameters and therefore refreshes every panel; without
+    // this snapshot that refresh would look like another auto trigger.
+    m_lastAutoSpots = m_stateGetter().profileSpots;
+    if (!m_lastAutoSpots.empty())
       emit optimizeColorRequested(true);
   });
 }
@@ -99,8 +106,22 @@ void ProfilePanel::onParametersRefreshed(const ParameterState &state)
                             n == 1 ? tr("1 spot")    :
                             tr("%1 spots").arg(n));
 
-  // Auto-trigger optimizer if auto mode and spots changed
-  if (isAutoEnabled() && n > 0)
+  // Auto-trigger only when the profile-spot set itself changed.  Parameter
+  // refreshes also happen when an optimization result is applied; treating
+  // every refresh as a spot change creates a self-triggering optimization
+  // loop and needless cancellation/restart churn.
+  bool spotsChanged = state.profileSpots.size() != m_lastAutoSpots.size();
+  if (!spotsChanged) {
+    for (std::size_t i = 0; i < state.profileSpots.size(); ++i) {
+      if (state.profileSpots[i].x != m_lastAutoSpots[i].x ||
+          state.profileSpots[i].y != m_lastAutoSpots[i].y) {
+        spotsChanged = true;
+        break;
+      }
+    }
+  }
+  m_lastAutoSpots = state.profileSpots;
+  if (isAutoEnabled() && spotsChanged && n > 0)
     emit optimizeColorRequested(true);
 }
 

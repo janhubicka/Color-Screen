@@ -36,6 +36,7 @@ private:
   QPushButton *m_addSpotBtn          = nullptr;  // toggleable
   QCheckBox *m_autoCheck             = nullptr;
   QLabel    *m_resultLabel           = nullptr;
+  std::vector<colorscreen::point_t> m_lastAutoSpots;
 
   bool m_addSpotActive = false;
 };

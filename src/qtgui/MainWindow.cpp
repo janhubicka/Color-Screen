@@ -77,21 +77,25 @@
 // Undo/Redo Implementation
 
 /** Undo command that captures a full ParameterState snapshot before and after
-   a change.  Successive commands within a 500 ms window are merged into a
-   single undo step so that slider drags produce one undo entry rather than
-   dozens.  All parameter changes share id()==1 which enables the merging.  */
+   a change.  Successive commands with the same description within a 500 ms
+   window are merged into a single undo step so that one slider drag produces
+   one entry.  Different controls must remain separate even when changed
+   quickly, otherwise undo can silently skip an intermediate user action. */
 class ChangeParametersCommand : public QUndoCommand {
 public:
   ChangeParametersCommand(MainWindow *window, const ParameterState &oldState,
                           const ParameterState &newState,
                           const QString &description = QString())
-      : m_window(window), m_oldState(oldState), m_newState(newState) {
+      : m_window(window), m_oldState(oldState), m_newState(newState),
+        m_description(description) {
     setText(description.isEmpty() ? "Change Parameters" : description);
     m_timestamp = QDateTime::currentMSecsSinceEpoch();
   }
 
   int id() const override {
-    return 1; // All parameter changes have the same ID
+    // Qt never attempts to merge commands whose id is -1.  Calls without a
+    // logical description are therefore conservative one-shot undo entries.
+    return m_description.isEmpty() ? -1 : 1;
   }
 
   bool mergeWith(const QUndoCommand *other) override {
@@ -101,10 +105,17 @@ public:
     const ChangeParametersCommand *cmd =
         static_cast<const ChangeParametersCommand *>(other);
 
-    // Only merge if commands are within 500ms of each other (e.g., slider
-    // dragging)
+    // QUndoStack uses id() only as a coarse filter.  The description is the
+    // stable logical identity supplied by ParameterPanel (normally the field
+    // label), so do not merge two different edits merely because they happened
+    // close together.
+    if (cmd->m_description != m_description)
+      return false;
+
+    // Only merge adjacent updates from the same edit gesture.  Also reject a
+    // negative delta in case the wall clock is adjusted between commands.
     qint64 timeDiff = cmd->m_timestamp - m_timestamp;
-    if (timeDiff > 500) {
+    if (timeDiff < 0 || timeDiff > 500) {
       return false; // Don't merge - create separate undo step
     }
 
@@ -123,6 +134,7 @@ private:
   MainWindow *m_window;
   ParameterState m_oldState;
   ParameterState m_newState;
+  QString m_description;
   qint64 m_timestamp; // Timestamp for merge window
 };
 
@@ -3658,7 +3670,7 @@ ParameterState MainWindow::getCurrentState() const {
    Compares the current state with NEWSTATE; if different, creates a
    ChangeParametersCommand and pushes it onto the undo stack.
    The DESCRIPTION string appears in the Edit > Undo/Redo menu text.
-   Successive calls within 500 ms are automatically merged by the
+   Successive calls with the same DESCRIPTION within 500 ms are merged by the
    command's mergeWith() into a single undo step.  */
 void MainWindow::changeParameters(const ParameterState &newState,
                                   const QString &description) {

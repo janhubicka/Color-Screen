@@ -75,7 +75,10 @@ void MultiLineTabWidget::setTabVisible(int index, bool visible)
         // If the current tab becomes hidden, switch to the first visible one
         if (!visible && m_stack->currentIndex() == index) {
             for (int i = 0; i < m_tabs.size(); ++i) {
-                if (m_tabs[i].button->isVisible()) {
+                // isVisible() is false when an ancestor inspector is hidden,
+                // even if this tab itself is enabled for later presentation.
+                // isHidden() tracks the explicit per-tab state we control.
+                if (!m_tabs[i].button->isHidden()) {
                     setCurrentIndex(i);
                     break;
                 }
@@ -95,11 +98,18 @@ int MultiLineTabWidget::indexOf(QWidget *page) const
 
 void MultiLineTabWidget::setCurrentIndex(int index)
 {
-    if (index >= 0 && index < m_tabs.size()) {
+    if (index < 0 || index >= m_tabs.size() ||
+        m_tabs[index].button->isHidden())
+        return;
+
+    if (m_stack->currentIndex() == index) {
         m_tabs[index].button->setChecked(true);
-        m_stack->setCurrentIndex(index);
-        emit currentChanged(index);
+        return;
     }
+
+    m_tabs[index].button->setChecked(true);
+    m_stack->setCurrentIndex(index);
+    emit currentChanged(index);
 }
 
 int MultiLineTabWidget::currentIndex() const
