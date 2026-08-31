@@ -58,87 +58,88 @@ jobs:
       run: |
         set -o pipefail
         make -j2 2>&1 | tee windows-asan-build.log
-    - name: Qt multi-window smoke with crash diagnostics
+    - name: Probe repeated ASan process startup
       shell: msys2 {0}
-      env:
-        ASAN_OPTIONS: halt_on_error=1:abort_on_error=1:symbolize=1:log_path=windows-asan-runtime
-        ASAN_SYMBOLIZER_PATH: /clang64/bin/llvm-symbolizer.exe
+      run: |
+        set -uo pipefail
+        : > windows-asan-status.log
+        failed=0
+        for i in $(seq 1 12); do
+          echo "===== startup $i =====" | tee -a windows-asan-status.log
+          set +e
+          ASAN_OPTIONS="halt_on_error=1:abort_on_error=1:symbolize=1:log_path=windows-asan-runtime-startup-${i}" \
+          ASAN_SYMBOLIZER_PATH=/clang64/bin/llvm-symbolizer.exe \
+            ./src/qtgui/colorscreen-qt --version \
+            >"windows-asan-startup-${i}.log" 2>&1
+          status=$?
+          set -e
+          echo "startup $i exit status: $status" | tee -a windows-asan-status.log
+          if test "$status" -ne 0; then
+            failed=1
+          fi
+        done
+        echo "startup failures: $failed" | tee -a windows-asan-status.log
+    - name: Probe repeated window lifetime smoke
+      shell: msys2 {0}
       run: |
         set -uo pipefail
         image="$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
-        failed_status=0
-        failed_name=
-
-        run_smoke () {
-          name="$1"
-          shift
-          echo "===== $name ====="
+        failed=0
+        for i in $(seq 1 6); do
+          echo "===== lifetime $i =====" | tee -a windows-asan-status.log
           set +e
-          "$@" 2>&1 | tee "windows-asan-smoke-${name}.log"
-          status=${PIPESTATUS[0]}
+          ASAN_OPTIONS="halt_on_error=1:abort_on_error=1:symbolize=1:log_path=windows-asan-runtime-lifetime-${i}" \
+          ASAN_SYMBOLIZER_PATH=/clang64/bin/llvm-symbolizer.exe \
+            ./src/qtgui/colorscreen-qt \
+              --smoke-test 20000 --smoke-test-expect-windows 1 \
+              --smoke-test-window-lifetime "$image" \
+              >"windows-asan-lifetime-${i}.log" 2>&1
+          status=$?
           set -e
-          echo "===== $name exit status: $status ====="
+          echo "lifetime $i exit status: $status" | tee -a windows-asan-status.log
           if test "$status" -ne 0; then
-            failed_status="$status"
-            failed_name="$name"
-            printf '%s\0' "$@" > windows-asan-failed-command.args0
-            return 1
+            failed=1
           fi
-        }
-
-        set -e
-        run_smoke mdi \
-          ./src/qtgui/colorscreen-qt \
-          --smoke-test 10000 --smoke-test-expect-windows 2 \
-          --smoke-test-tile-activation-stable --smoke-test-menu-order \
-          "$image" "$image" || true
-
-        if test "$failed_status" -eq 0; then
-          run_smoke views \
-            ./src/qtgui/colorscreen-qt \
-            --smoke-test 30000 --smoke-test-expect-windows 2 \
-            --smoke-test-new-view --smoke-test-slanted-reference \
-            "$image" "$image" || true
+        done
+        echo "lifetime failures: $failed" | tee -a windows-asan-status.log
+        if test "$failed" -ne 0; then
+          touch windows-asan-lifetime-failed
         fi
-
-        if test "$failed_status" -eq 0; then
-          run_smoke churn \
-            ./src/qtgui/colorscreen-qt \
-            --smoke-test 60000 --smoke-test-expect-windows 2 \
-            --smoke-test-workspace-churn \
-            "$image" "$image" || true
-        fi
-
-        if test "$failed_status" -eq 0; then
-          run_smoke lifetime \
-            ./src/qtgui/colorscreen-qt \
+    - name: Rerun lifetime smoke under GDB
+      if: ${{ hashFiles('windows-asan-lifetime-failed') != '' }}
+      shell: msys2 {0}
+      env:
+        ASAN_OPTIONS: halt_on_error=1:abort_on_error=1:symbolize=1
+        ASAN_SYMBOLIZER_PATH: /clang64/bin/llvm-symbolizer.exe
+      run: |
+        image="$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
+        # Windows ASan intentionally raises access violations while reserving
+        # and committing shadow memory. Pass those through compiler-rt until
+        # main() is reached; only then trap SIGSEGV as an application crash.
+        gdb --batch --nx \
+          -ex "set pagination off" \
+          -ex "set confirm off" \
+          -ex "handle SIGSEGV nostop noprint pass" \
+          -ex "tbreak main" \
+          -ex run \
+          -ex "handle SIGSEGV stop print pass" \
+          -ex continue \
+          -ex "thread apply all bt full" \
+          --args ./src/qtgui/colorscreen-qt \
             --smoke-test 20000 --smoke-test-expect-windows 1 \
-            --smoke-test-window-lifetime \
-            "$image" || true
-        fi
-
-        if test "$failed_status" -ne 0; then
-          echo "Smoke scenario '$failed_name' failed with status $failed_status"
-          echo "--- AddressSanitizer runtime logs ---"
-          shopt -s nullglob
-          for log in windows-asan-runtime*; do
-            echo "===== $log ====="
-            cat "$log" || true
-          done
-
-          echo "--- GDB rerun of failing command ---"
-          mapfile -d '' -t failed_argv < windows-asan-failed-command.args0
-          ASAN_OPTIONS=halt_on_error=1:abort_on_error=1:symbolize=1 \
-            gdb --batch --nx \
-              -ex "set pagination off" \
-              -ex "set confirm off" \
-              -ex run \
-              -ex "thread apply all bt full" \
-              --args "${failed_argv[@]}" \
-              2>&1 | tee "windows-asan-smoke-${failed_name}-gdb.log" || true
-
-          exit "$failed_status"
-        fi
+            --smoke-test-window-lifetime "$image" \
+          > windows-asan-lifetime-gdb.log 2>&1 || true
+        cat windows-asan-lifetime-gdb.log
+    - name: Print ASan runtime diagnostics
+      if: always()
+      shell: msys2 {0}
+      run: |
+        cat windows-asan-status.log || true
+        shopt -s nullglob
+        for log in windows-asan-runtime-*; do
+          echo "===== $log ====="
+          cat "$log" || true
+        done
     - name: Upload Windows ASan diagnostics
       if: always()
       uses: actions/upload-artifact@v4
@@ -147,9 +148,10 @@ jobs:
         if-no-files-found: warn
         path: |
           windows-asan-build.log
-          windows-asan-smoke-*.log
-          windows-asan-runtime*
-          windows-asan-failed-command.args0
+          windows-asan-status.log
+          windows-asan-startup-*.log
+          windows-asan-lifetime-*.log
+          windows-asan-runtime-*
           config.log
           testsuite/*.log
           testsuite/*.txt
