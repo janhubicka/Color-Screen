@@ -131,6 +131,18 @@ void MultiLineTabWidget::setTabToolTip(int index, const QString &tooltip)
     }
 }
 
+int MultiLineTabWidget::count() const
+{
+    return m_tabs.size();
+}
+
+QString MultiLineTabWidget::tabText(int index) const
+{
+    if (index >= 0 && index < m_tabs.size())
+        return m_tabs[index].button->text();
+    return QString();
+}
+
 void MultiLineTabWidget::onTabClicked(int id)
 {
     if (id >= 0 && id < m_tabs.size()) {

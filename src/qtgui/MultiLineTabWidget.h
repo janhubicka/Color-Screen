@@ -24,6 +24,12 @@ public:
     QWidget *widget(int index) const;
     void setTabToolTip(int index, const QString &tooltip);
 
+    /** Return the number of registered tabs, including currently hidden tabs. */
+    int count() const;
+
+    /** Return the label of tab INDEX, or an empty string for an invalid index. */
+    QString tabText(int index) const;
+
 signals:
     void currentChanged(int index);
 

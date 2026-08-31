@@ -3,6 +3,7 @@
 #include "ColorScreenApplication.h"
 #include "ImageViewWindow.h"
 #include "MainWindow.h"
+#include "MultiLineTabWidget.h"
 #include "WorkspaceWindow.h"
 
 #include <QCoreApplication>
@@ -14,6 +15,7 @@
 #include <QPointer>
 #include <QStatusBar>
 #include <QString>
+#include <QStringList>
 #include <QTimer>
 #include <QWidget>
 
@@ -25,12 +27,17 @@ namespace {
 
 constexpr int workspaceChurnFailure = 18;
 
-/** Live objects and completion callback shared by the staged smoke test. */
+/** Live objects, document-local processing-state sentinels, and completion
+    callback shared by the staged smoke test. */
 struct WorkspaceChurnState {
   QPointer<WorkspaceWindow> workspace;
   QPointer<MainWindow> first;
   QPointer<MainWindow> second;
   QPointer<ImageViewWindow> view;
+  bool originalFirstScanMirror = false;
+  bool expectedFirstScanMirror = false;
+  bool expectedSecondScanMirror = false;
+  bool expectedStatesSet = false;
   std::function<void()> completed;
 };
 
@@ -124,6 +131,22 @@ void startWorkspaceChurnSmoke(ColorScreenApplication &app,
         return;
       }
 
+      auto documentStatesPreserved = [state, first, second]() {
+        if (!state->expectedStatesSet)
+          return true;
+        if (!first || first->documentStateSnapshot().rparams.scan_mirror !=
+                          state->expectedFirstScanMirror)
+          return false;
+        return !second ||
+               second->documentStateSnapshot().rparams.scan_mirror ==
+                   state->expectedSecondScanMirror;
+      };
+      if (phase > 0 && !documentStatesPreserved()) {
+        fail(QStringLiteral(
+            "Workspace churn changed a document processing-state sentinel during a presentation-only operation"));
+        return;
+      }
+
       auto *mdiArea = workspace->findChild<QMdiArea *>(
           QStringLiteral("documentMdiArea"));
       auto hasExactWrappers = [mdiArea, first, second, view]() {
@@ -149,7 +172,7 @@ void startWorkspaceChurnSmoke(ColorScreenApplication &app,
       };
 
       switch (phase) {
-      case 0:
+      case 0: {
         if (!second || !view || view->sourceDocument() != first ||
             view->sharedImageData() != first->sharedImageData() ||
             app.documentWindows().size() != 2 ||
@@ -166,9 +189,66 @@ void startWorkspaceChurnSmoke(ColorScreenApplication &app,
               "Workspace churn did not create a complete third peer tab"));
           return;
         }
+
+        // Attached documents deliberately reparent their inspector column into
+        // WorkspaceWindow's shared inspector stack.  Follow the document-owned
+        // inspector handle rather than relying on QObject parentage.
+        QWidget *inspector = first->workspaceInspectorWidget();
+        auto *processingTabs =
+            inspector ? inspector->findChild<MultiLineTabWidget *>(
+                            QStringLiteral("ConfigTabs"))
+                      : nullptr;
+        const QStringList expectedProcessingTabs = {
+            QStringLiteral("Digital capture"), QStringLiteral("Tiles"),
+            QStringLiteral("Sharpness"), QStringLiteral("Image Layer"),
+            QStringLiteral("Contact copy"), QStringLiteral("Screen"),
+            QStringLiteral("Geometry"), QStringLiteral("Color"),
+            QStringLiteral("Profile")};
+        QStringList actualProcessingTabs;
+        if (processingTabs) {
+          for (int i = 0; i < processingTabs->count(); ++i)
+            actualProcessingTabs.append(processingTabs->tabText(i));
+        }
+        QStringList missingProcessingTabs;
+        for (const QString &name : expectedProcessingTabs) {
+          if (actualProcessingTabs.count(name) != 1)
+            missingProcessingTabs.append(name);
+        }
+        if (!processingTabs || !missingProcessingTabs.isEmpty()) {
+          const QString detail = QStringLiteral(
+                                     "Workspace churn source document lost part of the processing-panel workflow; missing=[%1], actual=[%2]")
+                                     .arg(missingProcessingTabs.join(
+                                              QStringLiteral(", ")),
+                                          actualProcessingTabs.join(
+                                              QStringLiteral(", ")));
+          if (retryOrFail(detail))
+            return;
+          return;
+        }
+
+        // Give the source a distinctive processing-state sentinel without
+        // dirtying the document (applyState is the same path used by
+        // undo/redo). Track only the value this smoke test changes: under
+        // sanitizers, unrelated post-load state may legitimately settle while
+        // presentation churn is already running.
+        ParameterState firstState = first->documentStateSnapshot();
+        state->originalFirstScanMirror = firstState.rparams.scan_mirror;
+        state->expectedFirstScanMirror = !state->originalFirstScanMirror;
+        state->expectedSecondScanMirror =
+            second->documentStateSnapshot().rparams.scan_mirror;
+        firstState.rparams.scan_mirror = state->expectedFirstScanMirror;
+        first->applyState(firstState);
+        state->expectedStatesSet = true;
+        if (!documentStatesPreserved()) {
+          fail(QStringLiteral(
+              "Workspace churn could not establish independent document processing-state sentinels"));
+          return;
+        }
+
         workspace->tileDocuments();
         schedule(1, 50, 40);
         return;
+      }
 
       case 1: {
         if (!second || !view || workspace->isTabbedView() ||
@@ -447,7 +527,7 @@ void startWorkspaceChurnSmoke(ColorScreenApplication &app,
         schedule(16, 50, 40);
         return;
 
-      case 16:
+      case 16: {
         if (!first->isWorkspaceEmbedded() ||
             !workspace->containsDocument(first) || app.tabCount() != 1 ||
             !workspace->isVisible() || !workspace->isTabBarVisible() ||
@@ -456,9 +536,17 @@ void startWorkspaceChurnSmoke(ColorScreenApplication &app,
               "Workspace churn final sole-document reattachment was incomplete"));
           return;
         }
+        // Restore only the sentinel changed by this smoke test. Reapplying the
+        // whole pre-load snapshot here could overwrite unrelated parameters
+        // that legitimately finished settling while sanitizers slowed the UI.
+        ParameterState restoredState = first->documentStateSnapshot();
+        restoredState.rparams.scan_mirror = state->originalFirstScanMirror;
+        first->applyState(restoredState);
+        state->expectedStatesSet = false;
         if (state->completed)
           state->completed();
         return;
+      }
 
       default:
         fail(QStringLiteral("Workspace churn reached an invalid phase"));
