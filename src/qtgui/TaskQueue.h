@@ -55,8 +55,10 @@ public:
    * @param success True if the task completed successfully.
    *
    * This method cleans up the task state and triggers the next pending task.
+   * @return True only when this is the newest requested task, is still tracked,
+   *         and has not been cancelled, so the caller may publish its result.
    */
-  void reportFinished(int reqId, bool success);
+  bool reportFinished(int reqId, bool success);
 
   /**
    * @brief Cancels all pending and active tasks.
@@ -68,13 +70,15 @@ public:
   /**
    * @brief Submit a one-shot task to run in the background.
    * @param worker A function that performs the work; it receives a progress_info pointer.
-   * @param done A callback invoked on the GUI thread after completion.
+   * @param done A callback invoked on the GUI thread after completion.  Its
+   *        boolean argument is true only when the result is still the newest
+   *        publishable request; cleanup in DONE must run regardless.
    * @param userData Optional metadata.
    *
    * The task is managed by the queue's concurrency and timeout rules.
    */
   void runAsync (std::function<void (colorscreen::progress_info *)> worker,
-                 std::function<void ()> done,
+                 std::function<void (bool publishResult)> done,
                  const QVariant &userData = {});
 
   /** @return True if there are any active or pending tasks in the queue. */
@@ -98,6 +102,7 @@ private:
   QString formatQueueState() const;
 
   int m_nextReqId = 1;
+  int m_latestRequestedReqId = 0;
 
   /** @brief Internal state for a managed task. */
   struct TaskInfo {

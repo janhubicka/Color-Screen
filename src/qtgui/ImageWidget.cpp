@@ -2209,13 +2209,15 @@ void ImageWidget::schedulePointsOverlayRender ()
         p.end ();
         *result = std::move (overlay);
       },
-      [this, result, viewX, viewY, scale] ()
+      [this, result, viewX, viewY, scale] (bool publishResult)
       {
         m_pointsRenderPending = false;
-        m_pointsOverlay       = std::move (*result);
-        m_lastPointsX         = viewX;
-        m_lastPointsY         = viewY;
-        m_lastPointsScale     = scale;
+        if (publishResult) {
+          m_pointsOverlay   = std::move (*result);
+          m_lastPointsX     = viewX;
+          m_lastPointsY     = viewY;
+          m_lastPointsScale = scale;
+        }
         if (m_pointsOverlayDirty)
           schedulePointsOverlayRender ();
         update ();

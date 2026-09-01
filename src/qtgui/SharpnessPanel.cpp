@@ -1333,13 +1333,13 @@ void SharpnessPanel::fitMeasuredMtf() {
           result->error = "unexpected exception during MTF fitting";
         }
       },
-      [this, result]() {
+      [this, result](bool publishResult) {
         m_mtfFitRunning = false;
         /* Re-run all panel availability predicates instead of unconditionally
            enabling the button.  Measurements or the containing section may
            have changed while the background fit was running.  */
         updateUI();
-        if (result->cancelled)
+        if (!publishResult || result->cancelled)
           return;
         if (result->objective < 0 || !result->error.empty()) {
           QMessageBox::warning(
