@@ -376,9 +376,9 @@ jobs:
         cat > windows-asan-watchdog.sh <<'EOF'
         #!/usr/bin/env bash
         # A Windows ASan process can occasionally wedge before Qt reaches
-        # main().  Bound it externally so the CI job never waits for hours,
-        # and attach only after a timeout so GDB does not stop on compiler-rt's
-        # intentional shadow-memory access violations during normal startup.
+        # main(). Bound it externally so the CI job never waits for hours.
+        # On timeout, diagnose both the libtool launcher and the real .libs
+        # executable, then kill the complete process tree before any retry.
         set -uo pipefail
 
         if test "$#" -lt 3; then
@@ -411,22 +411,36 @@ jobs:
               timeout 10s tasklist.exe 2>&1 || true
             } > "$process_log"
 
-            winpid=$(
-              timeout 10s powershell.exe -NoProfile -Command \
-                "(Get-Process -Name 'colorscreen-qt' -ErrorAction SilentlyContinue | Sort-Object StartTime -Descending | Select-Object -First 1).Id" \
-                2>/dev/null | tr -d '\r\n ' || true
+            mapfile -t winpids < <(
+              MSYS2_ARG_CONV_EXCL='*' timeout 10s tasklist.exe \
+                /FI "IMAGENAME eq colorscreen-qt.exe" /FO CSV /NH 2>/dev/null | \
+                tr -d '\r' | \
+                awk -F',' '$1 ~ /colorscreen-qt\.exe/ {
+                  gsub(/"/, "", $2);
+                  print $2;
+                }'
             )
-            if test -n "$winpid"; then
-              echo "attaching GDB to Windows pid ${winpid}" | tee -a "$output_log"
-              timeout 30s gdb --batch --nx \
-                -ex "set pagination off" \
-                -ex "set confirm off" \
-                -ex "info threads" \
-                -ex "thread apply all bt full" \
-                -p "$winpid" > "$backtrace_log" 2>&1 || true
-              MSYS2_ARG_CONV_EXCL='*' timeout 10s taskkill.exe /PID "$winpid" /T /F >> "$process_log" 2>&1 || true
+            : > "$backtrace_log"
+            if test "${#winpids[@]}" -gt 0; then
+              for winpid in "${winpids[@]}"; do
+                echo "attaching GDB to Windows pid ${winpid}" | tee -a "$output_log"
+                {
+                  echo "===== Windows pid ${winpid} ====="
+                  timeout 20s gdb --batch --nx \
+                    -ex "set pagination off" \
+                    -ex "set confirm off" \
+                    -ex "info threads" \
+                    -ex "thread apply all bt full" \
+                    -p "$winpid"
+                } >> "$backtrace_log" 2>&1 || true
+              done
+              # The libtool launcher and .libs executable have the same image
+              # name. Kill both so a timed-out first attempt cannot poison the
+              # retry or survive until GitHub's end-of-job cleanup.
+              MSYS2_ARG_CONV_EXCL='*' timeout 10s taskkill.exe \
+                /IM colorscreen-qt.exe /T /F >> "$process_log" 2>&1 || true
             else
-              echo "could not locate colorscreen-qt.exe Windows pid" > "$backtrace_log"
+              echo "could not locate colorscreen-qt.exe Windows pids" > "$backtrace_log"
             fi
 
             kill -KILL "$shell_pid" 2>/dev/null || true
@@ -455,34 +469,58 @@ jobs:
       run: |
         set -euo pipefail
         image="$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
+
+        # Freshly built Windows ASan GUI executables occasionally wedge during
+        # process startup without producing an ASan report. Retry only the
+        # watchdog's timeout status; a sanitizer finding or any other non-zero
+        # exit remains an immediate failure. A second timeout still fails.
+        run_asan_smoke ()
+        {
+          local label=$1
+          local timeout_seconds=$2
+          shift 2
+          local status
+          if ./windows-asan-watchdog.sh "$label" "$timeout_seconds" "$@"; then
+            return 0
+          else
+            status=$?
+          fi
+          if test "$status" -ne 124; then
+            return "$status"
+          fi
+          echo "::warning::${label} Windows ASan smoke timed out; retrying once after forced cleanup"
+          sleep 2
+          ./windows-asan-watchdog.sh "${label}-retry" "$timeout_seconds" "$@"
+        }
+
         # Keep the native MDI mode-switch probe in its own process on Windows.
         # Combining it with the detached-view smoke triggers a Qt crash before
         # AddressSanitizer can produce a diagnostic.
-        ./windows-asan-watchdog.sh mdi 45 \
+        run_asan_smoke mdi 45 \
           ./src/qtgui/colorscreen-qt \
             --smoke-test 10000 --smoke-test-expect-windows 2 \
             --smoke-test-tile-activation-stable --smoke-test-menu-order \
             "$image" "$image"
 
-        ./windows-asan-watchdog.sh detached-views 60 \
+        run_asan_smoke detached-views 60 \
           ./src/qtgui/colorscreen-qt \
             --smoke-test 30000 --smoke-test-expect-windows 2 \
             --smoke-test-new-view --smoke-test-slanted-reference \
             "$image" "$image"
 
-        ./windows-asan-watchdog.sh workspace-churn 100 \
+        run_asan_smoke workspace-churn 100 \
           ./src/qtgui/colorscreen-qt \
             --smoke-test 60000 --smoke-test-expect-windows 2 \
             --smoke-test-workspace-churn \
             "$image" "$image"
 
-        ./windows-asan-watchdog.sh document-lifecycle 90 \
+        run_asan_smoke document-lifecycle 90 \
           ./src/qtgui/colorscreen-qt \
             --smoke-test 30000 --smoke-test-expect-windows 2 \
             --smoke-test-document-lifecycle \
             "$image" "$image"
 
-        ./windows-asan-watchdog.sh window-lifetime 60 \
+        run_asan_smoke window-lifetime 60 \
           ./src/qtgui/colorscreen-qt \
             --smoke-test 20000 --smoke-test-expect-windows 1 \
             --smoke-test-window-lifetime "$image"
