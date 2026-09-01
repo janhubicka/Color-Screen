@@ -18,13 +18,11 @@ jobs:
           ref: agent/qtgui-document-lifecycle
           fetch-depth: 0
           path: review
-      - name: Checkout transport payload
-        uses: actions/checkout@v4
-        with:
-          ref: agent/transport-document-lifecycle
-          path: transport
       - name: Apply guarded patch
         shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PATCH_BLOB_SHA: ee1a4c4970acba350912db7f4ffb9dbfcf0778fd
         run: |
           set -euo pipefail
           cd review
@@ -34,7 +32,11 @@ jobs:
             echo "::error::Review branch moved: expected $expected, got $actual"
             exit 1
           fi
-          cat ../transport/.github/agent/lifecycle-part-* \
+          curl --fail --silent --show-error \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/janhubicka/Color-Screen/git/blobs/$PATCH_BLOB_SHA" \
+            | python3 -c 'import base64,json,sys; sys.stdout.write(base64.b64decode(json.load(sys.stdin)["content"]).decode())' \
             | base64 -d | gzip -d > /tmp/document-lifecycle.patch
           git apply --check /tmp/document-lifecycle.patch
           git apply /tmp/document-lifecycle.patch
