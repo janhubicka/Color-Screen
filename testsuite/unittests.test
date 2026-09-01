@@ -1,11 +1,312 @@
 ## -*- sh -*-
-## incomplete.test -- Test incomplete command handling
+## unittests.test -- Run library unit tests and real CSP persistence round trips.
+
+set -e
 
 # Common definitions
 if test -z "$srcdir"; then
-    srcdir=echo "$0" | sed 's,[^/]*$,,'
+    srcdir=`echo "$0" | sed 's,[^/]*$,,'`
     test "$srcdir" = "$0" && srcdir=.
     test -z "$srcdir" && srcdir=.
     test "${VERBOSE+set}" != set && VERBOSE=1
 fi
+
 ../src/libcolorscreen/unittests
+
+# Exercise the serializer as a complete document-state round trip, not only the
+# focused field groups covered by the C++ unit tests.  Start from a real Dufay
+# parameter file containing geometry, detection, rendering, and hundreds of
+# solver points, then change representative values from several processing
+# stages before save/reload.  Also exercise the Qt-only profile-spot postamble:
+# core/CLI readers must still accept it, while the Qt loader restores spots,
+# clears stale spots when loading an old file, and leaves old GUI-only state
+# untouched if the optional metadata is malformed.
+test_source=./csp-persistence-roundtrip.C
+test_object=./csp-persistence-roundtrip.lo
+test_program=./csp-persistence-roundtrip${EXEEXT}
+
+cleanup ()
+{
+    "$top_builddir/libtool" --mode=clean rm -f "$test_object" "$test_program" \
+        >/dev/null 2>&1 || rm -f "$test_object" "$test_program"
+    rm -f "$test_source"
+}
+trap cleanup EXIT HUP INT TERM
+
+cat >"$test_source" <<'EOF'
+#include "ParameterState.h"
+
+#include <cstdio>
+#include <vector>
+
+using namespace colorscreen;
+
+static bool
+same_spots (const std::vector<point_t> &a, const std::vector<point_t> &b)
+{
+  if (a.size () != b.size ())
+    return false;
+  for (size_t i = 0; i < a.size (); ++i)
+    if (a[i].x != b[i].x || a[i].y != b[i].y)
+      return false;
+  return true;
+}
+
+int
+main (int argc, char **argv)
+{
+  if (argc != 2)
+    {
+      std::fprintf (stderr, "usage: %s PARAMETER-FILE\n", argv[0]);
+      return 2;
+    }
+
+  scr_to_img_parameters saved_geometry;
+  scr_detect_parameters saved_detection;
+  render_parameters saved_render;
+  solver_parameters saved_solver;
+  const char *error = nullptr;
+
+  FILE *input = std::fopen (argv[1], "rt");
+  if (!input)
+    {
+      std::perror (argv[1]);
+      return 1;
+    }
+  const bool loaded = load_csp (input, &saved_geometry, &saved_detection,
+                                &saved_render, &saved_solver, &error);
+  std::fclose (input);
+  if (!loaded)
+    {
+      std::fprintf (stderr, "Could not load source parameter file: %s\n",
+                    error ? error : "unknown parser error");
+      return 1;
+    }
+
+  // Use exactly representable values so this checks persistence rather than
+  // decimal formatting noise.  These cover capture, sharpening, geometry,
+  // screen detection, and final colour/output state; the source file already
+  // provides a large non-default solver-point set.
+  saved_render.scan_mirror = !saved_render.scan_mirror;
+  saved_render.gamma = 1.25;
+  saved_render.sharpen.usm_radius = 1.5;
+  saved_render.sharpen.usm_amount = 0.25;
+  saved_render.saturation = 0.75;
+  saved_render.brightness = 1.5;
+  saved_geometry.final_rotation = 0.125;
+  saved_geometry.final_mirror = !saved_geometry.final_mirror;
+  saved_detection.min_ratio = 1.25;
+  saved_detection.sharpen_radius = 2.5;
+  saved_detection.sharpen_amount = 3.5;
+
+  FILE *project = std::tmpfile ();
+  if (!project)
+    {
+      std::perror ("tmpfile");
+      return 1;
+    }
+  if (!save_csp (project, &saved_geometry, &saved_detection, &saved_render,
+                 &saved_solver)
+      || std::fflush (project) != 0 || std::fseek (project, 0, SEEK_SET) != 0)
+    {
+      std::fprintf (stderr, "Could not save parameter round-trip file\n");
+      std::fclose (project);
+      return 1;
+    }
+
+  scr_to_img_parameters loaded_geometry;
+  scr_detect_parameters loaded_detection;
+  render_parameters loaded_render;
+  solver_parameters loaded_solver;
+  error = nullptr;
+  if (!load_csp (project, &loaded_geometry, &loaded_detection, &loaded_render,
+                 &loaded_solver, &error))
+    {
+      std::fprintf (stderr, "Could not reload saved parameter file: %s\n",
+                    error ? error : "unknown parser error");
+      std::fclose (project);
+      return 1;
+    }
+  std::fclose (project);
+
+  bool ok = true;
+  if (!(saved_geometry == loaded_geometry))
+    {
+      std::fprintf (stderr, "Geometry parameters changed across CSP save/load\n");
+      ok = false;
+    }
+  if (!(saved_detection == loaded_detection))
+    {
+      std::fprintf (stderr, "Detection parameters changed across CSP save/load\n");
+      ok = false;
+    }
+  if (!(saved_render == loaded_render))
+    {
+      std::fprintf (stderr, "Render parameters changed across CSP save/load\n");
+      ok = false;
+    }
+  if (!(saved_solver == loaded_solver))
+    {
+      std::fprintf (stderr, "Solver parameters changed across CSP save/load\n");
+      ok = false;
+    }
+
+  const std::vector<point_t> saved_spots = {
+      { 1.25, -2.5 }, { 3.75, 4.5 }, { -6.125, 8.25 }
+  };
+  FILE *extended = std::tmpfile ();
+  if (!extended
+      || !save_csp_with_profile_spots (
+          extended, &saved_geometry, &saved_detection, &saved_render,
+          &saved_solver, saved_spots)
+      || std::fflush (extended) != 0
+      || std::fseek (extended, 0, SEEK_SET) != 0)
+    {
+      std::fprintf (stderr, "Could not save Qt profile-spot metadata\n");
+      if (extended)
+        std::fclose (extended);
+      return 1;
+    }
+
+  scr_to_img_parameters extended_geometry;
+  scr_detect_parameters extended_detection;
+  render_parameters extended_render;
+  solver_parameters extended_solver;
+  std::vector<point_t> loaded_spots = { { 99, 99 } };
+  error = nullptr;
+  if (!load_csp_with_profile_spots (
+          extended, &extended_geometry, &extended_detection, &extended_render,
+          &extended_solver, &error, &loaded_spots))
+    {
+      std::fprintf (stderr, "Could not reload Qt profile-spot metadata: %s\n",
+                    error ? error : "unknown parser error");
+      std::fclose (extended);
+      return 1;
+    }
+  if (!same_spots (saved_spots, loaded_spots))
+    {
+      std::fprintf (stderr, "Profile spots changed across Qt CSP save/load\n");
+      ok = false;
+    }
+  if (!(saved_geometry == extended_geometry)
+      || !(saved_detection == extended_detection)
+      || !(saved_render == extended_render)
+      || !(saved_solver == extended_solver))
+    {
+      std::fprintf (stderr,
+                    "Qt metadata changed the portable CSP parameter payload\n");
+      ok = false;
+    }
+
+  // The portable loader must stop at screen_alignment_end and remain able to
+  // consume files written by the Qt editor even though it does not understand
+  // the optional GUI postamble.
+  if (std::fseek (extended, 0, SEEK_SET) != 0)
+    {
+      std::perror ("fseek");
+      std::fclose (extended);
+      return 1;
+    }
+  scr_to_img_parameters core_geometry;
+  scr_detect_parameters core_detection;
+  render_parameters core_render;
+  solver_parameters core_solver;
+  error = nullptr;
+  if (!load_csp (extended, &core_geometry, &core_detection, &core_render,
+                 &core_solver, &error))
+    {
+      std::fprintf (stderr,
+                    "Core loader rejected a Qt-extended CSP file: %s\n",
+                    error ? error : "unknown parser error");
+      ok = false;
+    }
+  std::fclose (extended);
+
+  // Loading a legacy/core-only file must not retain spots from the previously
+  // loaded document.  This is the stale-state bug found during the GUI audit.
+  FILE *legacy = std::tmpfile ();
+  if (!legacy
+      || !save_csp (legacy, &saved_geometry, &saved_detection, &saved_render,
+                    &saved_solver)
+      || std::fflush (legacy) != 0 || std::fseek (legacy, 0, SEEK_SET) != 0)
+    {
+      std::fprintf (stderr, "Could not create legacy CSP fixture\n");
+      if (legacy)
+        std::fclose (legacy);
+      return 1;
+    }
+  loaded_spots = saved_spots;
+  error = nullptr;
+  if (!load_csp_with_profile_spots (
+          legacy, &extended_geometry, &extended_detection, &extended_render,
+          &extended_solver, &error, &loaded_spots))
+    {
+      std::fprintf (stderr, "Could not load legacy CSP through Qt wrapper: %s\n",
+                    error ? error : "unknown parser error");
+      std::fclose (legacy);
+      return 1;
+    }
+  std::fclose (legacy);
+  if (!loaded_spots.empty ())
+    {
+      std::fprintf (stderr,
+                    "Legacy CSP load retained stale profile spots\n");
+      ok = false;
+    }
+
+  // If the optional Qt postamble is malformed, the GUI loader reports failure
+  // and MainWindow restores the old core state.  The GUI-only spot state must
+  // likewise remain untouched until the postamble has parsed completely.
+  FILE *malformed = std::tmpfile ();
+  if (!malformed
+      || !save_csp (malformed, &saved_geometry, &saved_detection, &saved_render,
+                    &saved_solver)
+      || std::fprintf (malformed, "colorscreen_qt_metadata_version: 1\n") < 0
+      || std::fprintf (malformed, "profile_spot: 10 20\n") < 0
+      || std::fprintf (malformed, "not_valid_qt_metadata\n") < 0
+      || std::fflush (malformed) != 0
+      || std::fseek (malformed, 0, SEEK_SET) != 0)
+    {
+      std::fprintf (stderr, "Could not create malformed Qt CSP fixture\n");
+      if (malformed)
+        std::fclose (malformed);
+      return 1;
+    }
+  const std::vector<point_t> previous_spots = {
+      { -11.5, 12.25 }, { 13.75, -14.5 }
+  };
+  loaded_spots = previous_spots;
+  error = nullptr;
+  if (load_csp_with_profile_spots (
+          malformed, &extended_geometry, &extended_detection, &extended_render,
+          &extended_solver, &error, &loaded_spots))
+    {
+      std::fprintf (stderr, "Malformed Qt metadata was unexpectedly accepted\n");
+      ok = false;
+    }
+  std::fclose (malformed);
+  if (!same_spots (previous_spots, loaded_spots))
+    {
+      std::fprintf (stderr,
+                    "Failed Qt metadata load modified previous profile spots\n");
+      ok = false;
+    }
+
+  return ok ? 0 : 1;
+}
+EOF
+
+"$top_builddir/libtool" --tag=CXX --mode=compile \
+    $CXX $CPPFLAGS $CXXFLAGS -std=c++17 -DLIBCOLORSCREEN \
+    -I"$top_srcdir/src/qtgui" \
+    -I"$top_srcdir/src/libcolorscreen" \
+    -I"$top_srcdir/src/libcolorscreen/include" \
+    -I"$top_builddir/src/libcolorscreen" \
+    -I"$top_builddir/src/libcolorscreen/include" \
+    -c "$test_source" -o "$test_object"
+
+"$top_builddir/libtool" --tag=CXX --mode=link \
+    $CXX $CXXFLAGS $LDFLAGS -o "$test_program" "$test_object" \
+    "$top_builddir/src/libcolorscreen/libcolorscreen.la" $LIBS
+
+"$test_program" "$srcdir/dufaycolor_nikon_coolsan9000ED_4000DPI_raw-nomesh.par"

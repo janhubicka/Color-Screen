@@ -16,6 +16,7 @@
 #include <QStatusBar>
 #include <QString>
 #include <QStringList>
+#include <QTemporaryDir>
 #include <QTimer>
 #include <QWidget>
 
@@ -223,6 +224,72 @@ void startWorkspaceChurnSmoke(ColorScreenApplication &app,
                                               QStringLiteral(", ")));
           if (retryOrFail(detail))
             return;
+          return;
+        }
+
+        // Exercise the real non-dialog document persistence path on the second
+        // (disposable) document before presentation churn begins.  This covers
+        // dirty tracking, save-as-current semantics, Qt-only profile spots, a
+        // non-dirty in-memory mutation, and full save -> reload restoration
+        // without automating platform-native QFileDialog implementations.
+        QTemporaryDir persistenceDir;
+        if (!persistenceDir.isValid()) {
+          fail(QStringLiteral(
+              "Workspace churn could not create a temporary persistence directory"));
+          return;
+        }
+        const QString persistenceFile =
+            persistenceDir.filePath(QStringLiteral("workspace-roundtrip.par"));
+        const ParameterState originalSecondState =
+            second->documentStateSnapshot();
+        ParameterState savedSecondState = originalSecondState;
+        savedSecondState.rparams.scan_mirror =
+            !savedSecondState.rparams.scan_mirror;
+        savedSecondState.profileSpots.push_back({0.25, 0.5});
+        savedSecondState.profileSpots.push_back({1.25, 1.5});
+        second->applySharedDocumentState(
+            savedSecondState, QStringLiteral("Persistence smoke edit"));
+        if (second->documentStateSnapshot() != savedSecondState ||
+            !second->documentDisplayName().endsWith(QLatin1Char('*'))) {
+          fail(QStringLiteral(
+              "Workspace churn persistence edit did not dirty the second document"));
+          return;
+        }
+        if (!second->saveParametersToFile(persistenceFile) ||
+            second->documentDisplayName().endsWith(QLatin1Char('*'))) {
+          fail(QStringLiteral(
+              "Workspace churn persistence save did not establish a clean document"));
+          return;
+        }
+
+        ParameterState mutatedSecondState = savedSecondState;
+        mutatedSecondState.rparams.scan_mirror =
+            !mutatedSecondState.rparams.scan_mirror;
+        mutatedSecondState.profileSpots.clear();
+        second->applyState(mutatedSecondState);
+        if (second->documentStateSnapshot() == savedSecondState ||
+            second->documentDisplayName().endsWith(QLatin1Char('*'))) {
+          fail(QStringLiteral(
+              "Workspace churn direct mutation did not remain non-dirty"));
+          return;
+        }
+        if (!second->loadParameterFile(persistenceFile) ||
+            second->documentStateSnapshot() != savedSecondState ||
+            second->documentDisplayName().endsWith(QLatin1Char('*'))) {
+          fail(QStringLiteral(
+              "Workspace churn save/reload did not restore the complete clean document state"));
+          return;
+        }
+
+        // The workspace lifecycle test itself should start from the same
+        // processing state as before the persistence probe.  The second
+        // document is intentionally left clean; its temporary parameter-file
+        // identity is irrelevant because this smoke process closes it later.
+        second->applyState(originalSecondState);
+        if (second->documentStateSnapshot() != originalSecondState ||
+            second->documentDisplayName().endsWith(QLatin1Char('*'))) {
+          fail(QStringLiteral(
+              "Workspace churn could not restore the second document after persistence round trip"));
           return;
         }
 

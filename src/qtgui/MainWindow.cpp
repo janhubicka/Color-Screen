@@ -2189,10 +2189,6 @@ void MainWindow::onOpenParameters() {
 
   QTimer::singleShot(0, this, [this, fileName]() {
     if (loadParameterFile(fileName)) {
-      m_currentParamsFile = QFileInfo(fileName).absoluteFilePath();
-      m_currentParamsFileIsWeak = false;
-      updateWindowTitle();
-      saveRecoveryState();
       statusBar()->showMessage(QString("Parameters loaded from %1").arg(fileName),
                                3000);
     }
@@ -2226,9 +2222,9 @@ bool MainWindow::saveParametersToFile(const QString &fileName) {
   }
 
   const bool hasRgb = m_scan && m_scan->has_rgb();
-  bool saved = colorscreen::save_csp(
+  bool saved = colorscreen::save_csp_with_profile_spots(
       f, &m_scrToImgParams, hasRgb ? &m_detectParams : nullptr, &m_rparams,
-      &m_solverParams);
+      &m_solverParams, m_profileSpots);
   if (fclose(f) != 0)
     saved = false;
 
@@ -3321,8 +3317,12 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
           m_rparams = emptyRparams;
           colorscreen::solver_parameters emptySolver;
           m_solverParams = emptySolver;
-          if (!colorscreen::load_csp(f, &m_scrToImgParams, &m_detectParams,
-                                     &m_rparams, &m_solverParams, &error)) {
+          m_profileSpots.clear();
+          m_profileSpotResults.clear();
+          if (!colorscreen::load_csp_with_profile_spots(
+                  f, &m_scrToImgParams, &m_detectParams, &m_rparams,
+                  &m_solverParams, &error, &m_profileSpots,
+                  &m_profileSpotResults)) {
             QMessageBox::warning(this, "Error Loading Parameters",
                                  error ? QString::fromUtf8(error)
                                        : "Unknown error loading parameters.");
@@ -3960,10 +3960,6 @@ void MainWindow::openRecentParams() {
   const QString fileName = action->data().toString();
   if (maybeSave()) {
     if (loadParameterFile(fileName)) {
-      m_currentParamsFile = QFileInfo(fileName).absoluteFilePath();
-      m_currentParamsFileIsWeak = false;
-      updateWindowTitle();
-      saveRecoveryState();
       statusBar()->showMessage(QString("Parameters loaded from %1").arg(fileName),
                                3000);
     }
@@ -4222,9 +4218,9 @@ void MainWindow::saveRecoveryState() {
   FILE *f = fopen(paramsPath.toUtf8().constData(), "wt");
   if (f) {
     const bool hasRgb = m_scan->has_rgb();
-    paramsSaved = colorscreen::save_csp(
+    paramsSaved = colorscreen::save_csp_with_profile_spots(
         f, &m_scrToImgParams, hasRgb ? &m_detectParams : nullptr, &m_rparams,
-        &m_solverParams);
+        &m_solverParams, m_profileSpots);
     if (fclose(f) != 0)
       paramsSaved = false;
   }
@@ -4268,9 +4264,9 @@ bool MainWindow::restoreRecoveryState() {
     FILE *f = fopen(paramsPath.toUtf8().constData(), "r");
     if (f) {
       const char *error = nullptr;
-      const bool loaded = colorscreen::load_csp(
+      const bool loaded = colorscreen::load_csp_with_profile_spots(
           f, &m_scrToImgParams, &m_detectParams, &m_rparams, &m_solverParams,
-          &error);
+          &error, &m_profileSpots, &m_profileSpotResults);
       fclose(f);
       if (!loaded || error) {
         QMessageBox::warning(
@@ -4780,8 +4776,12 @@ bool MainWindow::loadParameterFile(const QString &fileName) {
 
   const char *error = nullptr;
 
-  // Store previous state in case load fails
-  ParameterState oldState = getCurrentState();
+  // Store previous state in case load fails.  Profile match results are
+  // derived UI state rather than part of ParameterState, but failed loads must
+  // preserve those too.
+  const ParameterState oldState = getCurrentState();
+  const std::vector<colorscreen::color_match> oldProfileSpotResults =
+      m_profileSpotResults;
 
   // load_csp merges parameters in; reset first to ensure clean load.
   m_scrToImgParams = colorscreen::scr_to_img_parameters();
@@ -4789,8 +4789,9 @@ bool MainWindow::loadParameterFile(const QString &fileName) {
   m_rparams = colorscreen::render_parameters();
   m_solverParams = colorscreen::solver_parameters();
 
-  if (!colorscreen::load_csp(f, &m_scrToImgParams, &m_detectParams, &m_rparams,
-                             &m_solverParams, &error)) {
+  if (!colorscreen::load_csp_with_profile_spots(
+          f, &m_scrToImgParams, &m_detectParams, &m_rparams, &m_solverParams,
+          &error, &m_profileSpots, &m_profileSpotResults)) {
     fclose(f);
     QString errStr =
         error ? QString::fromUtf8(error) : "Unknown error loading parameters.";
@@ -4801,6 +4802,8 @@ bool MainWindow::loadParameterFile(const QString &fileName) {
     m_detectParams = oldState.detect;
     m_rparams = oldState.rparams;
     m_solverParams = oldState.solver;
+    m_profileSpots = oldState.profileSpots;
+    m_profileSpotResults = oldProfileSpotResults;
     return false;
   }
   fclose(f);
@@ -4826,9 +4829,15 @@ bool MainWindow::loadParameterFile(const QString &fileName) {
     m_undoStack->clear();
   m_recoveryDirty = false;
 
+  const QString absoluteFileName = QFileInfo(fileName).absoluteFilePath();
+  m_currentParamsFile = absoluteFileName;
+  m_currentParamsFileIsWeak = false;
+
   updateModeMenu();
   updateUIFromState(getCurrentState());
-  addToRecentParams(fileName);
+  addToRecentParams(absoluteFileName);
+  updateWindowTitle();
+  saveRecoveryState();
 
   return true;
 }
