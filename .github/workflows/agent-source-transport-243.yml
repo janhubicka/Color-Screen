@@ -1,0 +1,31 @@
+name: Agent source transport 243
+
+on:
+  push:
+    branches:
+      - agent/source-transport-243
+
+permissions:
+  contents: read
+
+jobs:
+  archive:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Archive exact source revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD > agent-source-sha.txt
+          git archive --format=tar.gz --output=colorscreen-source.tar.gz HEAD
+      - name: Upload source archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: colorscreen-source-243
+          path: |
+            colorscreen-source.tar.gz
+            agent-source-sha.txt
+          retention-days: 1
