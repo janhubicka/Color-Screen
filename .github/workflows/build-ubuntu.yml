@@ -92,6 +92,12 @@ jobs:
           --smoke-test-new-view --smoke-test-slanted-reference \
           "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif" \
           "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
+
+        QT_QPA_PLATFORM=offscreen ./src/qtgui/colorscreen-qt \
+          --smoke-test 30000 --smoke-test-expect-windows 2 \
+          --smoke-test-document-lifecycle \
+          "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif" \
+          "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
     - name: make check
       run: make -j$(nproc) check
     - name: Upload Test Results
@@ -231,6 +237,12 @@ jobs:
           --smoke-test 30000 --smoke-test-expect-windows 2 \
           --smoke-test-tile-activation-stable --smoke-test-menu-order \
           --smoke-test-new-view --smoke-test-slanted-reference \
+          "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif" \
+          "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
+
+        ./src/qtgui/colorscreen-qt \
+          --smoke-test 30000 --smoke-test-expect-windows 2 \
+          --smoke-test-document-lifecycle \
           "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif" \
           "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
 

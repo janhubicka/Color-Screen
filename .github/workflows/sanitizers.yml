@@ -277,6 +277,12 @@ jobs:
           "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
 
         ./src/qtgui/colorscreen-qt \
+          --smoke-test 30000 --smoke-test-expect-windows 2 \
+          --smoke-test-document-lifecycle \
+          "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif" \
+          "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
+
+        ./src/qtgui/colorscreen-qt \
           --smoke-test 20000 --smoke-test-expect-windows 1 \
           --smoke-test-window-lifetime \
           "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
@@ -468,6 +474,12 @@ jobs:
           ./src/qtgui/colorscreen-qt \
             --smoke-test 60000 --smoke-test-expect-windows 2 \
             --smoke-test-workspace-churn \
+            "$image" "$image"
+
+        ./windows-asan-watchdog.sh document-lifecycle 90 \
+          ./src/qtgui/colorscreen-qt \
+            --smoke-test 30000 --smoke-test-expect-windows 2 \
+            --smoke-test-document-lifecycle \
             "$image" "$image"
 
         ./windows-asan-watchdog.sh window-lifetime 60 \
