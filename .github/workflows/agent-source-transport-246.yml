@@ -1,7 +1,8 @@
 name: Agent source transport 246
 
 on:
-  workflow_dispatch:
+  push:
+    branches: [ "agent/source-transport-246" ]
 
 permissions:
   contents: write
