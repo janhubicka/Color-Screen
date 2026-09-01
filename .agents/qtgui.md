@@ -316,7 +316,7 @@ public:
 
 The `TaskQueue` coordinates when tasks run and provides a specialized `runAsync` API for non-blocking operations that need to return results to the GUI thread.
 
-For state-mutating work, **the newest request owns publication**. `TaskQueue::reportFinished()` returns `true` only for the newest still-live, non-cancelled request. A worker completion must use that return value as the gate before applying parameters or other persistent GUI state; an older worker can legitimately finish after a newer request has superseded it. `runAsync()` applies this gate automatically before invoking its done callback. Renderers that intentionally display intermediate frames may ignore the return value and keep their own generation checks.
+For state-mutating work, **the newest request owns publication**. `TaskQueue::reportFinished()` returns `true` only for the newest still-live, non-cancelled request. A worker completion must use that return value as the gate before applying parameters or other persistent GUI state; an older worker can legitimately finish after a newer request has superseded it. `runAsync()` always invokes its GUI-thread completion callback so bookkeeping can finish, and passes this publication verdict as a boolean. Cleanup must run regardless; publishing pixels or persistent state must be conditional on the verdict. Renderers that intentionally display intermediate frames may ignore the return value and keep their own generation checks.
 
 #### runAsync Pattern
 This pattern is ideal for tasks like rendering overlays or performing quick background math:
@@ -328,10 +328,12 @@ m_pointsQueue.runAsync(
         // e.g., Render 10,000 points into a QImage
         return result; 
     },
-    [this](ResultType result) {
-        // Done callback - Runs on the GUI thread
-        // Safely update UI or store results
-        update();
+    [this](bool publishResult) {
+        // Done callback - Runs on the GUI thread even after cancellation.
+        // Always finish bookkeeping; publish only if still current.
+        m_running = false;
+        if (publishResult)
+            update();
     }
 );
 ```

@@ -190,18 +190,18 @@ bool TaskQueue::hasActiveTasks() const {
  * @brief Runs a one-shot worker task through the queue.
  */
 void TaskQueue::runAsync (std::function<void (colorscreen::progress_info *)> worker,
-                          std::function<void ()> done,
+                          std::function<void (bool publishResult)> done,
                           const QVariant &userData)
 {
   requestRender(userData, [this, worker = std::move(worker), done = std::move(done)](int reqId, std::shared_ptr<colorscreen::progress_info> progress) mutable {
     /* Launch worker on Qt thread-pool; progress is read-only in worker.  */
     auto *watcher = new QFutureWatcher<void> (this);
     connect (watcher, &QFutureWatcher<void>::finished, this,
-             [this, reqId, watcher, progress, done = std::move (done)] () mutable
+             [this, reqId, watcher, done = std::move (done)] () mutable
              {
                watcher->deleteLater ();
-               if (reportFinished (reqId, true))
-                 done ();
+               const bool publishResult = reportFinished (reqId, true);
+               done (publishResult);
              });
     watcher->setFuture (
         QtConcurrent::run (
