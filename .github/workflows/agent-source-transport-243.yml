@@ -1,4 +1,4 @@
-name: Agent source transport 243
+name: Agent apply PR 243 follow-up
 
 on:
   push:
@@ -6,26 +6,69 @@ on:
       - agent/source-transport-243
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  archive:
+  apply:
     runs-on: ubuntu-latest
+    env:
+      TARGET_BRANCH: agent/qtgui-persistence-hardening
+      TARGET_SHA: 856a4baaaaf4eae555a5139275152e2785c84ace
+      BASE_SHA: 0abc8b14624e1e10e0ec9ab84ddfaf9c09ad5c27
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out transport payload
+        uses: actions/checkout@v4
         with:
+          ref: agent/source-transport-243
+          path: transport
+      - name: Check out guarded target revision
+        uses: actions/checkout@v4
+        with:
+          ref: agent/qtgui-persistence-hardening
           fetch-depth: 0
-      - name: Archive exact source revision
+          path: repo
+      - name: Apply, validate, squash, and update target
         shell: bash
         run: |
           set -euo pipefail
-          git rev-parse HEAD > agent-source-sha.txt
-          git archive --format=tar.gz --output=colorscreen-source.tar.gz HEAD
-      - name: Upload source archive
-        uses: actions/upload-artifact@v4
-        with:
-          name: colorscreen-source-243
-          path: |
-            colorscreen-source.tar.gz
-            agent-source-sha.txt
-          retention-days: 1
+          cd repo
+          actual=$(git rev-parse HEAD)
+          test "$actual" = "$TARGET_SHA" || {
+            echo "target moved: expected $TARGET_SHA, found $actual" >&2
+            exit 1
+          }
+
+          git apply --check ../transport/.agents/pr243-followup.patch
+          git apply ../transport/.agents/pr243-followup.patch
+          git diff --check
+          git add src/qtgui/MainWindow.cpp \
+                  src/qtgui/MainWindow.h \
+                  src/qtgui/ParameterState.h \
+                  src/qtgui/WorkspaceChurnSmoke.cpp
+
+          # Preserve the already-reviewed persistence tests from the existing
+          # PR commit while replacing branch history with one final commit.
+          git reset --soft "$BASE_SHA"
+          git diff --cached --check
+          expected=$(printf '%s\n' \
+            src/qtgui/MainWindow.cpp \
+            src/qtgui/MainWindow.h \
+            src/qtgui/ParameterState.h \
+            src/qtgui/WorkspaceChurnSmoke.cpp \
+            testsuite/unittests.test | sort)
+          actual_files=$(git diff --cached --name-only | sort)
+          test "$actual_files" = "$expected" || {
+            echo "unexpected final file set:" >&2
+            printf '%s\n' "$actual_files" >&2
+            exit 1
+          }
+
+          test -z "$(grep -nE '^#define (save_csp|load_csp)' src/qtgui/ParameterState.h || true)"
+          test "$(grep -c 'save_csp_with_profile_spots' src/qtgui/MainWindow.cpp)" -eq 2
+          test "$(grep -c 'load_csp_with_profile_spots' src/qtgui/MainWindow.cpp)" -eq 3
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'qtgui: harden parameter persistence'
+          git push --force-with-lease="refs/heads/$TARGET_BRANCH:$TARGET_SHA" \
+            origin HEAD:"$TARGET_BRANCH"
