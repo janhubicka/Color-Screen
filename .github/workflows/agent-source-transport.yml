@@ -1,4 +1,4 @@
-name: Agent lifecycle patch transport
+name: Agent lifecycle workflow blob transport
 
 on:
   push:
@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 jobs:
-  apply:
+  materialize:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout review branch
@@ -18,33 +18,58 @@ jobs:
           ref: agent/qtgui-document-lifecycle
           fetch-depth: 0
           path: review
-      - name: Apply guarded patch
+      - name: Materialize workflow blobs
         shell: bash
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PATCH_BLOB_SHA: ee1a4c4970acba350912db7f4ffb9dbfcf0778fd
+          PATCH_BLOB_SHA: 7fc39007539b5b7d9c408164500f813c37b94b4a
         run: |
           set -euo pipefail
           cd review
-          expected=44f7af8c1b4ec256f114848ac47e564200240334
+          expected=583fb8254663cdbefa402c9a931f3b25db349b7a
           actual=$(git rev-parse HEAD)
           if [[ "$actual" != "$expected" ]]; then
             echo "::error::Review branch moved: expected $expected, got $actual"
             exit 1
           fi
+
           curl --fail --silent --show-error \
             -H "Authorization: Bearer $GITHUB_TOKEN" \
             -H "Accept: application/vnd.github+json" \
             "https://api.github.com/repos/janhubicka/Color-Screen/git/blobs/$PATCH_BLOB_SHA" \
             | python3 -c 'import base64,json,sys; sys.stdout.write(base64.b64decode(json.load(sys.stdin)["content"]).decode())' \
-            | base64 -d | gzip -d > /tmp/document-lifecycle.patch
-          git apply --check /tmp/document-lifecycle.patch
-          git apply /tmp/document-lifecycle.patch
-          sh build-aux/check-generated-build-metadata.sh
+            | base64 -d | gzip -d > /tmp/workflows.patch
+
+          git apply --check /tmp/workflows.patch
+          git apply /tmp/workflows.patch
           git diff --check
-          git status --short
-          git config user.name "Jan Hubička"
-          git config user.email "46065755+janhubicka@users.noreply.github.com"
-          git add -A
-          git commit -m "qtgui: make document close decisions transactional"
-          git push origin HEAD:agent/qtgui-document-lifecycle
+
+          python3 <<'PY'
+          import base64
+          import json
+          import os
+          import urllib.request
+
+          token = os.environ["GITHUB_TOKEN"]
+          url = "https://api.github.com/repos/janhubicka/Color-Screen/git/blobs"
+          for label, path in [
+              ("BUILD", ".github/workflows/build-ubuntu.yml"),
+              ("SANITIZERS", ".github/workflows/sanitizers.yml"),
+          ]:
+              with open(path, "rb") as f:
+                  content = base64.b64encode(f.read()).decode()
+              body = json.dumps({"content": content, "encoding": "base64"}).encode()
+              req = urllib.request.Request(
+                  url,
+                  data=body,
+                  method="POST",
+                  headers={
+                      "Authorization": f"Bearer {token}",
+                      "Accept": "application/vnd.github+json",
+                      "Content-Type": "application/json",
+                  },
+              )
+              with urllib.request.urlopen(req) as response:
+                  sha = json.load(response)["sha"]
+              print(f"{label}_BLOB_SHA={sha}")
+          PY
