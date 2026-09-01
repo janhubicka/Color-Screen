@@ -46,6 +46,34 @@ struct DocumentLifecycleState {
   std::function<void()> completed;
 };
 
+/** Locate the QMessageBox currently implementing TITLE.
+
+    QApplication::activeModalWidget() is not reliable for native/offscreen
+    dialogs on every Qt platform plugin (notably macOS).  The QMessageBox
+    object itself still exists, so fall back to the application's widget list. */
+QMessageBox *findMessageBox(const QString &title, QMessageBox *previousBox) {
+  auto matches = [&title, previousBox](QMessageBox *box) {
+    return box && box != previousBox && box->windowTitle() == title;
+  };
+
+  if (auto *active =
+          qobject_cast<QMessageBox *>(QApplication::activeModalWidget())) {
+    if (matches(active))
+      return active;
+  }
+
+  QMessageBox *hiddenFallback = nullptr;
+  for (QWidget *widget : QApplication::allWidgets()) {
+    auto *candidate = qobject_cast<QMessageBox *>(widget);
+    if (!matches(candidate))
+      continue;
+    if (candidate->isVisible())
+      return candidate;
+    hiddenFallback = candidate;
+  }
+  return hiddenFallback;
+}
+
 /** Click a known sequence of modal QMessageBox buttons as they appear.
 
     QFileDialog is intentionally not automated here.  The smoke establishes a
@@ -67,14 +95,24 @@ void queueDialogResponses(ColorScreenApplication &app,
     if (state->index >= state->responses.size())
       return;
 
-    auto *box = qobject_cast<QMessageBox *>(QApplication::activeModalWidget());
     const DialogResponse &expected = state->responses[state->index];
-    if (box && box != state->previousBox &&
-        box->windowTitle() == expected.title) {
+    QMessageBox *box =
+        findMessageBox(expected.title, state->previousBox.data());
+    if (box) {
+      bool answered = false;
       if (QAbstractButton *button = box->button(expected.button)) {
+        button->click();
+        answered = true;
+      } else if (box->standardButtons().testFlag(expected.button)) {
+        // Native platform helpers do not always expose their standard buttons
+        // as clickable QWidget objects. QDialog::done() drives the same
+        // QMessageBox result synchronously and also closes the native helper.
+        box->done(expected.button);
+        answered = true;
+      }
+      if (answered) {
         state->previousBox = box;
         ++state->index;
-        button->click();
         if (auto retry = weakPoll.lock())
           QTimer::singleShot(0, &app, [retry]() { (*retry)(200); });
         return;
