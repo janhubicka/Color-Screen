@@ -18,9 +18,9 @@ jobs:
       - name: Guard branch and apply patch
         env:
           GH_TOKEN: ${{ github.token }}
-          PATCH_BLOB: fead1a5ffbd38c8cb8cb2e0fcc94c3ee181cc3cb
-          EXPECTED_BASE: af1c068c33d857db8ae037fdf8ee12f44f68eefa
-          EXPECTED_PATCH_SHA256: aa34b3ff1d0f36d16c814b2a2b4c28ced7c4a864b3aae9950ddd56e552516cab
+          PATCH_BLOB: fe465d4486dcefca98214d933f4ae9b0edae9fa0
+          EXPECTED_BASE: 4c2b9e2e1ce5bcb3ab1fa4ee54fd8760b4a61c09
+          EXPECTED_PATCH_SHA256: f4b812fe7e45152cacd9632cd90348a297d5bf28a7a03b7f627bca7f5cbbbbb4
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$EXPECTED_BASE"
@@ -38,9 +38,8 @@ jobs:
           actual=$(git diff --name-only | sort)
           expected=$(printf '%s\n' \
             .agents/qtgui.md \
-            src/qtgui/DocumentLifecycleSmoke.cpp \
-            src/qtgui/MainWindow.cpp \
-            src/qtgui/MainWindow.h \
+            src/qtgui/ImageWidget.cpp \
+            src/qtgui/SharpnessPanel.cpp \
             src/qtgui/TaskQueue.cpp \
             src/qtgui/TaskQueue.h | sort)
           test "$actual" = "$expected"
@@ -49,8 +48,8 @@ jobs:
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add .agents/qtgui.md src/qtgui/DocumentLifecycleSmoke.cpp \
-            src/qtgui/MainWindow.cpp src/qtgui/MainWindow.h \
-            src/qtgui/TaskQueue.cpp src/qtgui/TaskQueue.h
-          git commit -m 'qtgui: harden background task lifetime'
+          git add .agents/qtgui.md src/qtgui/ImageWidget.cpp \
+            src/qtgui/SharpnessPanel.cpp src/qtgui/TaskQueue.cpp \
+            src/qtgui/TaskQueue.h
+          git commit -m 'qtgui: preserve cleanup for stale async work'
           git push origin HEAD:agent/qtgui-background-task-lifetime
