@@ -29,6 +29,7 @@
 #include <QCloseEvent>
 #include <QColorDialog>
 #include <QColorSpace>
+#include <QCoreApplication>
 #include <QComboBox>
 #include <QDateTime> // Added QDateTime include
 #include <QDialog>
@@ -529,6 +530,27 @@ MainWindow::~MainWindow() {
   // (QTBUG-71850)
   hide();
 
+  // Destruction can also happen without a preceding closeEvent.  Make every
+  // queued result stale, request cooperative cancellation, and join one-shot
+  // workers before any document parameters or panels can disappear.
+  m_closing = true;
+  m_solverQueue.cancelAll();
+  m_colorOptimizerQueue.cancelAll();
+  for (const auto &entry : m_activeProgresses)
+    if (entry.info)
+      entry.info->cancel();
+  // Result delivery from persistent workers is no longer useful once teardown
+  // starts. Disconnect before joining one-shot workers because shutdown may
+  // service blocking queued calls from those workers.
+  if (m_solverWorker)
+    disconnect(m_solverWorker, nullptr, this, nullptr);
+  if (m_coordOptimizationWorker)
+    disconnect(m_coordOptimizationWorker, nullptr, this, nullptr);
+  if (m_colorOptimizerWorker)
+    disconnect(m_colorOptimizerWorker, nullptr, this, nullptr);
+
+  shutdownBackgroundThreads();
+
   if (m_solverThread) {
     m_solverThread->quit();
     m_solverThread->wait();
@@ -565,6 +587,50 @@ MainWindow::~MainWindow() {
     m_mainSplitter = nullptr;
   }
 
+}
+
+/** Track a one-shot worker thread owned by this document's lifetime. */
+void MainWindow::trackBackgroundThread(QThread *thread) {
+  if (!thread)
+    return;
+  m_backgroundThreads.erase(
+      std::remove_if(m_backgroundThreads.begin(), m_backgroundThreads.end(),
+                     [](const QPointer<QThread> &candidate) {
+                       return candidate.isNull();
+                     }),
+      m_backgroundThreads.end());
+  m_backgroundThreads.emplace_back(thread);
+}
+
+/** Cancel/join every one-shot worker before document members are destroyed. */
+void MainWindow::shutdownBackgroundThreads() {
+  for (const QPointer<QThread> &guard : m_backgroundThreads) {
+    if (QThread *thread = guard.data())
+      if (thread->isRunning()) {
+        thread->requestInterruption();
+        thread->quit();
+      }
+  }
+
+  // FinetuneMisregisteredWorker can be blocked asking the document for its
+  // latest point set through a BlockingQueuedConnection.  A plain wait() from
+  // the GUI thread would deadlock in that state.  Poll in short intervals and
+  // service only MetaCall events addressed to this document; m_closing makes
+  // every result callback a no-op while still allowing the blocking request to
+  // return and observe cancellation.
+  bool running = true;
+  while (running) {
+    running = false;
+    for (const QPointer<QThread> &guard : m_backgroundThreads) {
+      if (QThread *thread = guard.data(); thread && thread->isRunning()) {
+        running = true;
+        thread->wait(10);
+      }
+    }
+    if (running)
+      QCoreApplication::sendPostedEvents(this, QEvent::MetaCall);
+  }
+  m_backgroundThreads.clear();
 }
 
 /** Build the entire main window UI.
@@ -3382,6 +3448,10 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
       watcher, &QFutureWatcher<std::pair<bool, QString>>::finished, this,
       [this, watcher, tempScan, progress, fileName, isCsprj,
        offerInitialGuide]() {
+        if (m_closing) {
+          watcher->deleteLater();
+          return;
+        }
         std::pair<bool, QString> result = watcher->result();
         m_imageLoadPending = false;
         removeProgress(progress);
@@ -3451,6 +3521,10 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
                 connect(tileWatcher, &QFutureWatcher<bool>::finished, this,
                         [this, tileWatcher, tileProgress, scanRef, capturedX,
                          capturedY]() {
+                          if (m_closing) {
+                            tileWatcher->deleteLater();
+                            return;
+                          }
                           bool ok = tileWatcher->result();
                           removeProgress(tileProgress);
                           tileWatcher->deleteLater();
@@ -4104,8 +4178,12 @@ void MainWindow::onTriggerSolve(
 void MainWindow::onSolverFinished(int reqId,
                                   colorscreen::scr_to_img_parameters result,
                                   bool success, bool cancelled) {
-  // Report back to queue
-  m_solverQueue.reportFinished(reqId, success);
+  // reportFinished() is the authoritative stale-result gate.  A newer
+  // successful request removes older requests from the queue, and cancellation
+  // makes a nominally successful racing completion unpublishable.
+  const bool current = m_solverQueue.reportFinished(reqId, success);
+  if (!current || m_closing || cancelled)
+    return;
 
   if (success) {
     ParameterState newState = getCurrentState();
@@ -4600,25 +4678,33 @@ void MainWindow::onPointAdded(colorscreen::point_t imgPos,
     progress->set_task("Focus analysis", 0);
     addProgress(progress);
 
+    const uint64_t generation = ++m_focusAnalysisGeneration;
     FocusAnalysisWorker *worker = new FocusAnalysisWorker(
         m_rparams, m_scrToImgParams, m_scan, imgPos, fparam, progress);
-    QThread *thread = new QThread();
+    QThread *thread = new QThread(this);
     worker->moveToThread(thread);
+    trackBackgroundThread(thread);
 
     connect(thread, &QThread::started, worker, &FocusAnalysisWorker::run);
+    connect(worker, &FocusAnalysisWorker::finished, thread, &QThread::quit,
+          Qt::DirectConnection);
+    connect(thread, &QThread::finished, worker, &QObject::deleteLater);
+    connect(thread, &QThread::finished, thread, &QObject::deleteLater);
     connect(worker, &FocusAnalysisWorker::finished, this,
-            [this, worker, thread,
-             progress](bool success, colorscreen::finetune_result result) {
-              onFocusAnalysisFinished(success, result);
-              removeProgress(progress);
-              worker->deleteLater();
-              thread->quit();
-              thread->wait();
-              thread->deleteLater();
+            [this, progress, generation](bool success,
+                                         colorscreen::finetune_result result) {
+              const bool cancelled = progress && progress->pool_cancel();
+              if (!m_closing && generation == m_focusAnalysisGeneration) {
+                if (!cancelled)
+                  onFocusAnalysisFinished(success, result);
+                else if (m_sharpnessPanel)
+                  m_sharpnessPanel->setFocusAnalysisChecked(false);
+              }
+              if (!m_closing)
+                removeProgress(progress);
             });
 
     thread->start();
-    m_finetuneThreads.push_back(thread);
     return;
   }
 
@@ -4767,9 +4853,12 @@ void MainWindow::runAreaComputation(
     connect(watcher, &QFutureWatcher<ParameterState>::finished, this,
             [this, watcher, progress, description, onDone]() {
               ParameterState newState = watcher->result();
-              changeParameters(newState, description);
-              removeProgress(progress);
-              if (onDone)
+              const bool cancelled = progress && progress->pool_cancel();
+              if (!m_closing && !cancelled)
+                changeParameters(newState, description);
+              if (!m_closing)
+                removeProgress(progress);
+              if (!m_closing && onDone)
                 onDone();
               watcher->deleteLater();
             });
@@ -4958,13 +5047,15 @@ void MainWindow::onAreaSelected(QRect area) {
       m_solverParams, m_rparams, m_scrToImgParams, m_scan,
       {imgArea.x(), imgArea.y(), imgArea.width(), imgArea.height()}, progress,
       m_geometryPanel->finetuneAreaParams());
-  QThread *thread = new QThread();
+  QThread *thread = new QThread(this);
   worker->moveToThread(thread);
+  trackBackgroundThread(thread);
 
   // Connect signals
   connect(thread, &QThread::started, worker, &FinetuneWorker::run);
-  connect(worker, &FinetuneWorker::finished, thread, &QThread::quit);
-  connect(worker, &FinetuneWorker::finished, worker, &QObject::deleteLater);
+  connect(worker, &FinetuneWorker::finished, thread, &QThread::quit,
+          Qt::DirectConnection);
+  connect(thread, &QThread::finished, worker, &QObject::deleteLater);
   connect(thread, &QThread::finished, thread, &QObject::deleteLater);
 
   // Connect to our slot to handle results
@@ -4980,9 +5071,6 @@ void MainWindow::onAreaSelected(QRect area) {
               onFinetuneFinished(false, {}, thread, progress);
             }
           });
-
-  // Track thread
-  m_finetuneThreads.push_back(thread);
 
   // Start thread
   thread->start();
@@ -5026,15 +5114,15 @@ void MainWindow::onAutomaticallyAddPointsInAreaRequested(
         auto *worker = new FinetuneMisregisteredWorker(
             m_solverParams, m_rparams, m_scrToImgParams, m_scan, crop, progress,
             params, m_geometryPanel->isNonlinearEnabled());
-        auto *thread = new QThread();
+        auto *thread = new QThread(this);
         worker->moveToThread(thread);
+        trackBackgroundThread(thread);
 
         connect(thread, &QThread::started, worker,
                 &FinetuneMisregisteredWorker::run);
         connect(worker, &FinetuneMisregisteredWorker::finished, thread,
-                &QThread::quit);
-        connect(worker, &FinetuneMisregisteredWorker::finished, worker,
-                &QObject::deleteLater);
+                &QThread::quit, Qt::DirectConnection);
+        connect(thread, &QThread::finished, worker, &QObject::deleteLater);
         connect(thread, &QThread::finished, thread, &QObject::deleteLater);
 
         // Points and geometry are intentionally applied in batches while the
@@ -5045,7 +5133,7 @@ void MainWindow::onAutomaticallyAddPointsInAreaRequested(
             [this, progress](
                 std::vector<colorscreen::solver_parameters::solver_point_t>
                     points) {
-              if (progress && progress->pool_cancel())
+              if (m_closing || (progress && progress->pool_cancel()))
                 return;
               if (points.empty())
                 return;
@@ -5065,7 +5153,7 @@ void MainWindow::onAutomaticallyAddPointsInAreaRequested(
             });
         connect(worker, &FinetuneMisregisteredWorker::geometryReady, this,
                 [this, progress](colorscreen::scr_to_img_parameters result) {
-                  if (progress && progress->pool_cancel())
+                  if (m_closing || (progress && progress->pool_cancel()))
                     return;
                   ParameterState newState = getCurrentState();
                   newState.scrToImg.merge_solver_solution(result);
@@ -5078,25 +5166,24 @@ void MainWindow::onAutomaticallyAddPointsInAreaRequested(
                 [this](std::vector<colorscreen::solver_parameters::solver_point_t>
                            *points) {
                   if (points)
-                    *points = m_solverParams.points;
+                    *points = m_closing
+                                  ? std::vector<colorscreen::solver_parameters::solver_point_t>()
+                                  : m_solverParams.points;
                 },
                 Qt::BlockingQueuedConnection);
         connect(worker, &FinetuneMisregisteredWorker::finished, this,
-                [this, thread, progress](bool success) {
-                  removeProgress(progress);
-                  auto it = std::find(m_finetuneThreads.begin(),
-                                      m_finetuneThreads.end(), thread);
-                  if (it != m_finetuneThreads.end())
-                    m_finetuneThreads.erase(it);
+                [this, progress](bool success) {
+                  if (!m_closing)
+                    removeProgress(progress);
 
-                  if (!success && (!progress || !progress->pool_cancel())) {
+                  if (!m_closing && !success &&
+                      (!progress || !progress->pool_cancel())) {
                     QMessageBox::warning(
                         this, tr("Optimization Failed"),
                         tr("Automatically add points to area failed."));
                   }
                 });
 
-        m_finetuneThreads.push_back(thread);
         thread->start();
       });
 }
@@ -5129,15 +5216,15 @@ void MainWindow::onAutomaticallyAddPointsRequested(const colorscreen::finetune_a
   FinetuneMisregisteredWorker *worker = new FinetuneMisregisteredWorker(
       m_solverParams, m_rparams, m_scrToImgParams, m_scan, crop, progress,
       params, m_geometryPanel->isNonlinearEnabled());
-  QThread *thread = new QThread();
+  QThread *thread = new QThread(this);
   worker->moveToThread(thread);
+  trackBackgroundThread(thread);
 
   // Connect signals
   connect(thread, &QThread::started, worker, &FinetuneMisregisteredWorker::run);
   connect(worker, &FinetuneMisregisteredWorker::finished, thread,
-          &QThread::quit);
-  connect(worker, &FinetuneMisregisteredWorker::finished, worker,
-          &QObject::deleteLater);
+          &QThread::quit, Qt::DirectConnection);
+  connect(thread, &QThread::finished, worker, &QObject::deleteLater);
   connect(thread, &QThread::finished, thread, &QObject::deleteLater);
 
   // Connect to our slot to handle results
@@ -5145,7 +5232,7 @@ void MainWindow::onAutomaticallyAddPointsRequested(const colorscreen::finetune_a
       worker, &FinetuneMisregisteredWorker::pointsReady, this,
       [this, progress](
           std::vector<colorscreen::solver_parameters::solver_point_t> points) {
-        if (progress && progress->pool_cancel())
+        if (m_closing || (progress && progress->pool_cancel()))
           return;
 
         if (!points.empty()) {
@@ -5166,7 +5253,7 @@ void MainWindow::onAutomaticallyAddPointsRequested(const colorscreen::finetune_a
       });
   connect(worker, &FinetuneMisregisteredWorker::geometryReady, this,
           [this, progress](colorscreen::scr_to_img_parameters result) {
-            if (progress && progress->pool_cancel())
+            if (m_closing || (progress && progress->pool_cancel()))
               return;
             ParameterState newState = getCurrentState();
             newState.scrToImg.merge_solver_solution(result);
@@ -5175,25 +5262,22 @@ void MainWindow::onAutomaticallyAddPointsRequested(const colorscreen::finetune_a
           });
   connect(worker, &FinetuneMisregisteredWorker::requestCurrentPoints, this,
           [this](std::vector<colorscreen::solver_parameters::solver_point_t> *points) {
-            if (points) *points = m_solverParams.points;
+            if (points)
+              *points = m_closing
+                            ? std::vector<colorscreen::solver_parameters::solver_point_t>()
+                            : m_solverParams.points;
           }, Qt::BlockingQueuedConnection);
   connect(worker, &FinetuneMisregisteredWorker::finished, this,
-          [this, thread, progress](bool success) {
-            removeProgress(progress);
-            auto it = std::find(m_finetuneThreads.begin(),
-                                m_finetuneThreads.end(), thread);
-            if (it != m_finetuneThreads.end()) {
-              m_finetuneThreads.erase(it);
-            }
+          [this, progress](bool success) {
+            if (!m_closing)
+              removeProgress(progress);
 
-            if (!success && (!progress || !progress->pool_cancel())) {
+            if (!m_closing && !success &&
+                (!progress || !progress->pool_cancel())) {
               QMessageBox::warning(this, "Optimization Failed",
                                    "Automatically add points failed.");
             }
           });
-
-  // Track thread
-  m_finetuneThreads.push_back(thread);
 
   // Start thread
   thread->start();
@@ -5207,20 +5291,16 @@ void MainWindow::onFinetuneFinished(
     bool success,
     std::vector<colorscreen::solver_parameters::solver_point_t> points,
     QThread *thread, std::shared_ptr<colorscreen::progress_info> progress) {
-  // Remove progress
-  removeProgress(progress);
+  Q_UNUSED(thread);
 
-  // Remove thread from tracking
-  auto it =
-      std::find(m_finetuneThreads.begin(), m_finetuneThreads.end(), thread);
-  if (it != m_finetuneThreads.end()) {
-    m_finetuneThreads.erase(it);
-  }
+  // Remove progress only while the document still owns live presentation UI.
+  if (!m_closing)
+    removeProgress(progress);
 
-  // Check if cancelled
-  if (progress && progress->cancelled()) {
+  // A close or cancellation request makes any final batch stale even if the
+  // worker raced to completion before acknowledging cancellation.
+  if (m_closing || (progress && progress->pool_cancel()))
     return;
-  }
 
   // Add points if successful
   if (success && !points.empty()) {
@@ -5275,30 +5355,33 @@ void MainWindow::onAutodetectScreen() {
   addProgress(progress);
 
   // Create worker and thread
+  const uint64_t generation = ++m_detectScreenGeneration;
   DetectScreenWorker *worker =
       new DetectScreenWorker(m_detectParams, m_solverParams, m_scrToImgParams,
                              m_scan, progress, m_rparams.gamma);
-  QThread *thread = new QThread();
+  QThread *thread = new QThread(this);
   worker->moveToThread(thread);
+  trackBackgroundThread(thread);
 
   // Connect signals
   connect(thread, &QThread::started, worker, &DetectScreenWorker::detect);
-  connect(worker, &DetectScreenWorker::finished, thread, &QThread::quit);
-  connect(worker, &DetectScreenWorker::finished, worker, &QObject::deleteLater);
+  connect(worker, &DetectScreenWorker::finished, thread, &QThread::quit,
+          Qt::DirectConnection);
+  connect(thread, &QThread::finished, worker, &QObject::deleteLater);
   connect(thread, &QThread::finished, thread, &QObject::deleteLater);
 
   // Connect to our slot to handle results
   connect(worker, &DetectScreenWorker::finished, this,
-          [this, progress](bool success, colorscreen::detected_screen result,
-                           colorscreen::solver_parameters solverParams) {
-            onDetectScreenFinished(success, result, solverParams);
-            removeProgress(progress);
+          [this, progress, generation](
+              bool success, colorscreen::detected_screen result,
+              colorscreen::solver_parameters solverParams) {
+            if (!m_closing && generation == m_detectScreenGeneration &&
+                (!progress || !progress->pool_cancel()))
+              onDetectScreenFinished(success, result, solverParams);
+            if (!m_closing)
+              removeProgress(progress);
           });
 
-  // Store thread reference
-  m_detectScreenThread = thread;
-
-  // Start thread
   thread->start();
 }
 
@@ -5312,9 +5395,6 @@ void MainWindow::onAutodetectScreen() {
 void MainWindow::onDetectScreenFinished(
     bool success, colorscreen::detected_screen result,
     colorscreen::solver_parameters solverParams) {
-  // Clean up thread reference
-  m_detectScreenThread = nullptr;
-
   if (!success || !result.success) {
     QMessageBox::warning(this, "Screen Detection", "Screen detection failed.");
     return;
@@ -5424,11 +5504,13 @@ void MainWindow::onAdaptiveSharpeningRequested(
 
   // Create worker from the complete one-run configuration selected in the
   // dialog. The worker resolves automatic dimensions in STEP1.
+  const uint64_t generation = ++m_adaptiveSharpeningGeneration;
   AdaptiveSharpeningWorker *worker = new AdaptiveSharpeningWorker(
       m_scrToImgParams, m_rparams, m_scan, parameters, progress);
 
-  QThread *thread = new QThread;
+  QThread *thread = new QThread(this);
   worker->moveToThread(thread);
+  trackBackgroundThread(thread);
 
   connect(thread, &QThread::started, worker, &AdaptiveSharpeningWorker::run);
 
@@ -5451,24 +5533,26 @@ void MainWindow::onAdaptiveSharpeningRequested(
             &AdaptiveSharpeningChart::updateBlur);
   }
 
-  // Connect finished signal using lambda to capture thread and progress
+  connect(worker, &AdaptiveSharpeningWorker::finished, thread, &QThread::quit,
+          Qt::DirectConnection);
+  connect(thread, &QThread::finished, worker, &QObject::deleteLater);
+  connect(thread, &QThread::finished, thread, &QObject::deleteLater);
   connect(worker, &AdaptiveSharpeningWorker::finished, this,
-          [this, worker, thread, progress](
+          [this, progress, generation](
               bool success,
               std::shared_ptr<colorscreen::scanner_blur_correction_parameters>
                   result,
               const QString &error) {
             const bool cancelled = progress && progress->pool_cancel();
-            if (!cancelled)
-              onAdaptiveSharpeningFinished(success, result, error);
-            else
-              statusBar()->showMessage(tr("Displacement analysis cancelled"),
-                                       3000);
-            removeProgress(progress);
-            worker->deleteLater();
-            thread->quit();
-            thread->wait();
-            thread->deleteLater();
+            if (!m_closing && generation == m_adaptiveSharpeningGeneration) {
+              if (!cancelled)
+                onAdaptiveSharpeningFinished(success, result, error);
+              else
+                statusBar()->showMessage(tr("Displacement analysis cancelled"),
+                                         3000);
+            }
+            if (!m_closing)
+              removeProgress(progress);
           });
 
   thread->start();
@@ -5541,9 +5625,11 @@ void MainWindow::onAutodetectCoordinatesRequested() {
   progress->set_task("Autodetecting coordinates", 1);
   addUserVisibleProgress(progress, tr("Coordinate autodetection"));
 
+  const int reqId = ++m_coordinateAutodetectRequest;
   QMetaObject::invokeMethod(
       m_coordOptimizationWorker, "autodetect", Qt::QueuedConnection,
-      Q_ARG(int, 0), Q_ARG(colorscreen::scr_to_img_parameters, m_scrToImgParams),
+      Q_ARG(int, reqId),
+      Q_ARG(colorscreen::scr_to_img_parameters, m_scrToImgParams),
       Q_ARG(colorscreen::render_parameters, m_rparams),
       Q_ARG(std::shared_ptr<colorscreen::progress_info>, progress));
 }
@@ -5558,13 +5644,15 @@ void MainWindow::onOptimizeCoordinatesRequested() {
    render mode, activates the AddPoint tool, and pushes an undo command.
    On failure, shows a warning.  */
 void MainWindow::onAutodetectCoordinatesFinished(
-    int /*reqId*/, colorscreen::scr_to_img_parameters result,
+    int reqId, colorscreen::scr_to_img_parameters result,
     std::shared_ptr<colorscreen::progress_info> progress, bool success,
     bool cancelled) {
-  if (progress)
+  if (progress && !m_closing)
     removeProgress(progress);
 
-  if (cancelled) {
+  if (m_closing || reqId != m_coordinateAutodetectRequest)
+    return;
+  if (cancelled || (progress && progress->pool_cancel())) {
     m_autoAddPointsAfterCoordinates = false;
     return;
   }
@@ -5614,9 +5702,11 @@ void MainWindow::onOptimizeCoordinates() {
   progress->set_task("Optimizing coordinates", 1);
   addProgress(progress);
 
+  const int reqId = ++m_coordinateOptimizeRequest;
   QMetaObject::invokeMethod(
       m_coordOptimizationWorker, "optimize", Qt::QueuedConnection,
-      Q_ARG(int, 0), Q_ARG(colorscreen::scr_to_img_parameters, m_scrToImgParams),
+      Q_ARG(int, reqId),
+      Q_ARG(colorscreen::scr_to_img_parameters, m_scrToImgParams),
       Q_ARG(colorscreen::render_parameters, m_rparams),
       Q_ARG(std::shared_ptr<colorscreen::progress_info>, progress));
 }
@@ -5626,13 +5716,14 @@ void MainWindow::onOptimizeCoordinates() {
    mesh_trans (since coordinates changed), pushes an undo command, and
    updates the finetune diagnostic images.  */
 void MainWindow::onOptimizeCoordinatesFinished(
-    int /*reqId*/, colorscreen::finetune_result ret,
+    int reqId, colorscreen::finetune_result ret,
     std::shared_ptr<colorscreen::progress_info> progress, bool success,
     bool cancelled) {
-  if (progress)
+  if (progress && !m_closing)
     removeProgress(progress);
 
-  if (cancelled)
+  if (m_closing || reqId != m_coordinateOptimizeRequest || cancelled ||
+      (progress && progress->pool_cancel()))
     return;
 
   if (success) {
@@ -5725,28 +5816,33 @@ void MainWindow::onFlatFieldRequested() {
     this->addProgress(progress);
 
     // Create worker and thread
+    const uint64_t generation = ++m_flatFieldGeneration;
     FlatFieldWorker *worker = new FlatFieldWorker(
         whiteFile, blackFile, m_rparams.gamma, m_rparams.demosaic, progress);
-    QThread *thread = new QThread();
+    QThread *thread = new QThread(this);
     worker->moveToThread(thread);
+    trackBackgroundThread(thread);
 
     // Connect signals
     connect(thread, &QThread::started, worker, &FlatFieldWorker::run);
-    connect(worker, &FlatFieldWorker::finished, thread, &QThread::quit);
-    connect(worker, &FlatFieldWorker::finished, worker, &QObject::deleteLater);
+    connect(worker, &FlatFieldWorker::finished, thread, &QThread::quit,
+          Qt::DirectConnection);
+    connect(thread, &QThread::finished, worker, &QObject::deleteLater);
     connect(thread, &QThread::finished, thread, &QObject::deleteLater);
 
     // Connect results
     connect(worker, &FlatFieldWorker::finished, this,
-            [this, progress](
+            [this, progress, generation](
                 bool success,
                 std::shared_ptr<colorscreen::backlight_correction_parameters>
                     result) {
-              onFlatFieldFinished(success, result);
-              removeProgress(progress);
+              if (!m_closing && generation == m_flatFieldGeneration &&
+                  (!progress || !progress->pool_cancel()))
+                onFlatFieldFinished(success, result);
+              if (!m_closing)
+                removeProgress(progress);
             });
 
-    m_flatFieldThread = thread;
     thread->start();
   });
 }
@@ -5757,8 +5853,6 @@ void MainWindow::onFlatFieldRequested() {
 void MainWindow::onFlatFieldFinished(
     bool success,
     std::shared_ptr<colorscreen::backlight_correction_parameters> result) {
-  m_flatFieldThread = nullptr;
-
   if (!success || !result) {
     QMessageBox::warning(this, "Flat Field", "Flat field analysis failed.");
     return;
@@ -5884,6 +5978,10 @@ void MainWindow::onFindFocusAreasRequested() {
   auto *watcher = new QFutureWatcher<FocusAreaFindTaskResult>(this);
   connect(watcher, &QFutureWatcher<FocusAreaFindTaskResult>::finished, this,
           [this, watcher, progress]() {
+            if (m_closing) {
+              watcher->deleteLater();
+              return;
+            }
             const FocusAreaFindTaskResult result = watcher->result();
             watcher->deleteLater();
             removeProgress(progress);
@@ -5970,6 +6068,10 @@ void MainWindow::onAnalyzeFocusAreasRequested(uint64_t flags) {
   auto *watcher = new QFutureWatcher<FocusAreaAnalyzeTaskResult>(this);
   connect(watcher, &QFutureWatcher<FocusAreaAnalyzeTaskResult>::finished, this,
           [this, watcher, progress, flags]() {
+            if (m_closing) {
+              watcher->deleteLater();
+              return;
+            }
             const FocusAreaAnalyzeTaskResult result = watcher->result();
             watcher->deleteLater();
             removeProgress(progress);
@@ -6184,13 +6286,16 @@ void MainWindow::onRender() {
               bool success = watcher->result();
               bool cancelled = progress->pool_cancel();
               m_renderProgress.reset(); // no longer active
-              removeProgress(progress);
+              if (!m_closing)
+                removeProgress(progress);
               watcher->deleteLater();
               if (cancelled || !success) {
                 // Remove the incomplete output file
                 if (QFile::exists(outputPath))
                   QFile::remove(outputPath);
               }
+              if (m_closing)
+                return;
               if (cancelled) {
                 statusBar()->showMessage(tr("Render cancelled"), 3000);
               } else if (success) {
@@ -6306,7 +6411,9 @@ void MainWindow::onColorOptimizerFinished(
     int reqId, colorscreen::render_parameters updatedRparams,
     std::vector<colorscreen::color_match> results, bool success,
     bool cancelled) {
-  m_colorOptimizerQueue.reportFinished(reqId, success);
+  const bool current = m_colorOptimizerQueue.reportFinished(reqId, success);
+  if (!current || m_closing || cancelled)
+    return;
 
   if (success) {
     ParameterState newState = getCurrentState();

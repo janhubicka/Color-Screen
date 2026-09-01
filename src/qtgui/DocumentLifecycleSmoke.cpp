@@ -3,6 +3,7 @@
 #include "ColorScreenApplication.h"
 #include "ImageViewWindow.h"
 #include "MainWindow.h"
+#include "TaskQueue.h"
 #include "WorkspaceWindow.h"
 
 #include <QAbstractButton>
@@ -159,11 +160,54 @@ QByteArray readFile(const QString &fileName) {
   return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray();
 }
 
+/** Verify the queue's publication gate without starting real image work.
+
+    Two active requests are enough to reproduce both stale-result orderings:
+    an older completion arriving before the newest result, and an older worker
+    racing in after the newest result has already superseded it. */
+bool taskQueueLatestRequestWins() {
+  {
+    TaskQueue queue;
+    const int older = queue.requestRender();
+    const int newer = queue.requestRender();
+    if (queue.reportFinished(older, true))
+      return false;
+    if (!queue.reportFinished(newer, true))
+      return false;
+  }
+
+  {
+    TaskQueue queue;
+    const int older = queue.requestRender();
+    const int newer = queue.requestRender();
+    if (!queue.reportFinished(newer, true))
+      return false;
+    if (queue.reportFinished(older, true))
+      return false;
+  }
+
+  {
+    TaskQueue queue;
+    const int cancelled = queue.requestRender();
+    queue.cancelAll();
+    if (queue.reportFinished(cancelled, true))
+      return false;
+  }
+
+  return true;
+}
+
 } // namespace
 
 /** Exercise transactional application exit and individual close decisions. */
 void startDocumentLifecycleSmoke(ColorScreenApplication &app,
                                  std::function<void()> completed) {
+  if (!taskQueueLatestRequestWins()) {
+    qCritical() << "Document lifecycle smoke detected stale TaskQueue publication";
+    app.exit(documentLifecycleFailure);
+    return;
+  }
+
   auto start = std::make_shared<std::function<void(int)>>();
   const std::weak_ptr<std::function<void(int)>> weakStart = start;
   *start = [&app, completed = std::move(completed), weakStart](int attemptsLeft) {

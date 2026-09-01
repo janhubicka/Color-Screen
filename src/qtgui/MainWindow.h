@@ -42,6 +42,7 @@ class QWidget;
 
 class NavigationView;
 class QTimer;
+class QThread;
 #include "../libcolorscreen/include/colorscreen.h"
 #include "../libcolorscreen/include/solver-parameters.h"
 #include "FlatFieldWorker.h"
@@ -706,6 +707,15 @@ private:
   colorscreen::finetune_focus_analysis_result m_focusAreaAnalysisResult;
   bool m_focusAreaAnalysisRunning = false;
 
+  // Generations for replaceable background results. Starting a newer run makes
+  // an older completion stale without conflating unrelated operation types.
+  uint64_t m_detectScreenGeneration = 0;
+  uint64_t m_flatFieldGeneration = 0;
+  uint64_t m_focusAnalysisGeneration = 0;
+  uint64_t m_adaptiveSharpeningGeneration = 0;
+  int m_coordinateAutodetectRequest = 0;
+  int m_coordinateOptimizeRequest = 0;
+
   // Crash recovery
   QString m_recoveryDir;
   void saveRecoveryState();
@@ -722,8 +732,6 @@ private:
   // std::shared_ptr<colorscreen::progress_info> m_solverProgress; // Removed, now handled by queue request
   
   // Detect Screen Worker
-  QThread *m_detectScreenThread = nullptr;
-  QThread *m_flatFieldThread = nullptr;
   std::shared_ptr<colorscreen::mesh> m_detectedMesh; // Store mesh from autodetection
   
   // Solver Queue
@@ -733,8 +741,14 @@ private:
   CoordinateOptimizationWorker *m_coordOptimizationWorker = nullptr;
   QThread *m_coordOptimizationThread = nullptr;
 
-  // Finetune threads (allow multiple concurrent)
-  std::vector<QThread*> m_finetuneThreads;
+  // One-shot background threads (finetune, detection, focus, sharpening, etc.).
+  // QPointer makes completed/deleteLater threads harmless until the vector is
+  // pruned; shutdown joins every still-running operation before document state
+  // is destroyed.
+  std::vector<QPointer<QThread>> m_backgroundThreads;
+
+  void trackBackgroundThread(QThread *thread);
+  void shutdownBackgroundThreads();
   
 private slots:
   void onTriggerSolve(int reqId, std::shared_ptr<colorscreen::progress_info> progress, const QVariant &userData);

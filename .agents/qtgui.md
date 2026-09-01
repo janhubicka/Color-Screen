@@ -316,6 +316,8 @@ public:
 
 The `TaskQueue` coordinates when tasks run and provides a specialized `runAsync` API for non-blocking operations that need to return results to the GUI thread.
 
+For state-mutating work, **the newest request owns publication**. `TaskQueue::reportFinished()` returns `true` only for the newest still-live, non-cancelled request. A worker completion must use that return value as the gate before applying parameters or other persistent GUI state; an older worker can legitimately finish after a newer request has superseded it. `runAsync()` applies this gate automatically before invoking its done callback. Renderers that intentionally display intermediate frames may ignore the return value and keep their own generation checks.
+
 #### runAsync Pattern
 This pattern is ideal for tasks like rendering overlays or performing quick background math:
 
@@ -352,7 +354,9 @@ When a worker provides incremental updates (e.g., finding registration points in
 
 ### 4. Cancellation
 
-Workers must periodically check `m_progress->cancelled()` and exit gracefully. In `MainWindow`, ensure the worker's thread is tracked so it can be requested to stop when the user clicks "Cancel" in the progress bar.
+Workers must periodically check `m_progress->cancelled()` and exit gracefully. Treat `progress_info::pool_cancel()` as an immediate *publication* veto: once cancellation is requested, a racing successful completion must not be applied to document state.
+
+One-shot `QThread` workers owned by a document must also be registered with the document lifetime. The worker's `finished` signal must stop its `QThread` independently of any `MainWindow` result callback (use a direct connection to the thread-safe `QThread::quit()`), and the document must cancel and join all still-running one-shot threads before its parameter/UI members are destroyed. Never make thread shutdown depend on a receiver that may itself be closing.
 
 ---
 

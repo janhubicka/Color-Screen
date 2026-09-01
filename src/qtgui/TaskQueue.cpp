@@ -27,6 +27,7 @@ int TaskQueue::requestRender(const QVariant &userData,
 {
     QMutexLocker locker(&m_mutex);
     int newReqId = m_nextReqId++;
+    m_latestRequestedReqId = newReqId;
     
     // 1. Cancel tasks running too long
     for (auto it = m_tasks.begin(); it != m_tasks.end(); ) {
@@ -105,30 +106,42 @@ void TaskQueue::startTask(int reqId, const QVariant &userData,
 /**
  * @brief Cleans up a finished task and potentially starts a pending one.
  */
-void TaskQueue::reportFinished(int reqId, bool success)
+bool TaskQueue::reportFinished(int reqId, bool success)
 {
     QMutexLocker locker(&m_mutex);
     qCDebug(lcRenderSync) << "TaskQueue::reportFinished - Finished ID:" << reqId << " Success:" << success;
     auto it = m_tasks.find(reqId);
-    if (it != m_tasks.end()) {
-        emit progressFinished(it->progress);
-        m_tasks.erase(it);
+    if (it == m_tasks.end()) {
+        qCDebug(lcRenderSync) << "  Ignoring completion for stale/cancelled task ID:" << reqId;
+        return false;
     }
-    
-    // If task finishes and there are older tasks in queue, they should be cancelled.
-    if (success)
-      for (auto it = m_tasks.begin(); it != m_tasks.end(); ) {
-	  if (it->reqId < reqId) {
-	       qCDebug(lcRenderSync) << "  Cancelling older task ID:" << it->reqId << " as newer task finished. State:" << formatQueueState();
-	       if (it->progress) it->progress->cancel();
-	       emit progressFinished(it->progress);
-	       it = m_tasks.erase(it);
-	  } else {
-	       ++it;
-	  }
+
+    // Only the newest request may publish. A cancellation request also makes
+    // the result stale immediately, even if the worker races to a nominally
+    // successful completion before observing it.
+    const bool publishResult =
+        reqId == m_latestRequestedReqId &&
+        (!it->progress || !it->progress->pool_cancel());
+    emit progressFinished(it->progress);
+    m_tasks.erase(it);
+
+    // A successful newest task supersedes every older request.  Their workers
+    // may still emit completion later, but the missing queue entry above makes
+    // those results unpublishable.
+    if (success && publishResult)
+      for (auto older = m_tasks.begin(); older != m_tasks.end(); ) {
+          if (older->reqId < reqId) {
+               qCDebug(lcRenderSync) << "  Cancelling older task ID:" << older->reqId << " as newer task finished. State:" << formatQueueState();
+               if (older->progress) older->progress->cancel();
+               emit progressFinished(older->progress);
+               older = m_tasks.erase(older);
+          } else {
+               ++older;
+          }
       }
 
     processPending();
+    return publishResult;
 }
 
 /**
@@ -184,11 +197,11 @@ void TaskQueue::runAsync (std::function<void (colorscreen::progress_info *)> wor
     /* Launch worker on Qt thread-pool; progress is read-only in worker.  */
     auto *watcher = new QFutureWatcher<void> (this);
     connect (watcher, &QFutureWatcher<void>::finished, this,
-             [this, reqId, watcher, done = std::move (done)] () mutable
+             [this, reqId, watcher, progress, done = std::move (done)] () mutable
              {
                watcher->deleteLater ();
-               done ();
-               reportFinished (reqId, true);
+               if (reportFinished (reqId, true))
+                 done ();
              });
     watcher->setFuture (
         QtConcurrent::run (

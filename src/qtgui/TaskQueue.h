@@ -55,8 +55,10 @@ public:
    * @param success True if the task completed successfully.
    *
    * This method cleans up the task state and triggers the next pending task.
+   * @return True only when this is the newest requested task, is still tracked,
+   *         and has not been cancelled, so the caller may publish its result.
    */
-  void reportFinished(int reqId, bool success);
+  bool reportFinished(int reqId, bool success);
 
   /**
    * @brief Cancels all pending and active tasks.
@@ -98,6 +100,7 @@ private:
   QString formatQueueState() const;
 
   int m_nextReqId = 1;
+  int m_latestRequestedReqId = 0;
 
   /** @brief Internal state for a managed task. */
   struct TaskInfo {
