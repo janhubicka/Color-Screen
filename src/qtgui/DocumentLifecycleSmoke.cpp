@@ -49,29 +49,46 @@ struct DocumentLifecycleState {
 /** Locate the QMessageBox currently implementing TITLE.
 
     QApplication::activeModalWidget() is not reliable for native/offscreen
-    dialogs on every Qt platform plugin (notably macOS).  The QMessageBox
-    object itself still exists, so fall back to the application's widget list. */
+    dialogs on every Qt platform plugin.  Conversely, macOS is explicitly
+    allowed to ignore QMessageBox window titles, so TITLE is only a preferred
+    discriminator: the unique new active/visible QMessageBox is authoritative. */
 QMessageBox *findMessageBox(const QString &title, QMessageBox *previousBox) {
-  auto matches = [&title, previousBox](QMessageBox *box) {
-    return box && box != previousBox && box->windowTitle() == title;
+  auto isNew = [previousBox](QMessageBox *box) {
+    return box && box != previousBox;
+  };
+  auto hasExpectedTitle = [&title](QMessageBox *box) {
+    return box && box->windowTitle() == title;
   };
 
   if (auto *active =
           qobject_cast<QMessageBox *>(QApplication::activeModalWidget())) {
-    if (matches(active))
+    if (isNew(active))
       return active;
   }
 
+  QMessageBox *titledHiddenFallback = nullptr;
+  QMessageBox *visibleFallback = nullptr;
   QMessageBox *hiddenFallback = nullptr;
   for (QWidget *widget : QApplication::allWidgets()) {
     auto *candidate = qobject_cast<QMessageBox *>(widget);
-    if (!matches(candidate))
+    if (!isNew(candidate))
       continue;
-    if (candidate->isVisible())
-      return candidate;
-    hiddenFallback = candidate;
+    if (hasExpectedTitle(candidate)) {
+      if (candidate->isVisible())
+        return candidate;
+      titledHiddenFallback = candidate;
+      continue;
+    }
+    if (candidate->isVisible()) {
+      if (!visibleFallback)
+        visibleFallback = candidate;
+    } else if (!hiddenFallback) {
+      hiddenFallback = candidate;
+    }
   }
-  return hiddenFallback;
+  if (titledHiddenFallback)
+    return titledHiddenFallback;
+  return visibleFallback ? visibleFallback : hiddenFallback;
 }
 
 /** Click a known sequence of modal QMessageBox buttons as they appear.
