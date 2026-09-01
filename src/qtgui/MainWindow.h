@@ -114,6 +114,16 @@ public:
   /** Return the absolute path of the image assigned to this document. */
   QString currentImageFile() const { return m_currentImageFile; }
 
+  /** Save the current document parameters to FILENAME without opening a dialog.
+      On success the file becomes the document's current parameter file and the
+      undo stack is marked clean. */
+  bool saveParametersToFile(const QString &fileName);
+
+  /** Load FILENAME as this document's parameter file without opening a dialog.
+      The load is transactional, adopts the file on success, refreshes the UI,
+      and resets undo/dirty state to the newly loaded contents. */
+  bool loadParameterFile(const QString &fileName);
+
   /** Share the loaded scan with additional views of this document. */
   std::shared_ptr<colorscreen::image_data> sharedImageData() const {
     return m_scan;
@@ -352,9 +362,6 @@ private:
   // Helper to check for unsaved changes and prompt to save
   bool maybeSave();
 
-  /** Save parameters to FILEName and update the document's save metadata. */
-  bool saveParametersToFile(const QString &fileName);
-
   /** Prompt for a parameter filename and save synchronously. */
   bool saveParametersAs();
 
@@ -396,11 +403,6 @@ private:
       std::function<void(ParameterState &, colorscreen::image_data &,
                          const colorscreen::int_image_area &,
                          colorscreen::progress_info *)> worker);
-
-  /** Load parameters from a .par file and update all UI.
-      Resets params to defaults before loading (load_csp merges).
-      Returns true on success.  */
-  bool loadParameterFile(const QString &fileName);
 
   /**
    * @brief Saves the current interaction mode (if not a temporary mode like GenericAreaMode).
