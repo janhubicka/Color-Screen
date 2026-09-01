@@ -15,8 +15,8 @@ jobs:
       - name: Package exact source tree
         run: |
           git rev-parse HEAD > AGENT_TRANSPORT_HEAD
-          tar --exclude=.git -czf colorscreen-agent-source.tar.gz .
+          tar --exclude=.git -czf "$RUNNER_TEMP/colorscreen-agent-source.tar.gz" .
       - uses: actions/upload-artifact@v4
         with:
           name: colorscreen-agent-source
-          path: colorscreen-agent-source.tar.gz
+          path: ${{ runner.temp }}/colorscreen-agent-source.tar.gz
