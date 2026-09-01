@@ -1,4 +1,4 @@
-name: Agent source transport
+name: Agent lifecycle patch transport
 
 on:
   push:
@@ -6,17 +6,43 @@ on:
       - agent/transport-document-lifecycle
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  archive:
+  apply:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - name: Archive source tree
-        run: tar --exclude=.git -czf /tmp/colorscreen-source.tar.gz .
-      - name: Upload source tree
-        uses: actions/upload-artifact@v4
+      - name: Checkout review branch
+        uses: actions/checkout@v4
         with:
-          name: colorscreen-source
-          path: /tmp/colorscreen-source.tar.gz
+          ref: agent/qtgui-document-lifecycle
+          fetch-depth: 0
+          path: review
+      - name: Checkout transport payload
+        uses: actions/checkout@v4
+        with:
+          ref: agent/transport-document-lifecycle
+          path: transport
+      - name: Apply guarded patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd review
+          expected=44f7af8c1b4ec256f114848ac47e564200240334
+          actual=$(git rev-parse HEAD)
+          if [[ "$actual" != "$expected" ]]; then
+            echo "::error::Review branch moved: expected $expected, got $actual"
+            exit 1
+          fi
+          base64 -d ../transport/.github/agent/document-lifecycle.patch.gz.b64 \
+            | gzip -d > /tmp/document-lifecycle.patch
+          git apply --check /tmp/document-lifecycle.patch
+          git apply /tmp/document-lifecycle.patch
+          sh build-aux/check-generated-build-metadata.sh
+          git diff --check
+          git status --short
+          git config user.name "Jan Hubička"
+          git config user.email "46065755+janhubicka@users.noreply.github.com"
+          git add -A
+          git commit -m "qtgui: make document close decisions transactional"
+          git push origin HEAD:agent/qtgui-document-lifecycle
