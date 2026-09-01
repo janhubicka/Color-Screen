@@ -241,17 +241,40 @@ jobs:
     - name: make check (checking enabled)
       if: matrix.arch == 'amd64'
       run: make -j$(nproc) check
-    - name: make check (checking enabled, arm64 watchdog)
+
+    # The normal arm64 build above still runs the complete test suite, and the
+    # amd64 checking lane runs that complete suite under ASan/UBSan.  Repeating
+    # the three heavyweight integration programs under arm64 sanitizers takes
+    # several hours on GitHub's four-core ARM runner, so keep this lane bounded
+    # while retaining architecture-specific sanitizer coverage of the library,
+    # Qt workflow, finetuner, renderer and MTF paths.
+    - name: arm64 sanitizer library checks
       if: matrix.arch == 'arm64'
       env:
-        # The Automake harness and colorscreen both parallelize. Running several
-        # ASan/UBSan integration tests at once causes severe OpenMP oversubscription
-        # on the four-core ARM runner. Serialize test programs while allowing each
-        # program to use all runner cores internally.
+        ASAN_OPTIONS: detect_leaks=1:halt_on_error=1:strict_string_checks=1
+        UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
         COLORSCREEN_CHECK_JOBS: "1"
-        COLORSCREEN_CHECK_TIMEOUT_SECONDS: "4500"
-        COLORSCREEN_CHECK_HEARTBEAT_SECONDS: "300"
-      run: .github/scripts/run-check-with-watchdog.sh
+        COLORSCREEN_CHECK_OMP_THREADS: "4"
+        COLORSCREEN_CHECK_TIMEOUT_SECONDS: "900"
+        COLORSCREEN_CHECK_HEARTBEAT_SECONDS: "120"
+      run: |
+        .github/scripts/run-check-with-watchdog.sh \
+          make -C src/libcolorscreen -j1 check-local
+
+    - name: arm64 sanitizer representative integration tests
+      if: matrix.arch == 'arm64'
+      env:
+        ASAN_OPTIONS: detect_leaks=1:halt_on_error=1:strict_string_checks=1
+        UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        COLORSCREEN_CHECK_JOBS: "1"
+        COLORSCREEN_CHECK_OMP_THREADS: "4"
+        COLORSCREEN_CHECK_TIMEOUT_SECONDS: "1800"
+        COLORSCREEN_CHECK_HEARTBEAT_SECONDS: "180"
+      run: |
+        .github/scripts/run-check-with-watchdog.sh \
+          make -C testsuite -j1 check \
+          'TESTS=dufaycolor_nikon_coolsan9000ED_4000DPI_raw-finetune.test render-original.test slanted-edge.test epson-v850-defocused-mtf.test nikon-rgbi-mtf.test'
+
     - name: Upload Test Results
       uses: actions/upload-artifact@v4
       if: always()
