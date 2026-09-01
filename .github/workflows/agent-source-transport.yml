@@ -1,0 +1,22 @@
+name: Agent source transport
+
+on:
+  push:
+    branches:
+      - agent/transport-document-lifecycle
+
+permissions:
+  contents: read
+
+jobs:
+  archive:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Archive source tree
+        run: tar --exclude=.git -czf /tmp/colorscreen-source.tar.gz .
+      - name: Upload source tree
+        uses: actions/upload-artifact@v4
+        with:
+          name: colorscreen-source
+          path: /tmp/colorscreen-source.tar.gz
