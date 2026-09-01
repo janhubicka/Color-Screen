@@ -1,0 +1,55 @@
+name: Agent source transport 246
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/qtgui-background-task-lifetime
+          fetch-depth: 1
+      - name: Guard branch and apply patch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PATCH_BLOB: dec80ffc26c99ddfb16aaedd94fc514d3c7d6076
+          EXPECTED_BASE: af1c068c33d857db8ae037fdf8ee12f44f68eefa
+          EXPECTED_PATCH_SHA256: 61248a71522563be3b0618b08c9e256c60ceadb758fe4290572bf1404e0f427a
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_BASE"
+          curl -fsSL -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/git/blobs/${PATCH_BLOB}" \
+            | python3 -c 'import json,sys,base64; d=json.load(sys.stdin); sys.stdout.buffer.write(base64.b64decode(d["content"]))' \
+            > /tmp/background-lifetime.patch.gz
+          gzip -dc /tmp/background-lifetime.patch.gz > /tmp/background-lifetime.patch
+          echo "$EXPECTED_PATCH_SHA256  /tmp/background-lifetime.patch" | sha256sum -c -
+          git apply --check /tmp/background-lifetime.patch
+          git apply /tmp/background-lifetime.patch
+          git diff --check
+          sh build-aux/check-generated-build-metadata.sh
+          actual=$(git diff --name-only | sort)
+          expected=$(printf '%s\n' \
+            .agents/qtgui.md \
+            src/qtgui/DocumentLifecycleSmoke.cpp \
+            src/qtgui/MainWindow.cpp \
+            src/qtgui/MainWindow.h \
+            src/qtgui/TaskQueue.cpp \
+            src/qtgui/TaskQueue.h | sort)
+          test "$actual" = "$expected"
+      - name: Commit review source
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .agents/qtgui.md src/qtgui/DocumentLifecycleSmoke.cpp \
+            src/qtgui/MainWindow.cpp src/qtgui/MainWindow.h \
+            src/qtgui/TaskQueue.cpp src/qtgui/TaskQueue.h
+          git commit -m 'qtgui: harden background task lifetime'
+          git push origin HEAD:agent/qtgui-background-task-lifetime
