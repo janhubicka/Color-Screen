@@ -124,6 +124,16 @@ public:
       and resets undo/dirty state to the newly loaded contents. */
   bool loadParameterFile(const QString &fileName);
 
+  /** Resolve this document's save/render close questions without destroying it.
+
+      File -> Exit uses this as a preflight so a later document can veto the
+      application close without secondary views or earlier documents already
+      having disappeared.  The approval is consumed by the next real close. */
+  bool prepareForApplicationClose();
+
+  /** Cancel an unused application-close preflight approval. */
+  void cancelPreparedApplicationClose();
+
   /** Share the loaded scan with additional views of this document. */
   std::shared_ptr<colorscreen::image_data> sharedImageData() const {
     return m_scan;
@@ -361,6 +371,9 @@ protected:
 private:
   // Helper to check for unsaved changes and prompt to save
   bool maybeSave();
+
+  /** Ask every user-visible question that can veto final document closure. */
+  bool confirmClose();
 
   /** Prompt for a parameter filename and save synchronously. */
   bool saveParametersAs();
@@ -686,6 +699,7 @@ private:
   bool m_imageLoadPending = false;
   bool m_recoveryDirty = false;
   bool m_closing = false;
+  bool m_applicationClosePrepared = false;
   bool m_focusAnalysisPending = false;
   uint64_t m_focusAnalysisFlags = 0;
   std::vector<colorscreen::finetune_focus_area_candidate> m_focusAreaCandidates;

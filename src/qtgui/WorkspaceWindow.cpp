@@ -1300,11 +1300,47 @@ void WorkspaceWindow::closeEvent(QCloseEvent *event) {
       documents.append(document);
   }
 
-  // Close secondary presentations first. A primary in this same workspace can
-  // then close normally; detached peers still cause it to become a hidden
-  // document owner rather than being destroyed.
+  QList<QPointer<MainWindow>> preparedDocuments;
+  auto cancelPreparedCloses = [&preparedDocuments]() {
+    for (const QPointer<MainWindow> &document : preparedDocuments) {
+      if (document)
+        document->cancelPreparedApplicationClose();
+    }
+  };
+
+  // Resolve every close veto before removing any tab.  A document that still
+  // has a detached peer view is not actually leaving the application, so keep
+  // the historical behavior of deferring its save policy until that final
+  // presentation closes.
+  for (const QPointer<MainWindow> &document : documents) {
+    if (!document)
+      continue;
+
+    bool hasExternalView = false;
+    if (application) {
+      for (ImageViewWindow *view : application->viewWindows()) {
+        if (view && view->sourceDocument() == document && !containsView(view)) {
+          hasExternalView = true;
+          break;
+        }
+      }
+    }
+    if (!hasExternalView && !document->prepareForApplicationClose()) {
+      cancelPreparedCloses();
+      m_closing = false;
+      event->ignore();
+      return;
+    }
+    if (!hasExternalView)
+      preparedDocuments.append(document);
+  }
+
+  // Close secondary presentations only after every document that will really
+  // leave has approved closure.  This keeps Cancel transactional for the
+  // workspace just as it is for File -> Exit.
   for (const QPointer<ImageViewWindow> &view : views) {
     if (view && !closeView(view)) {
+      cancelPreparedCloses();
       m_closing = false;
       event->ignore();
       return;
@@ -1317,6 +1353,7 @@ void WorkspaceWindow::closeEvent(QCloseEvent *event) {
     const bool closed = document->close();
     if (!closed &&
         (!application || application->isDocumentPresentationOpen(document))) {
+      cancelPreparedCloses();
       m_closing = false;
       event->ignore();
       return;

@@ -113,6 +113,7 @@ CONFIG_CLEAN_VPATH_FILES =
 am__installdirs = "$(DESTDIR)$(bindir)"
 PROGRAMS = $(bin_PROGRAMS)
 am_colorscreen_qt_OBJECTS = colorscreen_qt-main.$(OBJEXT) \
+	colorscreen_qt-DocumentLifecycleSmoke.$(OBJEXT) \
 	colorscreen_qt-WorkspaceChurnSmoke.$(OBJEXT) \
 	colorscreen_qt-ColorScreenApplication.$(OBJEXT) \
 	colorscreen_qt-WorkspaceWindow.$(OBJEXT) \
@@ -302,6 +303,7 @@ am__depfiles_remade =  \
 	./$(DEPDIR)/colorscreen_qt-TilesPanel.Po \
 	./$(DEPDIR)/colorscreen_qt-ToneCurveWidget.Po \
 	./$(DEPDIR)/colorscreen_qt-WorkerBase.Po \
+	./$(DEPDIR)/colorscreen_qt-DocumentLifecycleSmoke.Po \
 	./$(DEPDIR)/colorscreen_qt-WorkspaceChurnSmoke.Po \
 	./$(DEPDIR)/colorscreen_qt-WorkspaceWindow.Po \
 	./$(DEPDIR)/colorscreen_qt-main.Po \
@@ -548,6 +550,7 @@ top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 colorscreen_qt_SOURCES = \
     main.cpp \
+    DocumentLifecycleSmoke.cpp \
     WorkspaceChurnSmoke.cpp \
     ColorScreenApplication.cpp \
     WorkspaceWindow.cpp \
@@ -657,7 +660,7 @@ MOC_SOURCES = \
     moc_ImageLayerPanel.cpp \
     moc_MeasureDialog.cpp
 
-EXTRA_DIST = ColorScreenApplication.h WorkspaceChurnSmoke.h \
+EXTRA_DIST = ColorScreenApplication.h DocumentLifecycleSmoke.h WorkspaceChurnSmoke.h \
 	WorkspaceWindow.h ImageViewWindow.h ImageWidget.h \
 	CapturePanel.h MainWindow.h MTFChartWidget.h \
 	DeformationChartWidget.h FinetuneImagesPanel.h \
@@ -846,6 +849,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-TilesPanel.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-ToneCurveWidget.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-WorkerBase.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-DocumentLifecycleSmoke.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-WorkspaceChurnSmoke.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-WorkspaceWindow.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-main.Po@am__quote@ # am--include-marker
@@ -941,6 +945,20 @@ colorscreen_qt-main.obj: main.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='main.cpp' object='colorscreen_qt-main.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-main.obj `if test -f 'main.cpp'; then $(CYGPATH_W) 'main.cpp'; else $(CYGPATH_W) '$(srcdir)/main.cpp'; fi`
+
+colorscreen_qt-DocumentLifecycleSmoke.o: DocumentLifecycleSmoke.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-DocumentLifecycleSmoke.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-DocumentLifecycleSmoke.Tpo -c -o colorscreen_qt-DocumentLifecycleSmoke.o `test -f 'DocumentLifecycleSmoke.cpp' || echo '$(srcdir)/'`DocumentLifecycleSmoke.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-DocumentLifecycleSmoke.Tpo $(DEPDIR)/colorscreen_qt-DocumentLifecycleSmoke.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='DocumentLifecycleSmoke.cpp' object='colorscreen_qt-DocumentLifecycleSmoke.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-DocumentLifecycleSmoke.o `test -f 'DocumentLifecycleSmoke.cpp' || echo '$(srcdir)/'`DocumentLifecycleSmoke.cpp
+
+colorscreen_qt-DocumentLifecycleSmoke.obj: DocumentLifecycleSmoke.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-DocumentLifecycleSmoke.obj -MD -MP -MF $(DEPDIR)/colorscreen_qt-DocumentLifecycleSmoke.Tpo -c -o colorscreen_qt-DocumentLifecycleSmoke.obj `if test -f 'DocumentLifecycleSmoke.cpp'; then $(CYGPATH_W) 'DocumentLifecycleSmoke.cpp'; else $(CYGPATH_W) '$(srcdir)/DocumentLifecycleSmoke.cpp'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-DocumentLifecycleSmoke.Tpo $(DEPDIR)/colorscreen_qt-DocumentLifecycleSmoke.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='DocumentLifecycleSmoke.cpp' object='colorscreen_qt-DocumentLifecycleSmoke.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-DocumentLifecycleSmoke.obj `if test -f 'DocumentLifecycleSmoke.cpp'; then $(CYGPATH_W) 'DocumentLifecycleSmoke.cpp'; else $(CYGPATH_W) '$(srcdir)/DocumentLifecycleSmoke.cpp'; fi`
 
 colorscreen_qt-WorkspaceChurnSmoke.o: WorkspaceChurnSmoke.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-WorkspaceChurnSmoke.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-WorkspaceChurnSmoke.Tpo -c -o colorscreen_qt-WorkspaceChurnSmoke.o `test -f 'WorkspaceChurnSmoke.cpp' || echo '$(srcdir)/'`WorkspaceChurnSmoke.cpp
@@ -2585,6 +2603,7 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-TilesPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-ToneCurveWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-WorkerBase.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-DocumentLifecycleSmoke.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-WorkspaceChurnSmoke.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-WorkspaceWindow.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-main.Po
@@ -2735,6 +2754,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-TilesPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-ToneCurveWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-WorkerBase.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-DocumentLifecycleSmoke.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-WorkspaceChurnSmoke.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-WorkspaceWindow.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-main.Po

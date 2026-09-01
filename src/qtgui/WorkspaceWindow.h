@@ -36,6 +36,16 @@ class WorkspaceWindow final : public QMainWindow {
 public:
   explicit WorkspaceWindow(QWidget *parent = nullptr);
 
+  /** Stop descendant callbacks before derived workspace state is destroyed. */
+  ~WorkspaceWindow() override {
+    m_closing = true;
+    if (m_tabBar)
+      m_tabBar->removeEventFilter(this);
+    const QObjectList descendants = findChildren<QObject *>();
+    for (QObject *object : descendants)
+      QObject::disconnect(object, nullptr, this, nullptr);
+  }
+
   /** Add DOCUMENT to the workspace and make it active. */
   void addDocument(MainWindow *document);
 

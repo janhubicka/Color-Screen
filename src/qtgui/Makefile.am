@@ -2,6 +2,7 @@ bin_PROGRAMS = colorscreen-qt
 
 colorscreen_qt_SOURCES = \
     main.cpp \
+    DocumentLifecycleSmoke.cpp \
     WorkspaceChurnSmoke.cpp \
     ColorScreenApplication.cpp \
     WorkspaceWindow.cpp \
@@ -110,7 +111,7 @@ MOC_SOURCES = \
     moc_ImageLayerPanel.cpp \
     moc_MeasureDialog.cpp
 
-EXTRA_DIST = ColorScreenApplication.h WorkspaceChurnSmoke.h WorkspaceWindow.h ImageViewWindow.h ImageWidget.h CapturePanel.h MainWindow.h MTFChartWidget.h DeformationChartWidget.h FinetuneImagesPanel.h BacklightChartWidget.h ColorUtils.h NavigationView.h ParameterPanel.h ParameterState.h Renderer.h SynchronizedRunnable.h SharpnessPanel.h SmartSpinBox.h TilePreviewPanel.h ScreenPanel.h GeometryPanel.h GeometrySolverWorker.h DetectScreenWorker.h FlatFieldWorker.h FinetuneWorker.h FinetuneMisregisteredWorker.h WorkerBase.h ContactCopyPanel.h HDCurveWidget.h InteractiveChartWidget.h ToneCurveWidget.h ColorPanel.h SpectraChartWidget.h CIEChartWidget.h ThamesAnimation.h PagetAnimation.h JolyAnimation.h HurleyAnimation.h TaskQueue.h SubtitleOverlay.h Logging.h colorscreen.rc resources.qrc icons/hand.svg icons/arrow.svg icons/plus.svg icons/crosshair.svg icons/rotate-left.svg icons/rotate-right.svg icons/zoom-in.svg icons/zoom-out.svg icons/zoom-100.svg icons/zoom-fit.svg icons/mirror.svg AdaptiveSharpeningWorker.h AdaptiveSharpeningParameters.h AdaptiveSharpeningChart.h RenderDialog.h ProfilePanel.h CoordinateOptimizationWorker.h ColorOptimizerWorker.h CoordinateTransformer.h FlowLayout.h FocusAnalysisWorker.h HistogramWorker.h MultiLineTabWidget.h ScalableImageLabel.h TilesPanel.h ImageLayerPanel.h MeasureDialog.h MTFFitDialog.h SlantedEdgeDialog.h
+EXTRA_DIST = ColorScreenApplication.h DocumentLifecycleSmoke.h WorkspaceChurnSmoke.h WorkspaceWindow.h ImageViewWindow.h ImageWidget.h CapturePanel.h MainWindow.h MTFChartWidget.h DeformationChartWidget.h FinetuneImagesPanel.h BacklightChartWidget.h ColorUtils.h NavigationView.h ParameterPanel.h ParameterState.h Renderer.h SynchronizedRunnable.h SharpnessPanel.h SmartSpinBox.h TilePreviewPanel.h ScreenPanel.h GeometryPanel.h GeometrySolverWorker.h DetectScreenWorker.h FlatFieldWorker.h FinetuneWorker.h FinetuneMisregisteredWorker.h WorkerBase.h ContactCopyPanel.h HDCurveWidget.h InteractiveChartWidget.h ToneCurveWidget.h ColorPanel.h SpectraChartWidget.h CIEChartWidget.h ThamesAnimation.h PagetAnimation.h JolyAnimation.h HurleyAnimation.h TaskQueue.h SubtitleOverlay.h Logging.h colorscreen.rc resources.qrc icons/hand.svg icons/arrow.svg icons/plus.svg icons/crosshair.svg icons/rotate-left.svg icons/rotate-right.svg icons/zoom-in.svg icons/zoom-out.svg icons/zoom-100.svg icons/zoom-fit.svg icons/mirror.svg AdaptiveSharpeningWorker.h AdaptiveSharpeningParameters.h AdaptiveSharpeningChart.h RenderDialog.h ProfilePanel.h CoordinateOptimizationWorker.h ColorOptimizerWorker.h CoordinateTransformer.h FlowLayout.h FocusAnalysisWorker.h HistogramWorker.h MultiLineTabWidget.h ScalableImageLabel.h TilesPanel.h ImageLayerPanel.h MeasureDialog.h MTFFitDialog.h SlantedEdgeDialog.h
 
 # Add moc files to the build
 nodist_colorscreen_qt_SOURCES = $(MOC_SOURCES) qrc_resources.cpp

@@ -67,6 +67,28 @@ run_pair ()
 
     if test "$platform" = xcb; then
         xvfb-run -a env QT_QPA_PLATFORM=xcb "$GUI" \
+          --smoke-test 30000 --smoke-test-expect-windows 2 \
+          --smoke-test-document-lifecycle \
+          "$IMAGE" "$IMAGE" >>"$log" 2>&1
+    else
+        env QT_QPA_PLATFORM="$platform" "$GUI" \
+          --smoke-test 30000 --smoke-test-expect-windows 2 \
+          --smoke-test-document-lifecycle \
+          "$IMAGE" "$IMAGE" >>"$log" 2>&1
+    fi
+    third_rc=$?
+
+    if grep -q 'WARNING: ThreadSanitizer' "$log"; then
+        cat "$log"
+        return 66
+    fi
+    if test "$third_rc" -ne 0; then
+        cat "$log"
+        return 1
+    fi
+
+    if test "$platform" = xcb; then
+        xvfb-run -a env QT_QPA_PLATFORM=xcb "$GUI" \
           --smoke-test 20000 --smoke-test-expect-windows 1 \
           --smoke-test-window-lifetime \
           "$IMAGE" >>"$log" 2>&1
@@ -76,13 +98,13 @@ run_pair ()
           --smoke-test-window-lifetime \
           "$IMAGE" >>"$log" 2>&1
     fi
-    third_rc=$?
+    fourth_rc=$?
 
     if grep -q 'WARNING: ThreadSanitizer' "$log"; then
         cat "$log"
         return 66
     fi
-    if test "$third_rc" -ne 0; then
+    if test "$fourth_rc" -ne 0; then
         cat "$log"
         return 1
     fi
