@@ -34,8 +34,8 @@ jobs:
             echo "::error::Review branch moved: expected $expected, got $actual"
             exit 1
           fi
-          base64 -d ../transport/.github/agent/document-lifecycle.patch.gz.b64 \
-            | gzip -d > /tmp/document-lifecycle.patch
+          cat ../transport/.github/agent/lifecycle-part-* \
+            | base64 -d | gzip -d > /tmp/document-lifecycle.patch
           git apply --check /tmp/document-lifecycle.patch
           git apply /tmp/document-lifecycle.patch
           sh build-aux/check-generated-build-metadata.sh
