@@ -1,22 +1,62 @@
-name: Agent source transport
+name: Agent background smoke transport
 
 on:
   push:
     branches: [ "agent/transport-background-lifetime-smoke" ]
 
 permissions:
-  contents: read
+  contents: write
+  packages: read
 
 jobs:
-  package-source:
-    runs-on: ubuntu-latest
+  validate-and-publish:
+    runs-on: ubuntu-24.04
+    container:
+      image: ghcr.io/janhubicka/color-screen-ci:ubuntu-24.04
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
-      - name: Package exact source tree
+      - name: Decode staged patch
         run: |
-          git rev-parse HEAD > AGENT_TRANSPORT_HEAD
-          tar --exclude=.git -czf "$RUNNER_TEMP/colorscreen-agent-source.tar.gz" .
-      - uses: actions/upload-artifact@v4
-        with:
-          name: colorscreen-agent-source
-          path: ${{ runner.temp }}/colorscreen-agent-source.tar.gz
+          base64 -d .agent/background-lifetime-smoke.patch.gz.b64 | gzip -d > /tmp/background-lifetime-smoke.patch
+      - name: Apply patch to clean review branch
+        run: |
+          git fetch origin agent/qtgui-background-lifetime-smoke
+          git checkout -B smoke origin/agent/qtgui-background-lifetime-smoke
+          git apply --check /tmp/background-lifetime-smoke.patch
+          git apply /tmp/background-lifetime-smoke.patch
+          git diff --check
+          sh build-aux/check-generated-build-metadata.sh
+          sh -n testsuite/qt-tsan-smoke-probe.test
+      - name: Configure Qt GUI
+        run: |
+          CXXFLAGS="-O1 -g" CFLAGS="-O1 -g" \
+            ./configure --enable-checking --disable-static-link \
+              --disable-gtkgui --enable-qtgui
+      - name: Build Qt GUI
+        run: make -j$(nproc)
+      - name: Run background lifetime smoke
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          ./src/qtgui/colorscreen-qt \
+            --smoke-test 30000 --smoke-test-expect-windows 1 \
+            --smoke-test-background-lifetime \
+            "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
+      - name: Commit validated patch
+        run: |
+          git config user.name "Jan Hubička"
+          git config user.email "46065755+janhubicka@users.noreply.github.com"
+          git add .agents/qtgui.md \
+            .github/workflows/build-ubuntu.yml \
+            .github/workflows/sanitizers.yml \
+            src/qtgui/BackgroundLifetimeSmoke.cpp \
+            src/qtgui/BackgroundLifetimeSmoke.h \
+            src/qtgui/MainWindow.cpp src/qtgui/MainWindow.h \
+            src/qtgui/Makefile.am src/qtgui/Makefile.in \
+            src/qtgui/main.cpp testsuite/qt-tsan-smoke-probe.test
+          git diff --cached --check
+          git commit -m "qtgui: add background lifetime smoke coverage"
+          git push origin HEAD:refs/heads/agent/qtgui-background-lifetime-smoke
