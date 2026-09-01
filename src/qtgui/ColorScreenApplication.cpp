@@ -882,13 +882,37 @@ void ColorScreenApplication::activateRelativeWindow(
 
 /** Close every presentation for File -> Exit, respecting close vetoes. */
 void ColorScreenApplication::closeAllDocumentWindows() {
-  const QList<ImageViewWindow *> views = viewWindows();
-  for (ImageViewWindow *view : views) {
-    if (view && !closeView(view))
+  const QList<MainWindow *> documents = documentWindows();
+  QList<QPointer<MainWindow>> preparedDocuments;
+
+  auto cancelPreparedCloses = [&preparedDocuments]() {
+    for (const QPointer<MainWindow> &document : preparedDocuments) {
+      if (document)
+        document->cancelPreparedApplicationClose();
+    }
+  };
+
+  // Resolve every save/render question before destroying any presentation.
+  // Previously secondary views were closed first, so cancelling a later save
+  // prompt left the application running with those views already lost.
+  for (MainWindow *document : documents) {
+    if (!document || m_closingDocuments.contains(document))
+      continue;
+    if (!document->prepareForApplicationClose()) {
+      cancelPreparedCloses();
       return;
+    }
+    preparedDocuments.append(document);
   }
 
-  const QList<MainWindow *> documents = documentWindows();
+  const QList<ImageViewWindow *> views = viewWindows();
+  for (ImageViewWindow *view : views) {
+    if (view && !closeView(view)) {
+      cancelPreparedCloses();
+      return;
+    }
+  }
+
   for (MainWindow *document : documents) {
     if (!document || m_closingDocuments.contains(document))
       continue;
@@ -899,6 +923,7 @@ void ColorScreenApplication::closeAllDocumentWindows() {
     m_finalizingDocuments.remove(document);
     if (!closed) {
       m_closingDocuments.remove(document);
+      cancelPreparedCloses();
       return;
     }
     m_hiddenDocumentPresentations.remove(document);

@@ -3734,6 +3734,37 @@ bool MainWindow::maybeSave() {
   }
 }
 
+/** Ask all user-visible questions that may veto destroying this document. */
+bool MainWindow::confirmClose() {
+  if (!maybeSave())
+    return false;
+
+  if (!m_renderProgress.expired()) {
+    const auto result = QMessageBox::question(
+        this, tr("Rendering in Progress"),
+        tr("A render is currently in progress. Cancel it and close this window?"),
+        QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+    if (result != QMessageBox::Yes)
+      return false;
+  }
+  return true;
+}
+
+/** Preflight final application closure without tearing down this document. */
+bool MainWindow::prepareForApplicationClose() {
+  if (m_closing || m_applicationClosePrepared)
+    return true;
+  if (!confirmClose())
+    return false;
+  m_applicationClosePrepared = true;
+  return true;
+}
+
+/** Forget a preflight approval when another document vetoes File -> Exit. */
+void MainWindow::cancelPreparedApplicationClose() {
+  m_applicationClosePrepared = false;
+}
+
 /** Handle closing one image-document window.
    Prompts for this document's unsaved changes, asks to cancel its active
    render, cancels only its background tasks, removes only its recovery data,
@@ -3754,22 +3785,13 @@ void MainWindow::closeEvent(QCloseEvent *event) {
     }
   }
 
-  // Check for unsaved changes
-  if (!maybeSave()) {
+  if (m_applicationClosePrepared) {
+    // File -> Exit already resolved every user-visible veto before it started
+    // tearing down secondary views.  Consume the one-shot approval here.
+    m_applicationClosePrepared = false;
+  } else if (!confirmClose()) {
     event->ignore();
     return;
-  }
-
-  // If a render is running, ask before quitting
-  if (!m_renderProgress.expired()) {
-    auto ret = QMessageBox::question(
-        this, tr("Rendering in Progress"),
-        tr("A render is currently in progress. Cancel it and close this window?"),
-        QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
-    if (ret != QMessageBox::Yes) {
-      event->ignore();
-      return;
-    }
   }
 
   m_closing = true;
