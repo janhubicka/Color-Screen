@@ -239,7 +239,19 @@ jobs:
           --smoke-test-window-lifetime \
           "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
     - name: make check (checking enabled)
+      if: matrix.arch == 'amd64'
       run: make -j$(nproc) check
+    - name: make check (checking enabled, arm64 watchdog)
+      if: matrix.arch == 'arm64'
+      env:
+        # The Automake harness and colorscreen both parallelize. Running several
+        # ASan/UBSan integration tests at once causes severe OpenMP oversubscription
+        # on the four-core ARM runner. Serialize test programs while allowing each
+        # program to use all runner cores internally.
+        COLORSCREEN_CHECK_JOBS: "1"
+        COLORSCREEN_CHECK_TIMEOUT_SECONDS: "4500"
+        COLORSCREEN_CHECK_HEARTBEAT_SECONDS: "300"
+      run: .github/scripts/run-check-with-watchdog.sh
     - name: Upload Test Results
       uses: actions/upload-artifact@v4
       if: always()
