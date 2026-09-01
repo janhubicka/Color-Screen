@@ -18,9 +18,9 @@ jobs:
       - name: Guard branch and apply patch
         env:
           GH_TOKEN: ${{ github.token }}
-          PATCH_BLOB: dec80ffc26c99ddfb16aaedd94fc514d3c7d6076
+          PATCH_BLOB: fead1a5ffbd38c8cb8cb2e0fcc94c3ee181cc3cb
           EXPECTED_BASE: af1c068c33d857db8ae037fdf8ee12f44f68eefa
-          EXPECTED_PATCH_SHA256: 61248a71522563be3b0618b08c9e256c60ceadb758fe4290572bf1404e0f427a
+          EXPECTED_PATCH_SHA256: aa34b3ff1d0f36d16c814b2a2b4c28ced7c4a864b3aae9950ddd56e552516cab
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$EXPECTED_BASE"
