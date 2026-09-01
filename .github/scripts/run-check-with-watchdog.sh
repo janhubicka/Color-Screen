@@ -8,27 +8,48 @@ grace_seconds="${COLORSCREEN_CHECK_GRACE_SECONDS:-15}"
 export OMP_NUM_THREADS="${COLORSCREEN_CHECK_OMP_THREADS:-$(nproc)}"
 export OMP_DYNAMIC="${OMP_DYNAMIC:-FALSE}"
 
+if (($#)); then
+  check_command=("$@")
+else
+  check_command=(make -j"$jobs" check)
+fi
+
+printf -v check_command_display '%q ' "${check_command[@]}"
+check_command_display="${check_command_display% }"
+
 check_pid=""
+monitor_pid=""
+timeout_marker="$(mktemp)"
+rm -f "$timeout_marker"
 
 terminate_check() {
   if [[ -n "$check_pid" ]] && kill -0 "$check_pid" 2>/dev/null; then
     kill -TERM -- "-$check_pid" 2>/dev/null || true
   fi
 }
-trap terminate_check EXIT INT TERM
+
+cleanup() {
+  if [[ -n "$monitor_pid" ]] && kill -0 "$monitor_pid" 2>/dev/null; then
+    kill "$monitor_pid" 2>/dev/null || true
+  fi
+  terminate_check
+  rm -f "$timeout_marker"
+}
+trap cleanup EXIT INT TERM
 
 print_status() {
   local heading="$1"
   echo "::group::$heading"
   printf 'UTC time: '
   date -u '+%Y-%m-%dT%H:%M:%SZ'
-  echo "make jobs: $jobs; OMP_NUM_THREADS: $OMP_NUM_THREADS"
+  echo "command: $check_command_display"
+  echo "configured make jobs: $jobs; OMP_NUM_THREADS: $OMP_NUM_THREADS"
   echo "Processes in the check session:"
   ps -eo pid=,ppid=,sid=,etime=,%cpu=,%mem=,stat=,args= --sort=-%cpu \
     | awk -v sid="$check_pid" '$3 == sid' \
     | head -n 60 || true
   echo "Most recently updated test artifacts:"
-  find testsuite -maxdepth 1 -type f \
+  find testsuite src/libcolorscreen -maxdepth 1 -type f \
     \( -name '*.log' -o -name '*.trs' -o -name '*.txt' -o -name '*.par' \) \
     -printf '%T@ %TY-%Tm-%TdT%TH:%TM:%TS %p\n' 2>/dev/null \
     | sort -nr | head -n 25 | cut -d' ' -f2- || true
@@ -42,7 +63,7 @@ print_log_tails() {
     [[ -n "$logfile" ]] || continue
     echo "===== $logfile ====="
     tail -n 100 "$logfile" 2>/dev/null || true
-  done < <(find testsuite -maxdepth 1 -type f \
+  done < <(find testsuite src/libcolorscreen -maxdepth 1 -type f \
     \( -name '*.log' -o -name '*.trs' \) -printf '%T@ %p\n' 2>/dev/null \
     | sort -nr | head -n 8 | cut -d' ' -f2-)
   echo "::endgroup::"
@@ -71,49 +92,68 @@ print_backtraces() {
   echo "::endgroup::"
 }
 
-echo "Running make check with a ${timeout_seconds}s watchdog."
-echo "Automake parallelism: -j${jobs}; OpenMP threads per test: ${OMP_NUM_THREADS}."
-setsid make -j"$jobs" check &
-check_pid=$!
-start_seconds=$SECONDS
-next_heartbeat=$((start_seconds + heartbeat_seconds))
+monitor_check() {
+  local start_seconds=$SECONDS
+  local next_heartbeat=$((start_seconds + heartbeat_seconds))
 
-while kill -0 "$check_pid" 2>/dev/null; do
-  now=$SECONDS
-  if (( now - start_seconds >= timeout_seconds )); then
-    echo "::error::make check exceeded ${timeout_seconds}s"
-    print_status "Timed-out make check diagnostics"
-    print_log_tails "Timed-out test log tails"
-    print_backtraces
+  while kill -0 "$check_pid" 2>/dev/null; do
+    local now=$SECONDS
+    if (( now - start_seconds >= timeout_seconds )); then
+      echo "::error::check command exceeded ${timeout_seconds}s"
+      print_status "Timed-out check diagnostics"
+      print_log_tails "Timed-out test log tails"
+      print_backtraces
+      : >"$timeout_marker"
 
-    kill -TERM -- "-$check_pid" 2>/dev/null || true
-    stop_deadline=$((SECONDS + grace_seconds))
-    while kill -0 "$check_pid" 2>/dev/null && (( SECONDS < stop_deadline )); do
-      sleep 1
-    done
-    if kill -0 "$check_pid" 2>/dev/null; then
-      kill -KILL -- "-$check_pid" 2>/dev/null || true
+      kill -TERM -- "-$check_pid" 2>/dev/null || true
+      local stop_deadline=$((SECONDS + grace_seconds))
+      while kill -0 "$check_pid" 2>/dev/null && (( SECONDS < stop_deadline )); do
+        sleep 1
+      done
+      if kill -0 "$check_pid" 2>/dev/null; then
+        kill -KILL -- "-$check_pid" 2>/dev/null || true
+      fi
+      return
     fi
-    wait "$check_pid" 2>/dev/null || true
-    check_pid=""
-    trap - EXIT INT TERM
-    exit 124
-  fi
 
-  if (( now >= next_heartbeat )); then
-    print_status "make check heartbeat"
-    next_heartbeat=$((now + heartbeat_seconds))
-  fi
-  sleep 5
-done
+    if (( now >= next_heartbeat )); then
+      print_status "check heartbeat"
+      next_heartbeat=$((now + heartbeat_seconds))
+    fi
+    sleep 5
+  done
+}
 
+echo "Running check command with a ${timeout_seconds}s watchdog."
+echo "Command: $check_command_display"
+echo "OpenMP threads per test: ${OMP_NUM_THREADS}."
+setsid "${check_command[@]}" &
+check_pid=$!
+monitor_check &
+monitor_pid=$!
+
+# The parent shell owns the child wait and performs it exactly once.  The
+# monitor only observes the process and kills its session on timeout.  This
+# preserves the command's real exit status even if it exits between polls.
 set +e
 wait "$check_pid"
 status=$?
 set -e
 check_pid=""
-trap - EXIT INT TERM
-if (( status != 0 )); then
+
+if [[ -e "$timeout_marker" ]]; then
+  wait "$monitor_pid" 2>/dev/null || true
+  status=124
+else
+  kill "$monitor_pid" 2>/dev/null || true
+  wait "$monitor_pid" 2>/dev/null || true
+fi
+monitor_pid=""
+
+if (( status != 0 && status != 124 )); then
   print_log_tails "Failed test log tails"
 fi
+
+rm -f "$timeout_marker"
+trap - EXIT INT TERM
 exit "$status"
