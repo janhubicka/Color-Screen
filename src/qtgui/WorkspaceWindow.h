@@ -2,6 +2,7 @@
 
 #include <QList>
 #include <QMainWindow>
+#include <QMdiArea>
 #include <QPoint>
 #include <QPointer>
 #include <QShowEvent>
@@ -13,7 +14,6 @@ class QCloseEvent;
 class QDockWidget;
 class QEvent;
 class ImageWidget;
-class QMdiArea;
 class QMdiSubWindow;
 class QHBoxLayout;
 class QLabel;
@@ -35,6 +35,12 @@ class QWidget;
 class WorkspaceWindow final : public QMainWindow {
 public:
   explicit WorkspaceWindow(QWidget *parent = nullptr);
+
+  /** Stop MDI activation callbacks before QMainWindow tears down its layout. */
+  ~WorkspaceWindow() override {
+    if (m_mdiArea)
+      m_mdiArea->blockSignals(true);
+  }
 
   /** Add DOCUMENT to the workspace and make it active. */
   void addDocument(MainWindow *document);
@@ -195,7 +201,7 @@ private:
   /** Detach VIEW into a top-level window through the application manager. */
   void detachView(ImageViewWindow *view);
 
-  /** Show VIEW's menu and toolbar in the shared shell. */
+  /** Show VIEW's menu and toolbar in the shared workspace. */
   void installViewChrome(ImageViewWindow *view);
 
   /** Return VIEW's shared chrome to its own window. */
