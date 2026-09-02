@@ -67,6 +67,7 @@
 #include <QTextStream>
 #include <QTimer>
 #include <QToolBar>
+#include <QToolButton>
 #include <QUndoCommand>
 #include <QUndoStack>
 #include <QVBoxLayout>
@@ -677,6 +678,15 @@ void MainWindow::setupUi() {
   workflowLayout->setContentsMargins(6, 4, 6, 4);
   workflowLayout->setSpacing(1);
 
+  auto *workflowToggle = new QToolButton(workflowSummary);
+  workflowToggle->setObjectName(QStringLiteral("WorkflowSummaryToggle"));
+  workflowToggle->setText(tr("Workflow"));
+  workflowToggle->setCheckable(true);
+  workflowToggle->setAutoRaise(true);
+  workflowToggle->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+  workflowToggle->setToolTip(tr("Show or hide the document workflow summary."));
+  workflowLayout->addWidget(workflowToggle);
+
   auto *workflowStages = new QLabel(
       tr("Capture → Process → Register → Reconstruct → Color"),
       workflowSummary);
@@ -705,13 +715,38 @@ void MainWindow::setupUi() {
   m_workflowCalibrationLabel->setWordWrap(true);
   workflowLayout->addWidget(m_workflowCalibrationLabel);
 
-  rightLayout->addWidget(workflowSummary);
+  const bool workflowExpanded =
+      QSettings().value(QStringLiteral("workflowSummaryExpanded"), true).toBool();
+  auto setWorkflowExpanded =
+      [this, workflowToggle, workflowStages](bool expanded) {
+        workflowToggle->setArrowType(expanded ? Qt::DownArrow : Qt::RightArrow);
+        workflowStages->setVisible(expanded);
+        m_workflowProcessLabel->setVisible(expanded);
+        m_workflowRegistrationLabel->setVisible(expanded);
+        m_workflowCalibrationLabel->setVisible(expanded);
+        workflowToggle->setToolTip(
+            expanded ? tr("Hide the document workflow summary.")
+                     : tr("Show the document workflow summary."));
+        workflowToggle->parentWidget()->updateGeometry();
+      };
+  workflowToggle->setChecked(workflowExpanded);
+  setWorkflowExpanded(workflowExpanded);
+  connect(workflowToggle, &QToolButton::toggled, this,
+          [setWorkflowExpanded](bool expanded) {
+            setWorkflowExpanded(expanded);
+            QSettings settings;
+            settings.setValue(QStringLiteral("workflowSummaryExpanded"),
+                              expanded);
+          });
 
   QSplitter *rightSplitter = new QSplitter(Qt::Vertical, m_rightColumn);
+  rightSplitter->setObjectName(QStringLiteral("DocumentInspectorSplitter"));
+  rightSplitter->setChildrenCollapsible(false);
   rightLayout->addWidget(rightSplitter, 1);
 
   // Top Right: Navigation View
   m_navigationView = new NavigationView(this);
+  m_navigationView->setObjectName(QStringLiteral("InspectorNavigation"));
   m_navigationView->setMinimumHeight(200);
   rightSplitter->addWidget(m_navigationView);
 
@@ -735,8 +770,22 @@ void MainWindow::setupUi() {
   connect(m_navigationView, &NavigationView::progressFinished, this,
           &MainWindow::removeProgress);
 
+  // The document inspector remains one dockable ownership unit. Keep the
+  // navigator independently resizable at the top, while the foldable workflow
+  // guide and processing tabs form one stable controls region below. Other
+  // diagnostic docks can still share the QMainWindow dock strip.
+  auto *controlsArea = new QWidget(rightSplitter);
+  controlsArea->setObjectName(QStringLiteral("DocumentControlsArea"));
+  auto *controlsLayout = new QVBoxLayout(controlsArea);
+  controlsLayout->setContentsMargins(0, 0, 0, 0);
+  controlsLayout->setSpacing(4);
+  controlsLayout->addWidget(workflowSummary);
+  rightSplitter->addWidget(controlsArea);
+  rightSplitter->setStretchFactor(0, 0);
+  rightSplitter->setStretchFactor(1, 1);
+
   // Bottom Right: Tabs
-  m_configTabs = new MultiLineTabWidget(this);
+  m_configTabs = new MultiLineTabWidget(controlsArea);
 
   // Create Sharpness Panel
   m_sharpnessPanel =
@@ -962,7 +1011,7 @@ void MainWindow::setupUi() {
 
   // ImageWidget::pointAdded is routed to onPointAdded; profile spot
   // handling is done there when m_addingProfileSpot is true.
-  rightSplitter->addWidget(m_configTabs);
+  controlsLayout->addWidget(m_configTabs, 1);
 
   // Register panels for updates
   m_panels.push_back(m_capturePanel);
