@@ -1,0 +1,98 @@
+name: Temporary PR252 New View mode setter probe
+
+on:
+  push:
+    branches:
+      - agent/tmp-pr252-mode-setter-probe
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    container: ghcr.io/janhubicka/color-screen-ci:ubuntu-24.04
+    env:
+      LC_ALL: C.UTF-8
+      LANG: C.UTF-8
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure Qt checking build
+        run: ./configure --enable-checking --disable-static-link --disable-gtkgui --enable-qtgui
+
+      - name: Build baseline
+        run: make -j"$(nproc)"
+
+      - name: Reproduce baseline failure
+        shell: bash
+        run: |
+          set +e
+          IMAGE="$PWD/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
+          QT_QPA_PLATFORM=offscreen ./src/qtgui/colorscreen-qt \
+            --smoke-test 90000 --smoke-test-expect-windows 2 \
+            --smoke-test-tile-activation-stable --smoke-test-menu-order \
+            --smoke-test-new-view --smoke-test-slanted-reference \
+            "$IMAGE" "$IMAGE" >baseline.log 2>&1
+          rc=$?
+          echo "baseline_rc=$rc"
+          cat baseline.log
+          exit 0
+
+      - name: Apply candidate mode-setter fix
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('src/qtgui/ImageViewWindow.cpp')
+          text = path.read_text()
+          old = '''/** Programmatically select TYPE in this view. */
+          bool ImageViewWindow::setRenderType(colorscreen::render_type_t type) {
+            const int index = m_modeComboBox->findData(static_cast<int>(type));
+            if (index < 0)
+              return false;
+            m_modeComboBox->setCurrentIndex(index);
+            return m_renderTypeParams.type == type;
+          }
+          '''
+          new = '''/** Programmatically select TYPE in this view. */
+          bool ImageViewWindow::setRenderType(colorscreen::render_type_t type) {
+            const int index = m_modeComboBox->findData(static_cast<int>(type));
+            if (index < 0) {
+              qWarning() << "New View render mode is not available" << (int)type
+                         << "items" << m_modeComboBox->count();
+              return false;
+            }
+
+            // Keep the combo and the private render snapshot in lockstep even
+            // when the combo already happens to point at INDEX.  In that case
+            // QComboBox::setCurrentIndex() emits no signal, so relying on
+            // currentIndexChanged alone can leave stale render parameters.
+            {
+              const QSignalBlocker blocker(m_modeComboBox);
+              m_modeComboBox->setCurrentIndex(index);
+            }
+            onModeChanged(index);
+            return m_modeComboBox->currentIndex() == index &&
+                   m_renderTypeParams.type == type;
+          }
+          '''
+          if text.count(old) != 1:
+              raise SystemExit(f'expected one setRenderType body, found {text.count(old)}')
+          path.write_text(text.replace(old, new))
+          PY
+          git diff --check
+          git diff -- src/qtgui/ImageViewWindow.cpp
+
+      - name: Rebuild candidate
+        run: make -C src/qtgui -j"$(nproc)"
+
+      - name: Run candidate smoke
+        shell: bash
+        run: |
+          IMAGE="$PWD/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
+          QT_QPA_PLATFORM=offscreen ./src/qtgui/colorscreen-qt \
+            --smoke-test 90000 --smoke-test-expect-windows 2 \
+            --smoke-test-tile-activation-stable --smoke-test-menu-order \
+            --smoke-test-new-view --smoke-test-slanted-reference \
+            "$IMAGE" "$IMAGE" 2>&1 | tee candidate.log
