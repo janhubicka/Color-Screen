@@ -9,6 +9,7 @@
 #include <QCoreApplication>
 #include <QDebug>
 #include <QEvent>
+#include <QLabel>
 #include <QList>
 #include <QMdiArea>
 #include <QMdiSubWindow>
@@ -222,6 +223,47 @@ void startWorkspaceChurnSmoke(ColorScreenApplication &app,
                                               QStringLiteral(", ")),
                                           actualProcessingTabs.join(
                                               QStringLiteral(", ")));
+          if (retryOrFail(detail))
+            return;
+          return;
+        }
+
+        QWidget *workflowSummary =
+            inspector->findChild<QWidget *>(QStringLiteral("WorkflowSummary"));
+        QLabel *workflowStages =
+            inspector->findChild<QLabel *>(QStringLiteral("WorkflowStages"));
+        QLabel *processSummary = inspector->findChild<QLabel *>(
+            QStringLiteral("WorkflowProcessSummary"));
+        QLabel *registrationSummary = inspector->findChild<QLabel *>(
+            QStringLiteral("WorkflowRegistrationSummary"));
+        QLabel *calibrationSummary = inspector->findChild<QLabel *>(
+            QStringLiteral("WorkflowCalibrationSummary"));
+        if (!workflowSummary || !workflowStages || !processSummary ||
+            !registrationSummary || !calibrationSummary ||
+            !workflowStages->text().contains(QStringLiteral("Capture")) ||
+            !workflowStages->text().contains(QStringLiteral("Register")) ||
+            !processSummary->text().startsWith(QStringLiteral("Process:")) ||
+            !registrationSummary->text().startsWith(
+                QStringLiteral("Registration:")) ||
+            !calibrationSummary->text().contains(
+                QStringLiteral("Capture MTF:")) ||
+            !calibrationSummary->text().contains(QStringLiteral("Profile:"))) {
+          const QString detail = QStringLiteral(
+              "Workspace churn source document lost the persistent workflow "
+              "summary; stages=[%1], process=[%2], registration=[%3], "
+              "calibration=[%4]")
+                                     .arg(workflowStages
+                                              ? workflowStages->text()
+                                              : QStringLiteral("<missing>"),
+                                          processSummary
+                                              ? processSummary->text()
+                                              : QStringLiteral("<missing>"),
+                                          registrationSummary
+                                              ? registrationSummary->text()
+                                              : QStringLiteral("<missing>"),
+                                          calibrationSummary
+                                              ? calibrationSummary->text()
+                                              : QStringLiteral("<missing>"));
           if (retryOrFail(detail))
             return;
           return;
