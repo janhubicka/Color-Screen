@@ -118,7 +118,7 @@ void CapturePanel::setupUi()
     connect(m_captureTypeCombo, QOverload<int>::of(&QComboBox::activated),
             this, [this](int index) {
       const auto capture =
-          static_cast<colorscreen::render_parameters::capture_type>(
+          static_cast<decltype(colorscreen::render_parameters::capture_unknown)>(
               m_captureTypeCombo->itemData(index).toInt());
       applyChange([capture](ParameterState &state) {
         state.rparams.capture_type = capture;

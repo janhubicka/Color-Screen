@@ -384,10 +384,10 @@ public:
   }
 
   /** Return the capture type selected by the operator. */
-  colorscreen::render_parameters::capture_type selectedCaptureType() const {
+  auto selectedCaptureType() const {
     if (!m_captureType)
       return colorscreen::render_parameters::capture_unknown;
-    return static_cast<colorscreen::render_parameters::capture_type>(
+    return static_cast<decltype(colorscreen::render_parameters::capture_unknown)>(
         m_captureType->currentData().toInt());
   }
 
@@ -3975,7 +3975,8 @@ void MainWindow::updateWorkflowSummary() {
     m_solverQueue.cancelAll();
   }
 
-  using capture_type = colorscreen::render_parameters::capture_type;
+  using capture_type =
+      decltype(colorscreen::render_parameters::capture_unknown);
   const capture_type capture =
       m_scan ? m_rparams.get_capture_type(m_scan.get())
              : m_rparams.capture_type;
