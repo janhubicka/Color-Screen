@@ -19,6 +19,7 @@
 #include <QStringList>
 #include <QTemporaryDir>
 #include <QTimer>
+#include <QToolButton>
 #include <QWidget>
 
 #include <functional>
@@ -230,6 +231,8 @@ void startWorkspaceChurnSmoke(ColorScreenApplication &app,
 
         QWidget *workflowSummary =
             inspector->findChild<QWidget *>(QStringLiteral("WorkflowSummary"));
+        QToolButton *workflowToggle = inspector->findChild<QToolButton *>(
+            QStringLiteral("WorkflowSummaryToggle"));
         QLabel *workflowStages =
             inspector->findChild<QLabel *>(QStringLiteral("WorkflowStages"));
         QLabel *processSummary = inspector->findChild<QLabel *>(
@@ -238,8 +241,8 @@ void startWorkspaceChurnSmoke(ColorScreenApplication &app,
             QStringLiteral("WorkflowRegistrationSummary"));
         QLabel *calibrationSummary = inspector->findChild<QLabel *>(
             QStringLiteral("WorkflowCalibrationSummary"));
-        if (!workflowSummary || !workflowStages || !processSummary ||
-            !registrationSummary || !calibrationSummary ||
+        if (!workflowSummary || !workflowToggle || !workflowStages ||
+            !processSummary || !registrationSummary || !calibrationSummary ||
             !workflowStages->text().contains(QStringLiteral("Capture")) ||
             !workflowStages->text().contains(QStringLiteral("Register")) ||
             !processSummary->text().startsWith(QStringLiteral("Process:")) ||
@@ -266,6 +269,27 @@ void startWorkspaceChurnSmoke(ColorScreenApplication &app,
                                               : QStringLiteral("<missing>"));
           if (retryOrFail(detail))
             return;
+          return;
+        }
+
+        // Folding the guide is presentation state only. It must not hide the
+        // processing tabs, and the smoke restores the user's previous fold
+        // preference immediately after exercising the toggle.
+        const bool wasExpanded = workflowToggle->isChecked();
+        workflowToggle->click();
+        if (workflowToggle->isChecked() == wasExpanded ||
+            workflowStages->isHidden() == workflowToggle->isChecked() ||
+            processingTabs->isHidden()) {
+          fail(QStringLiteral(
+              "Workspace churn could not fold the workflow guide independently of the processing tabs"));
+          return;
+        }
+        workflowToggle->click();
+        if (workflowToggle->isChecked() != wasExpanded ||
+            workflowStages->isHidden() == workflowToggle->isChecked() ||
+            processingTabs->isHidden()) {
+          fail(QStringLiteral(
+              "Workspace churn could not restore the workflow guide fold state"));
           return;
         }
 
