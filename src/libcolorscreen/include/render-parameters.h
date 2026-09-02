@@ -359,7 +359,7 @@ struct render_parameters
     capture_transparency,
     /* Monochrome negative capture with no attached color screen.  */
     capture_negative,
-    /* Ordinary positive image with no historical color screen.  */
+    /* Ordinary image with no historical color screen.  */
     capture_plain_image,
     capture_max
   };
