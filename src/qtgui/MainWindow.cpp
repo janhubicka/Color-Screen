@@ -248,7 +248,8 @@ bool focusAnalysisUsesMonochromeInput(const colorscreen::image_data &scan) {
 class InitialSetupGuideDialog final : public QDialog {
 public:
   explicit InitialSetupGuideDialog(QWidget *parent, bool suggestCaptureType,
-                                   bool suggestBayer, bool suggestFStop,
+                                   bool looksMonochrome, bool suggestBayer,
+                                   bool suggestFStop,
                                    bool suggestPitch, bool suggestFill,
                                    bool suggestDPI, bool suggestWavelengths,
                                    const colorscreen::image_data *scan)
@@ -269,12 +270,28 @@ public:
       m_captureType = new QComboBox(this);
       m_captureType->setObjectName(QStringLiteral("InitialCaptureTypeCombo"));
       for (int i = 0; i < (int)colorscreen::render_parameters::capture_max;
-           ++i)
-        m_captureType->addItem(
-            QString::fromUtf8(
-                colorscreen::render_parameters::capture_properties[i]
-                    .pretty_name),
-            i);
+           ++i) {
+        const auto capture = static_cast<decltype(
+            colorscreen::render_parameters::capture_unknown)>(i);
+        bool show = capture == colorscreen::render_parameters::capture_unknown;
+        if (looksMonochrome) {
+          // RGB is only a Bayer-container detail in this case. Until we have
+          // additive-process recognition, do not offer color-screen workflows.
+          show = show ||
+                 capture == colorscreen::render_parameters::capture_transparency ||
+                 capture == colorscreen::render_parameters::capture_negative ||
+                 capture == colorscreen::render_parameters::capture_plain_image;
+        } else if (scan) {
+          show = show ||
+                 colorscreen::render_parameters::capture_type_compatible_p(
+                     capture, scan);
+        }
+        if (show)
+          m_captureType->addItem(
+              QString::fromUtf8(colorscreen::render_parameters::
+                                    capture_properties[i].pretty_name),
+              i);
+      }
       m_captureType->setCurrentIndex(
           m_captureType->findData(
               (int)colorscreen::render_parameters::capture_unknown));
@@ -785,6 +802,12 @@ void MainWindow::setupUi() {
       QStringLiteral("WorkflowCalibrationSummary"));
   m_workflowCalibrationLabel->setWordWrap(true);
   workflowLayout->addWidget(m_workflowCalibrationLabel);
+
+  QFont workflowSectionFont = m_workflowProcessLabel->font();
+  workflowSectionFont.setWeight(QFont::DemiBold);
+  m_workflowProcessLabel->setFont(workflowSectionFont);
+  m_workflowRegistrationLabel->setFont(workflowSectionFont);
+  m_workflowCalibrationLabel->setFont(workflowSectionFont);
 
   m_workflowNextStepLabel = new QLabel(workflowSummary);
   m_workflowNextStepLabel->setObjectName(
@@ -3463,7 +3486,8 @@ void MainWindow::maybeOfferInitialSetupGuide(
 
   const bool suggestCaptureType =
       m_rparams.capture_type == colorscreen::render_parameters::capture_unknown;
-  bool suggestBayer = suggestDetectedMetadata && analysis.candidate &&
+  const bool looksMonochrome = analysis.candidate && m_scan->has_rgb();
+  bool suggestBayer = suggestDetectedMetadata && looksMonochrome &&
       m_rparams.demosaic !=
           colorscreen::image_data::demosaic_monochromatic_bayer_corrected;
   bool suggestFStop = suggestDetectedMetadata && m_scan->f_stop > 0 &&
@@ -3491,7 +3515,8 @@ void MainWindow::maybeOfferInitialSetupGuide(
 
   const std::shared_ptr<colorscreen::image_data> guideScan = m_scan;
   auto *dialog = new InitialSetupGuideDialog(
-      this, suggestCaptureType, suggestBayer, suggestFStop, suggestPitch,
+      this, suggestCaptureType, looksMonochrome, suggestBayer, suggestFStop,
+      suggestPitch,
       suggestFill, suggestDPI, suggestWavelengths, guideScan.get());
   connect(
       dialog, &QDialog::finished, this,
@@ -3508,7 +3533,7 @@ void MainWindow::maybeOfferInitialSetupGuide(
           const auto capture = dialog->selectedCaptureType();
           if (capture != colorscreen::render_parameters::capture_unknown) {
             state.rparams.capture_type = capture;
-            if (capture == colorscreen::render_parameters::capture_plain_image)
+            if (!colorscreen::render_parameters::capture_has_screen_p(capture))
               state.scrToImg.type = colorscreen::NoScreen;
             changes << tr("capture type");
           }
@@ -3986,9 +4011,6 @@ void MainWindow::updateWorkflowSummary() {
   const bool colorDetection =
       colorscreen::render_parameters::capture_supports_screen_detection_p(
           capture);
-  const bool geometryRequired =
-      colorscreen::render_parameters::capture_requires_regular_geometry_p(
-          capture);
   const bool regularScreen = colorscreen::screen_has_regular_geometry_p(type);
   const bool stochasticScreen = colorscreen::stochastic_screen_p(type);
 
@@ -4010,9 +4032,9 @@ void MainWindow::updateWorkflowSummary() {
   if (capture == colorscreen::render_parameters::capture_unknown) {
     m_workflowProcessLabel->setText(
         tr("Process: capture type unknown — choose it in Digital capture"));
-  } else if (capture == colorscreen::render_parameters::capture_plain_image) {
+  } else if (!hasScreen) {
     m_workflowProcessLabel->setText(
-        tr("Process: %1 — historical color restoration is disabled")
+        tr("Process: %1 — no historical color-screen reconstruction")
             .arg(captureName));
   } else {
     m_workflowProcessLabel->setText(
@@ -4031,11 +4053,7 @@ void MainWindow::updateWorkflowSummary() {
   } else if (!hasScreen) {
     registration = tr("Registration: not applicable — no color screen");
   } else if (!regularScreen) {
-    if (geometryRequired) {
-      registration = tr(
-          "Registration: required — choose a regular screen; monochrome "
-          "captures cannot use stochastic/no-screen geometry");
-    } else if (stochasticScreen) {
+    if (stochasticScreen) {
       registration = tr(
           "Registration: geometry not used — reconstruct from detected "
           "screen colours");
@@ -4044,9 +4062,7 @@ void MainWindow::updateWorkflowSummary() {
     }
   } else {
     minimumPoints = colorscreen::solver_parameters::min_points(type);
-    const QString prefix = geometryRequired
-        ? tr("Registration: required geometry")
-        : tr("Registration: optional geometry path");
+    const QString prefix = tr("Registration: optional geometry path");
     if (pointCount == 0) {
       registration = tr("%1 — no points; detect or add at least %2")
                          .arg(prefix)
@@ -4102,8 +4118,7 @@ void MainWindow::updateWorkflowSummary() {
   QString profileSummary;
   if (!m_scan) {
     profileSummary = tr("Profile: load an image to calibrate");
-  } else if (capture == colorscreen::render_parameters::capture_plain_image ||
-             capture == colorscreen::render_parameters::capture_unknown) {
+  } else if (!hasScreen) {
     profileSummary = tr("Profile: not applicable to this capture workflow");
   } else if (!m_scan->has_rgb()) {
     profileSummary = tr("Profile: unavailable — capture has no RGB channels");
@@ -4124,24 +4139,16 @@ void MainWindow::updateWorkflowSummary() {
     nextStep = tr("Next: load an image.");
   } else if (capture == colorscreen::render_parameters::capture_unknown) {
     nextStep = tr("Next: choose Capture type in Digital capture.");
-  } else if (capture == colorscreen::render_parameters::capture_plain_image) {
-    nextStep = tr(
-        "Next: set capture correction, black/backlight and sharpening, then "
-        "render the corrected capture.");
   } else if (colorscreen::render_parameters::capture_negative_p(capture) &&
              !m_rparams.contact_copy.simulate) {
     nextStep = tr(
         "Next: Simulated darkroom — enable Contact copy simulation to turn "
         "the negative into a positive.");
-  } else if (geometryRequired && !regularScreen) {
+  } else if (!hasScreen) {
     nextStep = tr(
-        "Next: choose a regular Screen type, then detect/add registration "
-        "points and fit Geometry.");
-  } else if (geometryRequired &&
-             (pointCount < minimumPoints || !fitCurrent)) {
-    nextStep = tr(
-        "Next: complete registration points and fit Geometry; monochrome "
-        "screen captures need geometry for sane reconstruction.");
+        "Next: set capture correction, black/backlight and sharpening, then "
+        "render the corrected capture. Contact copy remains available for "
+        "negative or photolab simulation.");
   } else if (colorDetection && stochasticScreen) {
     nextStep = tr(
         "Next: reconstruct from detected screen colours; stochastic screens "
@@ -4809,11 +4816,11 @@ void MainWindow::updateRegistrationGroupVisibility() {
   if (m_registrationMenu)
     m_registrationMenu->menuAction()->setVisible(hasRegularGeometry);
 
-  // Keep the beta tab order stable. Hide specialist restoration stages that
-  // do not apply to an ordinary/unknown capture; Color remains because its
-  // generic black/backlight/output controls are useful for ordinary images.
-  // Stochastic RGB screen captures retain Screen/Color/Profile while Geometry
-  // is hidden.
+  // Keep the beta tab order stable. Hide specialist color-screen stages that
+  // do not apply to ordinary/unknown captures. Color and Contact copy remain
+  // because their general appearance/darkroom controls are useful without an
+  // additive screen. Stochastic RGB screen captures retain Screen/Color/Profile
+  // while Geometry is hidden.
   if (m_configTabs) {
     const auto setPanelVisible = [this](QWidget *panel, bool visible) {
       const int index = m_configTabs->indexOf(panel);
@@ -4822,7 +4829,7 @@ void MainWindow::updateRegistrationGroupVisibility() {
     };
     setPanelVisible(m_screenPanel, hasScreenCapture);
     setPanelVisible(m_geometryPanel, hasRegularGeometry);
-    setPanelVisible(m_contactCopyPanel, hasScreenCapture);
+    setPanelVisible(m_contactCopyPanel, m_scan != nullptr);
     // Color also owns generic black/backlight/output appearance controls. The
     // panel itself hides its historical dye sections for ordinary/unknown
     // captures, so keep the tab available whenever an image is loaded.

@@ -84,10 +84,28 @@ main (int argc, char **argv)
 
   if (render_parameters::capture_has_screen_p (
           render_parameters::capture_plain_image)
-      || !render_parameters::capture_requires_regular_geometry_p (
+      || render_parameters::capture_has_screen_p (
           render_parameters::capture_transparency)
+      || render_parameters::capture_has_screen_p (
+          render_parameters::capture_negative)
+      || !render_parameters::capture_has_screen_p (
+          render_parameters::capture_transparency_with_screen)
       || !render_parameters::capture_supports_screen_detection_p (
-          render_parameters::capture_transparency_with_screen))
+          render_parameters::capture_transparency_with_screen)
+      || !render_parameters::capture_type_compatible_p (
+          render_parameters::capture_transparency, false, true)
+      || render_parameters::capture_type_compatible_p (
+          render_parameters::capture_transparency, true, false)
+      || !render_parameters::capture_type_compatible_p (
+          render_parameters::capture_transparency_with_screen, true, false)
+      || render_parameters::capture_type_compatible_p (
+          render_parameters::capture_transparency_with_screen, false, true)
+      || render_parameters::capture_type_compatible_p (
+          render_parameters::capture_transparency_with_screen_and_infrared,
+        true, false)
+      || !render_parameters::capture_type_compatible_p (
+          render_parameters::capture_transparency_with_screen_and_infrared,
+        true, true))
     {
       std::fprintf (stderr, "Capture workflow classification is inconsistent\n");
       return 1;

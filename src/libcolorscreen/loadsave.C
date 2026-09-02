@@ -923,6 +923,15 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam,
           for (j = 0; j < render_parameters::capture_max; j++)
             if (!strcmp (buf2, render_parameters::capture_properties[j].name))
               break;
+          /* PR #253 briefly saved the monochrome no-screen variants with
+             misleading *-screen-mono identifiers.  Accept those aliases while
+             all new files use the corrected names.  */
+          if (j == render_parameters::capture_max
+              && !strcmp (buf2, "positive-screen-mono"))
+            j = render_parameters::capture_transparency;
+          if (j == render_parameters::capture_max
+              && !strcmp (buf2, "negative-screen-mono"))
+            j = render_parameters::capture_negative;
           if (j == render_parameters::capture_max)
             {
               *error = "unknown capture type";
