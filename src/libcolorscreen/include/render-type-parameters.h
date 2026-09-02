@@ -59,8 +59,6 @@ public:
 };
 DLL_PUBLIC extern const render_type_property render_type_properties[render_type_max];
 
-
-//static const enum render_type_t first_scr_detect = render_type_adjusted_color;
 class render_type_parameters
 {
 public:
