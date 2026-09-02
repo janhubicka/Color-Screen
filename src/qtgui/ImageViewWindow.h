@@ -161,6 +161,9 @@ private:
   /** Convert a selection rectangle to bounded reference-image coordinates. */
   QRect referenceImageArea(QRect widgetArea) const;
 
+  /** Show/locate the selected stored MTF measurement on this reference image. */
+  void updateMtfMeasurementOverlay(bool locate = false);
+
   /** Rebuild render-mode choices valid for the current shared document. */
   void rebuildModeList();
 
@@ -196,6 +199,7 @@ private:
   bool m_slantedEdgeReference = false;
   bool m_referenceLoadPending = false;
   QString m_referenceFile;
+  int m_selectedMtfMeasurement = -1;
   std::mutex m_referenceLoadMutex;
   std::condition_variable m_referenceLoadCondition;
   bool m_referenceWorkerActive = false;

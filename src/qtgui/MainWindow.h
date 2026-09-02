@@ -284,11 +284,22 @@ public:
     std::vector<colorscreen::point_t>  spots;
   };
 
+  /** Shared document-level measured-MTF fit provenance used by every
+      Sharpness panel, including external slanted-edge reference views. */
+  QString mtfCalibrationSummary() const;
+  bool mtfModelFitRunning() const { return m_mtfFitRunning; }
+  bool beginMtfModelFit(const colorscreen::mtf_parameters &inputs);
+  void failMtfModelFit(const colorscreen::mtf_parameters &inputs);
+  void acceptMtfModelFit(const colorscreen::mtf_parameters &fitted, double rms);
+  void finishMtfModelFitWithoutResult();
+
 signals:
   /** Emitted after the loaded image or shared document parameters change.
       Secondary views refresh from this signal while keeping render mode, zoom,
       and pan view-local. */
   void documentStateChanged();
+  /** Emitted when session-local MTF fit provenance changes without parameters. */
+  void mtfCalibrationStateChanged();
   /** Emitted when this document gains or loses dedicated progress rows. */
   void userVisibleProgressVisibilityChanged(bool visible);
   /** Emitted when delayed transient progress appears or disappears. */
@@ -449,6 +460,9 @@ private:
   /** Refresh focus-analysis rectangles in the ordinary view currently
       presenting this document's inspector. */
   void updateFocusAreaOverlays();
+  /** Refresh/optionally locate the selected measured-MTF ROI in ordinary views. */
+  void updateMtfMeasurementOverlay(bool locate = false);
+  void refreshMtfCalibrationPresentation();
   /** Clear transient automatic focus-area state for this document. */
   void clearFocusAreaAnalysis();
 
@@ -714,6 +728,7 @@ private:
   std::vector<colorscreen::finetune_focus_area_candidate> m_focusAreaCandidates;
   colorscreen::finetune_focus_analysis_result m_focusAreaAnalysisResult;
   bool m_focusAreaAnalysisRunning = false;
+  int m_selectedMtfMeasurement = -1;
 
   // Generations for replaceable background results. Starting a newer run makes
   // an older completion stale without conflating unrelated operation types.
@@ -753,6 +768,13 @@ private:
   std::optional<ParameterState> m_geometryFitPendingInputs;
   std::optional<bool> m_geometryFitPendingComputeMesh;
   std::optional<ParameterState> m_geometryFitFailureInputs;
+
+  // Session-local MTF model-fit provenance shared by all Sharpness views.
+  std::optional<colorscreen::mtf_parameters> m_mtfFitBaseline;
+  std::optional<colorscreen::mtf_parameters> m_mtfFitPendingInputs;
+  std::optional<colorscreen::mtf_parameters> m_mtfFitFailureInputs;
+  double m_mtfFitRms = -1;
+  bool m_mtfFitRunning = false;
   
   // Coordinate Optimization Worker
   CoordinateOptimizationWorker *m_coordOptimizationWorker = nullptr;

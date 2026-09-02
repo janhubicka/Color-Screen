@@ -395,6 +395,10 @@ struct slanted_edge_parameters
   /* Human-readable name stored with the appended MTF measurement.  */
   std::string name = "Slanted edge MTF";
 
+  /* Optional source filename recorded as measurement provenance. GUI callers
+     populate this with the image or external reference being measured.  */
+  std::string source_filename;
+
   /* True when this edge belongs to the same capture as the preceding stored
      measurement and should therefore share fitted defocus.  */
   bool same_capture = false;

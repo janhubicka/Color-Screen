@@ -75,6 +75,7 @@
 #include <QtConcurrent>
 
 #include <algorithm>
+#include <utility>
 
 // Undo/Redo Implementation
 
@@ -810,12 +811,28 @@ void MainWindow::setupUi() {
   m_configTabs = new MultiLineTabWidget(controlsArea);
 
   // Create Sharpness Panel
+  MtfCalibrationCallbacks mtfCalibration;
+  mtfCalibration.summary = [this]() { return mtfCalibrationSummary(); };
+  mtfCalibration.fitAvailable = [this]() { return !m_mtfFitRunning; };
+  mtfCalibration.fitStarted = [this](const colorscreen::mtf_parameters &inputs) {
+    return beginMtfModelFit(inputs);
+  };
+  mtfCalibration.fitFailed = [this](const colorscreen::mtf_parameters &inputs) {
+    failMtfModelFit(inputs);
+  };
+  mtfCalibration.fitAccepted =
+      [this](const colorscreen::mtf_parameters &fitted, double rms) {
+        acceptMtfModelFit(fitted, rms);
+      };
+  mtfCalibration.fitFinishedWithoutResult =
+      [this]() { finishMtfModelFitWithoutResult(); };
   m_sharpnessPanel =
       new SharpnessPanel([this]() { return getCurrentState(); },
                          [this](const ParameterState &s, const QString &desc) {
                            changeParameters(s, desc);
                          },
-                         [this]() { return m_scan; }, this);
+                         [this]() { return m_scan; }, std::move(mtfCalibration),
+                         this);
 
   // Create Screen Panel
   m_screenPanel =
@@ -908,6 +925,16 @@ void MainWindow::setupUi() {
           });
   connect(m_sharpnessPanel, &SharpnessPanel::measureMtfRequested, this,
           &MainWindow::onMeasureMtfRequested);
+  connect(m_sharpnessPanel, &SharpnessPanel::mtfMeasurementSelected, this,
+          [this](int index) {
+            m_selectedMtfMeasurement = index;
+            updateMtfMeasurementOverlay(false);
+          });
+  connect(m_sharpnessPanel, &SharpnessPanel::mtfMeasurementLocateRequested, this,
+          [this](int index) {
+            m_selectedMtfMeasurement = index;
+            updateMtfMeasurementOverlay(true);
+          });
 
 
   // Create Digital Capture Panel
@@ -3282,6 +3309,7 @@ void MainWindow::setInspectorImageWidget(ImageWidget *imageWidget) {
         target->registrationPointsVisible());
   updateRegistrationActions();
   updateFocusAreaOverlays();
+  updateMtfMeasurementOverlay(false);
 }
 
 /** Reclaim the inspector when a detached primary document becomes active. */
@@ -3754,6 +3782,83 @@ void MainWindow::applyState(const ParameterState &state) {
     clearFocusAreaAnalysis();
 }
 
+QString MainWindow::mtfCalibrationSummary() const {
+  const colorscreen::mtf_parameters &mtf = m_rparams.sharpen.scanner_mtf;
+  const qsizetype count = static_cast<qsizetype>(mtf.measurements.size());
+  if (count == 0)
+    return tr("Capture MTF: not measured");
+
+  QString summary = tr("Capture MTF: %1 saved measurement%2")
+                        .arg(count)
+                        .arg(count == 1 ? QString() : QStringLiteral("s"));
+  const bool fitCurrent =
+      m_mtfFitBaseline && m_mtfFitBaseline->fit_inputs_equal_p(mtf);
+  const bool failureCurrent =
+      m_mtfFitFailureInputs && m_mtfFitFailureInputs->fit_inputs_equal_p(mtf);
+  if (m_mtfFitRunning) {
+    if (m_mtfFitPendingInputs && !m_mtfFitPendingInputs->equal_p(mtf))
+      summary += tr(" • fit inputs changed — result will be discarded");
+    else
+      summary += tr(" • fitting model…");
+  } else if (fitCurrent) {
+    summary += tr(" • model current");
+    if (m_mtfFitRms >= 0)
+      summary += tr(" • RMS %1 pp").arg(m_mtfFitRms, 0, 'g', 4);
+    if (failureCurrent)
+      summary += tr(" • last refit failed");
+  } else if (failureCurrent) {
+    summary += tr(" • fit failed — adjust settings and retry");
+  } else if (m_mtfFitBaseline) {
+    summary += tr(" • model stale — refit");
+  } else {
+    summary += tr(" • ready to fit/validate model");
+  }
+  return summary;
+}
+
+void MainWindow::refreshMtfCalibrationPresentation() {
+  updateWorkflowSummary();
+  if (m_sharpnessPanel)
+    m_sharpnessPanel->refreshMtfCalibrationStatus();
+  emit mtfCalibrationStateChanged();
+}
+
+bool MainWindow::beginMtfModelFit(const colorscreen::mtf_parameters &inputs) {
+  if (m_mtfFitRunning)
+    return false;
+  m_mtfFitRunning = true;
+  m_mtfFitPendingInputs = inputs;
+  m_mtfFitFailureInputs.reset();
+  refreshMtfCalibrationPresentation();
+  return true;
+}
+
+void MainWindow::failMtfModelFit(const colorscreen::mtf_parameters &inputs) {
+  m_mtfFitRunning = false;
+  m_mtfFitPendingInputs.reset();
+  m_mtfFitFailureInputs = inputs;
+  refreshMtfCalibrationPresentation();
+}
+
+void MainWindow::acceptMtfModelFit(const colorscreen::mtf_parameters &fitted,
+                                   double rms) {
+  m_mtfFitRunning = false;
+  m_mtfFitPendingInputs.reset();
+  m_mtfFitBaseline = fitted;
+  m_mtfFitFailureInputs.reset();
+  m_mtfFitRms = rms;
+  /* SharpnessPanel applies FITTED immediately after this callback. Defer the
+     presentation refresh so it observes the accepted document state rather
+     than briefly calling the new baseline stale. */
+  QTimer::singleShot(0, this, [this]() { refreshMtfCalibrationPresentation(); });
+}
+
+void MainWindow::finishMtfModelFitWithoutResult() {
+  m_mtfFitRunning = false;
+  m_mtfFitPendingInputs.reset();
+  refreshMtfCalibrationPresentation();
+}
+
 /** Refresh the persistent workflow summary from document-owned state.
 
     Geometry fit freshness is session-local rather than serialized into .par:
@@ -3837,13 +3942,7 @@ void MainWindow::updateWorkflowSummary() {
     m_workflowRegistrationLabel->setText(registration);
   }
 
-  const qsizetype mtfCount = static_cast<qsizetype>(
-      m_rparams.sharpen.scanner_mtf.measurements.size());
-  QString mtfSummary = mtfCount == 0
-      ? tr("Capture MTF: not measured")
-      : tr("Capture MTF: %1 saved measurement%2")
-            .arg(mtfCount)
-            .arg(mtfCount == 1 ? QString() : QStringLiteral("s"));
+  const QString mtfSummary = mtfCalibrationSummary();
 
   QString profileSummary;
   if (!m_scan) {
@@ -5177,6 +5276,17 @@ bool MainWindow::loadParameterFile(const QString &fileName) {
   }
   fclose(f);
 
+  // Successful external parameter load establishes a new calibration context.
+  m_geometryFitBaseline.reset();
+  m_geometryFitPendingInputs.reset();
+  m_geometryFitPendingComputeMesh.reset();
+  m_geometryFitFailureInputs.reset();
+  m_mtfFitBaseline.reset();
+  m_mtfFitPendingInputs.reset();
+  m_mtfFitFailureInputs.reset();
+  m_mtfFitRms = -1;
+  m_mtfFitRunning = false;
+
   // Update UI/Renderer
   if (m_scan) {
     m_imageWidget->setImage(m_scan, &m_rparams, &m_scrToImgParams,
@@ -6187,6 +6297,57 @@ void MainWindow::onFocusAnalysisFinished(bool success,
   }
 }
 
+/** Show/locate one selected stored MTF measurement on ordinary views when its
+    source image matches this document. */
+void MainWindow::updateMtfMeasurementOverlay(bool locate) {
+  const auto &measurements = m_rparams.sharpen.scanner_mtf.measurements;
+  const colorscreen::mtf_measurement *measurement = nullptr;
+  if (m_selectedMtfMeasurement >= 0 &&
+      m_selectedMtfMeasurement < static_cast<int>(measurements.size()))
+    measurement = &measurements[m_selectedMtfMeasurement];
+
+  auto matchesSource = [this](const colorscreen::mtf_measurement *m) {
+    if (!m || !m->has_spatial_metadata() || !m_scan ||
+        m->source_filename.empty())
+      return false;
+    if (m->source_width > 0 && m->source_height > 0 &&
+        (m->source_width != m_scan->width || m->source_height != m_scan->height))
+      return false;
+    const QFileInfo recorded(QString::fromUtf8(m->source_filename.c_str()));
+    const QFileInfo current(m_currentImageFile);
+    return recorded.absoluteFilePath() == current.absoluteFilePath() ||
+           (recorded.fileName() == current.fileName() &&
+            m->source_width == m_scan->width && m->source_height == m_scan->height);
+  };
+
+  const colorscreen::mtf_measurement *overlay =
+      matchesSource(measurement) ? measurement : nullptr;
+  if (m_imageWidget)
+    m_imageWidget->setMtfMeasurementOverlay(overlay);
+  if (ImageWidget *target = inspectorImageWidget();
+      target && target != m_imageWidget)
+    target->setMtfMeasurementOverlay(overlay);
+
+  if (!locate)
+    return;
+  if (!overlay) {
+    if (measurement && !measurement->source_filename.empty())
+      statusBar()->showMessage(
+          tr("MTF measurement belongs to %1; open that source/reference to locate it.")
+              .arg(QFileInfo(QString::fromUtf8(
+                       measurement->source_filename.c_str())).fileName()),
+          5000);
+    return;
+  }
+  if (ImageWidget *target = inspectorImageWidget()) {
+    const colorscreen::point_t center = {
+        overlay->roi.x + overlay->roi.width / 2.0,
+        overlay->roi.y + overlay->roi.height / 2.0};
+    target->centerOn(center);
+    target->setFocus();
+  }
+}
+
 /** Refresh automatic focus-area rectangles in all ordinary views currently
     owned/presented by this document. */
 void MainWindow::updateFocusAreaOverlays() {
@@ -6787,6 +6948,7 @@ void MainWindow::onMeasureMtfRequested(bool checked) {
         p.channel = channel;
         p.name = baseParameters.name + " " + channelNames[channel];
         p.same_capture = channel == 0 ? baseParameters.same_capture : true;
+        p.source_filename = m_currentImageFile.toUtf8().toStdString();
 
         double wavelength = currentMtf.wavelengths[channel];
         if (!(colorscreen::my_isfinite(wavelength) && wavelength > 0)
@@ -6802,6 +6964,7 @@ void MainWindow::onMeasureMtfRequested(bool checked) {
     } else {
       colorscreen::slanted_edge_parameters p = baseParameters;
       p.channel = -1;
+      p.source_filename = m_currentImageFile.toUtf8().toStdString();
       measurementParameters.push_back(std::move(p));
     }
 

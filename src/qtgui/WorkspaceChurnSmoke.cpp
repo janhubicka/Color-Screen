@@ -6,6 +6,7 @@
 #include "MultiLineTabWidget.h"
 #include "WorkspaceWindow.h"
 
+#include <QComboBox>
 #include <QCoreApplication>
 #include <QDebug>
 #include <QEvent>
@@ -14,6 +15,7 @@
 #include <QMdiArea>
 #include <QMdiSubWindow>
 #include <QPointer>
+#include <QPushButton>
 #include <QStatusBar>
 #include <QString>
 #include <QStringList>
@@ -241,6 +243,15 @@ void startWorkspaceChurnSmoke(ColorScreenApplication &app,
             QStringLiteral("WorkflowRegistrationSummary"));
         QLabel *calibrationSummary = inspector->findChild<QLabel *>(
             QStringLiteral("WorkflowCalibrationSummary"));
+        QLabel *mtfCalibrationStatus = inspector->findChild<QLabel *>(
+            QStringLiteral("MtfCalibrationStatus"));
+        QComboBox *mtfMeasurementSelector = inspector->findChild<QComboBox *>(
+            QStringLiteral("MtfMeasurementSelector"));
+        QLabel *mtfMeasurementProvenance = inspector->findChild<QLabel *>(
+            QStringLiteral("MtfMeasurementProvenance"));
+        QPushButton *mtfMeasurementLocate = inspector->findChild<QPushButton *>(
+            QStringLiteral("MtfMeasurementLocate"));
+
         if (!workflowSummary || !workflowToggle || !workflowStages ||
             !processSummary || !registrationSummary || !calibrationSummary ||
             !workflowStages->text().contains(QStringLiteral("Capture")) ||
@@ -269,6 +280,16 @@ void startWorkspaceChurnSmoke(ColorScreenApplication &app,
                                               : QStringLiteral("<missing>"));
           if (retryOrFail(detail))
             return;
+          return;
+        }
+
+        if (!mtfCalibrationStatus || !mtfMeasurementSelector ||
+            !mtfMeasurementProvenance || !mtfMeasurementLocate ||
+            mtfMeasurementSelector->count() < 1 ||
+            mtfMeasurementSelector->itemData(0).toInt() != -1 ||
+            mtfMeasurementLocate->isEnabled()) {
+          fail(QStringLiteral(
+              "Workspace churn source document lost MTF calibration/provenance controls"));
           return;
         }
 

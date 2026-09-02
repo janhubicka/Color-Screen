@@ -14,6 +14,7 @@
 #include <QMessageBox>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QPolygonF>
 #include <QRandomGenerator>
 #include <QWheelEvent>
 #include <QTimer>
@@ -466,6 +467,7 @@ void ImageWidget::paintEvent(QPaintEvent *event) {
     drawPointsOverlay(p);
     drawProfileSpots(p);
     drawFocusAreas(p);
+    drawMtfMeasurementOverlay(p);
     drawScreenCoordinateSystem(p);
     drawMeasurement(p);
 
@@ -662,6 +664,43 @@ void ImageWidget::drawFocusAreas(QPainter &p) {
                    .arg(overlay.heldOutRelativeBadness, 0, 'g', 3);
     p.drawText(rect.topLeft() + QPointF(3.0, 13.0), label);
   }
+}
+
+/** Draw the source ROI and detected edge for the MTF measurement selected
+    in the Sharpness panel/chart. */
+void ImageWidget::drawMtfMeasurementOverlay(QPainter &p) {
+  if (!m_hasMtfMeasurementOverlay)
+    return;
+
+  p.save();
+  p.setRenderHint(QPainter::Antialiasing);
+  QColor accent = palette().highlight().color();
+  QColor fill = accent;
+  fill.setAlpha(28);
+
+  const colorscreen::coord_t x0 = m_mtfMeasurementRoi.x;
+  const colorscreen::coord_t y0 = m_mtfMeasurementRoi.y;
+  const colorscreen::coord_t x1 = m_mtfMeasurementRoi.x + m_mtfMeasurementRoi.width;
+  const colorscreen::coord_t y1 = m_mtfMeasurementRoi.y + m_mtfMeasurementRoi.height;
+  QPolygonF roiPolygon;
+  roiPolygon << imageToWidget({x0, y0}) << imageToWidget({x1, y0})
+             << imageToWidget({x1, y1}) << imageToWidget({x0, y1});
+  p.setBrush(fill);
+  p.setPen(QPen(accent, 1.5, Qt::DashLine));
+  p.drawPolygon(roiPolygon);
+
+  const QPointF edge0 = imageToWidget(m_mtfMeasurementEdgeP1);
+  const QPointF edge1 = imageToWidget(m_mtfMeasurementEdgeP2);
+  p.setBrush(accent);
+  p.setPen(QPen(accent, 3.0, Qt::SolidLine, Qt::RoundCap));
+  p.drawLine(edge0, edge1);
+  p.drawEllipse(edge0, 3.5, 3.5);
+  p.drawEllipse(edge1, 3.5, 3.5);
+
+  const QRectF bounds = roiPolygon.boundingRect();
+  p.setPen(accent);
+  p.drawText(bounds.topLeft() + QPointF(4.0, 14.0), tr("MTF ROI"));
+  p.restore();
 }
 
 /**
@@ -2487,5 +2526,17 @@ void ImageWidget::setProfileSpots(const std::vector<colorscreen::point_t> *spots
 void ImageWidget::setFocusAreaOverlays(
     const std::vector<FocusAreaOverlay> &areas) {
   m_focusAreaOverlays = areas;
+  update();
+}
+
+void ImageWidget::setMtfMeasurementOverlay(
+    const colorscreen::mtf_measurement *measurement) {
+  m_hasMtfMeasurementOverlay =
+      measurement && measurement->has_spatial_metadata();
+  if (m_hasMtfMeasurementOverlay) {
+    m_mtfMeasurementRoi = measurement->roi;
+    m_mtfMeasurementEdgeP1 = measurement->edge_p1;
+    m_mtfMeasurementEdgeP2 = measurement->edge_p2;
+  }
   update();
 }
