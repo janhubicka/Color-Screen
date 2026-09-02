@@ -263,6 +263,10 @@ if (captureTypeCombo && first->sharedImageData()) {
     }
   }
 }
+QLabel *profileCalibrationStatus = inspector->findChild<QLabel *>(
+    QStringLiteral("ProfileCalibrationStatus"));
+QPushButton *profileOptimizeButton = inspector->findChild<QPushButton *>(
+    QStringLiteral("ProfileOptimizeButton"));
 QLabel *mtfCalibrationStatus = inspector->findChild<QLabel *>(
     QStringLiteral("MtfCalibrationStatus"));
 QComboBox *mtfMeasurementSelector = inspector->findChild<QComboBox *>(
@@ -318,7 +322,10 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
   return;
 }
 
-        if (!mtfCalibrationStatus || !mtfMeasurementSelector ||
+        if (!profileCalibrationStatus || !profileOptimizeButton ||
+            !profileCalibrationStatus->text().startsWith(
+                QStringLiteral("Profile:")) ||
+            !mtfCalibrationStatus || !mtfMeasurementSelector ||
             !mtfMeasurementProvenance || !mtfMeasurementLocate ||
             mtfMeasurementSelector->count() < 1 ||
             mtfMeasurementSelector->itemData(0).toInt() != -1 ||
