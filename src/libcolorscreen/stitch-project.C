@@ -29,7 +29,7 @@ stitch_project::initialize ()
 {
 
   image_data data;
-  scr_param.type = Random;
+  scr_param.type = NoScreen;
   data.width=1000;
   data.height=1000;
   if (!common_scr_to_img.set_parameters (scr_param, data, rotation_adjustment))

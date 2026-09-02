@@ -658,19 +658,6 @@ void SharpnessPanel::setupUi() {
   m_scannerCameraSeparatorToggle = addSeparator("Scanner/Camera properties");
   QToolButton *separatorToggle = m_scannerCameraSeparatorToggle;
 
-  m_diffractionNotice = new QLabel();
-  m_diffractionNotice->setWordWrap(true);
-  m_diffractionNotice->setTextFormat(Qt::RichText);
-  QFont noticeFont = m_diffractionNotice->font();
-  noticeFont.setItalic(true);
-  noticeFont.setPointSize(noticeFont.pointSize() - 1);
-  m_diffractionNotice->setFont(noticeFont);
-  
-  if (m_currentGroupForm)
-      m_currentGroupForm->addRow(m_diffractionNotice);
-  else
-      m_form->addRow(m_diffractionNotice);
-
   // MTF Chart
   m_mtfChart = new MTFChartWidget();
   m_mtfChart->setMinimumHeight(250);
@@ -1163,7 +1150,8 @@ void SharpnessPanel::updateMTFChart() {
         && chartParameters.can_simulate_diffraction_p();
   // Calculate screen frequency if applicable
   double screenFreq = -1;
-  if (img && state.scrToImg.type != colorscreen::Random) {
+  if (img && colorscreen::screen_has_regular_geometry_p(
+                 state.scrToImg.type)) {
       colorscreen::scr_to_img scrToImgObj;
       scrToImgObj.set_parameters(state.scrToImg, *img);
       double pixel_size = scrToImgObj.pixel_size({0, 0, img->width, img->height});
@@ -1191,22 +1179,6 @@ void SharpnessPanel::updateMTFChart() {
     m_mtfChart->setMeasuredMTF({}, {});
   }
 
-  // Update diffraction notice
-  bool canSimulate = state.rparams.sharpen.scanner_mtf.can_simulate_diffraction_p();
-  if (canSimulate) {
-      m_diffractionNotice->hide();
-  } else {
-      m_diffractionNotice->show();
-      QStringList missing;
-      const auto &mtf = state.rparams.sharpen.scanner_mtf;
-      if (mtf.pixel_pitch <= 0) missing << "<b>Sensor pixel pitch</b>";
-      if (mtf.f_stop <= 0) missing << "<b>Nominal f-stop</b>";
-      if (mtf.wavelength <= 0) missing << "<b>Wavelength</b>";
-      if (mtf.scan_dpi <= 0) missing << "<b>Resolution</b>";
-      
-      m_diffractionNotice->setText(QString("To enable diffraction simulation, please set missing data: %1.")
-                                  .arg(missing.join(", ")));
-  }
 }
 
 void SharpnessPanel::updateScreenTiles() {

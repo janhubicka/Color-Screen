@@ -126,7 +126,8 @@ CoordinateTransformer::CoordinateTransformer(
             /* Stitched image_data already exposes the common final viewport as
                its only meaningful canvas. */
             m_finalAvailable = true;
-        } else if (scrToImg && scrToImg->type != colorscreen::Random) {
+        } else if (scrToImg && colorscreen::screen_has_regular_geometry_p(
+                              scrToImg->type)) {
             const auto cached = getFinalMapping(*scan, *scrToImg);
             if (cached->available) {
                 m_map = cached->map;

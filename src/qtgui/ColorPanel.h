@@ -75,6 +75,11 @@ private:
   QPushButton *m_setNeutralAreaBtn = nullptr;
   QPushButton *m_setAutoLevelsBtn = nullptr;
 
+  // Historical color-screen-only groups. Generic black/backlight/final
+  // appearance controls remain visible for ordinary captures.
+  QWidget *m_screenDyesGroup = nullptr;
+  QWidget *m_viewingCorrectionGroup = nullptr;
+
   struct GamutChartGroup {
     CIEChartWidget *chart = nullptr;
     QComboBox *referenceCombo = nullptr;

@@ -18,7 +18,14 @@ namespace colorscreen
 #define Paget_res (1 / (1.41421356237 / 2))
 
 const scr_type_property_t scr_names[max_scr_type] = {
-  { "Random", "Random", "", 0 },
+  { "None", "None (no color screen)",
+    "No historical additive color screen is present.", 0 },
+  { "Random", "Random / stochastic",
+    "Generic stochastic mosaic with no regular geometric lattice.", 0 },
+  { "Autochrome", "Autochrome",
+    "Lumière Autochrome stochastic dyed-starch screen.", 0 },
+  { "Agfa-Farbenplatte", "Agfa Farbenplatte",
+    "Agfa Farbenplatte stochastic additive color screen.", 0 },
   { "Paget", "Paget", "", Paget_res },
   { "Thames", "Thames", "", Paget_res },
   { "Finlay", "Finlay", "", Paget_res },
@@ -191,7 +198,14 @@ save_csp (FILE *f, const scr_to_img_parameters *param, const scr_detect_paramete
     }
   if (rparam)
     {
-      if (fprintf (f, "demosaic: %s\n",
+      const int capture_index = (int)rparam->capture_type;
+      const char *capture_name =
+          capture_index >= 0 && capture_index < render_parameters::capture_max
+              ? render_parameters::capture_properties[capture_index].name
+              : render_parameters::capture_properties
+                    [render_parameters::capture_unknown].name;
+      if (fprintf (f, "capture_type: %s\n", capture_name) < 0
+          || fprintf (f, "demosaic: %s\n",
                    image_data::demosaic_names[(int)rparam->demosaic].name)
               < 0
           || fprintf (f, "gamma: %f\n", rparam->gamma) < 0
@@ -901,6 +915,21 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam,
             }
           if (param)
             param->type = (enum scr_type)j;
+        }
+      else if (!strcmp (buf, "capture_type"))
+        {
+          get_keyword (f, buf2);
+          int j;
+          for (j = 0; j < render_parameters::capture_max; j++)
+            if (!strcmp (buf2, render_parameters::capture_properties[j].name))
+              break;
+          if (j == render_parameters::capture_max)
+            {
+              *error = "unknown capture type";
+              return false;
+            }
+          if (rparam)
+            rparam->capture_type = (enum render_parameters::capture_type)j;
         }
       else if (!strcmp (buf, "scanner_type"))
         {

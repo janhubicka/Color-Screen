@@ -247,6 +247,14 @@ patch_proportions (enum scr_type t, const render_parameters *rparam)
 {
   switch (t)
     {
+    case NoScreen:
+    case Random:
+    case Autochrome:
+    case AgfaFarbenplatte:
+      /* There is no regular unit cell whose patch areas can be measured.
+         Equal thirds are a neutral fallback for generic color calculations;
+         geometry-based reconstruction must not reach these screen types.  */
+      return {1/3.0,1/3.0,1/3.0};
     case Paget:
     case Thames:
      /* The Paget Plate - This is believed was invention of C. Finlay
@@ -1663,7 +1671,7 @@ render_parameters::get_gamut (bool corrected, scr_type t) const
   gamut ret;
   color_matrix m;
   rgbdata proportions = {1,1,1};
-  if (t != Random)
+  if (screen_has_regular_geometry_p (t))
     proportions = patch_proportions (t, this);
   if (corrected)
     /*TODO: Check with observer whitepoint.  */

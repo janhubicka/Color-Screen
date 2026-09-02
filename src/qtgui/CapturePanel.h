@@ -37,6 +37,7 @@ public:
 private:
     void setupUi();
     ReloadCallback m_reloadCallback;
+    class QComboBox *m_captureTypeCombo = nullptr;
     class QComboBox *m_demosaicCombo = nullptr;
     class QPushButton *m_reloadDemosaicBtn = nullptr;
     class QLabel *m_imageResolutionValue = nullptr;

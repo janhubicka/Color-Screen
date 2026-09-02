@@ -402,7 +402,8 @@ private:
   /** Offer conservative post-load setup guidance when ANALYSIS says the
       normally demosaiced RAW is likely an achromatic Bayer capture. */
   void maybeOfferInitialSetupGuide(
-      const colorscreen::monochrome_bayer_analysis &analysis);
+      const colorscreen::monochrome_bayer_analysis &analysis,
+      bool suggestDetectedMetadata);
 
   void setupUi();
   void createMenus();
@@ -551,6 +552,7 @@ private:
   QLabel *m_workflowProcessLabel = nullptr;
   QLabel *m_workflowRegistrationLabel = nullptr;
   QLabel *m_workflowCalibrationLabel = nullptr;
+  QLabel *m_workflowNextStepLabel = nullptr;
 
   QToolBar *m_toolbar;        // New toolbar
   QComboBox *m_modeComboBox;  // Mode selector

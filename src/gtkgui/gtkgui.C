@@ -1554,7 +1554,7 @@ extern "C"
   previewrender (GdkPixbuf **pixbuf)
   {
     guint8 *pixels;
-    if (scan.stitch || current.type == Random)
+    if (scan.stitch || !screen_has_regular_geometry_p (current.type))
       return;
     enum render_parameters::color_model_t cm = rparams.color_model;
     // if (optimize_colors)
@@ -2046,7 +2046,7 @@ extern "C"
         };
         enum solver_parameters::point_color rcolor = solver_parameters::green;
         int npoints;
-        if (current.type != Random)
+        if (screen_has_regular_geometry_p (current.type))
           {
             struct solver_parameters::point_location *points
                 = solver_parameters::get_point_locations (current.type,

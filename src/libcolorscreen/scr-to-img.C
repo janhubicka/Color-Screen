@@ -16,6 +16,20 @@ namespace colorscreen
 std::atomic_ulong scr_to_img::m_nwarnings;
 
 const render_parameters::capture_type_property render_parameters::capture_properties[] = {
+  { "unknown", "Unknown", 0 },
+  { "positive-screen-rgb", "Color positive with screen",
+    render_parameters::capture_type_property::SUPPORTS_SCR_DETECT },
+  { "positive-screen-rgb-ir", "Color positive + IR with screen",
+    render_parameters::capture_type_property::SUPPORTS_SCR_DETECT | render_parameters::capture_type_property::HAS_IR },
+  { "negative-screen-rgb", "Color negative with screen",
+    render_parameters::capture_type_property::SUPPORTS_SCR_DETECT },
+  { "negative-screen-rgb-ir", "Color negative + IR with screen",
+    render_parameters::capture_type_property::SUPPORTS_SCR_DETECT | render_parameters::capture_type_property::HAS_IR },
+  { "positive-screen-mono", "Monochrome positive with screen",
+    render_parameters::capture_type_property::MAYBE_MONOCHROMATIC_DEMOSAIC },
+  { "negative-screen-mono", "Monochrome negative with screen",
+    render_parameters::capture_type_property::MAYBE_MONOCHROMATIC_DEMOSAIC },
+  { "ordinary-image", "Ordinary image (no color screen)", 0 },
 };
 namespace
 {

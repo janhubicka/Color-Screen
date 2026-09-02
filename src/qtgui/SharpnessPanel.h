@@ -119,7 +119,6 @@ private:
 
   MTFChartWidget *m_mtfChart = nullptr;
   QCheckBox *m_showSignedOtfCheck = nullptr;
-  class QLabel *m_diffractionNotice = nullptr;
   QVBoxLayout *m_mtfContainer = nullptr; // Container Layout
   QVBoxLayout *m_measurementsLayout = nullptr;
   QToolButton *m_scannerCameraSeparatorToggle = nullptr;

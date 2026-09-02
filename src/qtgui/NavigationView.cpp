@@ -11,7 +11,7 @@
 
 // We need access to render_type definitions? already in Renderer.h
 // Logic:
-// render_type_fast if scr_to_img type != Random
+// render_type_fast only when scr_to_img has a regular geometric lattice
 // render_type_original (color=true) otherwise
 
 Q_DECLARE_METATYPE(NavigationView::RenderRequestData)
@@ -59,7 +59,8 @@ void NavigationView::setImage(std::shared_ptr<colorscreen::image_data> scan,
   }
 
   // Determine render type
-  if (m_scrToImg && m_scrToImg->type != colorscreen::Random) {
+  if (m_scrToImg && colorscreen::screen_has_regular_geometry_p(
+                         m_scrToImg->type)) {
     // Find fast
     m_renderType.type = colorscreen::render_type_fast;
   } else {
@@ -189,7 +190,8 @@ void NavigationView::updateParameters(
   m_scrToImg = scrToImg;
   m_scrDetect = scrDetect;
 
-  if (m_scrToImg && m_scrToImg->type != colorscreen::Random) {
+  if (m_scrToImg && colorscreen::screen_has_regular_geometry_p(
+                         m_scrToImg->type)) {
     m_renderType.type = colorscreen::render_type_fast;
   } else {
     m_renderType.type = colorscreen::render_type_original;

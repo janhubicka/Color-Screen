@@ -198,7 +198,7 @@ void GeometryPanel::setupUi() {
 
   addSeparator("Final image orientation");
   auto hasFinalGeometry = [](const ParameterState &s) {
-      return s.scrToImg.type != colorscreen::Random;
+      return colorscreen::screen_has_regular_geometry_p(s.scrToImg.type);
   };
   addSliderParameter(
       "Final rotation", -180.0, 180.0, 100.0, 2, "°", "",
@@ -390,7 +390,8 @@ void GeometryPanel::updateDeformationChart() {
   bool showLens = hasScan && !state.scrToImg.lens_correction.is_noop();
   bool showPerspective = hasScan && (std::abs(state.scrToImg.tilt_x) > 1e-6 || std::abs(state.scrToImg.tilt_y) > 1e-6);
   bool showNonlinear = hasScan && (state.scrToImg.mesh_trans != nullptr);
-  bool showFinal = hasScan && (state.scrToImg.type != colorscreen::Random);
+  bool showFinal = hasScan && colorscreen::screen_has_regular_geometry_p(
+                                  state.scrToImg.type);
 
   // Using parentWidget() of the layout to get the container widget added to the form
   if (m_lensChartContainer && m_lensChartContainer->parentWidget())

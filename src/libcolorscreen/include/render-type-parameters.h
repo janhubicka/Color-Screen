@@ -40,7 +40,9 @@ public:
   {
     NEEDS_SCR_TO_IMG = 1,
     NEEDS_RGB = 2,
-    NEEDS_SCR_DETECT = 6, /* scr detect needs RGB.  */
+    USES_SCR_DETECT = 4,
+    NEEDS_SCR_DETECT = USES_SCR_DETECT | NEEDS_RGB,
+    /* Screen-colour detection always requires RGB input.  */
     NEEDS_CORRECTION_PROFILE = 8,
     OUTPUTS_SCAN_PROFILE = 16,
     OUTPUTS_PROCESS_PROFILE = 32,

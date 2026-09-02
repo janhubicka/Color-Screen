@@ -6297,11 +6297,11 @@ finetune_misregistered_area (solver_parameters *solver,
     return false;
   int_image_area area = in_area.intersect ({ 0, 0, img.width, img.height });
   const bool verbose = false;
-  if (area.empty_p () || param.type == Random)
+  if (area.empty_p () || !screen_has_regular_geometry_p (param.type))
     {
       if (verbose)
 	printf ("Finetuning area failed since area is empty or screen is "
-		"Random\n");
+		"without regular geometry\n");
       return false;
     }
   int xsteps, ysteps;
@@ -7210,7 +7210,7 @@ autodetect_coordinates (const image_data &img, scr_to_img_parameters &param,
   int screens = 1;
   render_parameters rparam = rparam_1;
   rparam.sharpen.mode = sharpen_parameters::none;
-  if (param.type == Random)
+  if (!screen_has_regular_geometry_p (param.type))
     screens = n_supported_types;
   std::vector<finetune_result> res (steps * steps * screens);
   fparams.flags = colorscreen::finetune_position
@@ -7225,7 +7225,7 @@ autodetect_coordinates (const image_data &img, scr_to_img_parameters &param,
         if (!progress || !progress->cancel_requested ())
           {
             scr_to_img_parameters p;
-            if (param.type == Random)
+            if (!screen_has_regular_geometry_p (param.type))
               p.type = supported_screns[scr];
             else
               p.type = param.type;
@@ -7279,7 +7279,7 @@ autodetect_coordinates (const image_data &img, scr_to_img_parameters &param,
   param.center = res[best_i].center;
   param.coordinate1 = res[best_i].coordinate1;
   param.coordinate2 = res[best_i].coordinate2;
-  if (param.type == Random)
+  if (!screen_has_regular_geometry_p (param.type))
     param.type = supported_screns[best_i % screens];
   return true;
 }

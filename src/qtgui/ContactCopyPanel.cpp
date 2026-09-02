@@ -344,7 +344,7 @@ void ContactCopyPanel::setupUi() {
           colorscreen::render_parameters mut_rparams = s.rparams;
           colorscreen::hd_axis_type axisType = m_hdCurveWidget->getDisplayMode();
               
-          auto colors = colorscreen::hd_y_to_rgb(mut_rparams, 400, minY, maxY, s.scrToImg.type != colorscreen::Random ? colorscreen::patch_proportions(s.scrToImg.type, &mut_rparams) : (colorscreen::rgbdata){1.0/3, 1.0/3, 1.0/3}, axisType);
+          auto colors = colorscreen::hd_y_to_rgb(mut_rparams, 400, minY, maxY, colorscreen::screen_has_regular_geometry_p(s.scrToImg.type) ? colorscreen::patch_proportions(s.scrToImg.type, &mut_rparams) : (colorscreen::rgbdata){1.0/3, 1.0/3, 1.0/3}, axisType);
           m_hdCurveWidget->setHDColors(colors, minY, maxY);
 
           if (m_imageGetter() && m_hdCurveWidget->isVisible() && m_hdCurveWidget->isEnabled()) {
