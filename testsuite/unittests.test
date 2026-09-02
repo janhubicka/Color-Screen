@@ -102,12 +102,50 @@ main (int argc, char **argv)
           render_parameters::capture_transparency_with_screen, false, true)
       || render_parameters::capture_type_compatible_p (
           render_parameters::capture_transparency_with_screen_and_infrared,
-        true, false)
+          true, false)
       || !render_parameters::capture_type_compatible_p (
           render_parameters::capture_transparency_with_screen_and_infrared,
-        true, true))
+          true, true))
     {
       std::fprintf (stderr, "Capture workflow classification is inconsistent\n");
+      return 1;
+    }
+
+  // The effective accessor must never reinterpret an incompatible stored
+  // capture type.  It preserves compatible choices and demotes mismatches to
+  // Unknown so the GUI can ask the operator again for the new image.
+  image_data mono_scan;
+  image_data rgb_scan;
+  image_data rgb_ir_scan;
+  if (!mono_scan.set_dimensions (1, 1, false, true)
+      || !rgb_scan.set_dimensions (1, 1, true, false)
+      || !rgb_ir_scan.set_dimensions (1, 1, true, true))
+    {
+      std::fprintf (stderr, "Could not allocate capture-type test images\n");
+      return 1;
+    }
+  if (render_parameters::get_capture_type (
+          render_parameters::capture_transparency, &mono_scan)
+          != render_parameters::capture_transparency
+      || render_parameters::get_capture_type (
+             render_parameters::capture_transparency_with_screen, &rgb_scan)
+             != render_parameters::capture_transparency_with_screen
+      || render_parameters::get_capture_type (
+             render_parameters::capture_transparency_with_screen_and_infrared,
+             &rgb_ir_scan)
+             != render_parameters::capture_transparency_with_screen_and_infrared
+      || render_parameters::get_capture_type (
+             render_parameters::capture_transparency_with_screen, &mono_scan)
+             != render_parameters::capture_unknown
+      || render_parameters::get_capture_type (
+             render_parameters::capture_transparency, &rgb_scan)
+             != render_parameters::capture_unknown
+      || render_parameters::get_capture_type (
+             render_parameters::capture_transparency_with_screen_and_infrared,
+             &rgb_scan)
+             != render_parameters::capture_unknown)
+    {
+      std::fprintf (stderr, "Capture type accessor failed channel validation\n");
       return 1;
     }
 
