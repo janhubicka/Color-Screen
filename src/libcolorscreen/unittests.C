@@ -3995,6 +3995,17 @@ test_mtf_physical_model ()
   saved_measurement.wavelength = 750.56789012345678;
   saved_measurement.same_capture = false;
   saved_measurement.name = "quoted \"IR\" measurement \\ path";
+  saved_measurement.source_filename = "/calibration/reference \"edge\" \\ 01.tif";
+  saved_measurement.source_width = 8256;
+  saved_measurement.source_height = 5504;
+  saved_measurement.roi = int_image_area (123, 456, 789, 321);
+  saved_measurement.edge_p1 = {145.12345678901235, 456.0};
+  saved_measurement.edge_p2 = {160.98765432109877, 776.0};
+  saved_measurement.edge_angle = 2.8374567890123456;
+  saved_measurement.edge_fit_rms = 0.13765432109876543;
+  saved_measurement.edge_contrast = 0.31234567890123456;
+  saved_measurement.edge_snr = 47.876543210987654;
+  saved_measurement.phase_coverage = 0.91234567890123456;
   saved_measurement.add_value (0.012345678901234568,
                                99.123456789012351,
                                0.12345678901234567);
@@ -4004,6 +4015,52 @@ test_mtf_physical_model ()
   saved_measurement.add_value (0.5, 4.3456789012345679,
                                2.3456789012345679);
   saved_mtf.measurements = {saved_measurement};
+
+  /* Spatial/descriptive provenance is useful for inspection but is not a
+     numerical input to the fitted analytical model.  */
+  mtf_measurement relocated_measurement = saved_measurement;
+  relocated_measurement.name = "renamed";
+  relocated_measurement.source_filename = "/moved/reference.tif";
+  relocated_measurement.roi.x += 10;
+  relocated_measurement.edge_p1.x += 10;
+  relocated_measurement.edge_p2.x += 10;
+  relocated_measurement.edge_fit_rms += 0.01;
+  if (!saved_measurement.fit_equal_p (relocated_measurement)
+      || !saved_measurement.curve_equal_p (relocated_measurement))
+    {
+      fprintf (stderr,
+               "MTF spatial provenance incorrectly changed curve/fit equality\n");
+      ok = false;
+    }
+  relocated_measurement.wavelength += 1;
+  if (saved_measurement.fit_equal_p (relocated_measurement))
+    {
+      fprintf (stderr, "MTF wavelength change failed to stale model fit inputs\n");
+      ok = false;
+    }
+
+  mtf_parameters relocated_mtf = saved_mtf;
+  relocated_mtf.measurements[0].name = "display-only rename";
+  relocated_mtf.measurements[0].roi.x += 17;
+  if (!saved_mtf.fit_inputs_equal_p (relocated_mtf)
+      || !(saved_mtf == relocated_mtf))
+    {
+      fprintf (stderr,
+               "MTF display/provenance edit incorrectly changed fit/cache state\n");
+      ok = false;
+    }
+  relocated_mtf.measured_mtf_idx = -1;
+  if (!saved_mtf.fit_inputs_equal_p (relocated_mtf))
+    {
+      fprintf (stderr, "MTF direct-curve selection incorrectly staled model\n");
+      ok = false;
+    }
+  relocated_mtf.measurements[0].add_value (0.45, 12.5);
+  if (saved_mtf.fit_inputs_equal_p (relocated_mtf))
+    {
+      fprintf (stderr, "MTF curve edit failed to stale model inputs\n");
+      ok = false;
+    }
 
   FILE *project = tmpfile ();
   render_parameters loaded_render;
@@ -6484,7 +6541,10 @@ test_slanted_edge_mtf ()
       params.wavelength = 750;
       params.channel = 3;
       params.name = "synthetic infrared edge";
-      slanted_edge_results res = slanted_edge_mtf(rparam, blurred, blurred.get_area(), params, nullptr);
+      params.source_filename = "/synthetic/edge-reference.tif";
+      const int_image_area measurement_roi = blurred.get_area();
+      slanted_edge_results res = slanted_edge_mtf(
+          rparam, blurred, measurement_roi, params, nullptr);
       
       if (!res.success)
 	{
@@ -6510,7 +6570,21 @@ test_slanted_edge_mtf ()
 	}
       if (measurement.wavelength != params.wavelength
           || measurement.channel != params.channel
-          || measurement.name != params.name)
+          || measurement.name != params.name
+          || measurement.source_filename != params.source_filename
+          || measurement.source_width != blurred.width
+          || measurement.source_height != blurred.height
+          || measurement.roi.x != measurement_roi.x
+          || measurement.roi.y != measurement_roi.y
+          || measurement.roi.width != measurement_roi.width
+          || measurement.roi.height != measurement_roi.height
+          || measurement.edge_p1 != res.edge_p1
+          || measurement.edge_p2 != res.edge_p2
+          || measurement.edge_angle != res.edge_angle
+          || measurement.edge_fit_rms != res.edge_fit_rms
+          || measurement.edge_contrast != res.edge_contrast
+          || measurement.edge_snr != res.edge_snr
+          || measurement.phase_coverage != res.phase_coverage)
 	{
 	  printf ("Slanted-edge measurement metadata was not preserved\n");
 	  return false;

@@ -1628,6 +1628,22 @@ slanted_edge_mtf (const render_parameters &rparam, const image_data &img,
   for (double value : esf)
     res.edge_histogram.push_back ((luminosity_t)value);
 
+  /* Keep the exact spatial/quality provenance with the stored curve.  The
+     endpoints above are already in scan coordinates rather than ROI-local
+     coordinates, so callers can later display the measurement directly on
+     the source image.  */
+  measurement.source_filename = params.source_filename;
+  measurement.source_width = img.width;
+  measurement.source_height = img.height;
+  measurement.roi = roi;
+  measurement.edge_p1 = res.edge_p1;
+  measurement.edge_p2 = res.edge_p2;
+  measurement.edge_angle = res.edge_angle;
+  measurement.edge_fit_rms = res.edge_fit_rms;
+  measurement.edge_contrast = res.edge_contrast;
+  measurement.edge_snr = res.edge_snr;
+  measurement.phase_coverage = res.phase_coverage;
+
   res.measurement = std::move (measurement);
   res.success = true;
   res.failure = slanted_edge_failure_none;

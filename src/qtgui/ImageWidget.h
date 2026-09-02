@@ -101,6 +101,9 @@ public:
 
   /** Replace the focus-analysis overlay shown by this view. */
   void setFocusAreaOverlays(const std::vector<FocusAreaOverlay> &areas);
+  /** Show the ROI and accepted edge belonging to one stored MTF measurement.
+      Passing null or a measurement without spatial provenance clears it. */
+  void setMtfMeasurementOverlay(const colorscreen::mtf_measurement *measurement);
 
   /**
    * @brief Toggles the visibility of registration points.
@@ -301,6 +304,7 @@ private:
   void drawPointsOverlay(QPainter &p);
   void drawProfileSpots(QPainter &p);
   void drawFocusAreas(QPainter &p);
+  void drawMtfMeasurementOverlay(QPainter &p);
   void drawScreenCoordinateSystem(QPainter &p);
   void drawMeasurement(QPainter &p);
 
@@ -393,6 +397,10 @@ private:
   const std::vector<colorscreen::point_t> *m_profileSpots = nullptr;
   const std::vector<colorscreen::color_match> *m_profileSpotResults = nullptr;
   std::vector<FocusAreaOverlay> m_focusAreaOverlays;
+  bool m_hasMtfMeasurementOverlay = false;
+  colorscreen::int_image_area m_mtfMeasurementRoi;
+  colorscreen::point_t m_mtfMeasurementEdgeP1 {0, 0};
+  colorscreen::point_t m_mtfMeasurementEdgeP2 {0, 0};
   
   // Coordinate system editing state
   enum class DragTarget { None, Center, Axis1, Axis2 };

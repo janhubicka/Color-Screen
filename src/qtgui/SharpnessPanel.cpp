@@ -12,6 +12,7 @@
 #include <cmath>
 #include <exception>
 #include <string>
+#include <utility>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDoubleSpinBox>
@@ -31,7 +32,9 @@
 #include <QPushButton>
 #include <QResizeEvent>
 #include <QScrollArea>
+#include <QSignalBlocker>
 #include <QTimer>
+#include <QToolButton>
 #include <QTabWidget>
 #include <QVBoxLayout> // Added
 #include <QtConcurrent>
@@ -623,9 +626,11 @@ private:
 } // namespace
 
 SharpnessPanel::SharpnessPanel(StateGetter stateGetter, StateSetter stateSetter,
-                               ImageGetter imageGetter, QWidget *parent)
+                               ImageGetter imageGetter,
+                               MtfCalibrationCallbacks mtfCalibration,
+                               QWidget *parent)
     : TilePreviewPanel(stateGetter, stateSetter, imageGetter, parent),
-      m_mtfFitQueue() {
+      m_mtfFitQueue(), m_mtfCalibration(std::move(mtfCalibration)) {
   connect(&m_mtfFitQueue, &TaskQueue::progressStarted, this,
           &SharpnessPanel::progressStarted);
   connect(&m_mtfFitQueue, &TaskQueue::progressFinished, this,
@@ -650,7 +655,8 @@ void SharpnessPanel::setupUi() {
         s.rparams.sharpen.mode = (sharpen_mode)v;
       }, nullptr, "Select the sharpening algorithm. \"None\" disables sharpening, \"Wiener\" and \"Richardson-Lucy\" use the MTF model, \"Unsharp mask\" is a classic edge enhancement.");
 
-  QToolButton *separatorToggle = addSeparator("Scanner/Camera properties");
+  m_scannerCameraSeparatorToggle = addSeparator("Scanner/Camera properties");
+  QToolButton *separatorToggle = m_scannerCameraSeparatorToggle;
 
   m_diffractionNotice = new QLabel();
   m_diffractionNotice->setWordWrap(true);
@@ -668,6 +674,8 @@ void SharpnessPanel::setupUi() {
   // MTF Chart
   m_mtfChart = new MTFChartWidget();
   m_mtfChart->setMinimumHeight(250);
+  connect(m_mtfChart, &MTFChartWidget::measurementSelected, this,
+          [this](int index) { selectMtfMeasurement(index); });
 
   // Create container for MTF
   QWidget *mtfWrapper = new QWidget();
@@ -830,11 +838,22 @@ void SharpnessPanel::setupUi() {
         bool visible = !s.rparams.sharpen.scanner_mtf.measurements.empty();
         if (separatorToggle && !separatorToggle->isChecked())
           visible = false;
-        return visible && !m_mtfFitRunning;
+        const bool documentAvailable =
+            !m_mtfCalibration.fitAvailable || m_mtfCalibration.fitAvailable();
+        return visible && !m_mtfFitRunning && documentAvailable;
       },
       "Choose the physical diffraction model, edit capture metadata, and "
       "explicitly select which values should be optimized. Numeric zero is "
       "never interpreted implicitly by this dialog.");
+
+  m_mtfFitStatusLabel = new QLabel(this);
+  m_mtfFitStatusLabel->setWordWrap(true);
+  m_mtfFitStatusLabel->setObjectName(QStringLiteral("MtfCalibrationStatus"));
+  if (m_currentGroupForm)
+    m_currentGroupForm->addRow(tr("Model status:"), m_mtfFitStatusLabel);
+  else
+    m_form->addRow(tr("Model status:"), m_mtfFitStatusLabel);
+  updateMtfCalibrationStatus();
 
   // MTF Scale
   // Range 0.0 - 2.0 (0.0 = no MTF)
@@ -848,6 +867,47 @@ void SharpnessPanel::setupUi() {
       }, 1.0, nullptr, false, "Global intensity of the deconvolution-based sharpening. 0.0 disables it, 1.0 is standard.");
 
   addSeparator("Measurements");
+
+  auto *inspectWidget = new QWidget(this);
+  auto *inspectLayout = new QHBoxLayout(inspectWidget);
+  inspectLayout->setContentsMargins(0, 0, 0, 0);
+  inspectLayout->setSpacing(4);
+  m_measurementSelector = new QComboBox(inspectWidget);
+  m_measurementSelector->setObjectName(QStringLiteral("MtfMeasurementSelector"));
+  m_measurementSelector->setSizeAdjustPolicy(
+      QComboBox::AdjustToMinimumContentsLengthWithIcon);
+  m_measurementSelector->setMinimumContentsLength(18);
+  inspectLayout->addWidget(m_measurementSelector, 1);
+  m_locateMeasurementBtn = new QPushButton(tr("Show ROI"), inspectWidget);
+  m_locateMeasurementBtn->setObjectName(QStringLiteral("MtfMeasurementLocate"));
+  m_locateMeasurementBtn->setToolTip(
+      tr("Center the image on the selected measurement's recorded region of interest."));
+  inspectLayout->addWidget(m_locateMeasurementBtn);
+  connect(m_measurementSelector, QOverload<int>::of(&QComboBox::currentIndexChanged),
+          this, [this](int row) {
+            const int measurement = row >= 0
+                ? m_measurementSelector->itemData(row).toInt() : -1;
+            selectMtfMeasurement(measurement);
+          });
+  connect(m_locateMeasurementBtn, &QPushButton::clicked, this, [this]() {
+    if (m_selectedMtfMeasurement >= 0)
+      emit mtfMeasurementLocateRequested(m_selectedMtfMeasurement);
+  });
+  if (m_currentGroupForm)
+    m_currentGroupForm->addRow(tr("Inspect:"), inspectWidget);
+  else
+    m_form->addRow(tr("Inspect:"), inspectWidget);
+
+  m_measurementDetailLabel = new QLabel(this);
+  m_measurementDetailLabel->setWordWrap(true);
+  m_measurementDetailLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
+  m_measurementDetailLabel->setObjectName(
+      QStringLiteral("MtfMeasurementProvenance"));
+  if (m_currentGroupForm)
+    m_currentGroupForm->addRow(m_measurementDetailLabel);
+  else
+    m_form->addRow(m_measurementDetailLabel);
+
   addButtonParameter("", "Load QuickMTF measurement", [this]() { loadMTF(); });
 
   QWidget *measContainer = new MeasurementContainer([this](int from, int to) {
@@ -1164,6 +1224,7 @@ void SharpnessPanel::applyChange(
 void SharpnessPanel::onParametersRefreshed(const ParameterState &state) {
   updateMeasurementList();
   updateMTFChart();
+  updateMtfCalibrationStatus();
   updateScreenTiles();
 
   // Update Adaptive Sharpening Chart visibility
@@ -1301,9 +1362,18 @@ void SharpnessPanel::fitMeasuredMtf() {
   result->baseline = current;
   result->input = input;
   result->fitted = input;
+  if (m_mtfCalibration.fitStarted &&
+      !m_mtfCalibration.fitStarted(result->baseline)) {
+    QMessageBox::information(
+        this, tr("MTF model fit"),
+        tr("Another MTF model fit is already running for this document."));
+    updateUI();
+    return;
+  }
   m_mtfFitRunning = true;
   if (m_fitMtfBtn)
     m_fitMtfBtn->setEnabled(false);
+  updateMtfCalibrationStatus();
 
   m_mtfFitQueue.runAsync(
       [result, options, flags](colorscreen::progress_info *progress) {
@@ -1336,12 +1406,19 @@ void SharpnessPanel::fitMeasuredMtf() {
       [this, result](bool publishResult) {
         m_mtfFitRunning = false;
         /* Re-run all panel availability predicates instead of unconditionally
-           enabling the button.  Measurements or the containing section may
-           have changed while the background fit was running.  */
+           enabling the button. Measurements or the containing section may
+           have changed while the background fit was running. */
         updateUI();
-        if (!publishResult || result->cancelled)
+        if (!publishResult || result->cancelled) {
+          if (m_mtfCalibration.fitFinishedWithoutResult)
+            m_mtfCalibration.fitFinishedWithoutResult();
+          updateMtfCalibrationStatus();
           return;
+        }
         if (result->objective < 0 || !result->error.empty()) {
+          if (m_mtfCalibration.fitFailed)
+            m_mtfCalibration.fitFailed(result->baseline);
+          updateMtfCalibrationStatus();
           QMessageBox::warning(
               this, tr("MTF model fit"),
               tr("The MTF model could not be fitted: %1")
@@ -1359,6 +1436,9 @@ void SharpnessPanel::fitMeasuredMtf() {
         const colorscreen::mtf_parameters &currentMtf =
             currentState.rparams.sharpen.scanner_mtf;
         if (!currentMtf.equal_p(result->baseline)) {
+          if (m_mtfCalibration.fitFinishedWithoutResult)
+            m_mtfCalibration.fitFinishedWithoutResult();
+          updateMtfCalibrationStatus();
           QMessageBox::warning(
               this, tr("MTF model fit"),
               tr("The MTF measurements or model parameters changed while the "
@@ -1368,16 +1448,21 @@ void SharpnessPanel::fitMeasuredMtf() {
         }
 
         const colorscreen::mtf_parameters fitted = result->fitted;
+        const double rms = result->observations
+                               ? std::sqrt(result->objective
+                                           / result->observations)
+                               : 0.0;
+        /* Establish document-owned provenance before applying the undoable
+           state so every Sharpness panel and the workflow guide agree. */
+        if (m_mtfCalibration.fitAccepted)
+          m_mtfCalibration.fitAccepted(fitted, rms);
         applyChange(
             [fitted](ParameterState &updated) {
               updated.rparams.sharpen.scanner_mtf = fitted;
             },
             tr("Fit measured MTF model"));
 
-        const double rms = result->observations
-                               ? std::sqrt(result->objective
-                                           / result->observations)
-                               : 0.0;
+        updateMtfCalibrationStatus();
         QString details =
             tr("The selected model was fitted successfully.\n\n"
                "RMS residual: %1 percentage points\n"
@@ -1449,6 +1534,117 @@ void SharpnessPanel::loadMTF() {
   }
 }
 
+QString SharpnessPanel::mtfCalibrationSummary() const {
+  if (m_mtfCalibration.summary)
+    return m_mtfCalibration.summary();
+  const qsizetype count = static_cast<qsizetype>(
+      m_stateGetter().rparams.sharpen.scanner_mtf.measurements.size());
+  return count == 0
+      ? tr("Capture MTF: not measured")
+      : tr("Capture MTF: %1 saved measurement%2 • ready to fit/validate model")
+            .arg(count)
+            .arg(count == 1 ? QString() : QStringLiteral("s"));
+}
+
+void SharpnessPanel::updateMtfCalibrationStatus() {
+  if (!m_mtfFitStatusLabel)
+    return;
+  QString status = mtfCalibrationSummary();
+  const QString prefix = tr("Capture MTF: ");
+  if (status.startsWith(prefix))
+    status.remove(0, prefix.size());
+  m_mtfFitStatusLabel->setText(status);
+}
+
+void SharpnessPanel::refreshMtfCalibrationStatus() {
+  updateMtfCalibrationStatus();
+  if (m_fitMtfBtn) {
+    const bool hasMeasurements =
+        !m_stateGetter().rparams.sharpen.scanner_mtf.measurements.empty();
+    const bool sectionOpen = !m_scannerCameraSeparatorToggle ||
+                             m_scannerCameraSeparatorToggle->isChecked();
+    const bool documentAvailable =
+        !m_mtfCalibration.fitAvailable || m_mtfCalibration.fitAvailable();
+    m_fitMtfBtn->setEnabled(hasMeasurements && sectionOpen &&
+                            !m_mtfFitRunning && documentAvailable);
+  }
+}
+
+void SharpnessPanel::selectMtfMeasurement(int index) {
+  const auto &measurements =
+      m_stateGetter().rparams.sharpen.scanner_mtf.measurements;
+  if (index < 0 || index >= static_cast<int>(measurements.size()))
+    index = -1;
+  const bool changed = m_selectedMtfMeasurement != index;
+  m_selectedMtfMeasurement = index;
+
+  if (m_measurementSelector) {
+    const QSignalBlocker blocker(m_measurementSelector);
+    const int row = m_measurementSelector->findData(index);
+    m_measurementSelector->setCurrentIndex(row >= 0 ? row : 0);
+  }
+  if (m_mtfChart)
+    m_mtfChart->setSelectedMeasurement(index);
+  updateSelectedMeasurementDetails();
+  if (changed)
+    emit mtfMeasurementSelected(index);
+}
+
+void SharpnessPanel::updateSelectedMeasurementDetails() {
+  if (!m_measurementDetailLabel || !m_locateMeasurementBtn)
+    return;
+  const auto &measurements =
+      m_stateGetter().rparams.sharpen.scanner_mtf.measurements;
+  if (m_selectedMtfMeasurement < 0 ||
+      m_selectedMtfMeasurement >= static_cast<int>(measurements.size())) {
+    m_measurementDetailLabel->setText(
+        measurements.empty()
+            ? tr("No measured MTF curves are stored.")
+            : tr("Select a measured curve or legend entry to inspect its source and edge."));
+    m_measurementDetailLabel->setToolTip(QString());
+    m_locateMeasurementBtn->setEnabled(false);
+    return;
+  }
+
+  const colorscreen::mtf_measurement &m =
+      measurements[m_selectedMtfMeasurement];
+  QString source;
+  if (!m.source_filename.empty()) {
+    const QString full = QString::fromUtf8(m.source_filename.c_str());
+    source = QFileInfo(full).fileName();
+    if (source.isEmpty())
+      source = full;
+    m_measurementDetailLabel->setToolTip(full);
+  } else {
+    source = tr("unknown source");
+    m_measurementDetailLabel->setToolTip(QString());
+  }
+  if (m.source_width > 0 && m.source_height > 0)
+    source += tr(" (%1×%2)").arg(m.source_width).arg(m.source_height);
+
+  QString detail = tr("Source: %1").arg(source);
+  if (m.has_spatial_metadata()) {
+    detail += tr("\nROI: x=%1, y=%2, %3×%4 px")
+                  .arg(m.roi.x).arg(m.roi.y).arg(m.roi.width).arg(m.roi.height);
+    detail += tr(" • edge (%1, %2) → (%3, %4)")
+                  .arg(m.edge_p1.x, 0, 'f', 2)
+                  .arg(m.edge_p1.y, 0, 'f', 2)
+                  .arg(m.edge_p2.x, 0, 'f', 2)
+                  .arg(m.edge_p2.y, 0, 'f', 2);
+    detail += tr("\nAngle %1° • fit RMS %2 px • contrast %3 • SNR %4 • phase %5%")
+                  .arg(m.edge_angle, 0, 'f', 3)
+                  .arg(m.edge_fit_rms, 0, 'f', 3)
+                  .arg(m.edge_contrast, 0, 'g', 4)
+                  .arg(m.edge_snr, 0, 'f', 1)
+                  .arg(m.phase_coverage * 100.0, 0, 'f', 1);
+    m_locateMeasurementBtn->setEnabled(true);
+  } else {
+    detail += tr("\nLocation unavailable for this legacy/imported measurement.");
+    m_locateMeasurementBtn->setEnabled(false);
+  }
+  m_measurementDetailLabel->setText(detail);
+}
+
 void SharpnessPanel::updateMeasurementList() {
     if (!m_measurementsLayout) return;
 
@@ -1456,10 +1652,34 @@ void SharpnessPanel::updateMeasurementList() {
     const auto &measurements = state.rparams.sharpen.scanner_mtf.measurements;
 
     // Memoization to avoid flickering and unnecessary rebuilds
-    if (measurements == m_lastMeasurements) {
+    if (m_measurementUiInitialized && measurements == m_lastMeasurements) {
+        updateSelectedMeasurementDetails();
         return;
     }
+    m_measurementUiInitialized = true;
     m_lastMeasurements = measurements;
+
+    /* Structural/metadata edits can reorder or replace records. Clear the
+       inspection index rather than accidentally associating an old overlay
+       with a different measurement occupying the same vector position. */
+    m_selectedMtfMeasurement = -1;
+    if (m_mtfChart)
+        m_mtfChart->setSelectedMeasurement(-1);
+    if (m_measurementSelector) {
+        const QSignalBlocker blocker(m_measurementSelector);
+        m_measurementSelector->clear();
+        m_measurementSelector->addItem(tr("None"), -1);
+        for (int i = 0; i < static_cast<int>(measurements.size()); ++i) {
+            QString label = tr("%1 — %2")
+                                .arg(i + 1)
+                                .arg(QString::fromStdString(measurements[i].name));
+            m_measurementSelector->addItem(label, i);
+        }
+        m_measurementSelector->setCurrentIndex(0);
+        m_measurementSelector->setEnabled(!measurements.empty());
+    }
+    updateSelectedMeasurementDetails();
+    emit mtfMeasurementSelected(-1);
 
     // Clear layout
     QLayoutItem *item;

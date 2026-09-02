@@ -288,11 +288,14 @@ For automatic operations, show four states consistently:
 - Stale (inputs changed since result)
 
 "Stale" is especially valuable in Color-Screen because a geometry or MTF fit may
-remain numerically present after a prerequisite changed. Geometry now tracks an
+remain numerically present after a prerequisite changed. Geometry tracks an
 accepted fit baseline for the current session: edits keep the numerical result
 visible but label it stale, and a fit whose inputs change while it is running is
-prevented from publishing. MTF/profile provenance can adopt the same pattern in
-later Phase-B patches.
+prevented from publishing. Measured MTF model fitting now follows the same
+document-level presentation model across the main and reference inspectors; its
+measurement ROI/edge metadata is persistent provenance but deliberately does
+not stale the numerical model. Profile calibration remains the main Phase-B
+analysis domain still needing equivalent freshness tracking.
 
 ## Control semantics: five categories
 

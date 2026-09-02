@@ -20,7 +20,10 @@ struct mtf_measurement
   /* Construct an empty unlabelled measurement.  */
   mtf_measurement ()
       : channel (-1), image_layer (false), wavelength (0), same_capture (false),
-        name ("Measured MTF")
+        name ("Measured MTF"), source_filename (), source_width (-1),
+        source_height (-1), roi (), edge_p1 {0, 0}, edge_p2 {0, 0},
+        edge_angle (0), edge_fit_rms (0), edge_contrast (0), edge_snr (0),
+        phase_coverage (0)
   {
   }
   /* Channel: -1 unknown, 0 red, 1 green, 2 blue, 3 IR.  */
@@ -38,6 +41,58 @@ struct mtf_measurement
   bool same_capture;
   /* Name.  */
   std::string name;
+
+  /* Source image used to measure this edge. GUI callers store an absolute
+     filename; command-line/imported data may leave it empty. The dimensions
+     make the spatial provenance useful even when the file is later moved.  */
+  std::string source_filename;
+  int source_width;
+  int source_height;
+
+  /* Scan-coordinate region of interest and the straight edge accepted inside
+     it. A nonpositive ROI size means that location metadata is unavailable,
+     as for legacy project files and imported QuickMTF curves.  */
+  int_image_area roi;
+  point_t edge_p1;
+  point_t edge_p2;
+
+  /* Qualification metadata from the slanted-edge estimator. EDGE_ANGLE is
+     measured from the nearest image axis in degrees; EDGE_FIT_RMS is in input
+     pixels; EDGE_CONTRAST is normalized image intensity; PHASE_COVERAGE is a
+     fraction in the range 0..1.  */
+  double edge_angle;
+  double edge_fit_rms;
+  double edge_contrast;
+  double edge_snr;
+  double phase_coverage;
+
+  /* Return true when this measurement records a usable image location.  */
+  bool
+  has_spatial_metadata () const
+  {
+    return roi.width > 0 && roi.height > 0;
+  }
+
+  /* Return true when the sampled transfer curve itself equals O. This is the
+     comparison used by the render cache when a measured curve is selected
+     directly; labels, wavelengths and spatial provenance do not change the
+     sampled transfer.  */
+  bool
+  curve_equal_p (const mtf_measurement &o) const
+  {
+    return m_data == o.m_data;
+  }
+
+  /* Return true when the numerical/model-fitting content equals O. Display
+     labels and spatial provenance deliberately do not participate: moving or
+     renaming the record does not invalidate a model fitted to the same curve. */
+  bool
+  fit_equal_p (const mtf_measurement &o) const
+  {
+    return channel == o.channel && image_layer == o.image_layer
+           && wavelength == o.wavelength && same_capture == o.same_capture
+           && m_data == o.m_data;
+  }
 
   /* Append one sample at FREQ cycles per pixel with CONTRAST in percent.
      UNCERTAINTY is the estimated one-standard-deviation uncertainty of
@@ -79,8 +134,14 @@ struct mtf_measurement
   {
     return channel == o.channel && image_layer == o.image_layer
            && wavelength == o.wavelength && same_capture == o.same_capture
-           && name == o.name
-           && m_data == o.m_data;
+           && name == o.name && source_filename == o.source_filename
+           && source_width == o.source_width && source_height == o.source_height
+           && roi.x == o.roi.x && roi.y == o.roi.y
+           && roi.width == o.roi.width && roi.height == o.roi.height
+           && edge_p1 == o.edge_p1 && edge_p2 == o.edge_p2
+           && edge_angle == o.edge_angle && edge_fit_rms == o.edge_fit_rms
+           && edge_contrast == o.edge_contrast && edge_snr == o.edge_snr
+           && phase_coverage == o.phase_coverage && m_data == o.m_data;
   }
 private:
   /* One measured frequency/contrast pair and its optional uncertainty.  */
@@ -250,8 +311,8 @@ struct mtf_parameters
       {
 	if (!o.use_measured_mtf ())
 	  return false;
-	return measurements[measured_mtf_idx]
-               == o.measurements[o.measured_mtf_idx]
+	return measurements[measured_mtf_idx].curve_equal_p (
+                   o.measurements[o.measured_mtf_idx])
            && sigma == o.sigma
            && blur_diameter == o.blur_diameter;
       }
@@ -295,6 +356,27 @@ struct mtf_parameters
 	   && measurements == o.measurements
 	   && sensor_fill_factor == o.sensor_fill_factor;
   }
+  /* Return true when the state relevant to fitting the analytical model is
+     equal to O. Direct-measurement selection and descriptive/spatial metadata
+     do not affect a fit and therefore do not make a fitted model stale.  */
+  bool
+  fit_inputs_equal_p (const mtf_parameters &o) const
+  {
+    if (sigma != o.sigma || model != o.model
+        || halo_fraction != o.halo_fraction || halo_sigma != o.halo_sigma
+        || blur_diameter != o.blur_diameter || defocus != o.defocus
+        || f_stop != o.f_stop || wavelength != o.wavelength
+        || wavelengths != o.wavelengths || pixel_pitch != o.pixel_pitch
+        || scan_dpi != o.scan_dpi
+        || sensor_fill_factor != o.sensor_fill_factor
+        || measurements.size () != o.measurements.size ())
+      return false;
+    for (size_t i = 0; i < measurements.size (); i++)
+      if (!measurements[i].fit_equal_p (o.measurements[i]))
+        return false;
+    return true;
+  }
+
   /* Release all measured curves.  */
   void
   clear_data ()

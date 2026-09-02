@@ -6,10 +6,13 @@
 #include "AdaptiveSharpeningParameters.h"
 #include "AdaptiveSharpeningChart.h"
 #include <QPointer>
+#include <functional>
 
 class MTFChartWidget;
 class QLabel;
 class QCheckBox;
+class QComboBox;
+class QToolButton;
 class QWidget;
 class QImage;
 class QVBoxLayout;
@@ -23,11 +26,25 @@ struct finetune_result;
 
 #include "TilePreviewPanel.h"
 
+/** Document-owned MTF fit provenance hooks shared by primary and reference
+    Sharpness panels. The panel owns the background operation; the document
+    owns the meaning of Current/Stale across all views. */
+struct MtfCalibrationCallbacks {
+  std::function<QString()> summary;
+  std::function<bool()> fitAvailable;
+  std::function<bool(const colorscreen::mtf_parameters &)> fitStarted;
+  std::function<void(const colorscreen::mtf_parameters &)> fitFailed;
+  std::function<void(const colorscreen::mtf_parameters &, double)> fitAccepted;
+  std::function<void()> fitFinishedWithoutResult;
+};
+
 class SharpnessPanel : public TilePreviewPanel {
   Q_OBJECT
 public:
   explicit SharpnessPanel(StateGetter stateGetter, StateSetter stateSetter,
-                          ImageGetter imageGetter, QWidget *parent = nullptr);
+                          ImageGetter imageGetter,
+                          MtfCalibrationCallbacks mtfCalibration = {},
+                          QWidget *parent = nullptr);
   ~SharpnessPanel() override;
 
   // Accessors for Dock Widgets
@@ -44,6 +61,12 @@ public:
                                  const QString &summary = QString());
   void setMeasureMtfChecked(bool checked);
   void setMeasureMtfEnabled(bool enabled);
+  /** Concise shared calibration state for this panel. */
+  QString mtfCalibrationSummary() const;
+  /** Refresh the panel-local status label from document-owned provenance. */
+  void refreshMtfCalibrationStatus();
+  /** Return whether this panel currently owns the document's active MTF fit. */
+  bool mtfFitRunning() const { return m_mtfFitRunning; }
 
   void reattachDotSpread(QWidget *widget);
   void reattachAdaptiveChart(QWidget *widget);
@@ -67,6 +90,10 @@ signals:
       sharpness reference while keeping the current document parameters. */
   void openSlantedEdgeReferenceRequested();
   void measureMtfRequested(bool checked);
+  /** Select a stored measurement for provenance display in the owning image view. */
+  void mtfMeasurementSelected(int index);
+  /** Center the owning image view on the selected measurement ROI. */
+  void mtfMeasurementLocateRequested(int index);
 
 protected:
   // TilePreviewPanel overrides
@@ -85,6 +112,9 @@ private:
       thread.  */
   void fitMeasuredMtf();
   void updateMeasurementList();
+  void updateMtfCalibrationStatus();
+  void selectMtfMeasurement(int index);
+  void updateSelectedMeasurementDetails();
   void onParametersRefreshed(const ParameterState &state) override;
 
   MTFChartWidget *m_mtfChart = nullptr;
@@ -92,6 +122,12 @@ private:
   class QLabel *m_diffractionNotice = nullptr;
   QVBoxLayout *m_mtfContainer = nullptr; // Container Layout
   QVBoxLayout *m_measurementsLayout = nullptr;
+  QToolButton *m_scannerCameraSeparatorToggle = nullptr;
+  QComboBox *m_measurementSelector = nullptr;
+  QLabel *m_measurementDetailLabel = nullptr;
+  class QPushButton *m_locateMeasurementBtn = nullptr;
+  int m_selectedMtfMeasurement = -1;
+  bool m_measurementUiInitialized = false;
   FinetuneImagesPanel *m_finetuneImagesPanel = nullptr;
   QWidget *m_finetuneImagesWrapper = nullptr;
   QVBoxLayout *m_finetuneImagesContainer = nullptr;
@@ -115,6 +151,8 @@ private:
   TaskQueue m_mtfFitQueue;
   /** True while M_MTF_FIT_QUEUE is processing a submitted fit.  */
   bool m_mtfFitRunning = false;
+  MtfCalibrationCallbacks m_mtfCalibration;
+  QLabel *m_mtfFitStatusLabel = nullptr;
   uint64_t m_finetuneFlags = 0;
   AdaptiveSharpeningParameters m_adaptiveSharpeningParameters;
   bool m_adaptiveSharpeningParametersInitialized = false;

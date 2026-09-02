@@ -14,6 +14,9 @@ public:
     void setMTFData(const std::array<colorscreen::mtf_parameters::computed_mtf, 4> &data, bool canSimulateDiffraction, double scanDpi, double screenFreq = -1);
     void setMeasuredMTF(const std::vector<colorscreen::mtf_measurement> &measurements, const std::array<double, 4> &channelWavelengths);
     void setChannelsPresence(bool hasRgb, bool hasIr);
+    /** Highlight one measured curve as the record currently being inspected. */
+    void setSelectedMeasurement(int index);
+    int selectedMeasurement() const { return m_selectedMeasurement; }
     /** Show or hide the signed analytical system OTF.  Measured slanted-edge
         curves remain magnitude-only.  */
     void setShowSignedOTF(bool show);
@@ -25,6 +28,10 @@ public:
     bool hasHeightForWidth() const override;
     int heightForWidth(int width) const override;
     
+signals:
+    /** A measured curve/legend entry was chosen for provenance inspection. */
+    void measurementSelected(int index);
+
 protected:
     void paintEvent(QPaintEvent *event) override;
     void mousePressEvent(QMouseEvent *event) override;
@@ -57,10 +64,17 @@ private:
         const std::vector<double> *data = nullptr;
         const colorscreen::mtf_measurement *measurement = nullptr;
         bool dashed = false;
+        int measurementIndex = -1;
+        QString key;
     };
     
     std::vector<LegendItem> getLegendItems() const;
-    bool isVisible(const QString &name) const { return m_hiddenItems.find(name) == m_hiddenItems.end(); }
+    QString visibilityKey(const LegendItem &item) const {
+        return item.key.isEmpty() ? item.name : item.key;
+    }
+    bool isVisible(const QString &key) const {
+        return m_hiddenItems.find(key) == m_hiddenItems.end();
+    }
 
     std::array<colorscreen::mtf_parameters::computed_mtf, 4> m_data;
     bool m_hasData = false;
@@ -74,6 +88,7 @@ private:
     bool m_showSignedOtf = false;
     bool m_hasRgb = true;
     bool m_hasIr = true;
+    int m_selectedMeasurement = -1;
 
     std::set<QString> m_hiddenItems;
 };
