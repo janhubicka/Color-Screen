@@ -13,11 +13,15 @@
 #include <QDebug>
 #include <QFile>
 #include <QMessageBox>
+#include <QMetaObject>
 #include <QPointer>
+#include <QSet>
 #include <QString>
 #include <QTemporaryDir>
+#include <QThread>
 #include <QTimer>
 
+#include <atomic>
 #include <functional>
 #include <memory>
 #include <utility>
@@ -44,6 +48,7 @@ struct DocumentLifecycleState {
   bool firstInitialMirror = false;
   bool secondInitialMirror = false;
   bool workspaceCancelTested = false;
+  QPointer<QThread> backgroundThread;
   std::function<void()> completed;
 };
 
@@ -195,6 +200,83 @@ bool taskQueueLatestRequestWins() {
   }
 
   return true;
+}
+
+/** Exercise the real asynchronous queue completion path.
+
+    The older task stays alive until the newer task publishes.  reportFinished
+    then cancels/supersedes the older request, whose completion callback must
+    still run for cleanup but receive publishResult == false. */
+void startTaskQueueAsyncPublicationSmoke(ColorScreenApplication &app,
+                                         std::function<void()> completed) {
+  struct State {
+    QPointer<TaskQueue> queue;
+    std::shared_ptr<std::atomic_bool> olderStarted =
+        std::make_shared<std::atomic_bool>(false);
+    bool olderDone = false;
+    bool newerDone = false;
+    bool failed = false;
+    std::function<void()> completed;
+  };
+
+  auto state = std::make_shared<State>();
+  state->completed = std::move(completed);
+  state->queue = new TaskQueue(&app);
+
+  auto finish = std::make_shared<std::function<void()>>();
+  *finish = [&app, state]() {
+    if (state->failed || !state->olderDone || !state->newerDone)
+      return;
+    if (state->queue)
+      state->queue->deleteLater();
+    state->completed();
+  };
+
+  auto fail = [&app, state](const char *message) {
+    if (state->failed)
+      return;
+    state->failed = true;
+    qCritical() << message;
+    app.exit(documentLifecycleFailure);
+  };
+
+  state->queue->runAsync(
+      [started = state->olderStarted](colorscreen::progress_info *progress) {
+        started->store(true, std::memory_order_release);
+        while (!progress->pool_cancel())
+          QThread::msleep(1);
+      },
+      [state, finish, fail](bool publishResult) {
+        if (publishResult) {
+          fail("Document lifecycle smoke published a superseded async result");
+          return;
+        }
+        state->olderDone = true;
+        (*finish)();
+      });
+
+  state->queue->runAsync(
+      [started = state->olderStarted](colorscreen::progress_info *) {
+        // Ensure this really races a running older worker rather than merely
+        // testing queue bookkeeping before the thread pool scheduled it.
+        for (int i = 0; i < 2000 &&
+                        !started->load(std::memory_order_acquire);
+             ++i)
+          QThread::msleep(1);
+      },
+      [state, finish, fail](bool publishResult) {
+        if (!publishResult) {
+          fail("Document lifecycle smoke rejected the newest async result");
+          return;
+        }
+        state->newerDone = true;
+        (*finish)();
+      });
+
+  QTimer::singleShot(5000, &app, [state, fail]() {
+    if (!state->failed && (!state->olderDone || !state->newerDone))
+      fail("Document lifecycle smoke timed out in TaskQueue::runAsync");
+  });
 }
 
 } // namespace
@@ -485,10 +567,39 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
       }
 
       case 5: {
-        // Explicit Discard is the final supported close outcome.
+        // Start a real production one-shot worker. Screen detection is useful
+        // here because it owns a QThread through the same registry as finetune,
+        // focus, flat-field and sharpening workers, but needs no modal setup.
+        const QList<QThread *> before = second->findChildren<QThread *>(
+            QString(), Qt::FindDirectChildrenOnly);
+        QSet<QThread *> existing;
+        for (QThread *thread : before)
+          existing.insert(thread);
+        if (!QMetaObject::invokeMethod(second, "onAutodetectScreen",
+                                       Qt::DirectConnection)) {
+          fail(QStringLiteral(
+              "Document lifecycle smoke could not start screen detection"));
+          return;
+        }
+        const QList<QThread *> after = second->findChildren<QThread *>(
+            QString(), Qt::FindDirectChildrenOnly);
+        for (QThread *thread : after)
+          if (thread && !existing.contains(thread)) {
+            state->backgroundThread = thread;
+            break;
+          }
+        if (!state->backgroundThread || !state->backgroundThread->isRunning()) {
+          fail(QStringLiteral(
+              "Document lifecycle smoke did not start a one-shot worker thread"));
+          return;
+        }
+
+        // Explicit Discard is the final supported close outcome.  Close while
+        // the production worker is still running: teardown must cancel its
+        // progress and join the tracked thread before document state vanishes.
         queueDialogResponses(app, {{QStringLiteral("Unsaved Changes"),
                                     QMessageBox::Discard}});
-        if (!second || !second->close()) {
+        if (!second->close()) {
           fail(QStringLiteral("Document lifecycle Discard did not allow close"));
           return;
         }
@@ -497,11 +608,12 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
       }
 
       case 6:
-        if (state->second || !app.documentWindows().isEmpty() ||
-            !app.viewWindows().isEmpty() || app.tabCount() != 0 ||
-            (workspace && workspace->isVisible())) {
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+        if (state->second || state->backgroundThread ||
+            !app.documentWindows().isEmpty() || !app.viewWindows().isEmpty() ||
+            app.tabCount() != 0 || (workspace && workspace->isVisible())) {
           if (retryOrFail(QStringLiteral(
-                  "Document lifecycle close did not drain the application")))
+                  "Document lifecycle close did not cancel/join background work")))
             return;
           return;
         }
@@ -517,5 +629,8 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
     QTimer::singleShot(0, &app, [runPhase]() { (*runPhase)(0, 40); });
   };
 
-  QTimer::singleShot(100, &app, [start]() { (*start)(100); });
+  startTaskQueueAsyncPublicationSmoke(
+      app, [&app, start]() {
+        QTimer::singleShot(100, &app, [start]() { (*start)(100); });
+      });
 }
