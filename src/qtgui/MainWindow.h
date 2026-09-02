@@ -21,6 +21,7 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <optional>
 #include <set>
 #include <vector>
 
@@ -743,6 +744,15 @@ private:
   
   // Solver Queue
   TaskQueue m_solverQueue;
+
+  // Session-local provenance for geometry fitting. The baseline is captured
+  // only after an accepted solver result, so loaded/manual geometry is never
+  // incorrectly advertised as a current automatic fit. Pending input state is
+  // also used as a publication gate when parameters change during a solve.
+  std::optional<ParameterState> m_geometryFitBaseline;
+  std::optional<ParameterState> m_geometryFitPendingInputs;
+  std::optional<bool> m_geometryFitPendingComputeMesh;
+  std::optional<ParameterState> m_geometryFitFailureInputs;
   
   // Coordinate Optimization Worker
   CoordinateOptimizationWorker *m_coordOptimizationWorker = nullptr;

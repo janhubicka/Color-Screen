@@ -288,9 +288,11 @@ For automatic operations, show four states consistently:
 - Stale (inputs changed since result)
 
 "Stale" is especially valuable in Color-Screen because a geometry or MTF fit may
-remain numerically present after a prerequisite changed.  A future revision
-counter per analysis domain can support this without deleting results
-immediately.
+remain numerically present after a prerequisite changed. Geometry now tracks an
+accepted fit baseline for the current session: edits keep the numerical result
+visible but label it stale, and a fit whose inputs change while it is running is
+prevented from publishing. MTF/profile provenance can adopt the same pattern in
+later Phase-B patches.
 
 ## Control semantics: five categories
 

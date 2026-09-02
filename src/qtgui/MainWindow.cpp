@@ -178,6 +178,24 @@ ColorScreenApplication *documentApplication() {
   return dynamic_cast<ColorScreenApplication *>(QCoreApplication::instance());
 }
 
+/** Return whether geometry-fit prerequisites/calibration differ between two
+    document snapshots. Appearance/output-only final-plane orientation is
+    deliberately excluded: it does not change the screen-to-scan fit. */
+bool geometryFitInputsDiffer(const ParameterState &before,
+                             const ParameterState &after) {
+  const auto &a = before.scrToImg;
+  const auto &b = after.scrToImg;
+  return before.solver != after.solver ||
+         !(a.center == b.center) || !(a.coordinate1 == b.coordinate1) ||
+         !(a.coordinate2 == b.coordinate2) ||
+         a.projection_distance != b.projection_distance ||
+         a.tilt_x != b.tilt_x || a.tilt_y != b.tilt_y ||
+         a.type != b.type || a.scanner_type != b.scanner_type ||
+         !(a.lens_correction == b.lens_correction) ||
+         a.mesh_trans != b.mesh_trans ||
+         a.mesh_trans_is_scr_to_img != b.mesh_trans_is_scr_to_img;
+}
+
 /** Choose the scalar/BW focus model for scans that have no native RGB data,
     and for RGB files that merely store one monochrome scanner signal in
     three gain-scaled channels.  Test raw scan chromaticity rather than the
@@ -707,6 +725,10 @@ void MainWindow::setupUi() {
   m_workflowRegistrationLabel->setObjectName(
       QStringLiteral("WorkflowRegistrationSummary"));
   m_workflowRegistrationLabel->setWordWrap(true);
+  m_workflowRegistrationLabel->setToolTip(tr(
+      "Geometry freshness is tracked for fits completed in this session. "
+      "Loaded or manually entered geometry remains available but is not "
+      "labelled current until it is fitted."));
   workflowLayout->addWidget(m_workflowRegistrationLabel);
 
   m_workflowCalibrationLabel = new QLabel(workflowSummary);
@@ -3734,14 +3756,28 @@ void MainWindow::applyState(const ParameterState &state) {
 
 /** Refresh the persistent workflow summary from document-owned state.
 
-    The summary is intentionally conservative: registration point counts are
-    reliable prerequisites, while the current geometry parameters do not yet
-    carry a generation/provenance marker that would let the UI distinguish a
-    freshly fitted result from a manually entered or stale one. */
+    Geometry fit freshness is session-local rather than serialized into .par:
+    an accepted fit captures the exact fit-related state as a baseline. Later
+    edits therefore remain visible while being labelled stale. A running fit
+    whose inputs changed is cancelled before it can publish an obsolete result. */
 void MainWindow::updateWorkflowSummary() {
   if (!m_workflowProcessLabel || !m_workflowRegistrationLabel ||
       !m_workflowCalibrationLabel)
     return;
+
+  const ParameterState currentState = getCurrentState();
+  const bool pendingMeshModeChanged =
+      m_geometryFitPendingComputeMesh && m_geometryPanel &&
+      *m_geometryFitPendingComputeMesh != m_geometryPanel->isNonlinearEnabled();
+  if (m_geometryFitPendingInputs &&
+      (geometryFitInputsDiffer(*m_geometryFitPendingInputs, currentState) ||
+       pendingMeshModeChanged)) {
+    // Reset first because cancelAll() may synchronously trigger progress/UI
+    // callbacks that refresh this summary again.
+    m_geometryFitPendingInputs.reset();
+    m_geometryFitPendingComputeMesh.reset();
+    m_solverQueue.cancelAll();
+  }
 
   const colorscreen::scr_type type = m_scrToImgParams.type;
   QString processName = tr("Unknown");
@@ -3774,9 +3810,27 @@ void MainWindow::updateWorkflowSummary() {
               .arg(minimum)
               .arg(minimum - count);
     } else {
-      registration =
-          tr("Registration: %1 points — ready to fit/validate geometry")
-              .arg(count);
+      registration = tr("Registration: %1 points").arg(count);
+      const bool fitCurrent =
+          m_geometryFitBaseline &&
+          !geometryFitInputsDiffer(*m_geometryFitBaseline, currentState);
+      const bool failureCurrent =
+          m_geometryFitFailureInputs &&
+          !geometryFitInputsDiffer(*m_geometryFitFailureInputs, currentState);
+      if (m_geometryFitPendingInputs) {
+        registration += tr(" • fitting geometry…");
+      } else if (fitCurrent) {
+        registration += tr(" • geometry current");
+        if (failureCurrent)
+          registration += tr(" • last refit failed");
+      } else if (failureCurrent) {
+        registration +=
+            tr(" • fit failed — adjust points/settings and retry");
+      } else if (m_geometryFitBaseline) {
+        registration += tr(" • geometry stale — refit");
+      } else {
+        registration += tr(" • ready to fit/validate geometry");
+      }
       if (m_scrToImgParams.mesh_trans)
         registration += tr(" • nonlinear correction present");
     }
@@ -4283,6 +4337,9 @@ void MainWindow::onNonlinearToggled(bool checked) {
       newState.scrToImg.mesh_trans = nullptr;
       changeParameters(newState, "Disable Nonlinear Corrections");
     }
+    // With no materialized mesh the checkbox is otherwise panel-local. A
+    // running nonlinear fit must still notice that the user turned it off.
+    updateWorkflowSummary();
   }
 }
 
@@ -4311,6 +4368,14 @@ void MainWindow::onOptimizeGeometry(bool autoChecked) {
   data.solver = m_solverParams;
   data.computeMesh = m_geometryPanel->isNonlinearEnabled();
 
+  // The pending snapshot is both user-visible provenance and a second stale
+  // result gate beyond TaskQueue's newest-request check. It catches edits to
+  // points/geometry and the requested nonlinear mode while this solve runs.
+  m_geometryFitPendingInputs = getCurrentState();
+  m_geometryFitPendingComputeMesh = data.computeMesh;
+  m_geometryFitFailureInputs.reset();
+  updateWorkflowSummary();
+
   // Request new solve task with captured data
   m_solverQueue.requestRender(QVariant::fromValue(data));
 }
@@ -4325,6 +4390,9 @@ void MainWindow::onTriggerSolve(
     const QVariant &userData) {
   if (!m_scan || !m_solverWorker || !userData.canConvert<SolverRequestData>()) {
     m_solverQueue.reportFinished(reqId, false);
+    m_geometryFitPendingInputs.reset();
+    m_geometryFitPendingComputeMesh.reset();
+    updateWorkflowSummary();
     return;
   }
 
@@ -4351,24 +4419,40 @@ void MainWindow::onTriggerSolve(
 void MainWindow::onSolverFinished(int reqId,
                                   colorscreen::scr_to_img_parameters result,
                                   bool success, bool cancelled) {
-  // reportFinished() is the authoritative stale-result gate.  A newer
-  // successful request removes older requests from the queue, and cancellation
-  // makes a nominally successful racing completion unpublishable.
+  // TaskQueue suppresses superseded requests. The pending input snapshot adds
+  // a domain-level gate: even the newest request is obsolete if its geometry
+  // inputs changed without starting another solve.
   const bool current = m_solverQueue.reportFinished(reqId, success);
-  if (!current || m_closing || cancelled)
+  if (!current || m_closing)
     return;
 
+  const ParameterState now = getCurrentState();
+  const bool meshModeStillCurrent =
+      m_geometryFitPendingComputeMesh && m_geometryPanel &&
+      *m_geometryFitPendingComputeMesh == m_geometryPanel->isNonlinearEnabled();
+  const bool inputsStillCurrent =
+      m_geometryFitPendingInputs && meshModeStillCurrent &&
+      !geometryFitInputsDiffer(*m_geometryFitPendingInputs, now);
+  m_geometryFitPendingInputs.reset();
+  m_geometryFitPendingComputeMesh.reset();
+
+  if (cancelled || !inputsStillCurrent) {
+    updateWorkflowSummary();
+    return;
+  }
+
   if (success) {
-    ParameterState newState = getCurrentState();
+    ParameterState newState = now;
     newState.scrToImg.merge_solver_solution(result);
     changeParameters(newState, "Optimize Geometry");
+    m_geometryFitBaseline = getCurrentState();
+    m_geometryFitFailureInputs.reset();
   } else {
-    // Only show error if not cancelled
-    if (!cancelled) {
-      QMessageBox::warning(this, "Optimization Failed",
-                           "The geometry solver failed to find a solution.");
-    }
+    m_geometryFitFailureInputs = now;
+    QMessageBox::warning(this, "Optimization Failed",
+                         "The geometry solver failed to find a solution.");
   }
+  updateWorkflowSummary();
 }
 
 /** Update the color (IR/RGB) checkbox visibility and enabled state.
@@ -5334,6 +5418,9 @@ void MainWindow::onAutomaticallyAddPointsInAreaRequested(
                   changeParameters(
                       newState,
                       "Automatically add points to area (Geometry update)");
+                  m_geometryFitBaseline = getCurrentState();
+                  m_geometryFitFailureInputs.reset();
+                  updateWorkflowSummary();
                 });
         connect(worker, &FinetuneMisregisteredWorker::requestCurrentPoints,
                 this,
@@ -5433,6 +5520,9 @@ void MainWindow::onAutomaticallyAddPointsRequested(const colorscreen::finetune_a
             newState.scrToImg.merge_solver_solution(result);
             changeParameters(newState,
                              "Automatically add points (Geometry update)");
+            m_geometryFitBaseline = getCurrentState();
+            m_geometryFitFailureInputs.reset();
+            updateWorkflowSummary();
           });
   connect(worker, &FinetuneMisregisteredWorker::requestCurrentPoints, this,
           [this](std::vector<colorscreen::solver_parameters::solver_point_t> *points) {
@@ -5915,6 +6005,7 @@ void MainWindow::onOptimizeCoordinatesFinished(
     if (m_geometryPanel) {
       m_geometryPanel->updateFinetuneImages(ret);
     }
+    updateWorkflowSummary();
     statusBar()->showMessage("Optimize coordinates finished", 3000);
   } else {
     QMessageBox::warning(this, "Optimization",
@@ -5947,6 +6038,11 @@ void MainWindow::onCoordinateSystemChanged() {
                                       &m_solverParams);
     }
   }
+
+  // Grid drags mutate scr_to_img parameters in-place rather than through
+  // changeParameters(). Refresh freshness here so a current/pending fit reacts
+  // immediately instead of waiting for an unrelated panel refresh.
+  updateWorkflowSummary();
 }
 /** Snapshot state before a grid drag operation for undo bookkeeping.  */
 void MainWindow::onCoordinateSystemManipulationStarted() {
