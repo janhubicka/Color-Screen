@@ -460,7 +460,7 @@ finetune_find_focus_area_candidates_in_image (
         *error = "automatic focus-area discovery requires image data";
       return false;
     }
-  if (param.type == Random || parameters.max_analysis_dimension < 32
+  if (!screen_has_regular_geometry_p (param.type) || parameters.max_analysis_dimension < 32
       || !my_isfinite (parameters.automatic_window_screen_periods)
       || parameters.automatic_window_screen_periods <= 0)
     {

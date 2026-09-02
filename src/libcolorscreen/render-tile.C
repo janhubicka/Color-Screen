@@ -159,7 +159,7 @@ sanitize_render_parameters (render_type_parameters &rtparam,
           & render_type_property::NEEDS_RGB))
     rtparam.type = render_type_original;
 
-  if (param.type == Random
+  if (!screen_has_regular_geometry_p (param.type)
       && (render_type_properties[(int)rtparam.type].flags
           & render_type_property::NEEDS_SCR_TO_IMG))
     rtparam.type = render_type_original;
@@ -198,8 +198,12 @@ render_to_scr::render_tile (render_type_parameters rtparam,
   if (width <= 0 || height <= 0)
     return true;
 
-  if (param.type == Random && rtparam.type != render_type_original
-      && rtparam.type != render_type_profiled_original)
+  // A capture with no historical screen may still use the ordinary image
+  // layer (including sharpening and capture corrections). Only screen-colour
+  // detection itself is nonsensical without a physical screen.
+  if (param.type == NoScreen
+      && (render_type_properties[(int)rtparam.type].flags
+          & render_type_property::USES_SCR_DETECT))
     rtparam.type = render_type_original;
 
   /* Avoid rendering outside of image area.  This saves some time and prevents

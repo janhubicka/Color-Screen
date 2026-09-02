@@ -539,7 +539,7 @@ render_screen_tile (tile_parameters &tile, scr_type type,
       a.apply_to_rgb (backlight_white.x, backlight_white.y, backlight_white.z,
                       &backlight.red, &backlight.green, &backlight.blue);
       luminosity_t max = (luminosity_t)1.0 / std::max (std::max (backlight.red, backlight.green), backlight.blue);
-      if (type == Random)
+      if (!screen_has_regular_geometry_p (type))
         type = Joly;
       if (rst == backlight_screen || rst == corrected_backlight_screen)
 	{
@@ -559,7 +559,7 @@ render_screen_tile (tile_parameters &tile, scr_type type,
         avg = true;
       rst = original_screen;
     }
-  if (type == Random)
+  if (!screen_has_regular_geometry_p (type))
     return false;
   if (rst != original_screen)
     {

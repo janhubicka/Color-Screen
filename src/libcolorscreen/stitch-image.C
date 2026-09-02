@@ -770,7 +770,7 @@ stitch_image::analyze (stitch_project *prj, detect_regular_screen_params *dspara
     }
   analyze_dufay *dufay = nullptr;
   analyze_paget *paget = nullptr;
-  if (m_prj->scr_param.type == Random)
+  if (m_prj->scr_param.type == NoScreen)
     {
       m_prj->scr_param.type = param.type;
       m_prj->scr_param.scanner_type = param.scanner_type;
