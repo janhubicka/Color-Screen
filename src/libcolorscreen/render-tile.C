@@ -16,6 +16,7 @@
 #include "render-scr-detect.h"
 #include "render-screen.h"
 #include "render-simulate.h"
+#include <memory>
 
 namespace colorscreen
 {
@@ -443,22 +444,29 @@ render_tile_final_impl (render_type_parameters rtparam,
   if (tile.width <= 0 || tile.height <= 0)
     return true;
 
-  scr_to_img map;
-  if (!map.set_parameters (map_param, img))
+  /* The final-coordinate loop can run under OpenMP from a Qt thread-pool
+     worker.  Do not publish addresses of renderer/map objects living on that
+     worker's stack into the outlined OpenMP region: macOS ASan catches this
+     as an invalid stack access when the GUI rapidly replaces preview frames.
+     Keep the owning objects alive here and give OpenMP only copied pointers. */
+  auto map_holder = std::make_unique<scr_to_img> ();
+  scr_to_img *map = map_holder.get ();
+  if (!map->set_parameters (map_param, img))
     return false;
 
-  T render (engine_param, img, rparam, 255);
-  render.compute_final_range ();
-  render.set_render_type (rtparam);
+  auto render_holder = std::make_unique<T> (engine_param, img, rparam, 255);
+  T *render = render_holder.get ();
+  render->compute_final_range ();
+  render->set_render_type (rtparam);
   if (progress)
     progress->set_task ("precomputing", 1);
   {
     sub_task task (progress);
-    if (!render.precompute_all (progress))
+    if (!render->precompute_all (progress))
       return false;
   }
 
-  const int_image_area final_range (map.get_final_range (img.width, img.height));
+  const int_image_area final_range (map->get_final_range (img.width, img.height));
   const int final_xshift = -final_range.x;
   const int final_yshift = -final_range.y;
 
@@ -469,35 +477,47 @@ render_tile_final_impl (render_type_parameters rtparam,
   const luminosity_t sample_scale
       = 1 / (luminosity_t)(antialias * antialias);
 
+  /* Likewise copy tile geometry and the output buffer pointer into the
+     OpenMP data environment instead of repeatedly dereferencing TILE, which
+     belongs to the caller's stack. */
+  unsigned char *pixels = tile.pixels;
+  const int pixelbytes = tile.pixelbytes;
+  const int rowstride = tile.rowstride;
+  const int width = tile.width;
+  const int height = tile.height;
+  const coord_t pos_x = tile.pos.x;
+  const coord_t pos_y = tile.pos.y;
+  const coord_t step = tile.step;
+
   if (progress)
-    progress->set_task ("rendering", tile.height);
-#pragma omp parallel for default(none) shared(tile,render,map,progress,final_xshift,final_yshift,antialias,substep,sample_scale) if (tile.width * (size_t)tile.height > render.openmp_size ())
-  for (int y = 0; y < tile.height; y++)
+    progress->set_task ("rendering", height);
+#pragma omp parallel for default(none) firstprivate(render,map,progress,pixels,pixelbytes,rowstride,width,height,pos_x,pos_y,step,final_xshift,final_yshift,antialias,substep,sample_scale) if (width * (size_t)height > render->openmp_size ())
+  for (int y = 0; y < height; y++)
     {
       if (!progress || !progress->cancel_requested ())
-        for (int x = 0; x < tile.width; x++)
+        for (int x = 0; x < width; x++)
           {
             rgbdata d = {0, 0, 0};
-            coord_t xx = (x + tile.pos.x) * tile.step;
-            coord_t yy = (y + tile.pos.y) * tile.step;
+            coord_t xx = (x + pos_x) * step;
+            coord_t yy = (y + pos_y) * step;
             if (antialias == 1)
-              d = sample_data_final (render, map, xx, yy, final_xshift,
+              d = sample_data_final (*render, *map, xx, yy, final_xshift,
                                      final_yshift);
             else
               {
                 for (int ay = 0; ay < antialias; ay++)
                   for (int ax = 0; ax < antialias; ax++)
                     d += sample_data_final (
-                        render, map, xx + (ax + (coord_t)0.5) * substep,
+                        *render, *map, xx + (ax + (coord_t)0.5) * substep,
                         yy + (ay + (coord_t)0.5) * substep, final_xshift,
                         final_yshift);
                 d.red *= sample_scale;
                 d.green *= sample_scale;
                 d.blue *= sample_scale;
               }
-            int_rgbdata out_c = render.out_color.final_color (d);
-            putpixel (tile.pixels, tile.pixelbytes, tile.rowstride, x, y,
-                      out_c.red, out_c.green, out_c.blue);
+            int_rgbdata out_c = render->out_color.final_color (d);
+            putpixel (pixels, pixelbytes, rowstride, x, y, out_c.red,
+                      out_c.green, out_c.blue);
           }
       if (progress)
         progress->inc_progress ();
