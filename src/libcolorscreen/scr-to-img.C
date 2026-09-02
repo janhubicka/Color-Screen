@@ -25,9 +25,9 @@ const render_parameters::capture_type_property render_parameters::capture_proper
     render_parameters::capture_type_property::SUPPORTS_SCR_DETECT },
   { "negative-screen-rgb-ir", "Color negative + IR with screen",
     render_parameters::capture_type_property::SUPPORTS_SCR_DETECT | render_parameters::capture_type_property::HAS_IR },
-  { "positive-screen-mono", "Monochrome positive with screen",
+  { "positive-mono", "Monochrome positive (no color screen)",
     render_parameters::capture_type_property::MAYBE_MONOCHROMATIC_DEMOSAIC },
-  { "negative-screen-mono", "Monochrome negative with screen",
+  { "negative-mono", "Monochrome negative (no color screen)",
     render_parameters::capture_type_property::MAYBE_MONOCHROMATIC_DEMOSAIC },
   { "ordinary-image", "Ordinary image (no color screen)", 0 },
 };

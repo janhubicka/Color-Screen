@@ -122,7 +122,8 @@ void CapturePanel::setupUi()
               m_captureTypeCombo->itemData(index).toInt());
       applyChange([capture](ParameterState &state) {
         state.rparams.capture_type = capture;
-        if (capture == colorscreen::render_parameters::capture_plain_image)
+        if (capture != colorscreen::render_parameters::capture_unknown &&
+            !colorscreen::render_parameters::capture_has_screen_p(capture))
           state.scrToImg.type = colorscreen::NoScreen;
       }, "Capture type");
     });
@@ -411,14 +412,37 @@ void CapturePanel::setupUi()
         [onUseDetectedWavelengths]() { onUseDetectedWavelengths(); });
 
     auto updateInfoLabels = [this, sensorWidthSlider](const ParameterState &state) {
-        m_captureTypeCombo->blockSignals(true);
-        int captureIndex = m_captureTypeCombo->findData(
-            (int)state.rparams.capture_type);
-        if (captureIndex >= 0)
-            m_captureTypeCombo->setCurrentIndex(captureIndex);
-        m_captureTypeCombo->blockSignals(false);
-
         auto img = m_imageGetter();
+
+        // The stored parameter can come from another image. Rebuild the
+        // selector from this scan's channel capabilities and display Unknown
+        // when the stored choice is incompatible instead of inventing a
+        // different physical capture type.
+        m_captureTypeCombo->blockSignals(true);
+        m_captureTypeCombo->clear();
+        for (int i = 0;
+             i < (int)colorscreen::render_parameters::capture_max; ++i) {
+          const auto capture = static_cast<decltype(
+              colorscreen::render_parameters::capture_unknown)>(i);
+          if (!img || capture == colorscreen::render_parameters::capture_unknown ||
+              colorscreen::render_parameters::capture_type_compatible_p(
+                  capture, img.get()))
+            m_captureTypeCombo->addItem(
+                QString::fromUtf8(colorscreen::render_parameters::
+                                      capture_properties[i].pretty_name),
+                i);
+        }
+        const auto effectiveCapture =
+            img ? state.rparams.get_capture_type(img.get())
+                : state.rparams.capture_type;
+        int captureIndex =
+            m_captureTypeCombo->findData((int)effectiveCapture);
+        if (captureIndex < 0)
+          captureIndex = m_captureTypeCombo->findData(
+              (int)colorscreen::render_parameters::capture_unknown);
+        if (captureIndex >= 0)
+          m_captureTypeCombo->setCurrentIndex(captureIndex);
+        m_captureTypeCombo->blockSignals(false);
         
         auto setVisibleRow = [&](QWidget *field, bool visible) {
             field->setVisible(visible);

@@ -10,6 +10,7 @@
 #include <QCoreApplication>
 #include <QDebug>
 #include <QEvent>
+#include <QFont>
 #include <QLabel>
 #include <QComboBox>
 #include <QList>
@@ -248,6 +249,20 @@ QLabel *nextStepSummary = inspector->findChild<QLabel *>(
     QStringLiteral("WorkflowNextStepSummary"));
 QComboBox *captureTypeCombo = inspector->findChild<QComboBox *>(
     QStringLiteral("CaptureTypeCombo"));
+bool captureChoicesCompatible = captureTypeCombo != nullptr;
+if (captureTypeCombo && first->sharedImageData()) {
+  for (int i = 0; i < captureTypeCombo->count(); ++i) {
+    const auto capture = static_cast<decltype(
+        colorscreen::render_parameters::capture_unknown)>(
+        captureTypeCombo->itemData(i).toInt());
+    if (capture != colorscreen::render_parameters::capture_unknown &&
+        !colorscreen::render_parameters::capture_type_compatible_p(
+            capture, first->sharedImageData().get())) {
+      captureChoicesCompatible = false;
+      break;
+    }
+  }
+}
 QLabel *mtfCalibrationStatus = inspector->findChild<QLabel *>(
     QStringLiteral("MtfCalibrationStatus"));
 QComboBox *mtfMeasurementSelector = inspector->findChild<QComboBox *>(
@@ -271,8 +286,14 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         QStringLiteral("Capture MTF:")) ||
     !calibrationSummary->text().contains(QStringLiteral("Profile:")) ||
     !nextStepSummary->text().startsWith(QStringLiteral("Next:")) ||
-    captureTypeCombo->count() !=
-        (int)colorscreen::render_parameters::capture_max) {
+    !captureChoicesCompatible ||
+    captureTypeCombo->findData(
+        (int)colorscreen::render_parameters::capture_unknown) < 0 ||
+    captureTypeCombo->findData(
+        (int)colorscreen::render_parameters::capture_plain_image) < 0 ||
+    processSummary->font().weight() < QFont::DemiBold ||
+    registrationSummary->font().weight() < QFont::DemiBold ||
+    calibrationSummary->font().weight() < QFont::DemiBold) {
   const QString detail = QStringLiteral(
       "Workspace churn source document lost the persistent workflow "
       "summary; stages=[%1], process=[%2], registration=[%3], "
