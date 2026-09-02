@@ -10,33 +10,35 @@
 #include "progress-info.h"
 
 #include <QAction>
-#include <QColor>
 #include <QCheckBox>
+#include <QColor>
 #include <QCommandLineOption>
 #include <QCommandLineParser>
 #include <QCoreApplication>
 #include <QDebug>
 #include <QDockWidget>
+#include <QFileInfo>
 #include <QIcon>
-#include <QPalette>
-#include <QPushButton>
 #include <QMdiArea>
+#include <QMdiSubWindow>
 #include <QMenu>
 #include <QMenuBar>
-#include <QMdiSubWindow>
 #include <QMouseEvent>
+#include <QPalette>
+#include <QPushButton>
 #include <QSettings>
-#include <QStyleFactory>
 #include <QStatusBar>
+#include <QStyleFactory>
 #include <QTabBar>
 #include <QThread>
 #include <QThreadPool>
-#include <QToolBar>
 #include <QTimer>
+#include <QToolBar>
 
 #include <cstring>
 #include <functional>
 #include <memory>
+#include <vector>
 
 /** Start the Qt GUI, restore any crashed document session, and open every
     positional image argument in an independent MainWindow.  */
@@ -262,7 +264,19 @@ int main(int argc, char *argv[]) {
   // pending recovery session when run locally.
   const bool restoredSession =
       !parser.isSet(smokeTestOption) && app.restoreRecoverySession();
-  const QStringList images = parser.positionalArguments();
+  QStringList images = parser.positionalArguments();
+  if (parser.isSet(smokeTestOption) && parser.isSet(newViewOption) &&
+      images.size() >= 2 &&
+      QFileInfo(images.at(0)).absoluteFilePath() ==
+          QFileInfo(images.at(1)).absoluteFilePath()) {
+    const QString monochromeFixture = QFileInfo(images.front()).absolutePath() +
+                                      QStringLiteral("/checkerboard.tif");
+    if (QFileInfo::exists(monochromeFixture)) {
+      qInfo() << "New View render smoke replacing duplicate RGB fixture with"
+              << monochromeFixture;
+      images[1] = monochromeFixture;
+    }
+  }
   if (!images.isEmpty())
     app.openFiles(images, nullptr, parser.isSet(smokeTestOption));
   else if (!restoredSession && app.documentWindows().isEmpty())
@@ -870,33 +884,67 @@ int main(int argc, char *argv[]) {
     QTimer::singleShot(300, &app,
                        [&app, newViewSmokeDone, maybeFinishStructuredSmoke]() {
       const QList<MainWindow *> documents = app.documentWindows();
-      if (documents.isEmpty() || !documents.front()->sharedImageData()) {
-        qCritical() << "New View smoke test requires a loaded document";
+      if (documents.size() < 2) {
+        qCritical() << "New View render-mode smoke requires RGB and monochrome "
+                       "documents";
         app.exit(14);
         return;
       }
 
-      MainWindow *source = documents.front();
+      MainWindow *source = nullptr;
+      MainWindow *monochromeSource = nullptr;
+      for (MainWindow *document : documents) {
+        const auto scan = document ? document->sharedImageData() : nullptr;
+        if (!scan)
+          continue;
+        if (scan->has_rgb() && !source)
+          source = document;
+        if (!scan->has_rgb() && !monochromeSource)
+          monochromeSource = document;
+      }
+      if (!source || !monochromeSource) {
+        qCritical() << "New View render-mode smoke did not receive both RGB "
+                       "and monochrome scans";
+        app.exit(14);
+        return;
+      }
+
       const auto sourceScan = source->sharedImageData();
+      const auto monochromeScan = monochromeSource->sharedImageData();
       const auto sourceType = source->viewRenderTypeParameters().type;
 
-      // Install a simple regular screen mapping so this smoke path exercises
-      // both the public final-coordinate tile API and the GUI selector without
-      // depending on a sidecar parameter file.
-      ParameterState coordinateState = source->documentStateSnapshot();
-      coordinateState.scrToImg.type = colorscreen::Dufay;
-      coordinateState.scrToImg.center =
-          {(colorscreen::coord_t)sourceScan->width / 2,
-           (colorscreen::coord_t)sourceScan->height / 2};
-      coordinateState.scrToImg.coordinate1 = {8, 0};
-      coordinateState.scrToImg.coordinate2 = {0, 8};
-      coordinateState.scrToImg.final_rotation = 12.5;
-      coordinateState.scrToImg.final_mirror = true;
-      // This state exists only to exercise coordinate rendering below.  Do not
-      // put it on the undo stack: the final-view lifetime check later in this
-      // smoke path must exercise closing a clean document, not maybeSave().
-      source->applyState(coordinateState);
+      auto installRenderSmokeState = [](MainWindow *document, const auto &scan,
+                                        bool correctionProfile) {
+        ParameterState state = document->documentStateSnapshot();
+        state.scrToImg.type = colorscreen::Dufay;
+        state.scrToImg.center = {(colorscreen::coord_t)scan->width / 2,
+                                 (colorscreen::coord_t)scan->height / 2};
+        state.scrToImg.coordinate1 = {8, 0};
+        state.scrToImg.coordinate2 = {0, 8};
+        state.scrToImg.final_rotation = 12.5;
+        state.scrToImg.final_mirror = true;
+        if (correctionProfile) {
+          // Near-identity but non-default profile: deliberately expose
+          // all correction-profile modes in this regression smoke.
+          state.rparams.profiled_red = {0.98, 0.01, 0.01};
+          state.rparams.profiled_green = {0.01, 0.98, 0.01};
+          state.rparams.profiled_blue = {0.01, 0.01, 0.98};
+        }
+        // Smoke-only setup must not dirty the document or add undo state.
+        document->applyState(state);
+        return state;
+      };
 
+      ParameterState coordinateState =
+          installRenderSmokeState(source, sourceScan, true);
+      ParameterState monochromeCoordinateState =
+          installRenderSmokeState(monochromeSource, monochromeScan, false);
+      if (!coordinateState.rparams.has_correction_profile()) {
+        qCritical()
+            << "RGB render-mode smoke failed to install correction profile";
+        app.exit(14);
+        return;
+      }
       auto basePresentation = coordinateState.rparams;
       basePresentation.scan_rotation = 0;
       basePresentation.scan_mirror = false;
@@ -932,26 +980,82 @@ int main(int argc, char *argv[]) {
         return;
       }
 
-      colorscreen::render_type_parameters apiRender;
-      apiRender.type = colorscreen::render_type_original;
-      apiRender.color = sourceScan->has_rgb();
-      colorscreen::tile_parameters apiTile;
-      std::vector<unsigned char> apiPixels(8 * 8 * 3);
-      apiTile.pixels = apiPixels.data();
-      apiTile.rowstride = 8 * 3;
-      apiTile.pixelbytes = 3;
-      apiTile.width = 8;
-      apiTile.height = 8;
-      apiTile.pos = {0, 0};
-      apiTile.step = 1;
-      auto apiRparams = coordinateState.rparams;
-      auto apiScrToImg = coordinateState.scrToImg;
-      auto apiDetect = coordinateState.detect;
-      if (!colorscreen::render_tile(*sourceScan, apiScrToImg, apiDetect,
-                                    apiRparams, apiRender, apiTile,
-                                    colorscreen::render_final_coordinates,
-                                    nullptr)) {
-        qCritical() << "Public render_tile final-coordinate API failed";
+      auto renderModeAvailable = [](const ParameterState &state,
+                                    const auto &scan,
+                                    colorscreen::render_type_t type) {
+        const auto &prop =
+            colorscreen::render_type_properties[static_cast<int>(type)];
+        if (prop.flags & colorscreen::render_type_property::HIDE_IN_GUI)
+          return false;
+        if ((prop.flags &
+             colorscreen::render_type_property::NEEDS_SCR_TO_IMG) &&
+            state.scrToImg.type == colorscreen::Random)
+          return false;
+        if ((prop.flags & colorscreen::render_type_property::NEEDS_RGB) &&
+            (!scan || !scan->has_rgb()))
+          return false;
+        if ((prop.flags &
+             colorscreen::render_type_property::NEEDS_CORRECTION_PROFILE) &&
+            !state.rparams.has_correction_profile())
+          return false;
+        return true;
+      };
+
+      auto exerciseRenderApi = [&renderModeAvailable](
+                                   const char *label, const auto &scan,
+                                   const ParameterState &state) {
+        std::vector<unsigned char> pixels(2 * 2 * 3);
+        for (colorscreen::render_coordinate_space coordinates :
+             {colorscreen::render_scan_coordinates,
+              colorscreen::render_final_coordinates}) {
+          for (int i = 0; i < colorscreen::render_type_max; ++i) {
+            const auto type = static_cast<colorscreen::render_type_t>(i);
+            if (!renderModeAvailable(state, scan, type))
+              continue;
+            const auto &prop = colorscreen::render_type_properties[i];
+            const char *coordinateName =
+                coordinates == colorscreen::render_scan_coordinates ? "scan"
+                                                                    : "screen";
+            qInfo() << "Render-mode API smoke" << label << coordinateName
+                    << prop.pretty_name;
+
+            colorscreen::render_type_parameters apiRender;
+            apiRender.type = type;
+            apiRender.color = scan->has_rgb();
+            colorscreen::tile_parameters apiTile;
+            apiTile.pixels = pixels.data();
+            apiTile.rowstride = 2 * 3;
+            apiTile.pixelbytes = 3;
+            apiTile.width = 2;
+            apiTile.height = 2;
+            apiTile.pos =
+                coordinates == colorscreen::render_scan_coordinates
+                    ? colorscreen::point_t{(colorscreen::coord_t)scan->width /
+                                                   2 -
+                                               1,
+                                           (colorscreen::coord_t)scan->height /
+                                                   2 -
+                                               1}
+                    : colorscreen::point_t{0, 0};
+            apiTile.step = 1;
+            auto apiRparams = state.rparams;
+            auto apiScrToImg = state.scrToImg;
+            auto apiDetect = state.detect;
+            if (!colorscreen::render_tile(*scan, apiScrToImg, apiDetect,
+                                          apiRparams, apiRender, apiTile,
+                                          coordinates, nullptr)) {
+              qCritical() << "Render-mode API smoke failed" << label
+                          << coordinateName << prop.pretty_name;
+              return false;
+            }
+          }
+        }
+        return true;
+      };
+
+      if (!exerciseRenderApi("RGB", sourceScan, coordinateState) ||
+          !exerciseRenderApi("monochrome", monochromeScan,
+                             monochromeCoordinateState)) {
         app.exit(14);
         return;
       }
@@ -1173,16 +1277,78 @@ int main(int argc, char *argv[]) {
         return;
       }
 
+      auto exerciseViewModes =
+          [&renderModeAvailable](const char *label, ImageViewWindow *target,
+                                 const ParameterState &state,
+                                 const auto &scan) {
+            for (colorscreen::render_coordinate_space coordinates :
+                 {colorscreen::render_scan_coordinates,
+                  colorscreen::render_final_coordinates}) {
+              if (!target->setCoordinateSpace(coordinates) ||
+                  target->coordinateSpace() != coordinates) {
+                qCritical()
+                    << "GUI render-mode smoke could not select coordinate space"
+                    << label << (int)coordinates;
+                return false;
+              }
+              for (int i = 0; i < colorscreen::render_type_max; ++i) {
+                const auto type = static_cast<colorscreen::render_type_t>(i);
+                if (!renderModeAvailable(state, scan, type))
+                  continue;
+                const auto &prop = colorscreen::render_type_properties[i];
+                qInfo() << "GUI render-mode smoke" << label
+                        << (coordinates == colorscreen::render_scan_coordinates
+                                ? "scan"
+                                : "screen")
+                        << prop.pretty_name;
+                if (!target->setRenderType(type) ||
+                    target->renderType() != type) {
+                  qCritical() << "GUI render-mode smoke could not select mode"
+                              << label << prop.pretty_name;
+                  return false;
+                }
+              }
+            }
+            return true;
+          };
+
+      if (!exerciseViewModes("RGB", view, coordinateState, sourceScan) ||
+          source->viewRenderTypeParameters().type != sourceType) {
+        qCritical()
+            << "RGB New View render/coordinate modes are not independent";
+        app.exit(14);
+        return;
+      }
+
+      ImageViewWindow *monochromeView = app.createViewWindow(monochromeSource);
+      QPointer<ImageViewWindow> guardedMonochromeView(monochromeView);
+      if (!monochromeView ||
+          monochromeView->sourceDocument() != monochromeSource ||
+          monochromeView->sharedImageData() != monochromeScan ||
+          !exerciseViewModes("monochrome", monochromeView,
+                             monochromeCoordinateState, monochromeScan) ||
+          !app.closeView(monochromeView)) {
+        qCritical() << "Monochrome New View render-mode smoke failed";
+        app.exit(14);
+        return;
+      }
+      QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+      QCoreApplication::processEvents();
+      if (guardedMonochromeView ||
+          app.documentWindows().size() != documents.size()) {
+        qCritical()
+            << "Monochrome render-mode smoke left a secondary view behind";
+        app.exit(14);
+        return;
+      }
+
       colorscreen::render_type_t alternate = sourceType;
-      const colorscreen::render_type_t candidates[] = {
-          colorscreen::render_type_original,
-          colorscreen::render_type_image_layer,
-          colorscreen::render_type_interpolated,
-          colorscreen::render_type_realistic,
-          colorscreen::render_type_screen};
       bool changed = false;
-      for (colorscreen::render_type_t candidate : candidates) {
-        if (candidate != sourceType && view->setRenderType(candidate)) {
+      for (int i = 0; i < colorscreen::render_type_max; ++i) {
+        const auto candidate = static_cast<colorscreen::render_type_t>(i);
+        if (candidate != sourceType &&
+            renderModeAvailable(coordinateState, sourceScan, candidate) &&
+            view->setRenderType(candidate)) {
           alternate = candidate;
           changed = true;
           break;
@@ -1194,7 +1360,6 @@ int main(int argc, char *argv[]) {
         app.exit(14);
         return;
       }
-
       // The primary presentation is a peer of New View. Closing it must keep
       // the logical document and shared image alive until this final view also
       // closes. This simultaneously covers destruction of one loaded document

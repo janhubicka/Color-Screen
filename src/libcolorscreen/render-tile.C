@@ -505,8 +505,57 @@ render_tile_final_impl (render_type_parameters rtparam,
   return (!progress || !progress->cancelled ());
 }
 
+/* Dispatch scan-coordinate rendering by mode, not by enum position.  The
+   render type order is a UI concern and must not decide which renderer owns a
+   mode.  */
+static bool
+render_tile_scan (image_data &scan, scr_to_img_parameters &param,
+                  scr_detect_parameters &dparam, render_parameters &rparam,
+                  render_type_parameters &rtparam, tile_parameters &tile,
+                  progress_info *progress)
+{
+  switch (rtparam.type)
+    {
+    case render_type_original:
+    case render_type_interpolated:
+    case render_type_predictive:
+    case render_type_image_layer:
+    case render_type_screen:
+    case render_type_realistic:
+    case render_type_combined:
+    case render_type_interpolated_original:
+    case render_type_preview_grid:
+    case render_type_simulate_process:
+    case render_type_fast:
+    case render_type_extra:
+    case render_type_profiled_original:
+    case render_type_interpolated_profiled_original:
+    case render_type_interpolated_diff:
+      return render_to_scr::render_tile (
+          rtparam, param, scan, rparam, tile.pixels, tile.pixelbytes,
+          tile.rowstride, tile.width, tile.height, tile.pos.x, tile.pos.y,
+          tile.step, progress);
+
+    case render_type_adjusted_color:
+    case render_type_normalized_color:
+    case render_type_pixel_colors:
+    case render_type_realistic_scr:
+    case render_type_scr_nearest:
+    case render_type_scr_nearest_scaled:
+    case render_type_scr_relax:
+      return render_scr_detect::render_tile (
+          rtparam, dparam, scan, rparam, tile.pixels, tile.pixelbytes,
+          tile.rowstride, tile.width, tile.height, tile.pos.x, tile.pos.y,
+          tile.step, progress);
+
+    default:
+      abort ();
+    }
+}
+
 /* Dispatch final-coordinate tile rendering using the same renderer-specific
-   sampling policies as render_to_file.  */
+   sampling policies as render_to_file.  Every mode is explicit here so
+   reordering render_type_t cannot silently change renderer ownership.  */
 static bool
 render_tile_final (image_data &scan, scr_to_img_parameters &param,
                    scr_detect_parameters &dparam, render_parameters &rparam,
@@ -515,78 +564,66 @@ render_tile_final (image_data &scan, scr_to_img_parameters &param,
 {
   if (scan.stitch)
     {
-      /* The existing stitched tile renderer already consumes zero-based final
-         viewport coordinates; stitched projects have no useful scan canvas.  */
-      if ((int)rtparam.type < (int)render_type_first_scr_detect
-          && rtparam.type != render_type_interpolated_diff)
-        return render_to_scr::render_tile (
-            rtparam, param, scan, rparam, tile.pixels, tile.pixelbytes,
-            tile.rowstride, tile.width, tile.height, tile.pos.x, tile.pos.y,
-            tile.step, progress);
-      return render_scr_detect::render_tile (
-          rtparam, dparam, scan, rparam, tile.pixels, tile.pixelbytes,
-          tile.rowstride, tile.width, tile.height, tile.pos.x, tile.pos.y,
-          tile.step, progress);
+      /* The stitched tile renderer already consumes zero-based final
+         viewport coordinates; stitched projects have no useful scan canvas. */
+      return render_tile_scan (scan, param, dparam, rparam, rtparam, tile,
+                               progress);
     }
 
-  if ((int)rtparam.type < (int)render_type_first_scr_detect
-      && rtparam.type != render_type_interpolated_diff)
-    {
-      sanitize_render_parameters (rtparam, param, scan);
-      render_parameters my_rparam;
-      my_rparam.adjust_for (rtparam, rparam);
-      switch (rtparam.type)
-        {
-        case render_type_original:
-        case render_type_profiled_original:
-        case render_type_image_layer:
-          return render_tile_final_impl<render_img, sample_data_final_by_img> (
-              rtparam, param, param, scan, my_rparam, tile, progress);
-        case render_type_preview_grid:
-        case render_type_realistic:
-          return render_tile_final_impl<render_superpose_img,
-                                        sample_data_final_by_img> (
-              rtparam, param, param, scan, my_rparam, tile, progress);
-        case render_type_screen:
-          my_rparam.brightness = 1;
-          return render_tile_final_impl<render_screen, sample_data_final_by_scr> (
-              rtparam, param, param, scan, my_rparam, tile, progress);
-        case render_type_simulate_process:
-          return render_tile_final_impl<render_simulate_process,
-                                        sample_data_final_by_img> (
-              rtparam, param, param, scan, my_rparam, tile, progress);
-        case render_type_interpolated_original:
-        case render_type_interpolated_profiled_original:
-        case render_type_interpolated:
-        case render_type_combined:
-        case render_type_predictive:
-          return render_tile_final_impl<render_interpolate,
-                                        sample_data_final_by_final> (
-              rtparam, param, param, scan, my_rparam, tile, progress);
-        case render_type_extra:
-#ifdef RENDER_EXTRA
-          return render_tile_final_impl<render_extra, sample_data_final_by_final> (
-              rtparam, param, param, scan, my_rparam, tile, progress);
-#endif
-        case render_type_fast:
-          return render_tile_final_impl<render_fast, sample_data_final_by_scr> (
-              rtparam, param, param, scan, my_rparam, tile, progress);
-        default:
-          abort ();
-        }
-    }
-
+  sanitize_render_parameters (rtparam, param, scan);
   if (rtparam.type == render_type_scr_nearest
       || rtparam.type == render_type_scr_nearest_scaled
       || rtparam.type == render_type_scr_relax)
     rtparam.antialias = false;
+
   render_parameters my_rparam;
   my_rparam.adjust_for (rtparam, rparam);
   switch (rtparam.type)
     {
+    case render_type_original:
+    case render_type_profiled_original:
+    case render_type_image_layer:
+      return render_tile_final_impl<render_img, sample_data_final_by_img> (
+          rtparam, param, param, scan, my_rparam, tile, progress);
+
+    case render_type_preview_grid:
+    case render_type_realistic:
+      return render_tile_final_impl<render_superpose_img,
+                                    sample_data_final_by_img> (
+          rtparam, param, param, scan, my_rparam, tile, progress);
+
+    case render_type_screen:
+      my_rparam.brightness = 1;
+      return render_tile_final_impl<render_screen, sample_data_final_by_scr> (
+          rtparam, param, param, scan, my_rparam, tile, progress);
+
+    case render_type_simulate_process:
+      return render_tile_final_impl<render_simulate_process,
+                                    sample_data_final_by_img> (
+          rtparam, param, param, scan, my_rparam, tile, progress);
+
+    case render_type_interpolated_original:
+    case render_type_interpolated_profiled_original:
+    case render_type_interpolated:
+    case render_type_combined:
+    case render_type_predictive:
+      return render_tile_final_impl<render_interpolate,
+                                    sample_data_final_by_final> (
+          rtparam, param, param, scan, my_rparam, tile, progress);
+
+    case render_type_extra:
+#ifdef RENDER_EXTRA
+      return render_tile_final_impl<render_extra, sample_data_final_by_final> (
+          rtparam, param, param, scan, my_rparam, tile, progress);
+#endif
+    case render_type_fast:
+      return render_tile_final_impl<render_fast, sample_data_final_by_scr> (
+          rtparam, param, param, scan, my_rparam, tile, progress);
+
     case render_type_interpolated_diff:
       return render_tile_final_impl<render_diff, sample_data_final_by_scr> (
           rtparam, param, param, scan, my_rparam, tile, progress);
+
     case render_type_adjusted_color:
       return render_tile_final_impl<render_scr_detect_adjusted,
                                     sample_data_final_by_img> (
@@ -604,15 +641,18 @@ render_tile_final (image_data &scan, scr_to_img_parameters &param,
                                     sample_data_final_by_img> (
           rtparam, param, dparam, scan, my_rparam, tile, progress);
     case render_type_scr_nearest:
-      return render_tile_final_impl<render_scr_nearest, sample_data_final_by_img> (
+      return render_tile_final_impl<render_scr_nearest,
+                                    sample_data_final_by_img> (
           rtparam, param, dparam, scan, my_rparam, tile, progress);
     case render_type_scr_nearest_scaled:
       return render_tile_final_impl<render_scr_nearest_scaled,
                                     sample_data_final_by_img> (
           rtparam, param, dparam, scan, my_rparam, tile, progress);
     case render_type_scr_relax:
-      return render_tile_final_impl<render_scr_relax, sample_data_final_by_img> (
+      return render_tile_final_impl<render_scr_relax,
+                                    sample_data_final_by_img> (
           rtparam, param, dparam, scan, my_rparam, tile, progress);
+
     default:
       abort ();
     }
@@ -642,17 +682,7 @@ render_tile (image_data &scan, scr_to_img_parameters &param,
   if (coordinates == render_final_coordinates)
     return render_tile_final (scan, param, dparam, rparam, rtparam, tile,
                               progress);
-
-  if ((int)rtparam.type < (int)render_type_first_scr_detect
-      && rtparam.type != render_type_interpolated_diff)
-    return render_to_scr::render_tile (
-        rtparam, param, scan, rparam, tile.pixels, tile.pixelbytes,
-        tile.rowstride, tile.width, tile.height, tile.pos.x, tile.pos.y,
-        tile.step, progress);
-  else
-    return render_scr_detect::render_tile (
-        rtparam, dparam, scan, rparam, tile.pixels, tile.pixelbytes,
-        tile.rowstride, tile.width, tile.height, tile.pos.x, tile.pos.y,
-        tile.step, progress);
+  return render_tile_scan (scan, param, dparam, rparam, rtparam, tile,
+                           progress);
 }
 } // namespace colorscreen
