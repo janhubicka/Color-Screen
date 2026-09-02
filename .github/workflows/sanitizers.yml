@@ -502,9 +502,12 @@ jobs:
             --smoke-test-tile-activation-stable --smoke-test-menu-order \
             "$image" "$image"
 
-        run_asan_smoke detached-views 60 \
+        # The renderer sweep now covers every GUI mode for RGB and monochrome
+        # images in both coordinate spaces. Give the sanitized Windows build
+        # enough time for that real work while keeping the watchdog bounded.
+        run_asan_smoke detached-views 360 \
           ./src/qtgui/colorscreen-qt \
-            --smoke-test 30000 --smoke-test-expect-windows 2 \
+            --smoke-test 150000 --smoke-test-expect-windows 2 \
             --smoke-test-new-view --smoke-test-slanted-reference \
             "$image" "$image"
 
