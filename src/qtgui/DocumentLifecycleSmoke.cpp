@@ -19,6 +19,7 @@
 #include <QString>
 #include <QTemporaryDir>
 #include <QThread>
+#include <QThreadPool>
 #include <QTimer>
 
 #include <atomic>
@@ -216,6 +217,7 @@ void startTaskQueueAsyncPublicationSmoke(ColorScreenApplication &app,
     bool olderDone = false;
     bool newerDone = false;
     bool failed = false;
+    int originalThreadPoolLimit = 0;
     std::function<void()> completed;
   };
 
@@ -223,19 +225,36 @@ void startTaskQueueAsyncPublicationSmoke(ColorScreenApplication &app,
   state->completed = std::move(completed);
   state->queue = new TaskQueue(&app);
 
+  // runAsync() uses QtConcurrent's global pool.  Some CI runners intentionally
+  // expose a single worker thread; the race below requires two workers because
+  // the older one remains blocked until the newer completion supersedes it.
+  // Temporarily guarantee the concurrency the test needs and restore the
+  // application's original limit as soon as the probe completes.
+  QThreadPool *pool = QThreadPool::globalInstance();
+  state->originalThreadPoolLimit = pool->maxThreadCount();
+  if (state->originalThreadPoolLimit < 2)
+    pool->setMaxThreadCount(2);
+
+  auto restorePoolLimit = [state]() {
+    QThreadPool::globalInstance()->setMaxThreadCount(
+        state->originalThreadPoolLimit);
+  };
+
   auto finish = std::make_shared<std::function<void()>>();
-  *finish = [&app, state]() {
+  *finish = [state, restorePoolLimit]() {
     if (state->failed || !state->olderDone || !state->newerDone)
       return;
     if (state->queue)
       state->queue->deleteLater();
+    restorePoolLimit();
     state->completed();
   };
 
-  auto fail = [&app, state](const char *message) {
+  auto fail = [&app, state, restorePoolLimit](const char *message) {
     if (state->failed)
       return;
     state->failed = true;
+    restorePoolLimit();
     qCritical() << message;
     app.exit(documentLifecycleFailure);
   };
