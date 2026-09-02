@@ -263,6 +263,10 @@ if (captureTypeCombo && first->sharedImageData()) {
     }
   }
 }
+QLabel *profileCalibrationStatus = inspector->findChild<QLabel *>(
+    QStringLiteral("ProfileCalibrationStatus"));
+QPushButton *profileOptimizeButton = inspector->findChild<QPushButton *>(
+    QStringLiteral("ProfileOptimizeButton"));
 QLabel *mtfCalibrationStatus = inspector->findChild<QLabel *>(
     QStringLiteral("MtfCalibrationStatus"));
 QComboBox *mtfMeasurementSelector = inspector->findChild<QComboBox *>(
@@ -317,6 +321,17 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
     return;
   return;
 }
+
+        const qsizetype profileSpotCount = static_cast<qsizetype>(
+            first->documentStateSnapshot().profileSpots.size());
+        if (!profileCalibrationStatus || !profileOptimizeButton ||
+            !profileCalibrationStatus->text().startsWith(
+                QStringLiteral("Profile:")) ||
+            (profileSpotCount < 4 && profileOptimizeButton->isEnabled())) {
+          fail(QStringLiteral(
+              "Workspace churn lost profile calibration freshness/prerequisite state"));
+          return;
+        }
 
         if (!mtfCalibrationStatus || !mtfMeasurementSelector ||
             !mtfMeasurementProvenance || !mtfMeasurementLocate ||

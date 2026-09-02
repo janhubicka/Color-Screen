@@ -67,15 +67,25 @@ void ProfilePanel::setupUi()
   m_autoCheck->setObjectName("autoColorOptBox");
   m_form->addRow(m_autoCheck);
 
-  auto *optimizeBtn = new QPushButton(tr("Optimize color"), this);
-  m_form->addRow(optimizeBtn);
+  m_optimizeBtn = new QPushButton(tr("Optimize color"), this);
+  m_optimizeBtn->setObjectName(QStringLiteral("ProfileOptimizeButton"));
+  m_optimizeBtn->setToolTip(
+      tr("Fit the scanner/process color profile from at least four spots."));
+  m_form->addRow(m_optimizeBtn);
+
+  // Freshness is owned by MainWindow because it must survive panel refreshes
+  // and gate asynchronous optimizer publication.  The panel only presents it.
+  m_statusLabel = new QLabel(tr("Profile: no calibration spots"), this);
+  m_statusLabel->setObjectName(QStringLiteral("ProfileCalibrationStatus"));
+  m_statusLabel->setWordWrap(true);
+  m_form->addRow(tr("Status:"), m_statusLabel);
 
   // Result summary label
   m_resultLabel = new QLabel(tr("—"), this);
   m_resultLabel->setWordWrap(true);
   m_form->addRow(tr("Result:"), m_resultLabel);
 
-  connect(optimizeBtn, &QPushButton::clicked, this, [this]() {
+  connect(m_optimizeBtn, &QPushButton::clicked, this, [this]() {
     emit optimizeColorRequested(m_autoCheck->isChecked());
   });
   connect(m_autoCheck, &QCheckBox::toggled, this, [this](bool checked) {
@@ -86,7 +96,7 @@ void ProfilePanel::setupUi()
     // changes render parameters and therefore refreshes every panel; without
     // this snapshot that refresh would look like another auto trigger.
     m_lastAutoSpots = m_stateGetter().profileSpots;
-    if (!m_lastAutoSpots.empty())
+    if (m_lastAutoSpots.size() >= 4)
       emit optimizeColorRequested(true);
   });
 }
@@ -105,6 +115,8 @@ void ProfilePanel::onParametersRefreshed(const ParameterState &state)
   m_spotCountLabel->setText(n == 0 ? tr("No spots") :
                             n == 1 ? tr("1 spot")    :
                             tr("%1 spots").arg(n));
+  if (m_optimizeBtn)
+    m_optimizeBtn->setEnabled(n >= 4);
 
   // Auto-trigger only when the profile-spot set itself changed.  Parameter
   // refreshes also happen when an optimization result is applied; treating
@@ -121,8 +133,15 @@ void ProfilePanel::onParametersRefreshed(const ParameterState &state)
     }
   }
   m_lastAutoSpots = state.profileSpots;
-  if (isAutoEnabled() && spotsChanged && n > 0)
+  if (isAutoEnabled() && spotsChanged && n >= 4)
     emit optimizeColorRequested(true);
+}
+
+/** Present document-owned profile fit freshness without owning that state. */
+void ProfilePanel::setCalibrationStatus(const QString &status)
+{
+  if (m_statusLabel)
+    m_statusLabel->setText(status);
 }
 
 void ProfilePanel::setSpotResults(const std::vector<colorscreen::color_match> &results)
