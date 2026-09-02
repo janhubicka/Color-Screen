@@ -441,6 +441,10 @@ private:
   bool acceptsInspectorImageWidget(ImageWidget *imageWidget) const;
 
   void updateWindowTitle(); // Helper to update window title
+
+  /** Refresh the compact persistent processing-stage summary in the inspector. */
+  void updateWorkflowSummary();
+
   /** Refresh focus-analysis rectangles in the ordinary view currently
       presenting this document's inspector. */
   void updateFocusAreaOverlays();
@@ -529,6 +533,9 @@ private:
   QWidget *m_rightColumn;
   NavigationView *m_navigationView;
   MultiLineTabWidget *m_configTabs;
+  QLabel *m_workflowProcessLabel = nullptr;
+  QLabel *m_workflowRegistrationLabel = nullptr;
+  QLabel *m_workflowCalibrationLabel = nullptr;
 
   QToolBar *m_toolbar;        // New toolbar
   QComboBox *m_modeComboBox;  // Mode selector

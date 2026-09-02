@@ -662,9 +662,53 @@ void MainWindow::setupUi() {
   m_rightColumn->setObjectName(QStringLiteral("DocumentInspector"));
   QVBoxLayout *rightLayout = new QVBoxLayout(m_rightColumn);
   rightLayout->setContentsMargins(0, 0, 0, 0);
+  rightLayout->setSpacing(4);
+
+  // Keep the major processing stages and the document's current readiness
+  // visible without forcing an operator to inspect several specialist tabs.
+  // This deliberately reports only state that can be derived reliably from
+  // existing document parameters; later revision counters can add explicit
+  // Completed/Stale analysis states without changing this presentation.
+  QFrame *workflowSummary = new QFrame(m_rightColumn);
+  workflowSummary->setObjectName(QStringLiteral("WorkflowSummary"));
+  workflowSummary->setFrameShape(QFrame::StyledPanel);
+  workflowSummary->setFrameShadow(QFrame::Plain);
+  auto *workflowLayout = new QVBoxLayout(workflowSummary);
+  workflowLayout->setContentsMargins(6, 4, 6, 4);
+  workflowLayout->setSpacing(1);
+
+  auto *workflowStages = new QLabel(
+      tr("Capture → Process → Register → Reconstruct → Color"),
+      workflowSummary);
+  workflowStages->setObjectName(QStringLiteral("WorkflowStages"));
+  workflowStages->setWordWrap(true);
+  workflowStages->setToolTip(tr(
+      "Color-Screen processing stages. The specialist tabs below remain in "
+      "their existing beta order."));
+  workflowLayout->addWidget(workflowStages);
+
+  m_workflowProcessLabel = new QLabel(workflowSummary);
+  m_workflowProcessLabel->setObjectName(
+      QStringLiteral("WorkflowProcessSummary"));
+  m_workflowProcessLabel->setWordWrap(true);
+  workflowLayout->addWidget(m_workflowProcessLabel);
+
+  m_workflowRegistrationLabel = new QLabel(workflowSummary);
+  m_workflowRegistrationLabel->setObjectName(
+      QStringLiteral("WorkflowRegistrationSummary"));
+  m_workflowRegistrationLabel->setWordWrap(true);
+  workflowLayout->addWidget(m_workflowRegistrationLabel);
+
+  m_workflowCalibrationLabel = new QLabel(workflowSummary);
+  m_workflowCalibrationLabel->setObjectName(
+      QStringLiteral("WorkflowCalibrationSummary"));
+  m_workflowCalibrationLabel->setWordWrap(true);
+  workflowLayout->addWidget(m_workflowCalibrationLabel);
+
+  rightLayout->addWidget(workflowSummary);
 
   QSplitter *rightSplitter = new QSplitter(Qt::Vertical, m_rightColumn);
-  rightLayout->addWidget(rightSplitter);
+  rightLayout->addWidget(rightSplitter, 1);
 
   // Top Right: Navigation View
   m_navigationView = new NavigationView(this);
@@ -884,25 +928,27 @@ void MainWindow::setupUi() {
   m_configTabs->addTab(m_colorPanel, "Color");
   m_configTabs->addTab(m_profilePanel, "Profile");
 
-  m_configTabs->setTabToolTip(0, "Configure demosaicking, resolution, sensor "
-                                 "parameters, and image gamma.");
-  m_configTabs->setTabToolTip(1, "Manage per-tile adjustments (exposure, dark "
-                                 "point) for stitched images.");
-  m_configTabs->setTabToolTip(2, "Configure sharpening algorithms (Wiener, "
-                                 "Richardson-Lucy, USM) and MTF models.");
-  m_configTabs->setTabToolTip(3, "Configure simulated mixing and layer-based "
-                                 "adjustments (infrared, dark area).");
-  m_configTabs->setTabToolTip(4, "Simulate photographic contact printing on "
-                                 "glass plate emulsions using the H&D curve.");
-  m_configTabs->setTabToolTip(5, "Select the physical color screen type and "
-                                 "configure reconstruction algorithms.");
+  m_configTabs->setTabToolTip(0, "Capture — configure demosaicking, resolution, "
+                                 "sensor parameters, and image gamma.");
+  m_configTabs->setTabToolTip(1, "Capture — manage per-tile adjustments "
+                                 "(exposure, dark point) for stitched images.");
+  m_configTabs->setTabToolTip(2, "Capture/Reconstruct — configure sharpening "
+                                 "algorithms and MTF models.");
+  m_configTabs->setTabToolTip(3, "Process — choose or synthesize the analysis "
+                                 "image layer, including infrared/dark mixing.");
+  m_configTabs->setTabToolTip(4, "Process — simulate photographic contact "
+                                 "printing on glass plate emulsions using the "
+                                 "H&D curve.");
+  m_configTabs->setTabToolTip(5, "Process/Register — select the physical color "
+                                 "screen type, detect it, and configure "
+                                 "reconstruction.");
   m_configTabs->setTabToolTip(6,
-                              "Align the screen and image geometry, including "
-                              "rotation, tilt, and lens correction.");
-  m_configTabs->setTabToolTip(7, "Adjust white balance, black point, "
+                              "Register — align screen and image geometry, "
+                              "including rotation, tilt, and lens correction.");
+  m_configTabs->setTabToolTip(7, "Color — adjust white balance, black point, "
                                  "presaturation, and dye model parameters.");
   m_configTabs->setTabToolTip(
-      8, "Apply color correction profiles and manage calibration spots.");
+      8, "Color calibration — optimize a profile and manage calibration spots.");
 
   connect(m_profilePanel, &ProfilePanel::optimizeColorRequested, this,
           &MainWindow::onColorOptimizeRequested);
@@ -3637,6 +3683,83 @@ void MainWindow::applyState(const ParameterState &state) {
     clearFocusAreaAnalysis();
 }
 
+/** Refresh the persistent workflow summary from document-owned state.
+
+    The summary is intentionally conservative: registration point counts are
+    reliable prerequisites, while the current geometry parameters do not yet
+    carry a generation/provenance marker that would let the UI distinguish a
+    freshly fitted result from a manually entered or stale one. */
+void MainWindow::updateWorkflowSummary() {
+  if (!m_workflowProcessLabel || !m_workflowRegistrationLabel ||
+      !m_workflowCalibrationLabel)
+    return;
+
+  const colorscreen::scr_type type = m_scrToImgParams.type;
+  QString processName = tr("Unknown");
+  const int typeIndex = static_cast<int>(type);
+  if (typeIndex >= 0 && typeIndex < colorscreen::max_scr_type &&
+      colorscreen::scr_names[typeIndex].pretty_name)
+    processName = QString::fromUtf8(
+        colorscreen::scr_names[typeIndex].pretty_name);
+  if (type == colorscreen::Random)
+    processName += tr(" (no historical screen)");
+  m_workflowProcessLabel->setText(tr("Process: %1").arg(processName));
+
+  if (!m_scan) {
+    m_workflowRegistrationLabel->setText(
+        tr("Registration: load an image to begin"));
+  } else if (type == colorscreen::Random) {
+    m_workflowRegistrationLabel->setText(
+        tr("Registration: not required for Random/no-screen images"));
+  } else {
+    const qsizetype count = static_cast<qsizetype>(m_solverParams.n_points());
+    const int minimum = colorscreen::solver_parameters::min_points(type);
+    QString registration;
+    if (count == 0) {
+      registration = tr("Registration: no points — detect or add at least %1")
+                         .arg(minimum);
+    } else if (count < minimum) {
+      registration =
+          tr("Registration: %1/%2 points — add %3 more")
+              .arg(count)
+              .arg(minimum)
+              .arg(minimum - count);
+    } else {
+      registration =
+          tr("Registration: %1 points — ready to fit/validate geometry")
+              .arg(count);
+      if (m_scrToImgParams.mesh_trans)
+        registration += tr(" • nonlinear correction present");
+    }
+    m_workflowRegistrationLabel->setText(registration);
+  }
+
+  const qsizetype mtfCount = static_cast<qsizetype>(
+      m_rparams.sharpen.scanner_mtf.measurements.size());
+  QString mtfSummary = mtfCount == 0
+      ? tr("Capture MTF: not measured")
+      : tr("Capture MTF: %1 saved measurement%2")
+            .arg(mtfCount)
+            .arg(mtfCount == 1 ? QString() : QStringLiteral("s"));
+
+  QString profileSummary;
+  if (!m_scan) {
+    profileSummary = tr("Profile: load an image to calibrate");
+  } else if (!m_scan->has_rgb()) {
+    profileSummary = tr("Profile: unavailable — capture has no RGB channels");
+  } else {
+    const qsizetype spotCount =
+        static_cast<qsizetype>(m_profileSpots.size());
+    profileSummary = spotCount == 0
+        ? tr("Profile: no calibration spots")
+        : tr("Profile: %1 calibration spot%2")
+              .arg(spotCount)
+              .arg(spotCount == 1 ? QString() : QStringLiteral("s"));
+  }
+  m_workflowCalibrationLabel->setText(
+      mtfSummary + QStringLiteral(" • ") + profileSummary);
+}
+
 /** Refresh all UI panels and toolbar state from a ParameterState.
    Calls updateUI() on every registered panel, syncs the mirror toggle,
    nonlinear corrections checkbox, deformation chart, backlight dock
@@ -3673,6 +3796,7 @@ void MainWindow::updateUIFromState(const ParameterState &state) {
   }
 
   updateCoordinateSpaceControls();
+  updateWorkflowSummary();
   emit documentStateChanged();
 }
 
@@ -4606,6 +4730,7 @@ void MainWindow::updateRegistrationActions() {
   if (m_geometryPanel) {
     m_geometryPanel->updateRegistrationPointInfo(getCurrentState());
   }
+  updateWorkflowSummary();
 }
 
 /** Save a state snapshot before a point drag operation begins.
