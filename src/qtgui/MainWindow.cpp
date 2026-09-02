@@ -3485,7 +3485,8 @@ void MainWindow::maybeOfferInitialSetupGuide(
     return;
 
   const bool suggestCaptureType =
-      m_rparams.capture_type == colorscreen::render_parameters::capture_unknown;
+      m_rparams.get_capture_type(m_scan.get()) ==
+          colorscreen::render_parameters::capture_unknown;
   const bool looksMonochrome = analysis.candidate && m_scan->has_rgb();
   bool suggestBayer = suggestDetectedMetadata && looksMonochrome &&
       m_rparams.demosaic !=
