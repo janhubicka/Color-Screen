@@ -19,7 +19,6 @@
 #include <QString>
 #include <QTemporaryDir>
 #include <QThread>
-#include <QThreadPool>
 #include <QTimer>
 
 #include <atomic>
@@ -205,9 +204,11 @@ bool taskQueueLatestRequestWins() {
 
 /** Exercise the real asynchronous queue completion path.
 
-    The older task stays alive until the newer task publishes.  reportFinished
-    then cancels/supersedes the older request, whose completion callback must
-    still run for cleanup but receive publishResult == false. */
+    Only the older request needs a QtConcurrent worker. Once that worker is
+    definitely running, publish a newer request synchronously through the same
+    TaskQueue. This cancels/supersedes the older request without requiring a
+    second global-thread-pool slot. The older runAsync callback must still run
+    for cleanup but receive publishResult == false. */
 void startTaskQueueAsyncPublicationSmoke(ColorScreenApplication &app,
                                          std::function<void()> completed) {
   struct State {
@@ -215,9 +216,7 @@ void startTaskQueueAsyncPublicationSmoke(ColorScreenApplication &app,
     std::shared_ptr<std::atomic_bool> olderStarted =
         std::make_shared<std::atomic_bool>(false);
     bool olderDone = false;
-    bool newerDone = false;
     bool failed = false;
-    int originalThreadPoolLimit = 0;
     std::function<void()> completed;
   };
 
@@ -225,36 +224,12 @@ void startTaskQueueAsyncPublicationSmoke(ColorScreenApplication &app,
   state->completed = std::move(completed);
   state->queue = new TaskQueue(&app);
 
-  // runAsync() uses QtConcurrent's global pool.  Some CI runners intentionally
-  // expose a single worker thread; the race below requires two workers because
-  // the older one remains blocked until the newer completion supersedes it.
-  // Temporarily guarantee the concurrency the test needs and restore the
-  // application's original limit as soon as the probe completes.
-  QThreadPool *pool = QThreadPool::globalInstance();
-  state->originalThreadPoolLimit = pool->maxThreadCount();
-  if (state->originalThreadPoolLimit < 2)
-    pool->setMaxThreadCount(2);
-
-  auto restorePoolLimit = [state]() {
-    QThreadPool::globalInstance()->setMaxThreadCount(
-        state->originalThreadPoolLimit);
-  };
-
-  auto finish = std::make_shared<std::function<void()>>();
-  *finish = [state, restorePoolLimit]() {
-    if (state->failed || !state->olderDone || !state->newerDone)
-      return;
-    if (state->queue)
-      state->queue->deleteLater();
-    restorePoolLimit();
-    state->completed();
-  };
-
-  auto fail = [&app, state, restorePoolLimit](const char *message) {
+  auto fail = [&app, state](const char *message) {
     if (state->failed)
       return;
     state->failed = true;
-    restorePoolLimit();
+    if (state->queue)
+      state->queue->cancelAll();
     qCritical() << message;
     app.exit(documentLifecycleFailure);
   };
@@ -265,35 +240,50 @@ void startTaskQueueAsyncPublicationSmoke(ColorScreenApplication &app,
         while (!progress->pool_cancel())
           QThread::msleep(1);
       },
-      [state, finish, fail](bool publishResult) {
+      [state, fail](bool publishResult) {
         if (publishResult) {
           fail("Document lifecycle smoke published a superseded async result");
           return;
         }
-        state->olderDone = true;
-        (*finish)();
-      });
-
-  state->queue->runAsync(
-      [started = state->olderStarted](colorscreen::progress_info *) {
-        // Ensure this really races a running older worker rather than merely
-        // testing queue bookkeeping before the thread pool scheduled it.
-        for (int i = 0; i < 2000 &&
-                        !started->load(std::memory_order_acquire);
-             ++i)
-          QThread::msleep(1);
-      },
-      [state, finish, fail](bool publishResult) {
-        if (!publishResult) {
-          fail("Document lifecycle smoke rejected the newest async result");
+        if (state->failed)
           return;
-        }
-        state->newerDone = true;
-        (*finish)();
+        state->olderDone = true;
+        if (state->queue)
+          state->queue->deleteLater();
+        state->completed();
       });
 
-  QTimer::singleShot(5000, &app, [state, fail]() {
-    if (!state->failed && (!state->olderDone || !state->newerDone))
+  auto supersede = std::make_shared<std::function<void(int)>>();
+  const std::weak_ptr<std::function<void(int)>> weakSupersede = supersede;
+  *supersede = [&app, state, fail, weakSupersede](int attemptsLeft) {
+    if (state->failed || state->olderDone)
+      return;
+    if (!state->olderStarted->load(std::memory_order_acquire)) {
+      if (attemptsLeft > 0) {
+        if (auto retry = weakSupersede.lock())
+          QTimer::singleShot(10, &app, [retry, attemptsLeft]() {
+            (*retry)(attemptsLeft - 1);
+          });
+        return;
+      }
+      fail("Document lifecycle smoke did not start TaskQueue::runAsync worker");
+      return;
+    }
+
+    if (!state->queue) {
+      fail("Document lifecycle smoke lost its TaskQueue");
+      return;
+    }
+    const int newer = state->queue->requestRender();
+    if (!state->queue->reportFinished(newer, true)) {
+      fail("Document lifecycle smoke rejected the newest queue result");
+      return;
+    }
+  };
+
+  QTimer::singleShot(0, &app, [supersede]() { (*supersede)(1000); });
+  QTimer::singleShot(20000, &app, [state, fail]() {
+    if (!state->failed && !state->olderDone)
       fail("Document lifecycle smoke timed out in TaskQueue::runAsync");
   });
 }
