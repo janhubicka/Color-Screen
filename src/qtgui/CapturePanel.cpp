@@ -689,9 +689,10 @@ void CapturePanel::setupUi()
                 return false;
             const auto capture = s.rparams.get_capture_type(img.get());
             return colorscreen::render_parameters::capture_has_screen_p(capture)
-                   && (img->has_rgb()
-                       || colorscreen::screen_has_regular_geometry_p(
-                           s.scrToImg.type));
+                   && (colorscreen::screen_has_regular_geometry_p(
+                           s.scrToImg.type)
+                       || (s.scrToImg.type == colorscreen::NoScreen
+                           && img->has_rgb()));
         });
 
     // Initial update

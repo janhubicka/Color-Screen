@@ -5921,6 +5921,12 @@ void MainWindow::onAutodetectScreen() {
     return;
   }
 
+  // A stochastic process has no regular lattice to identify. Color-element
+  // autodetection is performed by the screen-detection render modes instead.
+  if (colorscreen::stochastic_screen_p(m_scrToImgParams.type)) {
+    return;
+  }
+
   if (colorscreen::screen_has_regular_geometry_p(m_scrToImgParams.type)) {
     m_autoAddPointsAfterCoordinates = true;
     onAutodetectCoordinatesRequested();

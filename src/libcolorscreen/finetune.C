@@ -7210,7 +7210,9 @@ autodetect_coordinates (const image_data &img, scr_to_img_parameters &param,
   int screens = 1;
   render_parameters rparam = rparam_1;
   rparam.sharpen.mode = sharpen_parameters::none;
-  if (!screen_has_regular_geometry_p (param.type))
+  if (stochastic_screen_p (param.type))
+    return false;
+  if (param.type == NoScreen)
     screens = n_supported_types;
   std::vector<finetune_result> res (steps * steps * screens);
   fparams.flags = colorscreen::finetune_position
@@ -7225,7 +7227,7 @@ autodetect_coordinates (const image_data &img, scr_to_img_parameters &param,
         if (!progress || !progress->cancel_requested ())
           {
             scr_to_img_parameters p;
-            if (!screen_has_regular_geometry_p (param.type))
+            if (param.type == NoScreen)
               p.type = supported_screns[scr];
             else
               p.type = param.type;
@@ -7279,7 +7281,7 @@ autodetect_coordinates (const image_data &img, scr_to_img_parameters &param,
   param.center = res[best_i].center;
   param.coordinate1 = res[best_i].coordinate1;
   param.coordinate2 = res[best_i].coordinate2;
-  if (!screen_has_regular_geometry_p (param.type))
+  if (param.type == NoScreen)
     param.type = supported_screns[best_i % screens];
   return true;
 }
