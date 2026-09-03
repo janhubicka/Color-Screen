@@ -18,7 +18,14 @@ namespace colorscreen
 #define Paget_res (1 / (1.41421356237 / 2))
 
 const scr_type_property_t scr_names[max_scr_type] = {
-  { "Random", "Random", "", 0 },
+  { "None", "None (no color screen)",
+    "No historical additive color screen is present.", 0 },
+  { "Random", "Random / stochastic",
+    "Generic stochastic mosaic with no regular geometric lattice.", 0 },
+  { "Autochrome", "Autochrome",
+    "Lumière Autochrome stochastic dyed-starch screen.", 0 },
+  { "Agfa-Farbenplatte", "Agfa Farbenplatte",
+    "Agfa Farbenplatte stochastic additive color screen.", 0 },
   { "Paget", "Paget", "", Paget_res },
   { "Thames", "Thames", "", Paget_res },
   { "Finlay", "Finlay", "", Paget_res },
@@ -191,7 +198,14 @@ save_csp (FILE *f, const scr_to_img_parameters *param, const scr_detect_paramete
     }
   if (rparam)
     {
-      if (fprintf (f, "demosaic: %s\n",
+      const int capture_index = (int)rparam->capture_type;
+      const char *capture_name =
+          capture_index >= 0 && capture_index < render_parameters::capture_max
+              ? render_parameters::capture_properties[capture_index].name
+              : render_parameters::capture_properties
+                    [render_parameters::capture_unknown].name;
+      if (fprintf (f, "capture_type: %s\n", capture_name) < 0
+          || fprintf (f, "demosaic: %s\n",
                    image_data::demosaic_names[(int)rparam->demosaic].name)
               < 0
           || fprintf (f, "gamma: %f\n", rparam->gamma) < 0
@@ -261,9 +275,41 @@ save_csp (FILE *f, const scr_to_img_parameters *param, const scr_detect_paramete
                        < 0
                 || fprintf (f, "scanner_mtf_measurement_name: ") < 0)
               return false;
-            write_escaped_string (f, measurement.name.c_str ());
-            if (fputc ('\n', f) == EOF)
+            if (!write_escaped_string (f, measurement.name.c_str ())
+                || fputc ('\n', f) == EOF)
               return false;
+            if (!measurement.source_filename.empty ())
+              {
+                if (fprintf (f, "scanner_mtf_measurement_source: ") < 0
+                    || !write_escaped_string (
+                        f, measurement.source_filename.c_str ())
+                    || fputc ('\n', f) == EOF)
+                  return false;
+              }
+            if (measurement.source_width > 0 && measurement.source_height > 0
+                && fprintf (f,
+                            "scanner_mtf_measurement_source_dimensions: %d %d\n",
+                            measurement.source_width, measurement.source_height)
+                       < 0)
+              return false;
+            if (measurement.has_spatial_metadata ())
+              {
+                if (fprintf (f, "scanner_mtf_measurement_roi: %d %d %d %d\n",
+                             measurement.roi.x, measurement.roi.y,
+                             measurement.roi.width, measurement.roi.height) < 0
+                    || fprintf (
+                           f,
+                           "scanner_mtf_measurement_edge: %.17g %.17g %.17g %.17g\n",
+                           measurement.edge_p1.x, measurement.edge_p1.y,
+                           measurement.edge_p2.x, measurement.edge_p2.y) < 0
+                    || fprintf (
+                           f,
+                           "scanner_mtf_measurement_edge_quality: %.17g %.17g %.17g %.17g %.17g\n",
+                           measurement.edge_angle, measurement.edge_fit_rms,
+                           measurement.edge_contrast, measurement.edge_snr,
+                           measurement.phase_coverage) < 0)
+                  return false;
+              }
             for (size_t i = 0; i < measurement.size (); i++)
               {
                 const double uncertainty = measurement.get_uncertainty (i);
@@ -869,6 +915,30 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam,
             }
           if (param)
             param->type = (enum scr_type)j;
+        }
+      else if (!strcmp (buf, "capture_type"))
+        {
+          get_keyword (f, buf2);
+          int j;
+          for (j = 0; j < render_parameters::capture_max; j++)
+            if (!strcmp (buf2, render_parameters::capture_properties[j].name))
+              break;
+          /* PR #253 briefly saved the monochrome no-screen variants with
+             misleading *-screen-mono identifiers.  Accept those aliases while
+             all new files use the corrected names.  */
+          if (j == render_parameters::capture_max
+              && !strcmp (buf2, "positive-screen-mono"))
+            j = render_parameters::capture_transparency;
+          if (j == render_parameters::capture_max
+              && !strcmp (buf2, "negative-screen-mono"))
+            j = render_parameters::capture_negative;
+          if (j == render_parameters::capture_max)
+            {
+              *error = "unknown capture type";
+              return false;
+            }
+          if (rparam)
+            rparam->capture_type = (enum render_parameters::capture_type)j;
         }
       else if (!strcmp (buf, "scanner_type"))
         {
@@ -2239,6 +2309,112 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam,
           std::string n = read_escaped_string (f);
           if (rparam)
             rparam->sharpen.scanner_mtf.measurements[measurement].name = n;
+        }
+      else if (!strcmp (buf, "scanner_mtf_measurement_source"))
+        {
+          if (measurement < 0)
+            {
+              *error = "scanner_mtf_measurement_source specified without "
+                       "scanner_mtf_measurement";
+              return false;
+            }
+          std::string source = read_escaped_string (f);
+          if (rparam)
+            rparam->sharpen.scanner_mtf.measurements[measurement]
+                .source_filename = std::move (source);
+        }
+      else if (!strcmp (buf, "scanner_mtf_measurement_source_dimensions"))
+        {
+          if (measurement < 0)
+            {
+              *error = "scanner_mtf_measurement_source_dimensions specified "
+                       "without scanner_mtf_measurement";
+              return false;
+            }
+          int width, height;
+          if (fscanf (f, "%d %d", &width, &height) != 2 || width <= 0
+              || height <= 0)
+            {
+              *error = "error parsing scanner_mtf_measurement_source_dimensions";
+              return false;
+            }
+          if (rparam)
+            {
+              auto &m = rparam->sharpen.scanner_mtf.measurements[measurement];
+              m.source_width = width;
+              m.source_height = height;
+            }
+        }
+      else if (!strcmp (buf, "scanner_mtf_measurement_roi"))
+        {
+          if (measurement < 0)
+            {
+              *error = "scanner_mtf_measurement_roi specified without "
+                       "scanner_mtf_measurement";
+              return false;
+            }
+          int x, y, width, height;
+          if (fscanf (f, "%d %d %d %d", &x, &y, &width, &height) != 4
+              || width <= 0 || height <= 0)
+            {
+              *error = "error parsing scanner_mtf_measurement_roi";
+              return false;
+            }
+          if (rparam)
+            rparam->sharpen.scanner_mtf.measurements[measurement].roi
+                = int_image_area (x, y, width, height);
+        }
+      else if (!strcmp (buf, "scanner_mtf_measurement_edge"))
+        {
+          if (measurement < 0)
+            {
+              *error = "scanner_mtf_measurement_edge specified without "
+                       "scanner_mtf_measurement";
+              return false;
+            }
+          double x1, y1, x2, y2;
+          if (fscanf (f, "%lf %lf %lf %lf", &x1, &y1, &x2, &y2) != 4
+              || !my_isfinite (x1) || !my_isfinite (y1)
+              || !my_isfinite (x2) || !my_isfinite (y2))
+            {
+              *error = "error parsing scanner_mtf_measurement_edge";
+              return false;
+            }
+          if (rparam)
+            {
+              auto &m = rparam->sharpen.scanner_mtf.measurements[measurement];
+              m.edge_p1 = {x1, y1};
+              m.edge_p2 = {x2, y2};
+            }
+        }
+      else if (!strcmp (buf, "scanner_mtf_measurement_edge_quality"))
+        {
+          if (measurement < 0)
+            {
+              *error = "scanner_mtf_measurement_edge_quality specified without "
+                       "scanner_mtf_measurement";
+              return false;
+            }
+          double angle, fit_rms, contrast, snr, phase;
+          if (fscanf (f, "%lf %lf %lf %lf %lf", &angle, &fit_rms, &contrast,
+                      &snr, &phase) != 5
+              || !my_isfinite (angle) || !my_isfinite (fit_rms)
+              || !my_isfinite (contrast) || !my_isfinite (snr)
+              || !my_isfinite (phase) || fit_rms < 0 || contrast < 0
+              || snr < 0 || phase < 0 || phase > 1)
+            {
+              *error = "error parsing scanner_mtf_measurement_edge_quality";
+              return false;
+            }
+          if (rparam)
+            {
+              auto &m = rparam->sharpen.scanner_mtf.measurements[measurement];
+              m.edge_angle = angle;
+              m.edge_fit_rms = fit_rms;
+              m.edge_contrast = contrast;
+              m.edge_snr = snr;
+              m.phase_coverage = phase;
+            }
         }
       else if (!strcmp (buf, "scanner_mtf_measurement_image_layer"))
         {

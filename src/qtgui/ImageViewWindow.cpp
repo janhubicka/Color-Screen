@@ -143,6 +143,14 @@ ImageViewWindow::ImageViewWindow(MainWindow *document, int viewNumber,
 
 /** Destroy a secondary view without taking the document-owned inspector with it. */
 ImageViewWindow::~ImageViewWindow() {
+  // A reference-owned Sharpness panel may be the document's active MTF-fit
+  // controller. Closing the reference destroys its TaskQueue/watcher, so clear
+  // the shared busy state before that happens; otherwise the surviving document
+  // would permanently believe that a fit is still running.
+  if (m_slantedEdgeReference && m_sharpnessPanel &&
+      m_sharpnessPanel->mtfFitRunning() && m_document)
+    m_document->finishMtfModelFitWithoutResult();
+
   {
     std::unique_lock<std::mutex> locker(m_referenceLoadMutex);
     m_referenceLoadCondition.wait(
@@ -428,6 +436,30 @@ void ImageViewWindow::setupReferenceInspector() {
   m_referenceTabs->setObjectName(QStringLiteral("SlantedEdgeReferenceTabs"));
   splitter->addWidget(m_referenceTabs);
 
+  MtfCalibrationCallbacks mtfCalibration;
+  mtfCalibration.summary = [this]() {
+    return m_document ? m_document->mtfCalibrationSummary()
+                      : tr("Capture MTF: unavailable");
+  };
+  mtfCalibration.fitAvailable = [this]() {
+    return m_document && !m_document->mtfModelFitRunning();
+  };
+  mtfCalibration.fitStarted = [this](const colorscreen::mtf_parameters &inputs) {
+    return m_document && m_document->beginMtfModelFit(inputs);
+  };
+  mtfCalibration.fitFailed = [this](const colorscreen::mtf_parameters &inputs) {
+    if (m_document)
+      m_document->failMtfModelFit(inputs);
+  };
+  mtfCalibration.fitAccepted =
+      [this](const colorscreen::mtf_parameters &fitted, double rms) {
+        if (m_document)
+          m_document->acceptMtfModelFit(fitted, rms);
+      };
+  mtfCalibration.fitFinishedWithoutResult = [this]() {
+    if (m_document)
+      m_document->finishMtfModelFitWithoutResult();
+  };
   m_sharpnessPanel = new SharpnessPanel(
       [this]() {
         return m_document ? m_document->documentStateSnapshot()
@@ -437,7 +469,7 @@ void ImageViewWindow::setupReferenceInspector() {
         if (m_document)
           m_document->applySharedDocumentState(state, description);
       },
-      [this]() { return m_scan; }, m_referenceTabs);
+      [this]() { return m_scan; }, std::move(mtfCalibration), m_referenceTabs);
   m_referenceTabs->addTab(m_sharpnessPanel, tr("Sharpness"));
 
   connect(m_sharpnessPanel,
@@ -448,6 +480,18 @@ void ImageViewWindow::setupReferenceInspector() {
           });
   connect(m_sharpnessPanel, &SharpnessPanel::measureMtfRequested, this,
           &ImageViewWindow::onMeasureMtfRequested);
+  connect(m_sharpnessPanel, &SharpnessPanel::mtfMeasurementSelected, this,
+          [this](int index) {
+            m_selectedMtfMeasurement = index;
+            updateMtfMeasurementOverlay(false);
+          });
+  connect(m_sharpnessPanel, &SharpnessPanel::mtfMeasurementLocateRequested, this,
+          [this](int index) {
+            m_selectedMtfMeasurement = index;
+            updateMtfMeasurementOverlay(true);
+          });
+  connect(m_document, &MainWindow::mtfCalibrationStateChanged, m_sharpnessPanel,
+          &SharpnessPanel::refreshMtfCalibrationStatus);
 
   splitter->setStretchFactor(0, 0);
   splitter->setStretchFactor(1, 1);
@@ -547,6 +591,7 @@ void ImageViewWindow::finishReferenceLoad() {
     m_sharpnessPanel->updateUI();
   setWindowTitle(tr("%1 — Slanted edge reference")
                      .arg(QFileInfo(m_referenceFile).fileName()));
+  updateMtfMeasurementOverlay(false);
   statusBar()->showMessage(
       tr("Slanted-edge reference — sharpness parameters are shared"));
 }
@@ -610,8 +655,19 @@ void ImageViewWindow::rebuildModeList() {
       continue;
     const render_type_property &prop = render_type_properties[i];
     bool show = !(prop.flags & render_type_property::HIDE_IN_GUI);
+    const auto capture =
+        m_scan ? m_rparams.get_capture_type(m_scan.get())
+               : render_parameters::capture_unknown;
+    const bool hasScreenCapture =
+        render_parameters::capture_has_screen_p(capture);
+    const bool supportsScreenDetection =
+        render_parameters::capture_supports_screen_detection_p(capture);
     if (show && (prop.flags & render_type_property::NEEDS_SCR_TO_IMG) &&
-        m_scrToImgParams.type == colorscreen::Random)
+        (!hasScreenCapture ||
+         !screen_has_regular_geometry_p(m_scrToImgParams.type)))
+      show = false;
+    if (show && (prop.flags & render_type_property::USES_SCR_DETECT) &&
+        (!supportsScreenDetection || !screen_present_p(m_scrToImgParams.type)))
       show = false;
     if (show && (prop.flags & render_type_property::NEEDS_RGB) &&
         (!m_scan || !m_scan->has_rgb()))
@@ -660,7 +716,8 @@ void ImageViewWindow::updateViewControls() {
   if (m_coordinateComboBox) {
     const bool stitched = m_scan && m_scan->stitch;
     const bool hasFinal = stitched ||
-        (m_scan && m_scrToImgParams.type != colorscreen::Random);
+        (m_scan && colorscreen::screen_has_regular_geometry_p(
+                       m_scrToImgParams.type));
     const QSignalBlocker blocker(m_coordinateComboBox);
     m_coordinateComboBox->clear();
     if (!stitched)
@@ -867,6 +924,7 @@ void ImageViewWindow::onMeasureMtfRequested(bool checked) {
       p.channel = channel;
       p.name = baseParameters.name + " " + channelNames[channel];
       p.same_capture = channel == 0 ? baseParameters.same_capture : true;
+      p.source_filename = m_referenceFile.toUtf8().toStdString();
       double wavelength = currentMtf.wavelengths[channel];
       if (!(colorscreen::my_isfinite(wavelength) && wavelength > 0))
         wavelength = m_scan->wavelengths[channel];
@@ -878,12 +936,62 @@ void ImageViewWindow::onMeasureMtfRequested(bool checked) {
   } else {
     colorscreen::slanted_edge_parameters p = baseParameters;
     p.channel = -1;
+    p.source_filename = m_referenceFile.toUtf8().toStdString();
     m_pendingMtfParameters.push_back(std::move(p));
   }
 
   m_imageWidget->setInteractionMode(ImageWidget::GenericAreaMode);
   statusBar()->showMessage(
       tr("Select an area containing a slanted edge to compute its MTF"));
+}
+
+/** Show/locate a selected stored MTF measurement when it belongs to this
+    external reference image. */
+void ImageViewWindow::updateMtfMeasurementOverlay(bool locate) {
+  if (!m_slantedEdgeReference || !m_imageWidget || !m_document) {
+    if (m_imageWidget)
+      m_imageWidget->setMtfMeasurementOverlay(nullptr);
+    return;
+  }
+  const auto &measurements = m_document->documentStateSnapshot()
+                                 .rparams.sharpen.scanner_mtf.measurements;
+  const colorscreen::mtf_measurement *measurement = nullptr;
+  if (m_selectedMtfMeasurement >= 0 &&
+      m_selectedMtfMeasurement < static_cast<int>(measurements.size()))
+    measurement = &measurements[m_selectedMtfMeasurement];
+
+  bool matches = measurement && measurement->has_spatial_metadata() && m_scan &&
+                 !measurement->source_filename.empty();
+  if (matches && measurement->source_width > 0 && measurement->source_height > 0)
+    matches = measurement->source_width == m_scan->width &&
+              measurement->source_height == m_scan->height;
+  if (matches) {
+    const QFileInfo recorded(QString::fromUtf8(
+        measurement->source_filename.c_str()));
+    const QFileInfo current(m_referenceFile);
+    matches = recorded.absoluteFilePath() == current.absoluteFilePath() ||
+              (recorded.fileName() == current.fileName() &&
+               measurement->source_width == m_scan->width &&
+               measurement->source_height == m_scan->height);
+  }
+
+  m_imageWidget->setMtfMeasurementOverlay(matches ? measurement : nullptr);
+  if (!locate)
+    return;
+  if (!matches) {
+    if (measurement && !measurement->source_filename.empty())
+      statusBar()->showMessage(
+          tr("This measurement belongs to %1, not the current reference.")
+              .arg(QFileInfo(QString::fromUtf8(
+                       measurement->source_filename.c_str())).fileName()),
+          5000);
+    return;
+  }
+  const colorscreen::point_t center = {
+      measurement->roi.x + measurement->roi.width / 2.0,
+      measurement->roi.y + measurement->roi.height / 2.0};
+  m_imageWidget->centerOn(center);
+  m_imageWidget->setFocus();
 }
 
 /** Convert a widget-space selection to a bounded rectangle in reference scan. */

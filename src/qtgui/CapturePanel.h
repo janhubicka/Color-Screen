@@ -37,6 +37,8 @@ public:
 private:
     void setupUi();
     ReloadCallback m_reloadCallback;
+    // Top-level material/capture choice controlling the applicable workflow.
+    class QComboBox *m_captureTypeCombo = nullptr;
     class QComboBox *m_demosaicCombo = nullptr;
     class QPushButton *m_reloadDemosaicBtn = nullptr;
     class QLabel *m_imageResolutionValue = nullptr;

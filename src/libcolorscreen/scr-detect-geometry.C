@@ -29,7 +29,7 @@ struct detection_stats {
   FILE *report_file;
   const char *result = "no-initial-grid";
   const char *last_flood_failure = "none";
-  scr_type type = Random;
+  scr_type type = NoScreen;
   int regions = 0;
   long long seed_pixels = 0;
   int initial_grids = 0;
@@ -77,7 +77,7 @@ struct detection_stats {
         std::chrono::duration<double, std::milli>(clock::now() - total_start)
             .count();
     const char *type_name =
-        type >= Random && type < max_scr_type ? scr_names[(int)type].name
+        type > NoScreen && type < max_scr_type ? scr_names[(int)type].name
                                               : "none";
     fprintf(report_file,
             "detect_stats: result=%s type=%s regions=%i seed_pixels=%lld "
@@ -2063,7 +2063,7 @@ detect_regular_screen_1(const image_data &img, scr_detect_parameters &dparam,
               if (report_file)
                 fflush(report_file);
 
-              enum scr_type current_type = Random;
+              enum scr_type current_type = NoScreen;
               color_class_map *this_cmap;
               /* Try to guess both screen types.  If we find Paget/Finlay
                  screen, preserve original type if it makes sense,
@@ -2116,7 +2116,7 @@ detect_regular_screen_1(const image_data &img, scr_detect_parameters &dparam,
                 return ret;
               }
 
-              if (current_type != Random) {
+              if (current_type != NoScreen) {
                 stats.initial_grids++;
                 nattempts++;
                 if (report_file && verbose) {

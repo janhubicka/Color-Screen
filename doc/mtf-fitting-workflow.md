@@ -200,6 +200,21 @@ requested native channels must pass edge qualification before any of their
 measurements are appended, so a failed channel cannot leave a partial RGB
 capture group in the scanner-MTF state.
 
+Each accepted GUI measurement also stores spatial provenance in the `.par`
+record: the source filename and dimensions, scan-coordinate ROI, accepted edge
+endpoints, edge angle, fit RMS, contrast, SNR, and phase coverage. This makes it
+possible to compare centre and corner sharpness later and to verify that a test
+target was sufficiently slanted. Legacy project files and imported QuickMTF
+curves remain valid but have no location metadata.
+
+The Sharpness **Inspect** selector and the measured-curve chart refer to the
+same active measurement. Clicking a measured legend entry or a visible measured
+curve toggles only that record and selects it for inspection; measurements with
+identical display names no longer share visibility. **Show ROI** centres the
+matching source image/reference and overlays both the saved ROI and accepted
+edge. A reference-image measurement is never overlaid on the document image
+merely because its numeric coordinates happen to fit.
+
 The sharp-to-defocused edge-localization policy, external comparisons with MTF
 Mapper, Imatest, SFRMAT-style implementations and FidMTF, and the fail-closed
 regression strategy are documented in
@@ -233,6 +248,15 @@ The fit runs outside the GUI thread, reports cancellable progress, and operates
 on a snapshot. When it finishes, Color-Screen verifies that the MTF state has
 not changed in the meantime. A valid result is committed as one undoable
 parameter change; a stale result is reported but not applied.
+
+The document also tracks the accepted analytical-model fit as session-local
+provenance shared by the primary and external-reference Sharpness panels. The
+GUI reports **ready**, **running**, **current**, **stale**, or **failed** and
+shows the accepted RMS residual when available. Only one model fit may run per
+document at a time. Numerical model/curve inputs make an accepted fit stale;
+renaming a measurement or changing its saved ROI/source/edge-quality metadata
+does not, because those fields describe where the observation came from rather
+than the transfer function being fitted.
 
 The numerical solver normally runs derivative-free simplex first and then an
 optional local least-squares refinement. This order is important because the

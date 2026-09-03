@@ -355,8 +355,12 @@ struct render_parameters
     capture_transparency_with_screen_and_infrared,
     capture_negative_with_screen,
     capture_negative_with_screen_and_infrared,
+    /* Monochrome positive capture with no attached color screen.  */
     capture_transparency,
+    /* Monochrome negative capture with no attached color screen.  */
     capture_negative,
+    /* Ordinary image with no historical color screen.  */
+    capture_plain_image,
     capture_max
   };
 
@@ -781,7 +785,8 @@ struct render_parameters
     for (unsigned int i = 0; i < tile_adjustments.size (); i++)
       if (tile_adjustments[i] != other.tile_adjustments[i])
         return false;
-    return demosaic == other.demosaic
+    return capture_type == other.capture_type
+           && demosaic == other.demosaic
 	   && gamma == other.gamma 
 	   && contact_copy == other.contact_copy
            && output_gamma == other.output_gamma
@@ -963,50 +968,89 @@ struct render_parameters
     return intersection;
   }
 
-  /* Return effective capture type for CAPTURE_TYPE and SCAN.  */
-  pure_attr static enum capture_type
-  get_capture_type (enum capture_type capture_type, image_data *scan)
+  /* Return true if CAPTURE_TYPE describes a plate carrying a historical
+     additive color screen.  */
+  pure_attr static bool
+  capture_has_screen_p (enum capture_type capture_type)
   {
-    if (!scan)
-      return capture_unknown;
+    return capture_type == capture_transparency_with_screen
+           || capture_type == capture_transparency_with_screen_and_infrared
+           || capture_type == capture_negative_with_screen
+           || capture_type == capture_negative_with_screen_and_infrared;
+  }
+
+  /* Return true if CAPTURE_TYPE has RGB information from which individual
+     screen elements can be detected without a geometric lattice.  */
+  pure_attr static bool
+  capture_supports_screen_detection_p (enum capture_type capture_type)
+  {
+    return capture_type == capture_transparency_with_screen
+           || capture_type == capture_transparency_with_screen_and_infrared
+           || capture_type == capture_negative_with_screen
+           || capture_type == capture_negative_with_screen_and_infrared;
+  }
+
+  /* Return true when CAPTURE_TYPE is compatible with the channel layout of
+     a loaded capture.  Plain monochrome captures require a scalar image;
+     screen captures require RGB, and RGB+IR variants additionally require
+     the fourth grayscale/infrared plane.  */
+  pure_attr static bool
+  capture_type_compatible_p (enum capture_type capture_type,
+                             bool has_rgb, bool has_ir)
+  {
     switch (capture_type)
       {
-	case capture_unknown:
-	case capture_transparency:
-	case capture_negative:
-	  return capture_unknown;
-	  break;
-	case capture_transparency_with_screen:
-	  if (!scan->has_rgb ())
-	    return capture_transparency;
-	  return capture_transparency_with_screen;
-	  break;
-	case capture_negative_with_screen:
-	  if (!scan->has_rgb ())
-	    return capture_negative;
-	  return capture_negative_with_screen;
-	  break;
-	case capture_transparency_with_screen_and_infrared:
-	  if (!scan->has_rgb ())
-	    return capture_transparency;
-	  if (!scan->has_grayscale_or_ir ())
-	    return capture_transparency_with_screen;
-	  return capture_transparency_with_screen_and_infrared;
-	  break;
-	case capture_negative_with_screen_and_infrared:
-	  if (!scan->has_rgb ())
-	    return capture_negative;
-	  if (!scan->has_grayscale_or_ir ())
-	    return capture_negative_with_screen;
-	  return capture_negative_with_screen_and_infrared;
-	  break;
-	default:
-	  abort ();
+      case capture_unknown:
+      case capture_plain_image:
+        return true;
+      case capture_transparency:
+      case capture_negative:
+        return !has_rgb;
+      case capture_transparency_with_screen:
+      case capture_negative_with_screen:
+        return has_rgb;
+      case capture_transparency_with_screen_and_infrared:
+      case capture_negative_with_screen_and_infrared:
+        return has_rgb && has_ir;
+      default:
+        abort ();
       }
+  }
+
+  /* Image-data convenience overload for the compatibility predicate.  */
+  pure_attr static bool
+  capture_type_compatible_p (enum capture_type capture_type,
+                             const image_data *scan)
+  {
+    return scan
+           && capture_type_compatible_p (capture_type, scan->has_rgb (),
+                                         scan->has_grayscale_or_ir ());
+  }
+
+  /* Return true if CAPTURE_TYPE is a negative that needs positive conversion
+     before restoration is useful.  */
+  pure_attr static bool
+  capture_negative_p (enum capture_type capture_type)
+  {
+    return capture_type == capture_negative
+           || capture_type == capture_negative_with_screen
+           || capture_type == capture_negative_with_screen_and_infrared;
+  }
+
+  /* Return the capture type only when it matches the loaded image.  A
+     parameter file may describe a different capture, so incompatible RGB/IR or
+     monochrome choices are deliberately demoted to Unknown rather than silently
+     changing their physical meaning.  */
+  pure_attr static enum capture_type
+  get_capture_type (enum capture_type capture_type, const image_data *scan)
+  {
+    if (!scan || !capture_type_compatible_p (capture_type, scan))
+      return capture_unknown;
+    return capture_type;
   }
   /* Return effective capture type for this and SCAN.  */
   pure_attr enum capture_type
-  get_capture_type (image_data *scan)
+  get_capture_type (const image_data *scan) const
   {
     return get_capture_type (capture_type, scan);
   }

@@ -45,7 +45,7 @@ protected:
   }
 
   bool isTileRenderingEnabled(const ParameterState &state) const override {
-    return true;
+    return colorscreen::screen_has_regular_geometry_p(state.scrToImg.type);
   }
 
   bool requiresScan() const override { return false; }
@@ -140,6 +140,8 @@ void ColorPanel::setupUi() {
 
   m_currentGroupForm = nullptr; // End Backlight section
   addSeparator("Screen dyes");
+  m_screenDyesGroup = m_currentGroupForm ? m_currentGroupForm->parentWidget()
+                                         : nullptr;
   setupTiles("Color Preview");
 
   // Gamut Chart
@@ -240,6 +242,8 @@ void ColorPanel::setupUi() {
   m_currentGroupForm = nullptr; // End Screen dyes section
   // Separator
   addSeparator("Viewing conditions correction");
+  m_viewingCorrectionGroup =
+      m_currentGroupForm ? m_currentGroupForm->parentWidget() : nullptr;
 
   // Corrected Color Preview
   {
@@ -409,6 +413,22 @@ void ColorPanel::setupUi() {
          if (m_spectraSection) m_spectraSection->hide();
      }
   });
+
+  // Ordinary/unknown captures still use the generic black, backlight and
+  // final-output controls in this panel. Hide only the historical
+  // screen-dye/viewing-model sections until a screen capture is selected.
+  m_widgetStateUpdaters.push_back([this]() {
+    const ParameterState state = m_stateGetter();
+    const auto image = m_imageGetter();
+    const auto capture = image
+        ? state.rparams.get_capture_type(image.get())
+        : state.rparams.capture_type;
+    const bool historical = render_parameters::capture_has_screen_p(capture);
+    if (m_screenDyesGroup)
+      m_screenDyesGroup->setVisible(historical);
+    if (m_viewingCorrectionGroup)
+      m_viewingCorrectionGroup->setVisible(historical);
+  });
   
   updateUI();
 }
@@ -495,9 +515,9 @@ void ColorPanel::onTileUpdateScheduled() {
 }
 
 bool ColorPanel::isTileRenderingEnabled(const ParameterState &state) const {
-  // User requested "Make the new ColorPanel appear even when scr_to_img type is
-  // Random"
-  return true;
+  // Synthetic screen previews require a periodic lattice. Stochastic screens
+  // still expose their color-model controls, but have no representative tile.
+  return colorscreen::screen_has_regular_geometry_p(state.scrToImg.type);
 }
 
 void ColorPanel::applyChange(std::function<void(ParameterState &)> modifier, const QString &description) {

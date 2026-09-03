@@ -44,6 +44,7 @@
 #include <QEvent>
 #include <QFile>
 #include <QFileDialog>
+#include <QFont>
 #include <QFileInfo>
 #include <QFormLayout>
 #include <QFrame>
@@ -75,6 +76,7 @@
 #include <QtConcurrent>
 
 #include <algorithm>
+#include <utility>
 
 // Undo/Redo Implementation
 
@@ -196,6 +198,41 @@ bool geometryFitInputsDiffer(const ParameterState &before,
          a.mesh_trans_is_scr_to_img != b.mesh_trans_is_scr_to_img;
 }
 
+/** Compare the inputs actually handed to optimize_color_model_colors().
+    The fitted profiled_* values are outputs, not prerequisites. Final-plane
+    orientation and output profile selection likewise do not change the sampled
+    screen/scan colors used by the optimizer. */
+bool profileCalibrationInputsDiffer(
+    const MainWindow::ColorOptimizerRequestData &before,
+    const MainWindow::ColorOptimizerRequestData &after) {
+  if (before.spots.size() != after.spots.size())
+    return true;
+  for (std::size_t i = 0; i < before.spots.size(); ++i)
+    if (!(before.spots[i] == after.spots[i]))
+      return true;
+
+  colorscreen::scr_to_img_parameters aScr = before.scrParams;
+  colorscreen::scr_to_img_parameters bScr = after.scrParams;
+  aScr.final_rotation = bScr.final_rotation = 0;
+  aScr.final_mirror = bScr.final_mirror = false;
+  aScr.final_angle = bScr.final_angle = 90;
+  aScr.final_ratio = bScr.final_ratio = 1;
+  if (aScr != bScr)
+    return true;
+
+  colorscreen::render_parameters a = before.rparams;
+  colorscreen::render_parameters b = after.rparams;
+  const colorscreen::render_parameters defaults;
+  a.profiled_dark = b.profiled_dark = defaults.profiled_dark;
+  a.profiled_red = b.profiled_red = defaults.profiled_red;
+  a.profiled_green = b.profiled_green = defaults.profiled_green;
+  a.profiled_blue = b.profiled_blue = defaults.profiled_blue;
+  // optimize_color_model_colors() forces XYZ output internally.
+  a.output_profile = b.output_profile =
+      colorscreen::render_parameters::output_profile_xyz;
+  return a != b;
+}
+
 /** Choose the scalar/BW focus model for scans that have no native RGB data,
     and for RGB files that merely store one monochrome scanner signal in
     three gain-scaled channels.  Test raw scan chromaticity rather than the
@@ -245,12 +282,67 @@ bool focusAnalysisUsesMonochromeInput(const colorscreen::image_data &scan) {
     changing the load/reload orchestration. */
 class InitialSetupGuideDialog final : public QDialog {
 public:
-  explicit InitialSetupGuideDialog(QWidget *parent, bool suggestBayer, bool suggestFStop, bool suggestPitch, bool suggestFill, bool suggestDPI, bool suggestWavelengths, const colorscreen::image_data *scan)
+  explicit InitialSetupGuideDialog(QWidget *parent, bool suggestCaptureType,
+                                   bool looksMonochrome, bool suggestBayer,
+                                   bool suggestFStop,
+                                   bool suggestPitch, bool suggestFill,
+                                   bool suggestDPI, bool suggestWavelengths,
+                                   const colorscreen::image_data *scan)
       : QDialog(parent) {
     setWindowTitle(tr("Suggested image setup"));
     setModal(true);
 
     auto *layout = new QVBoxLayout(this);
+
+    if (suggestCaptureType) {
+      auto *intro = new QLabel(
+          tr("Choose what kind of material this image captures. The capture "
+             "type determines which restoration workflow is applicable."),
+          this);
+      intro->setWordWrap(true);
+      layout->addWidget(intro);
+
+      m_captureType = new QComboBox(this);
+      m_captureType->setObjectName(QStringLiteral("InitialCaptureTypeCombo"));
+      for (int i = 0; i < (int)colorscreen::render_parameters::capture_max;
+           ++i) {
+        const auto capture = static_cast<decltype(
+            colorscreen::render_parameters::capture_unknown)>(i);
+        bool show = capture == colorscreen::render_parameters::capture_unknown;
+        if (looksMonochrome) {
+          // RGB is only a Bayer-container detail in this case. Until we have
+          // additive-process recognition, do not offer color-screen workflows.
+          show = show ||
+                 capture == colorscreen::render_parameters::capture_transparency ||
+                 capture == colorscreen::render_parameters::capture_negative ||
+                 capture == colorscreen::render_parameters::capture_plain_image;
+        } else if (scan) {
+          show = show ||
+                 colorscreen::render_parameters::capture_type_compatible_p(
+                     capture, scan);
+        }
+        if (show)
+          m_captureType->addItem(
+              QString::fromUtf8(colorscreen::render_parameters::
+                                    capture_properties[i].pretty_name),
+              i);
+      }
+      m_captureType->setCurrentIndex(
+          m_captureType->findData(
+              (int)colorscreen::render_parameters::capture_unknown));
+      m_captureType->setToolTip(
+          tr("Choose Unknown if you are not sure yet. Color-Screen will keep "
+             "the restoration workflow conservative until this is known."));
+      layout->addWidget(m_captureType);
+
+      if (suggestBayer || suggestFStop || suggestPitch || suggestFill
+          || suggestDPI || suggestWavelengths) {
+        auto *line = new QFrame(this);
+        line->setFrameShape(QFrame::HLine);
+        line->setFrameShadow(QFrame::Sunken);
+        layout->addWidget(line);
+      }
+    }
     
     if (suggestBayer) {
       auto *intro = new QLabel(
@@ -343,6 +435,14 @@ public:
     layout->addWidget(buttons);
   }
 
+  /** Return the capture type selected by the operator. */
+  auto selectedCaptureType() const {
+    if (!m_captureType)
+      return colorscreen::render_parameters::capture_unknown;
+    return static_cast<decltype(colorscreen::render_parameters::capture_unknown)>(
+        m_captureType->currentData().toInt());
+  }
+
   /** Return whether compensated monochrome Bayer loading was selected. */
   bool useMonochromeBayerCorrection() const {
     return m_monochromeBayer && m_monochromeBayer->isChecked();
@@ -391,6 +491,7 @@ private:
     return tr("Unknown, %1 mm width").arg(width_mm, 0, 'f', 1);
   }
 
+  QComboBox *m_captureType = nullptr;
   QCheckBox *m_monochromeBayer = nullptr;
   QCheckBox *m_fstop = nullptr;
   QCheckBox *m_pitch = nullptr;
@@ -706,7 +807,7 @@ void MainWindow::setupUi() {
   workflowLayout->addWidget(workflowToggle);
 
   auto *workflowStages = new QLabel(
-      tr("Capture → Process → Register → Reconstruct → Color"),
+      tr("Capture → Sharpen → Process → Register/Reconstruct → Color"),
       workflowSummary);
   workflowStages->setObjectName(QStringLiteral("WorkflowStages"));
   workflowStages->setWordWrap(true);
@@ -737,6 +838,21 @@ void MainWindow::setupUi() {
   m_workflowCalibrationLabel->setWordWrap(true);
   workflowLayout->addWidget(m_workflowCalibrationLabel);
 
+  QFont workflowSectionFont = m_workflowProcessLabel->font();
+  workflowSectionFont.setWeight(QFont::DemiBold);
+  m_workflowProcessLabel->setFont(workflowSectionFont);
+  m_workflowRegistrationLabel->setFont(workflowSectionFont);
+  m_workflowCalibrationLabel->setFont(workflowSectionFont);
+
+  m_workflowNextStepLabel = new QLabel(workflowSummary);
+  m_workflowNextStepLabel->setObjectName(
+      QStringLiteral("WorkflowNextStepSummary"));
+  m_workflowNextStepLabel->setWordWrap(true);
+  QFont nextStepFont = m_workflowNextStepLabel->font();
+  nextStepFont.setBold(true);
+  m_workflowNextStepLabel->setFont(nextStepFont);
+  workflowLayout->addWidget(m_workflowNextStepLabel);
+
   const bool workflowExpanded =
       QSettings().value(QStringLiteral("workflowSummaryExpanded"), true).toBool();
   auto setWorkflowExpanded =
@@ -746,6 +862,7 @@ void MainWindow::setupUi() {
         m_workflowProcessLabel->setVisible(expanded);
         m_workflowRegistrationLabel->setVisible(expanded);
         m_workflowCalibrationLabel->setVisible(expanded);
+        m_workflowNextStepLabel->setVisible(expanded);
         workflowToggle->setToolTip(
             expanded ? tr("Hide the document workflow summary.")
                      : tr("Show the document workflow summary."));
@@ -810,12 +927,28 @@ void MainWindow::setupUi() {
   m_configTabs = new MultiLineTabWidget(controlsArea);
 
   // Create Sharpness Panel
+  MtfCalibrationCallbacks mtfCalibration;
+  mtfCalibration.summary = [this]() { return mtfCalibrationSummary(); };
+  mtfCalibration.fitAvailable = [this]() { return !m_mtfFitRunning; };
+  mtfCalibration.fitStarted = [this](const colorscreen::mtf_parameters &inputs) {
+    return beginMtfModelFit(inputs);
+  };
+  mtfCalibration.fitFailed = [this](const colorscreen::mtf_parameters &inputs) {
+    failMtfModelFit(inputs);
+  };
+  mtfCalibration.fitAccepted =
+      [this](const colorscreen::mtf_parameters &fitted, double rms) {
+        acceptMtfModelFit(fitted, rms);
+      };
+  mtfCalibration.fitFinishedWithoutResult =
+      [this]() { finishMtfModelFitWithoutResult(); };
   m_sharpnessPanel =
       new SharpnessPanel([this]() { return getCurrentState(); },
                          [this](const ParameterState &s, const QString &desc) {
                            changeParameters(s, desc);
                          },
-                         [this]() { return m_scan; }, this);
+                         [this]() { return m_scan; }, std::move(mtfCalibration),
+                         this);
 
   // Create Screen Panel
   m_screenPanel =
@@ -908,6 +1041,16 @@ void MainWindow::setupUi() {
           });
   connect(m_sharpnessPanel, &SharpnessPanel::measureMtfRequested, this,
           &MainWindow::onMeasureMtfRequested);
+  connect(m_sharpnessPanel, &SharpnessPanel::mtfMeasurementSelected, this,
+          [this](int index) {
+            m_selectedMtfMeasurement = index;
+            updateMtfMeasurementOverlay(false);
+          });
+  connect(m_sharpnessPanel, &SharpnessPanel::mtfMeasurementLocateRequested, this,
+          [this](int index) {
+            m_selectedMtfMeasurement = index;
+            updateMtfMeasurementOverlay(true);
+          });
 
 
   // Create Digital Capture Panel
@@ -1681,7 +1824,8 @@ void MainWindow::updateCoordinateSpaceControls() {
     return;
   const bool stitched = m_scan && m_scan->stitch;
   const bool hasFinal = stitched ||
-      (m_scan && m_scrToImgParams.type != colorscreen::Random);
+      (m_scan && colorscreen::screen_has_regular_geometry_p(
+                     m_scrToImgParams.type));
 
   m_coordinateComboBox->blockSignals(true);
   m_coordinateComboBox->clear();
@@ -1887,8 +2031,9 @@ void MainWindow::onColorCheckBoxChanged(bool checked) {
 
 /** Rebuild the render mode combo box from the static render_type_properties
    table in libcolorscreen.  Filters out modes that are hidden, require
-   screen-to-image mapping when none is set (Random type), need RGB data
-   that isn't available, or need a correction profile that doesn't exist.
+   screen-to-image mapping when no regular screen is available, screen-colour
+   detection when the capture cannot support it, RGB data that isn't
+   available, or a correction profile that doesn't exist.
    After populating, re-selects the current mode, updates 1-0 hotkey
    tooltips, and refreshes the color checkbox state.  */
 void MainWindow::updateModeMenu() {
@@ -1920,13 +2065,24 @@ void MainWindow::updateModeMenu() {
     if (prop.flags & render_type_property::HIDE_IN_GUI)
       show = false;
 
-    // If given type has render_type_property::NEEDS_SCR_TO_IMG do not show it
-    // if scr_to_img type is Random.
-    if (prop.flags & render_type_property::NEEDS_SCR_TO_IMG) {
-      if (m_scrToImgParams.type == colorscreen::Random) {
-        show = false;
-      }
-    }
+    const auto capture =
+        m_scan ? m_rparams.get_capture_type(m_scan.get())
+               : colorscreen::render_parameters::capture_unknown;
+    const bool hasScreenCapture =
+        colorscreen::render_parameters::capture_has_screen_p(capture);
+    const bool supportsScreenDetection =
+        colorscreen::render_parameters::capture_supports_screen_detection_p(
+            capture);
+
+    if ((prop.flags & render_type_property::NEEDS_SCR_TO_IMG) &&
+        (!hasScreenCapture || !colorscreen::screen_has_regular_geometry_p(
+                                  m_scrToImgParams.type)))
+      show = false;
+
+    if ((prop.flags & render_type_property::USES_SCR_DETECT) &&
+        (!supportsScreenDetection ||
+         !colorscreen::screen_present_p(m_scrToImgParams.type)))
+      show = false;
 
     // If given type has render_type_property::NEEDS_RGB do not show it if
     // m_scan->rgbdata is NULL.
@@ -3282,6 +3438,7 @@ void MainWindow::setInspectorImageWidget(ImageWidget *imageWidget) {
         target->registrationPointsVisible());
   updateRegistrationActions();
   updateFocusAreaOverlays();
+  updateMtfMeasurementOverlay(false);
 }
 
 /** Reclaim the inspector when a detached primary document becomes active. */
@@ -3357,23 +3514,28 @@ void MainWindow::reloadCurrentImageWithDemosaic() {
    Detected capture metadata is copied only after explicit user confirmation;
    loading an existing parameter file remains authoritative. */
 void MainWindow::maybeOfferInitialSetupGuide(
-    const colorscreen::monochrome_bayer_analysis &analysis) {
+    const colorscreen::monochrome_bayer_analysis &analysis,
+    bool suggestDetectedMetadata) {
   if (!m_scan)
     return;
 
-  bool suggestBayer = analysis.candidate &&
+  const bool suggestCaptureType =
+      m_rparams.get_capture_type(m_scan.get()) ==
+          colorscreen::render_parameters::capture_unknown;
+  const bool looksMonochrome = analysis.candidate && m_scan->has_rgb();
+  bool suggestBayer = suggestDetectedMetadata && looksMonochrome &&
       m_rparams.demosaic !=
           colorscreen::image_data::demosaic_monochromatic_bayer_corrected;
-  bool suggestFStop = m_scan->f_stop > 0 &&
+  bool suggestFStop = suggestDetectedMetadata && m_scan->f_stop > 0 &&
       std::abs(m_scan->f_stop - m_rparams.sharpen.scanner_mtf.f_stop) > 0.01;
-  bool suggestPitch = m_scan->pixel_pitch > 0 &&
+  bool suggestPitch = suggestDetectedMetadata && m_scan->pixel_pitch > 0 &&
       std::abs(m_scan->pixel_pitch - m_rparams.sharpen.scanner_mtf.pixel_pitch) > 0.001;
-  bool suggestFill = m_scan->sensor_fill_factor > 0 &&
+  bool suggestFill = suggestDetectedMetadata && m_scan->sensor_fill_factor > 0 &&
       std::abs(m_scan->sensor_fill_factor - m_rparams.sharpen.scanner_mtf.sensor_fill_factor) > 0.001;
-  bool suggestDPI = m_scan->xdpi > 0 &&
+  bool suggestDPI = suggestDetectedMetadata && m_scan->xdpi > 0 &&
       std::abs(m_scan->xdpi - m_rparams.sharpen.scanner_mtf.scan_dpi) > 0.1;
   bool suggestWavelengths = false;
-  for (int c = 0; c < 4; ++c) {
+  for (int c = 0; suggestDetectedMetadata && c < 4; ++c) {
     const bool present = c < 3 ? m_scan->has_rgb()
                                : m_scan->has_grayscale_or_ir();
     const double wavelength = m_scan->wavelengths[c];
@@ -3383,24 +3545,35 @@ void MainWindow::maybeOfferInitialSetupGuide(
       suggestWavelengths = true;
   }
 
-  if (!suggestBayer && !suggestFStop && !suggestPitch && !suggestFill
-      && !suggestDPI && !suggestWavelengths)
+  if (!suggestCaptureType && !suggestBayer && !suggestFStop && !suggestPitch
+      && !suggestFill && !suggestDPI && !suggestWavelengths)
     return;
 
   const std::shared_ptr<colorscreen::image_data> guideScan = m_scan;
   auto *dialog = new InitialSetupGuideDialog(
-      this, suggestBayer, suggestFStop, suggestPitch, suggestFill,
-      suggestDPI, suggestWavelengths, guideScan.get());
+      this, suggestCaptureType, looksMonochrome, suggestBayer, suggestFStop,
+      suggestPitch,
+      suggestFill, suggestDPI, suggestWavelengths, guideScan.get());
   connect(
       dialog, &QDialog::finished, this,
-      [this, dialog, guideScan, suggestBayer, suggestFStop, suggestPitch,
-       suggestFill, suggestDPI, suggestWavelengths](int result) {
+      [this, dialog, guideScan, suggestCaptureType, suggestBayer, suggestFStop,
+       suggestPitch, suggestFill, suggestDPI, suggestWavelengths](int result) {
         if (result != QDialog::Accepted || !m_scan ||
             m_scan.get() != guideScan.get())
           return;
 
         ParameterState state = getCurrentState();
         QStringList changes;
+
+        if (suggestCaptureType) {
+          const auto capture = dialog->selectedCaptureType();
+          if (capture != colorscreen::render_parameters::capture_unknown) {
+            state.rparams.capture_type = capture;
+            if (!colorscreen::render_parameters::capture_has_screen_p(capture))
+              state.scrToImg.type = colorscreen::NoScreen;
+            changes << tr("capture type");
+          }
+        }
 
         const bool useBayer =
             suggestBayer && dialog->useMonochromeBayerCorrection();
@@ -3522,7 +3695,8 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
 
             // If we have a valid screen type, default to formatted
             // (interpolated) view
-            if (m_scrToImgParams.type != colorscreen::Random) {
+            if (colorscreen::screen_has_regular_geometry_p(
+                    m_scrToImgParams.type)) {
               m_renderTypeParams.type = colorscreen::render_type_interpolated;
             }
           }
@@ -3544,8 +3718,12 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
     }
   }
 
-  const bool offerInitialGuide =
+  const bool suggestDetectedMetadata =
       !suppressParamPrompt && !parameterDataLoaded;
+  const bool offerInitialGuide =
+      !suppressParamPrompt &&
+      (suggestDetectedMetadata ||
+       m_rparams.capture_type == colorscreen::render_parameters::capture_unknown);
 
   auto progress = std::make_shared<colorscreen::progress_info>();
   progress->set_task("Opening image", 0);
@@ -3564,7 +3742,7 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
   connect(
       watcher, &QFutureWatcher<std::pair<bool, QString>>::finished, this,
       [this, watcher, tempScan, progress, fileName, isCsprj,
-       offerInitialGuide]() {
+       offerInitialGuide, suggestDetectedMetadata]() {
         if (m_closing) {
           watcher->deleteLater();
           return;
@@ -3611,9 +3789,11 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
           if (offerInitialGuide) {
             const colorscreen::monochrome_bayer_analysis analysis =
                 m_scan->analyze_monochrome_bayer();
-            QTimer::singleShot(0, this, [this, analysis]() {
-              maybeOfferInitialSetupGuide(analysis);
-            });
+            QTimer::singleShot(
+                0, this, [this, analysis, suggestDetectedMetadata]() {
+                  maybeOfferInitialSetupGuide(analysis,
+                                              suggestDetectedMetadata);
+                });
           }
 
           // Launch background tile loading for stitch projects.
@@ -3726,6 +3906,15 @@ void MainWindow::applyState(const ParameterState &state) {
   const bool invalidateFocusAreas
       = m_scrToImgParams != state.scrToImg
         || !(m_rparams.scan_crop == state.rparams.scan_crop);
+  bool profileSpotsChanged = m_profileSpots.size() != state.profileSpots.size();
+  if (!profileSpotsChanged) {
+    for (std::size_t i = 0; i < m_profileSpots.size(); ++i) {
+      if (!(m_profileSpots[i] == state.profileSpots[i])) {
+        profileSpotsChanged = true;
+        break;
+      }
+    }
+  }
   // User requested rotation is not part of parameters.
   // Preserve current rotation when applying state.
   m_rparams = state.rparams;
@@ -3733,6 +3922,13 @@ void MainWindow::applyState(const ParameterState &state) {
   m_detectParams = state.detect;
   m_solverParams = state.solver; // Manually copy logic if needed? Struct copy
   m_profileSpots = state.profileSpots;
+  if (profileSpotsChanged) {
+    // Per-spot optimizer output is indexed by the spot list. Never show old
+    // DeltaE/colour matches beside a different set of spots.
+    m_profileSpotResults.clear();
+    if (m_profilePanel)
+      m_profilePanel->setSpotResults(m_profileSpotResults);
+  }
   // should work if fields are copyable.
   // solver_parameters has vector, copy constructor should be fine
   // (std::vector).
@@ -3754,6 +3950,132 @@ void MainWindow::applyState(const ParameterState &state) {
     clearFocusAreaAnalysis();
 }
 
+QString MainWindow::mtfCalibrationSummary() const {
+  const colorscreen::mtf_parameters &mtf = m_rparams.sharpen.scanner_mtf;
+  const qsizetype count = static_cast<qsizetype>(mtf.measurements.size());
+  if (count == 0)
+    return tr("Capture MTF: not measured");
+
+  QString summary = tr("Capture MTF: %1 saved measurement%2")
+                        .arg(count)
+                        .arg(count == 1 ? QString() : QStringLiteral("s"));
+  const bool fitCurrent =
+      m_mtfFitBaseline && m_mtfFitBaseline->fit_inputs_equal_p(mtf);
+  const bool failureCurrent =
+      m_mtfFitFailureInputs && m_mtfFitFailureInputs->fit_inputs_equal_p(mtf);
+  if (m_mtfFitRunning) {
+    if (m_mtfFitPendingInputs && !m_mtfFitPendingInputs->equal_p(mtf))
+      summary += tr(" • fit inputs changed — result will be discarded");
+    else
+      summary += tr(" • fitting model…");
+  } else if (fitCurrent) {
+    summary += tr(" • model current");
+    if (m_mtfFitRms >= 0)
+      summary += tr(" • RMS %1 pp").arg(m_mtfFitRms, 0, 'g', 4);
+    if (failureCurrent)
+      summary += tr(" • last refit failed");
+  } else if (failureCurrent) {
+    summary += tr(" • fit failed — adjust settings and retry");
+  } else if (m_mtfFitBaseline) {
+    summary += tr(" • model stale — refit");
+  } else {
+    summary += tr(" • ready to fit/validate model");
+  }
+  return summary;
+}
+
+void MainWindow::refreshMtfCalibrationPresentation() {
+  updateWorkflowSummary();
+  if (m_sharpnessPanel)
+    m_sharpnessPanel->refreshMtfCalibrationStatus();
+  emit mtfCalibrationStateChanged();
+}
+
+bool MainWindow::beginMtfModelFit(const colorscreen::mtf_parameters &inputs) {
+  if (m_mtfFitRunning)
+    return false;
+  m_mtfFitRunning = true;
+  m_mtfFitPendingInputs = inputs;
+  m_mtfFitFailureInputs.reset();
+  refreshMtfCalibrationPresentation();
+  return true;
+}
+
+void MainWindow::failMtfModelFit(const colorscreen::mtf_parameters &inputs) {
+  m_mtfFitRunning = false;
+  m_mtfFitPendingInputs.reset();
+  m_mtfFitFailureInputs = inputs;
+  refreshMtfCalibrationPresentation();
+}
+
+void MainWindow::acceptMtfModelFit(const colorscreen::mtf_parameters &fitted,
+                                   double rms) {
+  m_mtfFitRunning = false;
+  m_mtfFitPendingInputs.reset();
+  m_mtfFitBaseline = fitted;
+  m_mtfFitFailureInputs.reset();
+  m_mtfFitRms = rms;
+  /* SharpnessPanel applies FITTED immediately after this callback. Defer the
+     presentation refresh so it observes the accepted document state rather
+     than briefly calling the new baseline stale. */
+  QTimer::singleShot(0, this, [this]() { refreshMtfCalibrationPresentation(); });
+}
+
+void MainWindow::finishMtfModelFitWithoutResult() {
+  m_mtfFitRunning = false;
+  m_mtfFitPendingInputs.reset();
+  refreshMtfCalibrationPresentation();
+}
+
+QString MainWindow::profileCalibrationSummary() const {
+  if (!m_scan)
+    return tr("Profile: load an image to calibrate");
+
+  const auto capture = m_rparams.get_capture_type(m_scan.get());
+  if (!colorscreen::render_parameters::capture_has_screen_p(capture))
+    return tr("Profile: not applicable to this capture workflow");
+  if (!m_scan->has_rgb())
+    return tr("Profile: unavailable — capture has no RGB channels");
+
+  const qsizetype count = static_cast<qsizetype>(m_profileSpots.size());
+  const bool savedCalibration = m_rparams.has_correction_profile();
+  if (count < 4) {
+    if (savedCalibration)
+      return tr("Profile: saved calibration present — provenance not verified • %1/4 spots")
+          .arg(count);
+    return tr("Profile: %1/4 calibration spots — add %2 more")
+        .arg(count).arg(4 - count);
+  }
+
+  const ColorOptimizerRequestData current{
+      m_scrToImgParams, m_rparams, m_profileSpots};
+  const bool fitCurrent = m_profileCalibrationBaseline &&
+      !profileCalibrationInputsDiffer(*m_profileCalibrationBaseline, current);
+  const bool failureCurrent = m_profileCalibrationFailureInputs &&
+      !profileCalibrationInputsDiffer(*m_profileCalibrationFailureInputs, current);
+
+  QString summary = tr("Profile: %1 calibration spots").arg(count);
+  if (m_profileCalibrationPendingInputs) {
+    summary += tr(" • optimizing…");
+  } else if (fitCurrent) {
+    summary += tr(" • calibration current");
+    if (m_profileCalibrationAverageDeltaE >= 0)
+      summary += tr(" • avg ΔE₂₀₀₀ %1")
+          .arg(m_profileCalibrationAverageDeltaE, 0, 'f', 2);
+    if (failureCurrent)
+      summary += tr(" • last retry failed");
+  } else if (failureCurrent) {
+    summary += tr(" • optimization failed — adjust inputs and retry");
+  } else if (m_profileCalibrationBaseline) {
+    summary += tr(" • calibration stale — reoptimize");
+  } else if (savedCalibration) {
+    summary += tr(" • saved calibration present — provenance not verified");
+  } else {
+    summary += tr(" • ready to optimize");
+  }
+  return summary;
+}
+
 /** Refresh the persistent workflow summary from document-owned state.
 
     Geometry fit freshness is session-local rather than serialized into .par:
@@ -3762,7 +4084,7 @@ void MainWindow::applyState(const ParameterState &state) {
     whose inputs changed is cancelled before it can publish an obsolete result. */
 void MainWindow::updateWorkflowSummary() {
   if (!m_workflowProcessLabel || !m_workflowRegistrationLabel ||
-      !m_workflowCalibrationLabel)
+      !m_workflowCalibrationLabel || !m_workflowNextStepLabel)
     return;
 
   const ParameterState currentState = getCurrentState();
@@ -3779,43 +4101,96 @@ void MainWindow::updateWorkflowSummary() {
     m_solverQueue.cancelAll();
   }
 
+  if (m_profileCalibrationPendingInputs) {
+    const ColorOptimizerRequestData currentProfileInputs{
+        m_scrToImgParams, m_rparams, m_profileSpots};
+    if (profileCalibrationInputsDiffer(*m_profileCalibrationPendingInputs,
+                                       currentProfileInputs)) {
+      // As with geometry, reset first because cancellation can synchronously
+      // drive progress/UI callbacks.
+      m_profileCalibrationPendingInputs.reset();
+      m_colorOptimizerQueue.cancelAll();
+    }
+  }
+
+  using capture_type =
+      decltype(colorscreen::render_parameters::capture_unknown);
+  const capture_type capture =
+      m_scan ? m_rparams.get_capture_type(m_scan.get())
+             : m_rparams.capture_type;
   const colorscreen::scr_type type = m_scrToImgParams.type;
-  QString processName = tr("Unknown");
+  const bool hasScreen =
+      colorscreen::render_parameters::capture_has_screen_p(capture);
+  const bool colorDetection =
+      colorscreen::render_parameters::capture_supports_screen_detection_p(
+          capture);
+  const bool regularScreen = colorscreen::screen_has_regular_geometry_p(type);
+  const bool stochasticScreen = colorscreen::stochastic_screen_p(type);
+
+  QString captureName = tr("Unknown");
+  const int captureIndex = static_cast<int>(capture);
+  if (captureIndex >= 0 &&
+      captureIndex < colorscreen::render_parameters::capture_max)
+    captureName = QString::fromUtf8(
+        colorscreen::render_parameters::capture_properties[captureIndex]
+            .pretty_name);
+
+  QString screenName;
   const int typeIndex = static_cast<int>(type);
   if (typeIndex >= 0 && typeIndex < colorscreen::max_scr_type &&
       colorscreen::scr_names[typeIndex].pretty_name)
-    processName = QString::fromUtf8(
-        colorscreen::scr_names[typeIndex].pretty_name);
-  if (type == colorscreen::Random)
-    processName += tr(" (no historical screen)");
-  m_workflowProcessLabel->setText(tr("Process: %1").arg(processName));
+    screenName =
+        QString::fromUtf8(colorscreen::scr_names[typeIndex].pretty_name);
 
-  if (!m_scan) {
-    m_workflowRegistrationLabel->setText(
-        tr("Registration: load an image to begin"));
-  } else if (type == colorscreen::Random) {
-    m_workflowRegistrationLabel->setText(
-        tr("Registration: not required for Random/no-screen images"));
+  if (capture == colorscreen::render_parameters::capture_unknown) {
+    m_workflowProcessLabel->setText(
+        tr("Process: capture type unknown — choose it in Digital capture"));
+  } else if (!hasScreen) {
+    m_workflowProcessLabel->setText(
+        tr("Process: %1 — no historical color-screen reconstruction")
+            .arg(captureName));
   } else {
-    const qsizetype count = static_cast<qsizetype>(m_solverParams.n_points());
-    const int minimum = colorscreen::solver_parameters::min_points(type);
-    QString registration;
-    if (count == 0) {
-      registration = tr("Registration: no points — detect or add at least %1")
-                         .arg(minimum);
-    } else if (count < minimum) {
-      registration =
-          tr("Registration: %1/%2 points — add %3 more")
-              .arg(count)
-              .arg(minimum)
-              .arg(minimum - count);
+    m_workflowProcessLabel->setText(
+        tr("Process: %1 • screen: %2").arg(captureName, screenName));
+  }
+
+  QString registration;
+  qsizetype pointCount = static_cast<qsizetype>(m_solverParams.n_points());
+  int minimumPoints = 0;
+  bool fitCurrent = false;
+  bool failureCurrent = false;
+  if (!m_scan) {
+    registration = tr("Registration: load an image to begin");
+  } else if (capture == colorscreen::render_parameters::capture_unknown) {
+    registration = tr("Registration: choose the capture type first");
+  } else if (!hasScreen) {
+    registration = tr("Registration: not applicable — no color screen");
+  } else if (!regularScreen) {
+    if (stochasticScreen) {
+      registration = tr(
+          "Registration: geometry not used — reconstruct from detected "
+          "screen colours");
     } else {
-      registration = tr("Registration: %1 points").arg(count);
-      const bool fitCurrent =
-          m_geometryFitBaseline &&
+      registration = tr("Registration: choose a screen type");
+    }
+  } else {
+    minimumPoints = colorscreen::solver_parameters::min_points(type);
+    const QString prefix = tr("Registration: optional geometry path");
+    if (pointCount == 0) {
+      registration = tr("%1 — no points; detect or add at least %2")
+                         .arg(prefix)
+                         .arg(minimumPoints);
+    } else if (pointCount < minimumPoints) {
+      registration = tr("%1 — %2/%3 points; add %4 more")
+                         .arg(prefix)
+                         .arg(pointCount)
+                         .arg(minimumPoints)
+                         .arg(minimumPoints - pointCount);
+    } else {
+      registration = tr("%1 — %2 points").arg(prefix).arg(pointCount);
+      fitCurrent = m_geometryFitBaseline &&
           !geometryFitInputsDiffer(*m_geometryFitBaseline, currentState);
-      const bool failureCurrent =
-          m_geometryFitFailureInputs &&
+      failureCurrent = m_geometryFitFailureInputs &&
           !geometryFitInputsDiffer(*m_geometryFitFailureInputs, currentState);
       if (m_geometryFitPendingInputs) {
         registration += tr(" • fitting geometry…");
@@ -3824,8 +4199,7 @@ void MainWindow::updateWorkflowSummary() {
         if (failureCurrent)
           registration += tr(" • last refit failed");
       } else if (failureCurrent) {
-        registration +=
-            tr(" • fit failed — adjust points/settings and retry");
+        registration += tr(" • fit failed — adjust points/settings and retry");
       } else if (m_geometryFitBaseline) {
         registration += tr(" • geometry stale — refit");
       } else {
@@ -3834,33 +4208,62 @@ void MainWindow::updateWorkflowSummary() {
       if (m_scrToImgParams.mesh_trans)
         registration += tr(" • nonlinear correction present");
     }
-    m_workflowRegistrationLabel->setText(registration);
   }
+  m_workflowRegistrationLabel->setText(registration);
 
-  const qsizetype mtfCount = static_cast<qsizetype>(
-      m_rparams.sharpen.scanner_mtf.measurements.size());
-  QString mtfSummary = mtfCount == 0
-      ? tr("Capture MTF: not measured")
-      : tr("Capture MTF: %1 saved measurement%2")
-            .arg(mtfCount)
-            .arg(mtfCount == 1 ? QString() : QStringLiteral("s"));
+  const auto &mtf = m_rparams.sharpen.scanner_mtf;
+  QStringList missingLensData;
+  if (!colorscreen::my_isfinite(mtf.pixel_pitch) || mtf.pixel_pitch <= 0)
+    missingLensData << tr("pixel pitch");
+  if (!colorscreen::my_isfinite(mtf.f_stop) || mtf.f_stop <= 0)
+    missingLensData << tr("f-stop");
+  if (!colorscreen::my_isfinite(mtf.scan_dpi) || mtf.scan_dpi <= 0)
+    missingLensData << tr("resolution");
+  const QString sharpenSummary = missingLensData.isEmpty()
+      ? tr("Sharpening: lens model ready")
+      : tr("Sharpening: lens model needs %1")
+            .arg(missingLensData.join(", "));
 
-  QString profileSummary;
-  if (!m_scan) {
-    profileSummary = tr("Profile: load an image to calibrate");
-  } else if (!m_scan->has_rgb()) {
-    profileSummary = tr("Profile: unavailable — capture has no RGB channels");
-  } else {
-    const qsizetype spotCount =
-        static_cast<qsizetype>(m_profileSpots.size());
-    profileSummary = spotCount == 0
-        ? tr("Profile: no calibration spots")
-        : tr("Profile: %1 calibration spot%2")
-              .arg(spotCount)
-              .arg(spotCount == 1 ? QString() : QStringLiteral("s"));
-  }
+  // Preserve #251's richer calibration/provenance summary rather than
+  // collapsing it back to a saved-measurement count.
+  const QString mtfSummary = mtfCalibrationSummary();
+
+  const QString profileSummary = profileCalibrationSummary();
+  if (m_profilePanel)
+    m_profilePanel->setCalibrationStatus(profileSummary);
   m_workflowCalibrationLabel->setText(
-      mtfSummary + QStringLiteral(" • ") + profileSummary);
+      sharpenSummary + QStringLiteral(" • ") + mtfSummary +
+      QStringLiteral(" • ") + profileSummary);
+
+  QString nextStep;
+  if (!m_scan) {
+    nextStep = tr("Next: load an image.");
+  } else if (capture == colorscreen::render_parameters::capture_unknown) {
+    nextStep = tr("Next: choose Capture type in Digital capture.");
+  } else if (colorscreen::render_parameters::capture_negative_p(capture) &&
+             !m_rparams.contact_copy.simulate) {
+    nextStep = tr(
+        "Next: Simulated darkroom — enable Contact copy simulation to turn "
+        "the negative into a positive.");
+  } else if (!hasScreen) {
+    nextStep = tr(
+        "Next: set capture correction, black/backlight and sharpening, then "
+        "render the corrected capture. Contact copy remains available for "
+        "negative or photolab simulation.");
+  } else if (colorDetection && stochasticScreen) {
+    nextStep = tr(
+        "Next: reconstruct from detected screen colours; stochastic screens "
+        "do not use Geometry.");
+  } else if (colorDetection && regularScreen) {
+    nextStep = tr(
+        "Next: choose either Geometry-based reconstruction or screen-colour "
+        "detection from the RGB scan.");
+  } else if (hasScreen && type == colorscreen::NoScreen) {
+    nextStep = tr("Next: choose the physical Screen type.");
+  } else {
+    nextStep = tr("Next: reconstruct the image and refine Color/Profile.");
+  }
+  m_workflowNextStepLabel->setText(nextStep);
 }
 
 /** Refresh all UI panels and toolbar state from a ParameterState.
@@ -4494,44 +4897,52 @@ void MainWindow::updateColorCheckBoxState() {
   m_colorCheckBox->blockSignals(false);
 }
 
-/** Show or hide the registration-related toolbar actions, menu, and tabs.
-   Registration tools are visible only when an image is loaded and the
-   screen type is not Random (which has no geometric mapping).  If hiding
-   while a registration tool is active, switches back to Pan mode.  */
+/** Show or hide restoration controls that depend on capture/screen type.
+   Geometry actions require a loaded screen capture with a regular lattice;
+   ordinary and unknown captures keep only the general capture-processing
+   stages. If geometry becomes unavailable, return to Pan mode.  */
 void MainWindow::updateRegistrationGroupVisibility() {
-  // Show registration group only if:
-  // 1. Image is loaded
-  // 2. Screen type is not Random
-  bool shouldShow = m_scan && (m_scrToImgParams.type != colorscreen::Random);
+  const auto capture =
+      m_scan ? m_rparams.get_capture_type(m_scan.get())
+             : colorscreen::render_parameters::capture_unknown;
+  const bool hasScreenCapture =
+      m_scan && colorscreen::render_parameters::capture_has_screen_p(capture);
+  const bool hasRegularGeometry =
+      hasScreenCapture && colorscreen::screen_has_regular_geometry_p(
+                              m_scrToImgParams.type);
 
-  for (QAction *action : m_registrationActions) {
-    action->setVisible(shouldShow);
-  }
+  for (QAction *action : m_registrationActions)
+    action->setVisible(hasRegularGeometry);
 
-  // Hide/Show registration menu
-  if (m_registrationMenu) {
-    m_registrationMenu->menuAction()->setVisible(shouldShow);
-  }
+  if (m_registrationMenu)
+    m_registrationMenu->menuAction()->setVisible(hasRegularGeometry);
 
-  // Hide/Show Geometry and Profile tabs
+  // Keep the beta tab order stable. Hide specialist color-screen stages that
+  // do not apply to ordinary/unknown captures. Color and Contact copy remain
+  // because their general appearance/darkroom controls are useful without an
+  // additive screen. Stochastic RGB screen captures retain Screen/Color/Profile
+  // while Geometry is hidden.
   if (m_configTabs) {
-    int geometryIndex = m_configTabs->indexOf(m_geometryPanel);
-    if (geometryIndex != -1) {
-      m_configTabs->setTabVisible(geometryIndex, shouldShow);
-    }
-    int profileIndex = m_configTabs->indexOf(m_profilePanel);
-    if (profileIndex != -1) {
-      m_configTabs->setTabVisible(profileIndex,
-                                  shouldShow && m_scan->has_rgb());
-    }
+    const auto setPanelVisible = [this](QWidget *panel, bool visible) {
+      const int index = m_configTabs->indexOf(panel);
+      if (index >= 0)
+        m_configTabs->setTabVisible(index, visible);
+    };
+    setPanelVisible(m_screenPanel, hasScreenCapture);
+    setPanelVisible(m_geometryPanel, hasRegularGeometry);
+    setPanelVisible(m_contactCopyPanel, m_scan != nullptr);
+    // Color also owns generic black/backlight/output appearance controls. The
+    // panel itself hides its historical dye sections for ordinary/unknown
+    // captures, so keep the tab available whenever an image is loaded.
+    setPanelVisible(m_colorPanel, m_scan != nullptr);
+    setPanelVisible(m_profilePanel,
+                    hasScreenCapture && m_scan && m_scan->has_rgb());
   }
 
-  // If hiding and a registration tool is active, switch to Pan
-  if (!shouldShow &&
+  if (!hasRegularGeometry &&
       (m_selectAction->isChecked() || m_addPointAction->isChecked() ||
-       m_setCenterAction->isChecked())) {
+       m_setCenterAction->isChecked()))
     m_panAction->setChecked(true);
-  }
 }
 
 /** Toggle the gamut warning overlay.
@@ -4830,10 +5241,10 @@ void MainWindow::updateRegistrationActions() {
     m_pruneMisplacedAction->setEnabled(hasSelection);
   }
 
-  // Disable Add Point and Set Center tools when screen type is Random or no
-  // scan loaded
+  // Add Point and Set Center need a loaded image and a regular screen lattice.
   if (m_addPointAction) {
-    bool canAddPoints = m_scan && m_scrToImgParams.type != colorscreen::Random;
+    bool canAddPoints = m_scan && colorscreen::screen_has_regular_geometry_p(
+                                     m_scrToImgParams.type);
     m_addPointAction->setEnabled(canAddPoints);
     // If tool is active but we can't add points, switch to Pan mode
     if (!canAddPoints && m_addPointAction->isChecked()) {
@@ -4841,7 +5252,8 @@ void MainWindow::updateRegistrationActions() {
     }
   }
   if (m_setCenterAction) {
-    bool canSetCenter = m_scan && m_scrToImgParams.type != colorscreen::Random;
+    bool canSetCenter = m_scan && colorscreen::screen_has_regular_geometry_p(
+                                     m_scrToImgParams.type);
     m_setCenterAction->setEnabled(canSetCenter);
     // If tool is active but we can't set center, switch to Pan mode
     if (!canSetCenter && m_setCenterAction->isChecked()) {
@@ -5177,12 +5589,30 @@ bool MainWindow::loadParameterFile(const QString &fileName) {
   }
   fclose(f);
 
+  // Successful external parameter load establishes a new calibration context.
+  m_geometryFitBaseline.reset();
+  m_geometryFitPendingInputs.reset();
+  m_geometryFitPendingComputeMesh.reset();
+  m_geometryFitFailureInputs.reset();
+  m_mtfFitBaseline.reset();
+  m_mtfFitPendingInputs.reset();
+  m_mtfFitFailureInputs.reset();
+  m_mtfFitRms = -1;
+  m_mtfFitRunning = false;
+  m_colorOptimizerQueue.cancelAll();
+  m_profileCalibrationBaseline.reset();
+  m_profileCalibrationPendingInputs.reset();
+  m_profileCalibrationFailureInputs.reset();
+  m_profileCalibrationAverageDeltaE = -1;
+
   // Update UI/Renderer
   if (m_scan) {
     m_imageWidget->setImage(m_scan, &m_rparams, &m_scrToImgParams,
                             &m_detectParams, &m_renderTypeParams,
                             &m_solverParams);
     m_imageWidget->setProfileSpots(&m_profileSpots, &m_profileSpotResults);
+    if (m_profilePanel)
+      m_profilePanel->setSpotResults(m_profileSpotResults);
     m_navigationView->setImage(m_scan, &m_rparams, &m_scrToImgParams,
                                &m_detectParams);
     updateColorCheckBoxState();
@@ -5606,7 +6036,13 @@ void MainWindow::onAutodetectScreen() {
     return;
   }
 
-  if (m_scrToImgParams.type != colorscreen::Random) {
+  // A stochastic process has no regular lattice to identify. Color-element
+  // autodetection is performed by the screen-detection render modes instead.
+  if (colorscreen::stochastic_screen_p(m_scrToImgParams.type)) {
+    return;
+  }
+
+  if (colorscreen::screen_has_regular_geometry_p(m_scrToImgParams.type)) {
     m_autoAddPointsAfterCoordinates = true;
     onAutodetectCoordinatesRequested();
     return;
@@ -6187,6 +6623,57 @@ void MainWindow::onFocusAnalysisFinished(bool success,
   }
 }
 
+/** Show/locate one selected stored MTF measurement on ordinary views when its
+    source image matches this document. */
+void MainWindow::updateMtfMeasurementOverlay(bool locate) {
+  const auto &measurements = m_rparams.sharpen.scanner_mtf.measurements;
+  const colorscreen::mtf_measurement *measurement = nullptr;
+  if (m_selectedMtfMeasurement >= 0 &&
+      m_selectedMtfMeasurement < static_cast<int>(measurements.size()))
+    measurement = &measurements[m_selectedMtfMeasurement];
+
+  auto matchesSource = [this](const colorscreen::mtf_measurement *m) {
+    if (!m || !m->has_spatial_metadata() || !m_scan ||
+        m->source_filename.empty())
+      return false;
+    if (m->source_width > 0 && m->source_height > 0 &&
+        (m->source_width != m_scan->width || m->source_height != m_scan->height))
+      return false;
+    const QFileInfo recorded(QString::fromUtf8(m->source_filename.c_str()));
+    const QFileInfo current(m_currentImageFile);
+    return recorded.absoluteFilePath() == current.absoluteFilePath() ||
+           (recorded.fileName() == current.fileName() &&
+            m->source_width == m_scan->width && m->source_height == m_scan->height);
+  };
+
+  const colorscreen::mtf_measurement *overlay =
+      matchesSource(measurement) ? measurement : nullptr;
+  if (m_imageWidget)
+    m_imageWidget->setMtfMeasurementOverlay(overlay);
+  if (ImageWidget *target = inspectorImageWidget();
+      target && target != m_imageWidget)
+    target->setMtfMeasurementOverlay(overlay);
+
+  if (!locate)
+    return;
+  if (!overlay) {
+    if (measurement && !measurement->source_filename.empty())
+      statusBar()->showMessage(
+          tr("MTF measurement belongs to %1; open that source/reference to locate it.")
+              .arg(QFileInfo(QString::fromUtf8(
+                       measurement->source_filename.c_str())).fileName()),
+          5000);
+    return;
+  }
+  if (ImageWidget *target = inspectorImageWidget()) {
+    const colorscreen::point_t center = {
+        overlay->roi.x + overlay->roi.width / 2.0,
+        overlay->roi.y + overlay->roi.height / 2.0};
+    target->centerOn(center);
+    target->setFocus();
+  }
+}
+
 /** Refresh automatic focus-area rectangles in all ordinary views currently
     owned/presented by this document. */
 void MainWindow::updateFocusAreaOverlays() {
@@ -6639,13 +7126,16 @@ void MainWindow::onColorOptimizeRequested(bool /*autoMode*/) {
   if (!m_scan || !m_colorOptimizerWorker)
     return;
   ParameterState state = getCurrentState();
-  if (state.profileSpots.empty())
+  if (state.profileSpots.size() < 4)
     return;
 
-  // Pack request data and hand it to the queue.
-  // If an optimization is already running the queue cancels it and starts a new
-  // one.
+  // The snapshot is both user-visible provenance and a publication gate. A
+  // newer request still supersedes an older TaskQueue job, while unrelated
+  // edits invalidate even the newest request before it can publish.
   ColorOptimizerRequestData d{m_scrToImgParams, m_rparams, state.profileSpots};
+  m_profileCalibrationPendingInputs = d;
+  m_profileCalibrationFailureInputs.reset();
+  updateWorkflowSummary();
   m_colorOptimizerQueue.requestRender(QVariant::fromValue(d));
 }
 
@@ -6657,7 +7147,11 @@ void MainWindow::onTriggerColorOptimize(
     const QVariant &userData) {
   if (!m_scan || !m_colorOptimizerWorker ||
       !userData.canConvert<ColorOptimizerRequestData>()) {
-    m_colorOptimizerQueue.reportFinished(reqId, false);
+    const bool current = m_colorOptimizerQueue.reportFinished(reqId, false);
+    if (current) {
+      m_profileCalibrationPendingInputs.reset();
+      updateWorkflowSummary();
+    }
     return;
   }
 
@@ -6682,10 +7176,33 @@ void MainWindow::onColorOptimizerFinished(
     std::vector<colorscreen::color_match> results, bool success,
     bool cancelled) {
   const bool current = m_colorOptimizerQueue.reportFinished(reqId, success);
-  if (!current || m_closing || cancelled)
+  if (!current || m_closing)
     return;
 
+  const ColorOptimizerRequestData now{
+      m_scrToImgParams, m_rparams, m_profileSpots};
+  const bool inputsStillCurrent = m_profileCalibrationPendingInputs &&
+      !profileCalibrationInputsDiffer(*m_profileCalibrationPendingInputs, now);
+  const std::optional<ColorOptimizerRequestData> completedInputs =
+      m_profileCalibrationPendingInputs;
+  m_profileCalibrationPendingInputs.reset();
+
+  if (cancelled || !inputsStillCurrent) {
+    updateWorkflowSummary();
+    return;
+  }
+
   if (success) {
+    m_profileCalibrationBaseline = completedInputs;
+    m_profileCalibrationFailureInputs.reset();
+    m_profileCalibrationAverageDeltaE = -1;
+    if (!results.empty()) {
+      double total = 0;
+      for (const auto &match : results)
+        total += match.deltaE;
+      m_profileCalibrationAverageDeltaE = total / results.size();
+    }
+
     ParameterState newState = getCurrentState();
     newState.rparams.profiled_dark = updatedRparams.profiled_dark;
     newState.rparams.profiled_red = updatedRparams.profiled_red;
@@ -6700,9 +7217,11 @@ void MainWindow::onColorOptimizerFinished(
       m_imageWidget->setProfileSpots(&m_profileSpots, &m_profileSpotResults);
       m_imageWidget->update();
     }
-  } else if (!cancelled) {
+  } else {
+    m_profileCalibrationFailureInputs = completedInputs;
     statusBar()->showMessage(tr("Color optimization failed"), 4000);
   }
+  updateWorkflowSummary();
 }
 
 /** Enter measurement mode for DPI calculation.
@@ -6787,6 +7306,7 @@ void MainWindow::onMeasureMtfRequested(bool checked) {
         p.channel = channel;
         p.name = baseParameters.name + " " + channelNames[channel];
         p.same_capture = channel == 0 ? baseParameters.same_capture : true;
+        p.source_filename = m_currentImageFile.toUtf8().toStdString();
 
         double wavelength = currentMtf.wavelengths[channel];
         if (!(colorscreen::my_isfinite(wavelength) && wavelength > 0)
@@ -6802,6 +7322,7 @@ void MainWindow::onMeasureMtfRequested(bool checked) {
     } else {
       colorscreen::slanted_edge_parameters p = baseParameters;
       p.channel = -1;
+      p.source_filename = m_currentImageFile.toUtf8().toStdString();
       measurementParameters.push_back(std::move(p));
     }
 

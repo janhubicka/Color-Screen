@@ -6,14 +6,18 @@
 #include "MultiLineTabWidget.h"
 #include "WorkspaceWindow.h"
 
+#include <QComboBox>
 #include <QCoreApplication>
 #include <QDebug>
 #include <QEvent>
+#include <QFont>
 #include <QLabel>
+#include <QComboBox>
 #include <QList>
 #include <QMdiArea>
 #include <QMdiSubWindow>
 #include <QPointer>
+#include <QPushButton>
 #include <QStatusBar>
 #include <QString>
 #include <QStringList>
@@ -229,46 +233,105 @@ void startWorkspaceChurnSmoke(ColorScreenApplication &app,
           return;
         }
 
-        QWidget *workflowSummary =
-            inspector->findChild<QWidget *>(QStringLiteral("WorkflowSummary"));
-        QToolButton *workflowToggle = inspector->findChild<QToolButton *>(
-            QStringLiteral("WorkflowSummaryToggle"));
-        QLabel *workflowStages =
-            inspector->findChild<QLabel *>(QStringLiteral("WorkflowStages"));
-        QLabel *processSummary = inspector->findChild<QLabel *>(
-            QStringLiteral("WorkflowProcessSummary"));
-        QLabel *registrationSummary = inspector->findChild<QLabel *>(
-            QStringLiteral("WorkflowRegistrationSummary"));
-        QLabel *calibrationSummary = inspector->findChild<QLabel *>(
-            QStringLiteral("WorkflowCalibrationSummary"));
-        if (!workflowSummary || !workflowToggle || !workflowStages ||
-            !processSummary || !registrationSummary || !calibrationSummary ||
-            !workflowStages->text().contains(QStringLiteral("Capture")) ||
-            !workflowStages->text().contains(QStringLiteral("Register")) ||
-            !processSummary->text().startsWith(QStringLiteral("Process:")) ||
-            !registrationSummary->text().startsWith(
-                QStringLiteral("Registration:")) ||
-            !calibrationSummary->text().contains(
-                QStringLiteral("Capture MTF:")) ||
-            !calibrationSummary->text().contains(QStringLiteral("Profile:"))) {
-          const QString detail = QStringLiteral(
-              "Workspace churn source document lost the persistent workflow "
-              "summary; stages=[%1], process=[%2], registration=[%3], "
-              "calibration=[%4]")
-                                     .arg(workflowStages
-                                              ? workflowStages->text()
-                                              : QStringLiteral("<missing>"),
-                                          processSummary
-                                              ? processSummary->text()
-                                              : QStringLiteral("<missing>"),
-                                          registrationSummary
-                                              ? registrationSummary->text()
-                                              : QStringLiteral("<missing>"),
-                                          calibrationSummary
-                                              ? calibrationSummary->text()
-                                              : QStringLiteral("<missing>"));
-          if (retryOrFail(detail))
-            return;
+QWidget *workflowSummary =
+    inspector->findChild<QWidget *>(QStringLiteral("WorkflowSummary"));
+QToolButton *workflowToggle = inspector->findChild<QToolButton *>(
+    QStringLiteral("WorkflowSummaryToggle"));
+QLabel *workflowStages =
+    inspector->findChild<QLabel *>(QStringLiteral("WorkflowStages"));
+QLabel *processSummary = inspector->findChild<QLabel *>(
+    QStringLiteral("WorkflowProcessSummary"));
+QLabel *registrationSummary = inspector->findChild<QLabel *>(
+    QStringLiteral("WorkflowRegistrationSummary"));
+QLabel *calibrationSummary = inspector->findChild<QLabel *>(
+    QStringLiteral("WorkflowCalibrationSummary"));
+QLabel *nextStepSummary = inspector->findChild<QLabel *>(
+    QStringLiteral("WorkflowNextStepSummary"));
+QComboBox *captureTypeCombo = inspector->findChild<QComboBox *>(
+    QStringLiteral("CaptureTypeCombo"));
+bool captureChoicesCompatible = captureTypeCombo != nullptr;
+if (captureTypeCombo && first->sharedImageData()) {
+  for (int i = 0; i < captureTypeCombo->count(); ++i) {
+    const auto capture = static_cast<decltype(
+        colorscreen::render_parameters::capture_unknown)>(
+        captureTypeCombo->itemData(i).toInt());
+    if (capture != colorscreen::render_parameters::capture_unknown &&
+        !colorscreen::render_parameters::capture_type_compatible_p(
+            capture, first->sharedImageData().get())) {
+      captureChoicesCompatible = false;
+      break;
+    }
+  }
+}
+QLabel *profileCalibrationStatus = inspector->findChild<QLabel *>(
+    QStringLiteral("ProfileCalibrationStatus"));
+QPushButton *profileOptimizeButton = inspector->findChild<QPushButton *>(
+    QStringLiteral("ProfileOptimizeButton"));
+QLabel *mtfCalibrationStatus = inspector->findChild<QLabel *>(
+    QStringLiteral("MtfCalibrationStatus"));
+QComboBox *mtfMeasurementSelector = inspector->findChild<QComboBox *>(
+    QStringLiteral("MtfMeasurementSelector"));
+QLabel *mtfMeasurementProvenance = inspector->findChild<QLabel *>(
+    QStringLiteral("MtfMeasurementProvenance"));
+QPushButton *mtfMeasurementLocate = inspector->findChild<QPushButton *>(
+    QStringLiteral("MtfMeasurementLocate"));
+
+if (!workflowSummary || !workflowToggle || !workflowStages ||
+    !processSummary || !registrationSummary || !calibrationSummary ||
+    !nextStepSummary || !captureTypeCombo ||
+    !workflowStages->text().contains(QStringLiteral("Capture")) ||
+    !workflowStages->text().contains(QStringLiteral("Sharpen")) ||
+    !workflowStages->text().contains(QStringLiteral("Register")) ||
+    !processSummary->text().startsWith(QStringLiteral("Process:")) ||
+    !registrationSummary->text().startsWith(
+        QStringLiteral("Registration:")) ||
+    !calibrationSummary->text().contains(QStringLiteral("Sharpening:")) ||
+    !calibrationSummary->text().contains(
+        QStringLiteral("Capture MTF:")) ||
+    !calibrationSummary->text().contains(QStringLiteral("Profile:")) ||
+    !nextStepSummary->text().startsWith(QStringLiteral("Next:")) ||
+    !captureChoicesCompatible ||
+    captureTypeCombo->findData(
+        (int)colorscreen::render_parameters::capture_unknown) < 0 ||
+    captureTypeCombo->findData(
+        (int)colorscreen::render_parameters::capture_plain_image) < 0 ||
+    processSummary->font().weight() < QFont::DemiBold ||
+    registrationSummary->font().weight() < QFont::DemiBold ||
+    calibrationSummary->font().weight() < QFont::DemiBold) {
+  const QString detail = QStringLiteral(
+      "Workspace churn source document lost the persistent workflow "
+      "summary; stages=[%1], process=[%2], registration=[%3], "
+      "calibration=[%4], next=[%5]")
+                             .arg(workflowStages
+                                      ? workflowStages->text()
+                                      : QStringLiteral("<missing>"),
+                                  processSummary
+                                      ? processSummary->text()
+                                      : QStringLiteral("<missing>"),
+                                  registrationSummary
+                                      ? registrationSummary->text()
+                                      : QStringLiteral("<missing>"),
+                                  calibrationSummary
+                                      ? calibrationSummary->text()
+                                      : QStringLiteral("<missing>"),
+                                  nextStepSummary
+                                      ? nextStepSummary->text()
+                                      : QStringLiteral("<missing>"));
+  if (retryOrFail(detail))
+    return;
+  return;
+}
+
+        if (!profileCalibrationStatus || !profileOptimizeButton ||
+            !profileCalibrationStatus->text().startsWith(
+                QStringLiteral("Profile:")) ||
+            !mtfCalibrationStatus || !mtfMeasurementSelector ||
+            !mtfMeasurementProvenance || !mtfMeasurementLocate ||
+            mtfMeasurementSelector->count() < 1 ||
+            mtfMeasurementSelector->itemData(0).toInt() != -1 ||
+            mtfMeasurementLocate->isEnabled()) {
+          fail(QStringLiteral(
+              "Workspace churn source document lost MTF calibration/provenance controls"));
           return;
         }
 

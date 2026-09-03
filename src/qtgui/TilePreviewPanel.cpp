@@ -51,16 +51,6 @@ renderTilesGeneric(ParameterState state, int scanWidth, int scanHeight,
     tile.pixels = pixels.data();
 
     colorscreen::scr_type type = state.scrToImg.type;
-    // If panel does not require scan (e.g. ColorPanel), and type is Random
-    // (default), force a valid screen type (e.g. Paget) so that
-    // render_screen_tile does not abort. This allows visualizing dyes even
-    // without a loaded image/screen detection.
-    if (type == colorscreen::Random) {
-      // We can't use requiresScan() here easily because this function is
-      // static/free helper. But we pass 'state'. Wait, renderTilesGeneric is
-      // free function. We need to pass requiresScan flag to it or handle it in
-      // performTileRender.
-    }
 
     if (render_screen_tile(tile, type, state.rparams, pixel_size, tileTypes[i],
                            progress.get())) {
@@ -498,5 +488,5 @@ void TilePreviewPanel::reattachTiles(QWidget *widget) {
 
 bool TilePreviewPanel::isTileRenderingEnabled(
     const ParameterState &state) const {
-  return state.scrToImg.type != scr_type::Random;
+  return colorscreen::screen_has_regular_geometry_p(state.scrToImg.type);
 }

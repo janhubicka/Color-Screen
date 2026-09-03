@@ -284,11 +284,22 @@ public:
     std::vector<colorscreen::point_t>  spots;
   };
 
+  /** Shared document-level measured-MTF fit provenance used by every
+      Sharpness panel, including external slanted-edge reference views. */
+  QString mtfCalibrationSummary() const;
+  bool mtfModelFitRunning() const { return m_mtfFitRunning; }
+  bool beginMtfModelFit(const colorscreen::mtf_parameters &inputs);
+  void failMtfModelFit(const colorscreen::mtf_parameters &inputs);
+  void acceptMtfModelFit(const colorscreen::mtf_parameters &fitted, double rms);
+  void finishMtfModelFitWithoutResult();
+
 signals:
   /** Emitted after the loaded image or shared document parameters change.
       Secondary views refresh from this signal while keeping render mode, zoom,
       and pan view-local. */
   void documentStateChanged();
+  /** Emitted when session-local MTF fit provenance changes without parameters. */
+  void mtfCalibrationStateChanged();
   /** Emitted when this document gains or loses dedicated progress rows. */
   void userVisibleProgressVisibilityChanged(bool visible);
   /** Emitted when delayed transient progress appears or disappears. */
@@ -391,7 +402,8 @@ private:
   /** Offer conservative post-load setup guidance when ANALYSIS says the
       normally demosaiced RAW is likely an achromatic Bayer capture. */
   void maybeOfferInitialSetupGuide(
-      const colorscreen::monochrome_bayer_analysis &analysis);
+      const colorscreen::monochrome_bayer_analysis &analysis,
+      bool suggestDetectedMetadata);
 
   void setupUi();
   void createMenus();
@@ -449,6 +461,11 @@ private:
   /** Refresh focus-analysis rectangles in the ordinary view currently
       presenting this document's inspector. */
   void updateFocusAreaOverlays();
+  /** Refresh/optionally locate the selected measured-MTF ROI in ordinary views. */
+  void updateMtfMeasurementOverlay(bool locate = false);
+  void refreshMtfCalibrationPresentation();
+  /** Return document-owned color-profile fit provenance. */
+  QString profileCalibrationSummary() const;
   /** Clear transient automatic focus-area state for this document. */
   void clearFocusAreaAnalysis();
 
@@ -537,6 +554,7 @@ private:
   QLabel *m_workflowProcessLabel = nullptr;
   QLabel *m_workflowRegistrationLabel = nullptr;
   QLabel *m_workflowCalibrationLabel = nullptr;
+  QLabel *m_workflowNextStepLabel = nullptr;
 
   QToolBar *m_toolbar;        // New toolbar
   QComboBox *m_modeComboBox;  // Mode selector
@@ -714,6 +732,7 @@ private:
   std::vector<colorscreen::finetune_focus_area_candidate> m_focusAreaCandidates;
   colorscreen::finetune_focus_analysis_result m_focusAreaAnalysisResult;
   bool m_focusAreaAnalysisRunning = false;
+  int m_selectedMtfMeasurement = -1;
 
   // Generations for replaceable background results. Starting a newer run makes
   // an older completion stale without conflating unrelated operation types.
@@ -737,6 +756,13 @@ private:
   ColorOptimizerWorker *m_colorOptimizerWorker = nullptr;
   QThread *m_colorOptimizerThread = nullptr;
   TaskQueue m_colorOptimizerQueue;
+  // Session-local profile-fit provenance. The persisted matrix remains usable,
+  // but is only called current when an accepted optimizer result matches the
+  // current geometry, color inputs, and calibration spots.
+  std::optional<ColorOptimizerRequestData> m_profileCalibrationBaseline;
+  std::optional<ColorOptimizerRequestData> m_profileCalibrationPendingInputs;
+  std::optional<ColorOptimizerRequestData> m_profileCalibrationFailureInputs;
+  double m_profileCalibrationAverageDeltaE = -1;
   // std::shared_ptr<colorscreen::progress_info> m_solverProgress; // Removed, now handled by queue request
   
   // Detect Screen Worker
@@ -753,6 +779,13 @@ private:
   std::optional<ParameterState> m_geometryFitPendingInputs;
   std::optional<bool> m_geometryFitPendingComputeMesh;
   std::optional<ParameterState> m_geometryFitFailureInputs;
+
+  // Session-local MTF model-fit provenance shared by all Sharpness views.
+  std::optional<colorscreen::mtf_parameters> m_mtfFitBaseline;
+  std::optional<colorscreen::mtf_parameters> m_mtfFitPendingInputs;
+  std::optional<colorscreen::mtf_parameters> m_mtfFitFailureInputs;
+  double m_mtfFitRms = -1;
+  bool m_mtfFitRunning = false;
   
   // Coordinate Optimization Worker
   CoordinateOptimizationWorker *m_coordOptimizationWorker = nullptr;

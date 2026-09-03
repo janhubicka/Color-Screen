@@ -10,6 +10,7 @@
 #include <QPainterPath>
 #include <algorithm>
 #include <cmath>
+#include <utility>
 
 MTFChartWidget::MTFChartWidget(QWidget *parent) : QWidget(parent) {
   setMinimumHeight(200);
@@ -28,9 +29,31 @@ void MTFChartWidget::setMTFData(
 }
 
 void MTFChartWidget::setMeasuredMTF(const std::vector<colorscreen::mtf_measurement> &measurements, const std::array<double, 4> &channelWavelengths) {
+  if (measurements != m_measurements) {
+    /* Measurement visibility is indexed, not named. Reset only measured-curve
+       presentation state when records change so duplicate names never share a
+       toggle and stale indices cannot hide a different reordered record. */
+    for (auto it = m_hiddenItems.begin(); it != m_hiddenItems.end(); ) {
+      if (it->startsWith(QStringLiteral("measurement:")))
+        it = m_hiddenItems.erase(it);
+      else
+        ++it;
+    }
+    if (m_selectedMeasurement >= static_cast<int>(measurements.size()))
+      m_selectedMeasurement = -1;
+  }
   m_measurements = measurements;
   m_channelWavelengths = channelWavelengths;
   m_hasMeasuredData = !measurements.empty();
+  update();
+}
+
+void MTFChartWidget::setSelectedMeasurement(int index) {
+  if (index < 0 || index >= static_cast<int>(m_measurements.size()))
+    index = -1;
+  if (m_selectedMeasurement == index)
+    return;
+  m_selectedMeasurement = index;
   update();
 }
 
@@ -47,6 +70,7 @@ void MTFChartWidget::clear() {
   m_hasData = false;
   m_hasMeasuredData = false;
   m_measurements.clear();
+  m_selectedMeasurement = -1;
   update();
 }
 
@@ -169,12 +193,17 @@ std::vector<MTFChartWidget::LegendItem> MTFChartWidget::getLegendItems() const {
     }
 
     if (m_hasMeasuredData) {
-        for (const auto &m : m_measurements) {
+        for (size_t i = 0; i < m_measurements.size(); ++i) {
+            const auto &m = m_measurements[i];
             double wl = m.wavelength;
             if (wl <= 0 && m.channel >= 0 && m.channel < 4)
                 wl = m_channelWavelengths[m.channel];
             QColor col = (wl > 0) ? wavelengthToRGB(wl) : Qt::white;
-            items.push_back({QString::fromStdString(m.name), col, 2, true, nullptr, &m});
+            LegendItem item{QString::fromStdString(m.name), col, 2, true,
+                            nullptr, &m};
+            item.measurementIndex = static_cast<int>(i);
+            item.key = QStringLiteral("measurement:%1").arg(i);
+            items.push_back(std::move(item));
         }
     }
     return items;
@@ -433,7 +462,7 @@ void MTFChartWidget::paintEvent(QPaintEvent *event) {
 
   // Draw all curves
   for (const auto &item : items) {
-    if (!item.visible || !isVisible(item.name))
+    if (!item.visible || !isVisible(visibilityKey(item)))
       continue;
 
     // Standard curves
@@ -493,12 +522,15 @@ void MTFChartWidget::paintEvent(QPaintEvent *event) {
             // naturally interpolated by the gradient.
             certaintyGradient.setColorAt(0.0, firstUncertaintyColor);
             certaintyGradient.setColorAt(1.0, lastUncertaintyColor);
-            painter.setPen(QPen(QBrush(certaintyGradient), item.width,
+            painter.setPen(QPen(QBrush(certaintyGradient),
+                                item.width + (item.measurementIndex == m_selectedMeasurement ? 2 : 0),
                                 Qt::DotLine));
         } else {
             // Legacy/project-imported curves have no stored uncertainty and
             // retain the historical fully opaque appearance.
-            painter.setPen(QPen(item.color, item.width, Qt::DotLine));
+            painter.setPen(QPen(item.color,
+                                item.width + (item.measurementIndex == m_selectedMeasurement ? 2 : 0),
+                                Qt::DotLine));
         }
         painter.drawPath(path);
     }
@@ -569,7 +601,7 @@ void MTFChartWidget::paintEvent(QPaintEvent *event) {
       continue;
 
     int x = legendX + col * layout.itemWidth;
-    bool visible = isVisible(item.name);
+    bool visible = isVisible(visibilityKey(item));
 
     // Line sample
     QColor itemColor = item.color;
@@ -590,8 +622,12 @@ void MTFChartWidget::paintEvent(QPaintEvent *event) {
         textColor.setAlpha(180);
     }
     painter.setPen(textColor);
+    QFont legendFont = baseFont;
+    legendFont.setBold(item.measurementIndex == m_selectedMeasurement);
+    painter.setFont(legendFont);
     painter.drawText(x + 25, legendY, layout.itemWidth - 25, layout.lineHeight,
                      Qt::AlignLeft | Qt::AlignVCenter, item.name);
+    painter.setFont(baseFont);
 
     col++;
     if (col >= layout.numCols) {
@@ -601,27 +637,109 @@ void MTFChartWidget::paintEvent(QPaintEvent *event) {
   }
 }
 
+static double pointSegmentDistanceSquared(const QPointF &p, const QPointF &a,
+                                          const QPointF &b) {
+    const QPointF d = b - a;
+    const double length2 = d.x() * d.x() + d.y() * d.y();
+    if (length2 <= 1e-12) {
+        const QPointF q = p - a;
+        return q.x() * q.x() + q.y() * q.y();
+    }
+    const QPointF ap = p - a;
+    const double t = std::clamp((ap.x() * d.x() + ap.y() * d.y()) / length2,
+                                0.0, 1.0);
+    const QPointF q = p - (a + t * d);
+    return q.x() * q.x() + q.y() * q.y();
+}
+
 void MTFChartWidget::mousePressEvent(QMouseEvent *event) {
+    if (event->button() != Qt::LeftButton) {
+        QWidget::mousePressEvent(event);
+        return;
+    }
+
     LayoutInfo layout = calculateLayout(width(), height());
-    
+    auto items = getLegendItems();
+
+    /* Curves themselves are selectable. This is especially useful when names
+       are similar: the clicked measured trace becomes the active provenance
+       record and receives the same one-record visibility toggle as its legend. */
+    if (layout.chartRect.contains(event->position().toPoint())) {
+        const bool signedScale = m_showSignedOtf && m_canSimulateDiffraction;
+        const double yMin = signedScale ? -1.0 : 0.0;
+        const double yMax = 1.0;
+        auto mapPoint = [&](double freq, double value) {
+            return QPointF(layout.chartRect.left() + freq * layout.chartRect.width(),
+                           layout.chartRect.bottom()
+                               - (value - yMin) / (yMax - yMin)
+                                     * layout.chartRect.height());
+        };
+
+        constexpr double hitRadius = 8.0;
+        double bestDistance2 = hitRadius * hitRadius;
+        const LegendItem *best = nullptr;
+        for (const auto &item : items) {
+            if (!item.visible || !item.measurement || item.measurementIndex < 0
+                || !isVisible(visibilityKey(item)))
+                continue;
+            QPointF previous;
+            bool havePrevious = false;
+            for (size_t i = 0; i < item.measurement->size(); ++i) {
+                const double freq = item.measurement->get_freq(i);
+                if (freq < 0.0 || freq > 1.0)
+                    continue;
+                const QPointF current = mapPoint(
+                    freq, item.measurement->get_contrast(i) * 0.01);
+                double distance2;
+                if (havePrevious)
+                    distance2 = pointSegmentDistanceSquared(event->position(),
+                                                            previous, current);
+                else {
+                    const QPointF d = event->position() - current;
+                    distance2 = d.x() * d.x() + d.y() * d.y();
+                }
+                if (distance2 < bestDistance2) {
+                    bestDistance2 = distance2;
+                    best = &item;
+                }
+                previous = current;
+                havePrevious = true;
+            }
+        }
+        if (best) {
+            const QString key = visibilityKey(*best);
+            if (m_hiddenItems.count(key))
+                m_hiddenItems.erase(key);
+            else
+                m_hiddenItems.insert(key);
+            setSelectedMeasurement(best->measurementIndex);
+            emit measurementSelected(best->measurementIndex);
+            update();
+            event->accept();
+            return;
+        }
+    }
+
     int legendY = layout.legendStartY;
     int legendX = layout.chartRect.left();
-
-    auto items = getLegendItems();
     int col = 0;
     for (const auto &item : items) {
         if (!item.visible) continue;
 
         int x = legendX + col * layout.itemWidth;
         QRect itemRect(x, legendY, layout.itemWidth, layout.lineHeight);
-        
-        if (itemRect.contains(event->pos())) {
-            if (m_hiddenItems.count(item.name)) {
-                m_hiddenItems.erase(item.name);
-            } else {
-                m_hiddenItems.insert(item.name);
+        if (itemRect.contains(event->position().toPoint())) {
+            const QString key = visibilityKey(item);
+            if (m_hiddenItems.count(key))
+                m_hiddenItems.erase(key);
+            else
+                m_hiddenItems.insert(key);
+            if (item.measurementIndex >= 0) {
+                setSelectedMeasurement(item.measurementIndex);
+                emit measurementSelected(item.measurementIndex);
             }
             update();
+            event->accept();
             return;
         }
 
@@ -631,7 +749,7 @@ void MTFChartWidget::mousePressEvent(QMouseEvent *event) {
             legendY += layout.lineHeight;
         }
     }
-    
+
     QWidget::mousePressEvent(event);
 }
 void MTFChartWidget::setChannelsPresence(bool hasRgb, bool hasIr) {

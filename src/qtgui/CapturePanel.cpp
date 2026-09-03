@@ -1,5 +1,6 @@
 #include "CapturePanel.h"
 #include <QCheckBox>
+#include <QComboBox>
 #include <QPushButton>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -97,7 +98,37 @@ void CapturePanel::setupUi()
         m_form->addRow(label, container);
     };
 
-    // 0. Demosaic (Enum) + Reload
+    // Capture type is the top-level workflow choice: it determines whether
+    // historical color-screen restoration is meaningful for this document.
+    m_captureTypeCombo = new QComboBox();
+    m_captureTypeCombo->setObjectName(QStringLiteral("CaptureTypeCombo"));
+    m_captureTypeCombo->setSizeAdjustPolicy(
+        QComboBox::AdjustToMinimumContentsLengthWithIcon);
+    m_captureTypeCombo->setMinimumContentsLength(18);
+    for (int i = 0; i < (int)colorscreen::render_parameters::capture_max; ++i)
+      m_captureTypeCombo->addItem(
+          QString::fromUtf8(
+              colorscreen::render_parameters::capture_properties[i].pretty_name),
+          i);
+    m_captureTypeCombo->setToolTip(
+        tr("Physical capture/material type. This selects the applicable "
+           "restoration path; ordinary images use capture correction and "
+           "sharpening but not historical color-screen reconstruction."));
+    m_form->addRow(tr("Capture type"), m_captureTypeCombo);
+    connect(m_captureTypeCombo, QOverload<int>::of(&QComboBox::activated),
+            this, [this](int index) {
+      const auto capture =
+          static_cast<decltype(colorscreen::render_parameters::capture_unknown)>(
+              m_captureTypeCombo->itemData(index).toInt());
+      applyChange([capture](ParameterState &state) {
+        state.rparams.capture_type = capture;
+        if (capture != colorscreen::render_parameters::capture_unknown &&
+            !colorscreen::render_parameters::capture_has_screen_p(capture))
+          state.scrToImg.type = colorscreen::NoScreen;
+      }, "Capture type");
+    });
+
+    // Demosaic (Enum) + Reload
     QWidget *demosaicContainer = new QWidget();
     QHBoxLayout *demosaicHLayout = new QHBoxLayout(demosaicContainer);
     demosaicHLayout->setContentsMargins(0, 0, 0, 0);
@@ -382,6 +413,36 @@ void CapturePanel::setupUi()
 
     auto updateInfoLabels = [this, sensorWidthSlider](const ParameterState &state) {
         auto img = m_imageGetter();
+
+        // The stored parameter can come from another image. Rebuild the
+        // selector from this scan's channel capabilities and display Unknown
+        // when the stored choice is incompatible instead of inventing a
+        // different physical capture type.
+        m_captureTypeCombo->blockSignals(true);
+        m_captureTypeCombo->clear();
+        for (int i = 0;
+             i < (int)colorscreen::render_parameters::capture_max; ++i) {
+          const auto capture = static_cast<decltype(
+              colorscreen::render_parameters::capture_unknown)>(i);
+          if (!img || capture == colorscreen::render_parameters::capture_unknown ||
+              colorscreen::render_parameters::capture_type_compatible_p(
+                  capture, img.get()))
+            m_captureTypeCombo->addItem(
+                QString::fromUtf8(colorscreen::render_parameters::
+                                      capture_properties[i].pretty_name),
+                i);
+        }
+        const auto effectiveCapture =
+            img ? state.rparams.get_capture_type(img.get())
+                : state.rparams.capture_type;
+        int captureIndex =
+            m_captureTypeCombo->findData((int)effectiveCapture);
+        if (captureIndex < 0)
+          captureIndex = m_captureTypeCombo->findData(
+              (int)colorscreen::render_parameters::capture_unknown);
+        if (captureIndex >= 0)
+          m_captureTypeCombo->setCurrentIndex(captureIndex);
+        m_captureTypeCombo->blockSignals(false);
         
         auto setVisibleRow = [&](QWidget *field, bool visible) {
             field->setVisible(visible);
@@ -480,7 +541,7 @@ void CapturePanel::setupUi()
 
         // 5. Screen Resolution
         bool showScreenRes = false;
-        if (state.scrToImg.type != colorscreen::Random) {
+        if (colorscreen::screen_has_regular_geometry_p(state.scrToImg.type)) {
             if (img && img->width > 0 && img->height > 0) {
                 colorscreen::scr_to_img map;
                 map.set_parameters(state.scrToImg, *img);
@@ -648,7 +709,14 @@ void CapturePanel::setupUi()
         [this]() { emit autodetectRequested(); },
         [this](const ParameterState &s) {
             auto img = m_imageGetter();
-            return img && (img->has_rgb() || s.scrToImg.type != colorscreen::Random);
+            if (!img)
+                return false;
+            const auto capture = s.rparams.get_capture_type(img.get());
+            return colorscreen::render_parameters::capture_has_screen_p(capture)
+                   && (colorscreen::screen_has_regular_geometry_p(
+                           s.scrToImg.type)
+                       || (s.scrToImg.type == colorscreen::NoScreen
+                           && img->has_rgb()));
         });
 
     // Initial update

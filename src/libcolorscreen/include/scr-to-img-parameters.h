@@ -24,7 +24,15 @@ struct render_parameters;
 /* Types of supported screens.  */
 enum scr_type
 {
+  /* No color screen is present.  Keep this as value zero so it can also be
+     used as an explicit ``not selected/detected'' sentinel.  */
+  NoScreen = 0,
+  /* Generic stochastic screen whose individual elements have no useful
+     geometric lattice.  */
   Random,
+  /* Named stochastic screen processes.  */
+  Autochrome,
+  AgfaFarbenplatte,
   Paget,
   Thames,
   Finlay,
@@ -36,6 +44,34 @@ enum scr_type
   Omnicolore,
   max_scr_type
 };
+
+/* Return true if T describes a stochastic screen without a regular lattice. */
+inline bool
+stochastic_screen_p (enum scr_type t)
+{
+  return t == Random || t == Autochrome || t == AgfaFarbenplatte;
+}
+
+/* Return true if a color screen is physically present.  */
+inline bool
+screen_present_p (enum scr_type t)
+{
+  return t > NoScreen && t < max_scr_type;
+}
+
+/* Return true if T has a regular lattice that can be mapped by scr_to_img.  */
+inline bool
+screen_has_regular_geometry_p (enum scr_type t)
+{
+  return screen_present_p (t) && !stochastic_screen_p (t);
+}
+
+/* Return true if T has no regular geometric mapping.  */
+inline bool
+screen_without_regular_geometry_p (enum scr_type t)
+{
+  return !screen_has_regular_geometry_p (t);
+}
 
 /* Return true if screen T is Paget-like.  */
 inline bool
@@ -160,7 +196,7 @@ struct scr_to_img_parameters
   std::shared_ptr<mesh> mesh_trans = nullptr;
   bool mesh_trans_is_scr_to_img = false;
 
-  enum scr_type type = Random;
+  enum scr_type type = NoScreen;
   enum scanner_type scanner_type = fixed_lens;
 
   lens_warp_correction_parameters lens_correction;

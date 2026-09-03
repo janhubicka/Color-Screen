@@ -112,7 +112,7 @@ void ScreenPanel::setupUi() {
     scr_type type = (scr_type)i;
     QString name = QString::fromUtf8(scr_names[i].pretty_name);
 
-    if (type == Random) {
+    if (!screen_has_regular_geometry_p(type)) {
       screenCombo->addItem(name, i);
     } else {
       // Render Preview
@@ -146,7 +146,10 @@ void ScreenPanel::setupUi() {
   }
 
   addEnumTooltips(screenCombo, scr_names, max_scr_type);
-  screenCombo->setToolTip("Select the physical color screen process (e.g., Autochrome, Joly, Dufaycolor). \"Random\" is used for modern digital images without a screen.");
+  screenCombo->setToolTip(
+      "Select the physical color screen process. None means no historical "
+      "screen; Random, Autochrome and Agfa Farbenplatte are stochastic "
+      "screens without a regular geometric lattice.");
 
   if (m_currentGroupForm) {
     m_currentGroupForm->addRow("Screen type", screenCombo);
@@ -178,7 +181,14 @@ void ScreenPanel::setupUi() {
       [this]() { emit autodetectRequested(); },
       [this](const ParameterState &s) {
           auto img = m_imageGetter();
-          return img && (img->has_rgb() || s.scrToImg.type != colorscreen::Random);
+          if (!img)
+            return false;
+          const auto capture = s.rparams.get_capture_type(img.get());
+          return colorscreen::render_parameters::capture_has_screen_p(capture)
+                 && (colorscreen::screen_has_regular_geometry_p(
+                         s.scrToImg.type)
+                     || (s.scrToImg.type == colorscreen::NoScreen
+                         && img->has_rgb()));
       }, "Attempt to automatically identify the screen type and its orientation from the image content.");
 
   addSeparator("Regular screen");
@@ -196,7 +206,8 @@ void ScreenPanel::setupUi() {
 
   m_widgetStateUpdaters.push_back([this, preview]() {
     preview->updateUI();
-    bool visible = m_stateGetter().scrToImg.type != Random;
+    bool visible = screen_has_regular_geometry_p(
+        m_stateGetter().scrToImg.type);
     preview->setVisible(visible);
   });
 
