@@ -1277,6 +1277,13 @@ int main(int argc, char *argv[]) {
         return;
       }
 
+      // Moving the shared inspector between primary, detached, and attached
+      // presentations above can leave queued panel refreshes behind. Drain them
+      // first, then install the deterministic renderer fixture at the point of
+      // use so the GUI mode list and the API sweep exercise the same live state.
+      QCoreApplication::processEvents();
+      coordinateState = installRenderSmokeState(source, sourceScan, true);
+
       auto exerciseViewModes =
           [&renderModeAvailable](const char *label, ImageViewWindow *target,
                                  const ParameterState &state,
@@ -1320,6 +1327,8 @@ int main(int argc, char *argv[]) {
         return;
       }
 
+      monochromeCoordinateState =
+          installRenderSmokeState(monochromeSource, monochromeScan, false);
       ImageViewWindow *monochromeView = app.createViewWindow(monochromeSource);
       QPointer<ImageViewWindow> guardedMonochromeView(monochromeView);
       if (!monochromeView ||
