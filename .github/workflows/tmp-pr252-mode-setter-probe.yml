@@ -1,46 +1,35 @@
-name: Temporary PR252 promote verified mode-setter fix
+name: Temporary PR252 mode availability probe
 
 on:
   push:
     branches:
       - agent/tmp-pr252-mode-setter-probe
 
-permissions:
-  contents: write
-
 jobs:
-  promote:
+  probe:
     runs-on: ubuntu-24.04
+    container:
+      image: ghcr.io/janhubicka/color-screen-ci:ubuntu-24.04
+    env:
+      PATH: /usr/lib/qt6/libexec:/usr/lib/x86_64-linux-gnu/qt6/libexec:/usr/lib/qt6/bin:/usr/lib/x86_64-linux-gnu/qt6/bin:/usr/lib64/qt6/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     steps:
       - uses: actions/checkout@v4
         with:
           ref: agent/render-dispatch-smoke
           fetch-depth: 0
 
-      - name: Verify tested PR head
+      - name: Verify PR head
         shell: bash
-        run: |
-          test "$(git rev-parse HEAD)" = "54d715ccf489ea257a39307570dd50e385894428"
+        run: test "$(git rev-parse HEAD)" = "a916ff3df27e403a091ac9c426872245cb4401be"
 
-      - name: Apply verified mode-setter fix
+      - name: Instrument New View mode selection
         shell: bash
         run: |
           python3 - <<'PY'
           from pathlib import Path
-
           path = Path('src/qtgui/ImageViewWindow.cpp')
           text = path.read_text()
-          old = '''/** Programmatically select TYPE in this view. */
-          bool ImageViewWindow::setRenderType(colorscreen::render_type_t type) {
-            const int index = m_modeComboBox->findData(static_cast<int>(type));
-            if (index < 0)
-              return false;
-            m_modeComboBox->setCurrentIndex(index);
-            return m_renderTypeParams.type == type;
-          }
-          '''
-          new = '''/** Programmatically select TYPE in this view. */
-          bool ImageViewWindow::setRenderType(colorscreen::render_type_t type) {
+          old = '''bool ImageViewWindow::setRenderType(colorscreen::render_type_t type) {
             const int index = m_modeComboBox->findData(static_cast<int>(type));
             if (index < 0)
               return false;
@@ -56,18 +45,61 @@ jobs:
                    m_renderTypeParams.type == type;
           }
           '''
+          new = '''bool ImageViewWindow::setRenderType(colorscreen::render_type_t type) {
+            const int index = m_modeComboBox->findData(static_cast<int>(type));
+            qWarning() << "PR252 mode probe request" << static_cast<int>(type)
+                       << "index" << index << "count" << m_modeComboBox->count()
+                       << "view-map-type" << static_cast<int>(m_scrToImgParams.type)
+                       << "document-map-type"
+                       << static_cast<int>(m_source->documentStateSnapshot().scrToImg.type)
+                       << "stored-type" << static_cast<int>(m_renderTypeParams.type)
+                       << "current-index" << m_modeComboBox->currentIndex();
+            for (int i = 0; i < m_modeComboBox->count(); ++i)
+              qWarning() << "PR252 mode probe item" << i
+                         << m_modeComboBox->itemData(i).toInt()
+                         << m_modeComboBox->itemText(i);
+            if (index < 0)
+              return false;
+
+            {
+              const QSignalBlocker blocker(m_modeComboBox);
+              m_modeComboBox->setCurrentIndex(index);
+            }
+            qWarning() << "PR252 mode probe before callback" << index
+                       << m_modeComboBox->currentIndex()
+                       << m_modeComboBox->currentData().toInt();
+            onModeChanged(index);
+            qWarning() << "PR252 mode probe after callback"
+                       << m_modeComboBox->currentIndex()
+                       << m_modeComboBox->currentData().toInt()
+                       << static_cast<int>(m_renderTypeParams.type)
+                       << "view-map-type" << static_cast<int>(m_scrToImgParams.type)
+                       << "document-map-type"
+                       << static_cast<int>(m_source->documentStateSnapshot().scrToImg.type);
+            return m_modeComboBox->currentIndex() == index &&
+                   m_renderTypeParams.type == type;
+          }
+          '''
           if old not in text:
-              raise SystemExit('expected setRenderType implementation not found')
+              raise SystemExit('current setRenderType implementation not found')
           path.write_text(text.replace(old, new, 1))
           PY
           git diff --check
-          git diff -- src/qtgui/ImageViewWindow.cpp
 
-      - name: Commit and update PR branch
+      - name: Configure optimized Qt build
+        shell: bash
+        run: CXXFLAGS="-Ofast -flto=auto" CFLAGS="-Ofast -flto=auto" ./configure --enable-qtgui
+
+      - name: Build
+        shell: bash
+        run: make -j$(nproc)
+
+      - name: Reproduce New View smoke
         shell: bash
         run: |
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add src/qtgui/ImageViewWindow.cpp
-          git commit -m 'qt: keep New View render mode state synchronized'
-          git push origin HEAD:agent/render-dispatch-smoke
+          QT_QPA_PLATFORM=offscreen ./src/qtgui/colorscreen-qt \
+            --smoke-test 10000 --smoke-test-expect-windows 2 \
+            --smoke-test-tile-activation-stable --smoke-test-menu-order \
+            --smoke-test-new-view --smoke-test-slanted-reference \
+            "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif" \
+            "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
