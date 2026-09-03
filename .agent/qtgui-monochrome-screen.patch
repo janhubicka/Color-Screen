@@ -1,0 +1,448 @@
+diff --git a/src/libcolorscreen/include/render-parameters.h b/src/libcolorscreen/include/render-parameters.h
+--- a/src/libcolorscreen/include/render-parameters.h
++++ b/src/libcolorscreen/include/render-parameters.h
+@@ -353,9 +353,11 @@ struct render_parameters
+     capture_transparency_with_screen_and_infrared,
+     capture_negative_with_screen,
+     capture_negative_with_screen_and_infrared,
+-    /* Monochrome positive capture with no attached color screen.  */
++    /* Monochrome positive made through a separate historical color screen.
++       The screen colors are not present in the captured data.  */
+     capture_transparency,
+-    /* Monochrome negative capture with no attached color screen.  */
++    /* Monochrome negative made through a separate historical color screen.
++       The screen colors are not present in the captured data.  */
+     capture_negative,
+     /* Ordinary image with no historical color screen.  */
+     capture_plain_image,
+@@ -370,6 +372,8 @@ struct render_parameters
+     const char *name;
+     /* Human readable name.  */
+     const char *pretty_name;
++    /* Explanation shown by user interfaces.  */
++    const char *help;
+     /* Flags.  */
+     int flags;
+     /* Supported flags.  */
+@@ -377,7 +381,9 @@ struct render_parameters
+     {
+       SUPPORTS_SCR_DETECT = 1,
+       HAS_IR = 2,
+-      MAYBE_MONOCHROMATIC_DEMOSAIC = 4
++      MAYBE_MONOCHROMATIC_DEMOSAIC = 4,
++      USES_SCREEN = 8,
++      REGULAR_SCREEN_ONLY = 16
+     };
+   };
+   DLL_PUBLIC static const capture_type_property capture_properties[capture_max];
+@@ -966,17 +972,27 @@ struct render_parameters
+-  /* Return true if CAPTURE_TYPE describes a plate carrying a historical
+-     additive color screen.  */
++  /* Return true if reconstruction of CAPTURE_TYPE uses a historical additive
++     color screen.  For monochrome-through-screen captures the screen itself is
++     separate or its colors were suppressed by capture (for example in IR), so
++     it must be re-attached geometrically.  */
+   pure_attr static bool
+   capture_has_screen_p (enum capture_type capture_type)
+   {
+-    return capture_type == capture_transparency_with_screen
+-           || capture_type == capture_transparency_with_screen_and_infrared
+-           || capture_type == capture_negative_with_screen
+-           || capture_type == capture_negative_with_screen_and_infrared;
++    return capture_type >= capture_unknown && capture_type < capture_max
++           && (capture_properties[(int)capture_type].flags
++               & capture_type_property::USES_SCREEN);
+   }
+ 
+   /* Return true if CAPTURE_TYPE has RGB information from which individual
+      screen elements can be detected without a geometric lattice.  */
+   pure_attr static bool
+   capture_supports_screen_detection_p (enum capture_type capture_type)
+   {
+-    return capture_type == capture_transparency_with_screen
+-           || capture_type == capture_transparency_with_screen_and_infrared
+-           || capture_type == capture_negative_with_screen
+-           || capture_type == capture_negative_with_screen_and_infrared;
++    return capture_type >= capture_unknown && capture_type < capture_max
++           && (capture_properties[(int)capture_type].flags
++               & capture_type_property::SUPPORTS_SCR_DETECT);
++  }
++
++  /* Return true if the screen colors are absent from CAPTURE_TYPE, so a
++     stochastic screen cannot be reconstructed and the operator must choose a
++     regular screen with geometry.  */
++  pure_attr static bool
++  capture_requires_regular_screen_p (enum capture_type capture_type)
++  {
++    return capture_type >= capture_unknown && capture_type < capture_max
++           && (capture_properties[(int)capture_type].flags
++               & capture_type_property::REGULAR_SCREEN_ONLY);
+   }
+ 
+   /* Return true when CAPTURE_TYPE is compatible with the channel layout of
+-     a loaded capture.  Plain monochrome captures require a scalar image;
+-     screen captures require RGB, and RGB+IR variants additionally require
+-     the fourth grayscale/infrared plane.  */
++     a loaded capture.  Monochrome-through-screen captures may be stored either
++     as a scalar image or in an RGB container whose channels carry the same
++     monochrome signal; captures with recorded screen colors require RGB, and
++     RGB+IR variants additionally require the fourth grayscale/infrared plane.  */
+   pure_attr static bool
+   capture_type_compatible_p (enum capture_type capture_type,
+                              bool has_rgb, bool has_ir)
+@@ -990,7 +1006,7 @@ struct render_parameters
+         return true;
+       case capture_transparency:
+       case capture_negative:
+-        return !has_rgb;
++        return has_rgb || has_ir;
+       case capture_transparency_with_screen:
+       case capture_negative_with_screen:
+         return has_rgb;
+@@ -1032,8 +1048,8 @@ struct render_parameters
+ 
+   /* Return the capture type only when it matches the loaded image.  A
+      parameter file may describe a different capture, so incompatible RGB/IR or
+-     monochrome choices are deliberately demoted to Unknown rather than silently
+-     changing their physical meaning.  */
++     channel-layout choices are deliberately demoted to Unknown rather than
++     silently changing their physical meaning.  */
+   pure_attr static enum capture_type
+   get_capture_type (enum capture_type capture_type, const image_data *scan)
+   {
+diff --git a/src/libcolorscreen/scr-to-img.C b/src/libcolorscreen/scr-to-img.C
+--- a/src/libcolorscreen/scr-to-img.C
++++ b/src/libcolorscreen/scr-to-img.C
+@@ -16,19 +16,46 @@ namespace colorscreen
+ std::atomic_ulong scr_to_img::m_nwarnings;
+ 
+ const render_parameters::capture_type_property render_parameters::capture_properties[] = {
+-  { "unknown", "Unknown", 0 },
++  { "unknown", "Unknown",
++    "Capture type is not known yet. The GUI keeps the restoration workflow "
++    "conservative until it is selected.",
++    0 },
+   { "positive-screen-rgb", "Color positive with screen",
+-    render_parameters::capture_type_property::SUPPORTS_SCR_DETECT },
++    "Color transparency in which the historical additive screen colors are "
++    "recorded in RGB. Regular and stochastic screens can be reconstructed.",
++    render_parameters::capture_type_property::SUPPORTS_SCR_DETECT
++    | render_parameters::capture_type_property::USES_SCREEN },
+   { "positive-screen-rgb-ir", "Color positive + IR with screen",
+-    render_parameters::capture_type_property::SUPPORTS_SCR_DETECT | render_parameters::capture_type_property::HAS_IR },
++    "Color transparency with recorded additive screen colors plus a separate "
++    "infrared/grayscale channel.",
++    render_parameters::capture_type_property::SUPPORTS_SCR_DETECT
++    | render_parameters::capture_type_property::HAS_IR
++    | render_parameters::capture_type_property::USES_SCREEN },
+   { "negative-screen-rgb", "Color negative with screen",
+-    render_parameters::capture_type_property::SUPPORTS_SCR_DETECT },
++    "Color negative in which the historical additive screen colors are "
++    "recorded in RGB. Regular and stochastic screens can be reconstructed.",
++    render_parameters::capture_type_property::SUPPORTS_SCR_DETECT
++    | render_parameters::capture_type_property::USES_SCREEN },
+   { "negative-screen-rgb-ir", "Color negative + IR with screen",
+-    render_parameters::capture_type_property::SUPPORTS_SCR_DETECT | render_parameters::capture_type_property::HAS_IR },
+-  { "positive-mono", "Monochrome positive (no color screen)",
+-    render_parameters::capture_type_property::MAYBE_MONOCHROMATIC_DEMOSAIC },
+-  { "negative-mono", "Monochrome negative (no color screen)",
+-    render_parameters::capture_type_property::MAYBE_MONOCHROMATIC_DEMOSAIC },
+-  { "ordinary-image", "Ordinary image (no color screen)", 0 },
++    "Color negative with recorded additive screen colors plus a separate "
++    "infrared/grayscale channel.",
++    render_parameters::capture_type_property::SUPPORTS_SCR_DETECT
++    | render_parameters::capture_type_property::HAS_IR
++    | render_parameters::capture_type_property::USES_SCREEN },
++  { "positive-mono", "Monochrome transparency taken through color screen",
++    "Monochrome transparency produced through a separate additive color "
++    "screen, or a capture in which the screen colors are not recorded (for "
++    "example an infrared capture of a screen transparency). The original "
++    "screen must be re-attached during reconstruction. Choose the original "
++    "regular screen type and fit its geometry; stochastic screen colors "
++    "cannot be recovered from monochrome data.",
++    render_parameters::capture_type_property::MAYBE_MONOCHROMATIC_DEMOSAIC
++    | render_parameters::capture_type_property::USES_SCREEN
++    | render_parameters::capture_type_property::REGULAR_SCREEN_ONLY },
++  { "negative-mono", "Monochrome negative taken through color screen",
++    "Monochrome negative exposed through a separate additive color screen. "
++    "The screen filter is not part of the negative and must be re-attached "
++    "when producing the reconstructed positive. Choose the original regular "
++    "screen type and fit its geometry; stochastic screen colors cannot be "
++    "recovered from a monochrome negative.",
++    render_parameters::capture_type_property::MAYBE_MONOCHROMATIC_DEMOSAIC
++    | render_parameters::capture_type_property::USES_SCREEN
++    | render_parameters::capture_type_property::REGULAR_SCREEN_ONLY },
++  { "ordinary-image", "Ordinary image (no color screen)",
++    "Ordinary image with no historical additive color screen. Screen "
++    "registration and reconstruction are not applicable.",
++    0 },
+ };
+ namespace
+ {
+diff --git a/src/qtgui/CapturePanel.cpp b/src/qtgui/CapturePanel.cpp
+--- a/src/qtgui/CapturePanel.cpp
++++ b/src/qtgui/CapturePanel.cpp
+@@ -100,11 +100,18 @@ void CapturePanel::setupUi()
+     m_captureTypeCombo->setSizeAdjustPolicy(
+         QComboBox::AdjustToMinimumContentsLengthWithIcon);
+     m_captureTypeCombo->setMinimumContentsLength(18);
+-    for (int i = 0; i < (int)colorscreen::render_parameters::capture_max; ++i)
++    for (int i = 0; i < (int)colorscreen::render_parameters::capture_max; ++i) {
++      const auto &property =
++          colorscreen::render_parameters::capture_properties[i];
+       m_captureTypeCombo->addItem(
+-          QString::fromUtf8(
+-              colorscreen::render_parameters::capture_properties[i].pretty_name),
++          QString::fromUtf8(property.pretty_name),
+           i);
++      if (property.help && property.help[0])
++        m_captureTypeCombo->setItemData(
++            m_captureTypeCombo->count() - 1,
++            QString::fromUtf8(property.help), Qt::ToolTipRole);
++    }
+     m_captureTypeCombo->setToolTip(
+         tr("Physical capture/material type. This selects the applicable "
+            "restoration path; ordinary images use capture correction and "
+@@ -424,13 +431,20 @@ void CapturePanel::setupUi()
+           const auto capture = static_cast<decltype(
+               colorscreen::render_parameters::capture_unknown)>(i);
+           if (!img || capture == colorscreen::render_parameters::capture_unknown ||
+-              colorscreen::render_parameters::capture_type_compatible_p(
+-                  capture, img.get()))
++              colorscreen::render_parameters::capture_type_compatible_p(
++                  capture, img.get())) {
++            const auto &property =
++                colorscreen::render_parameters::capture_properties[i];
+             m_captureTypeCombo->addItem(
+-                QString::fromUtf8(colorscreen::render_parameters::
+-                                      capture_properties[i].pretty_name),
++                QString::fromUtf8(property.pretty_name),
+                 i);
++            if (property.help && property.help[0])
++              m_captureTypeCombo->setItemData(
++                  m_captureTypeCombo->count() - 1,
++                  QString::fromUtf8(property.help), Qt::ToolTipRole);
++          }
+         }
+         const auto effectiveCapture =
+             img ? state.rparams.get_capture_type(img.get())
+@@ -704,10 +718,16 @@ void CapturePanel::setupUi()
+             if (!img)
+                 return false;
+             const auto capture = s.rparams.get_capture_type(img.get());
+-            return colorscreen::render_parameters::capture_has_screen_p(capture)
+-                   && (colorscreen::screen_has_regular_geometry_p(
+-                           s.scrToImg.type)
+-                       || (s.scrToImg.type == colorscreen::NoScreen
+-                           && img->has_rgb()));
++            if (!colorscreen::render_parameters::capture_has_screen_p(capture))
++              return false;
++            if (colorscreen::render_parameters::
++                    capture_requires_regular_screen_p(capture))
++              return colorscreen::screen_has_regular_geometry_p(
++                  s.scrToImg.type);
++            return colorscreen::screen_has_regular_geometry_p(
++                       s.scrToImg.type)
++                   || (s.scrToImg.type == colorscreen::NoScreen
++                       && img->has_rgb());
+         });
+ 
+     // Initial update
+diff --git a/src/qtgui/ScreenPanel.cpp b/src/qtgui/ScreenPanel.cpp
+--- a/src/qtgui/ScreenPanel.cpp
++++ b/src/qtgui/ScreenPanel.cpp
+@@ -9,6 +9,7 @@
+ #include <QPixmap>
+ #include <QPushButton>
++#include <QStandardItemModel>
+ #include <QStyleOptionComboBox>
+ #include <QStylePainter>
+ #include <map>
+@@ -136,8 +137,11 @@ void ScreenPanel::setupUi() {
+   addEnumTooltips(screenCombo, scr_names, max_scr_type);
+   screenCombo->setToolTip(
+       "Select the physical color screen process. None means no historical "
+-      "screen; Random, Autochrome and Agfa Farbenplatte are stochastic "
+-      "screens without a regular geometric lattice.");
++      "screen; Random, Autochrome and Agfa Farbenplatte are stochastic "
++      "screens without a regular geometric lattice. Monochrome captures made "
++      "through a color screen require a regular screen because the color "
++      "identity of stochastic screen elements is not recoverable.");
+@@ -158,7 +162,23 @@ void ScreenPanel::setupUi() {
+   });
+ 
+   // Updater: State -> UI
+-  m_paramUpdaters.push_back([screenCombo](const ParameterState &state) {
++  m_paramUpdaters.push_back([this, screenCombo](const ParameterState &state) {
++    const auto img = m_imageGetter();
++    const auto capture =
++        img ? state.rparams.get_capture_type(img.get())
++            : state.rparams.capture_type;
++    const bool regularOnly =
++        render_parameters::capture_requires_regular_screen_p(capture);
++    if (auto *model =
++            qobject_cast<QStandardItemModel *>(screenCombo->model())) {
++      for (int i = 0; i < screenCombo->count(); ++i) {
++        const auto type =
++            (scr_type)screenCombo->itemData(i).toInt();
++        if (QStandardItem *item = model->item(i))
++          item->setEnabled(!regularOnly
++                           || screen_has_regular_geometry_p(type));
++      }
++    }
++
+     int val = (int)state.scrToImg.type;
+     int idx = screenCombo->findData(val);
+     if (idx != -1) {
+@@ -181,10 +201,16 @@ void ScreenPanel::setupUi() {
+           if (!img)
+             return false;
+           const auto capture = s.rparams.get_capture_type(img.get());
+-          return colorscreen::render_parameters::capture_has_screen_p(capture)
+-                 && (colorscreen::screen_has_regular_geometry_p(
+-                         s.scrToImg.type)
+-                     || (s.scrToImg.type == colorscreen::NoScreen
+-                         && img->has_rgb()));
++          if (!render_parameters::capture_has_screen_p(capture))
++            return false;
++          if (render_parameters::capture_requires_regular_screen_p(capture))
++            return screen_has_regular_geometry_p(s.scrToImg.type);
++          return screen_has_regular_geometry_p(s.scrToImg.type)
++                 || (s.scrToImg.type == NoScreen && img->has_rgb());
+       }, "Attempt to automatically identify the screen type and its orientation from the image content.");
+ 
+   addSeparator("Regular screen");
+diff --git a/src/qtgui/MainWindow.cpp b/src/qtgui/MainWindow.cpp
+--- a/src/qtgui/MainWindow.cpp
++++ b/src/qtgui/MainWindow.cpp
+@@ -297,8 +297,9 @@ public:
+         bool show = capture == colorscreen::render_parameters::capture_unknown;
+         if (looksMonochrome) {
+-          // RGB is only a Bayer-container detail in this case. Until we have
+-          // additive-process recognition, do not offer color-screen workflows.
++          // RGB may only be a Bayer-container detail here. Offer the
++          // monochrome-through-screen paths, which reconstruct a regular
++          // screen geometrically, but not RGB screen-color detection paths.
+           show = show ||
+                  capture == colorscreen::render_parameters::capture_transparency ||
+                  capture == colorscreen::render_parameters::capture_negative ||
+@@ -309,11 +310,17 @@ public:
+                  colorscreen::render_parameters::capture_type_compatible_p(
+                      capture, scan);
+         }
+-        if (show)
++        if (show) {
++          const auto &property =
++              colorscreen::render_parameters::capture_properties[i];
+           m_captureType->addItem(
+-              QString::fromUtf8(colorscreen::render_parameters::
+-                                    capture_properties[i].pretty_name),
++              QString::fromUtf8(property.pretty_name),
+               i);
++          if (property.help && property.help[0])
++            m_captureType->setItemData(
++                m_captureType->count() - 1,
++                QString::fromUtf8(property.help), Qt::ToolTipRole);
++        }
+       }
+       m_captureType->setCurrentIndex(
+           m_captureType->findData(
+@@ -2380,9 +2387,13 @@ void MainWindow::updateRegistrationGroupVisibility() {
+   const bool hasScreenCapture =
+       m_scan && colorscreen::render_parameters::capture_has_screen_p(capture);
++  const bool hasScreenColorData =
++      m_scan && colorscreen::render_parameters::
++                    capture_supports_screen_detection_p(capture);
+   const bool hasRegularGeometry =
+       hasScreenCapture && colorscreen::screen_has_regular_geometry_p(
+                               m_scrToImgParams.type);
+@@ -2408,7 +2419,7 @@ void MainWindow::updateRegistrationGroupVisibility() {
+     // captures, so keep the tab available whenever an image is loaded.
+     setPanelVisible(m_colorPanel, m_scan != nullptr);
+     setPanelVisible(m_profilePanel,
+-                    hasScreenCapture && m_scan && m_scan->has_rgb());
++                    hasScreenColorData && m_scan && m_scan->has_rgb());
+   }
+@@ -3718,11 +3729,21 @@ void MainWindow::updateWorkflowGuide() {
+   } else if (colorDetection && regularScreen) {
+     nextStep = tr(
+         "Next: choose either Geometry-based reconstruction or screen-colour "
+         "detection from the RGB scan.");
+-  } else if (hasScreen && type == colorscreen::NoScreen) {
+-    nextStep = tr("Next: choose the physical Screen type.");
++  } else if (colorscreen::render_parameters::
++                 capture_requires_regular_screen_p(capture)
++             && !regularScreen) {
++    nextStep = tr(
++        "Next: choose the original regular Screen type. Stochastic screen "
++        "colors cannot be recovered from a monochrome capture.");
++  } else if (!colorDetection && regularScreen) {
++    nextStep = tr(
++        "Next: fit and validate Geometry so the original color screen can be "
++        "re-attached to the monochrome capture.");
++  } else if (hasScreen && type == colorscreen::NoScreen) {
++    nextStep = tr("Next: choose the physical Screen type.");
+   } else {
+     nextStep = tr("Next: reconstruct the image and refine Color/Profile.");
+   }
+diff --git a/testsuite/unittests.test b/testsuite/unittests.test
+--- a/testsuite/unittests.test
++++ b/testsuite/unittests.test
+@@ -79,17 +79,27 @@ main (int argc, char **argv)
+   if (render_parameters::capture_has_screen_p (
+           render_parameters::capture_plain_image)
+-      || render_parameters::capture_has_screen_p (
++      || !render_parameters::capture_has_screen_p (
+           render_parameters::capture_transparency)
+-      || render_parameters::capture_has_screen_p (
++      || !render_parameters::capture_has_screen_p (
+           render_parameters::capture_negative)
+       || !render_parameters::capture_has_screen_p (
+           render_parameters::capture_transparency_with_screen)
++      || render_parameters::capture_supports_screen_detection_p (
++          render_parameters::capture_transparency)
++      || render_parameters::capture_supports_screen_detection_p (
++          render_parameters::capture_negative)
+       || !render_parameters::capture_supports_screen_detection_p (
+           render_parameters::capture_transparency_with_screen)
++      || !render_parameters::capture_requires_regular_screen_p (
++          render_parameters::capture_transparency)
++      || !render_parameters::capture_requires_regular_screen_p (
++          render_parameters::capture_negative)
++      || render_parameters::capture_requires_regular_screen_p (
++          render_parameters::capture_transparency_with_screen)
+       || !render_parameters::capture_type_compatible_p (
+           render_parameters::capture_transparency, false, true)
+-      || render_parameters::capture_type_compatible_p (
++      || !render_parameters::capture_type_compatible_p (
+           render_parameters::capture_transparency, true, false)
+       || !render_parameters::capture_type_compatible_p (
+           render_parameters::capture_transparency_with_screen, true, false)
+@@ -119,7 +129,7 @@ main (int argc, char **argv)
+              != render_parameters::capture_unknown
+       || render_parameters::get_capture_type (
+              render_parameters::capture_transparency, &rgb_scan)
+-             != render_parameters::capture_unknown
++             != render_parameters::capture_transparency
+       || render_parameters::get_capture_type (
+              render_parameters::capture_transparency_with_screen_and_infrared,
+              &rgb_scan)
+diff --git a/doc/qtgui-workflow-roadmap.md b/doc/qtgui-workflow-roadmap.md
+--- a/doc/qtgui-workflow-roadmap.md
++++ b/doc/qtgui-workflow-roadmap.md
+@@ -98,6 +98,16 @@ These describe the object, not a subjective colour grade.
+ opening several groups.  Process selection determines which later tools are
+ applicable and is therefore closer to choosing a camera/lens profile than to a
+ creative adjustment.
++
++Monochrome transparency/negative captures made through a separate additive
++colour screen remain historical-screen workflows even though the screen colours
++are absent from the captured data.  This includes an infrared capture that
++effectively suppresses the screen colours of an otherwise screened
++transparency.  In these cases the operator must choose the original **regular**
++screen type and fit its geometry so the screen can be re-attached during
++reconstruction.  Stochastic screens (Random, Autochrome, Agfa Farbenplatte)
++cannot be reconstructed from monochrome data because the colour identity of
++their individual screen elements has been lost.
+ 
+ ### Stage 4 — Screen detection and geometry
