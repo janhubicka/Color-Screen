@@ -16,12 +16,12 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Stage patch
+      - name: Stage guarded transformer
         shell: bash
         run: |
           set -euo pipefail
-          cp .agent/qtgui-monochrome-screen.patch /tmp/qtgui-monochrome-screen.patch
-          sha256sum /tmp/qtgui-monochrome-screen.patch
+          cp .agent/qtgui-monochrome-screen.py /tmp/qtgui-monochrome-screen.py
+          sha256sum /tmp/qtgui-monochrome-screen.py
 
       - name: Publish clean product branch
         shell: bash
@@ -31,8 +31,15 @@ jobs:
           set -euo pipefail
           git fetch origin main
           git checkout -B "$PRODUCT_BRANCH" origin/main
-          git apply --check /tmp/qtgui-monochrome-screen.patch
-          git apply --index /tmp/qtgui-monochrome-screen.patch
+          python3 /tmp/qtgui-monochrome-screen.py
+          git add -- \
+            doc/qtgui-workflow-roadmap.md \
+            src/libcolorscreen/include/render-parameters.h \
+            src/libcolorscreen/scr-to-img.C \
+            src/qtgui/CapturePanel.cpp \
+            src/qtgui/MainWindow.cpp \
+            src/qtgui/ScreenPanel.cpp \
+            testsuite/unittests.test
           git diff --cached --check
 
           expected=$(cat <<'EOF' | sort
@@ -51,8 +58,13 @@ jobs:
             printf '%s\n' "$actual" >&2
             exit 1
           }
+          test -z "$(git status --porcelain | grep -v '^M  ' || true)" || {
+            echo 'Unexpected unstaged/untracked product changes:' >&2
+            git status --short >&2
+            exit 1
+          }
 
           git config user.name 'OpenAI Agent'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git commit -m 'qtgui: restore monochrome screen-capture workflow' -m 'Treat monochrome positive and negative captures as historical-screen workflows whose screen colors are absent from the captured data. Require a regular screen and geometry, keep RGB screen-element detection unavailable, accept scalar or monochrome RGB containers, and expose shared capture-type help from libcolorscreen. Preserve the existing serialized capture identifiers.'
-          git push origin HEAD:"refs/heads/$PRODUCT_BRANCH"
+          git push --force-with-lease origin HEAD:"refs/heads/$PRODUCT_BRANCH"
