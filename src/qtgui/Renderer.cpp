@@ -1,5 +1,6 @@
 #include "Renderer.h"
 #include <QImage>
+#include <QThreadPool>
 #include "Logging.h"
 #include "SynchronizedRunnable.h"
 #include <QColorSpace>
@@ -18,12 +19,17 @@ Renderer::Renderer(std::shared_ptr<colorscreen::image_data> scan,
     : m_scan(scan), m_rparams(rparams), m_scrToImg(scrToImg),
       m_scrDetect(scrDetect), m_renderType(renderType)
 {
+    m_renderPool = new QThreadPool(this);
+    m_renderPool->setMaxThreadCount(1);
 }
 
 Renderer::~Renderer()
 {
     // Render tasks use this object while emitting their completion signal.
-    // Keep it alive until every project-published QThreadPool task has left.
+    // The private pool gives shutdown an exact set of workers to drain instead
+    // of relying on unrelated work in QThreadPool::globalInstance().
+    if (m_renderPool)
+        m_renderPool->waitForDone();
     std::unique_lock<std::mutex> locker(m_activeMutex);
     m_activeCondition.wait(locker, [this]() { return m_activeTasks == 0; });
 }
@@ -133,6 +139,7 @@ void Renderer::render(int reqId)
     }
 
     runSynchronized(
+        m_renderPool,
         [this, reqId, xOffset, yOffset, scale, width, height, coordinateSpace,
          frameParams = std::move(frameParams), progress = std::move(progress),
          taskName, scrToImg = std::move(scrToImg),
