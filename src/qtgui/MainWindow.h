@@ -282,15 +282,6 @@ public:
     colorscreen::scr_to_img_parameters scrParams;
     colorscreen::render_parameters     rparams;
     std::vector<colorscreen::point_t>  spots;
-
-    /** Exact optimizer-input equality used for freshness/publication gates. */
-    bool operator==(const ColorOptimizerRequestData &other) const {
-      return scrParams == other.scrParams && rparams == other.rparams &&
-             spots == other.spots;
-    }
-    bool operator!=(const ColorOptimizerRequestData &other) const {
-      return !(*this == other);
-    }
   };
 
   /** Shared document-level measured-MTF fit provenance used by every
@@ -467,21 +458,14 @@ private:
   /** Refresh the compact persistent processing-stage summary in the inspector. */
   void updateWorkflowSummary();
 
-  /** Capture the exact inputs consumed by color-profile optimization. */
-  ColorOptimizerRequestData profileCalibrationInputs() const;
-
-  /** Return the document-owned profile-calibration freshness summary. */
-  QString profileCalibrationSummary() const;
-
-  /** Reset session-only profile fit provenance for a newly loaded context. */
-  void resetProfileCalibrationProvenance();
-
   /** Refresh focus-analysis rectangles in the ordinary view currently
       presenting this document's inspector. */
   void updateFocusAreaOverlays();
   /** Refresh/optionally locate the selected measured-MTF ROI in ordinary views. */
   void updateMtfMeasurementOverlay(bool locate = false);
   void refreshMtfCalibrationPresentation();
+  /** Return document-owned color-profile fit provenance. */
+  QString profileCalibrationSummary() const;
   /** Clear transient automatic focus-area state for this document. */
   void clearFocusAreaAnalysis();
 
@@ -772,6 +756,13 @@ private:
   ColorOptimizerWorker *m_colorOptimizerWorker = nullptr;
   QThread *m_colorOptimizerThread = nullptr;
   TaskQueue m_colorOptimizerQueue;
+  // Session-local profile-fit provenance. The persisted matrix remains usable,
+  // but is only called current when an accepted optimizer result matches the
+  // current geometry, color inputs, and calibration spots.
+  std::optional<ColorOptimizerRequestData> m_profileCalibrationBaseline;
+  std::optional<ColorOptimizerRequestData> m_profileCalibrationPendingInputs;
+  std::optional<ColorOptimizerRequestData> m_profileCalibrationFailureInputs;
+  double m_profileCalibrationAverageDeltaE = -1;
   // std::shared_ptr<colorscreen::progress_info> m_solverProgress; // Removed, now handled by queue request
   
   // Detect Screen Worker
@@ -788,15 +779,6 @@ private:
   std::optional<ParameterState> m_geometryFitPendingInputs;
   std::optional<bool> m_geometryFitPendingComputeMesh;
   std::optional<ParameterState> m_geometryFitFailureInputs;
-
-  // Session-local profile-fit provenance.  The optimizer consumes a complete
-  // render/screen-map snapshot plus the profile spots, so the same snapshot is
-  // also the stale-result publication gate.  Loaded profile coefficients are
-  // deliberately not called current until this session validates them.
-  std::optional<ColorOptimizerRequestData> m_profileFitBaseline;
-  std::optional<ColorOptimizerRequestData> m_profileFitPendingInputs;
-  std::optional<ColorOptimizerRequestData> m_profileFitFailureInputs;
-  double m_profileFitAverageDeltaE = -1;
 
   // Session-local MTF model-fit provenance shared by all Sharpness views.
   std::optional<colorscreen::mtf_parameters> m_mtfFitBaseline;

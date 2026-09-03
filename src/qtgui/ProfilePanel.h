@@ -18,8 +18,7 @@ public:
 
   // Called by MainWindow after the optimizer finishes.
   void setSpotResults(const std::vector<colorscreen::color_match> &results);
-
-  /** Show document-owned profile calibration freshness/status text. */
+  /** Show document-owned profile calibration readiness/freshness. */
   void setCalibrationStatus(const QString &status);
 
 signals:
@@ -39,7 +38,7 @@ private:
   QPushButton *m_addSpotBtn          = nullptr;  // toggleable
   QCheckBox *m_autoCheck             = nullptr;
   QPushButton *m_optimizeBtn         = nullptr;
-  QLabel    *m_statusLabel           = nullptr;
+  QLabel    *m_calibrationStatusLabel = nullptr;
   QLabel    *m_resultLabel           = nullptr;
   std::vector<colorscreen::point_t> m_lastAutoSpots;
 

@@ -69,21 +69,18 @@ void ProfilePanel::setupUi()
 
   m_optimizeBtn = new QPushButton(tr("Optimize color"), this);
   m_optimizeBtn->setObjectName(QStringLiteral("ProfileOptimizeButton"));
-  m_optimizeBtn->setToolTip(
-      tr("Fit the scanner/process color profile from at least four spots."));
   m_form->addRow(m_optimizeBtn);
 
-  // Freshness is owned by MainWindow because it must survive panel refreshes
-  // and gate asynchronous optimizer publication.  The panel only presents it.
-  m_statusLabel = new QLabel(tr("Profile: no calibration spots"), this);
-  m_statusLabel->setObjectName(QStringLiteral("ProfileCalibrationStatus"));
-  m_statusLabel->setWordWrap(true);
-  m_form->addRow(tr("Status:"), m_statusLabel);
+  m_calibrationStatusLabel = new QLabel(tr("Profile: no calibration spots"), this);
+  m_calibrationStatusLabel->setObjectName(
+      QStringLiteral("ProfileCalibrationStatus"));
+  m_calibrationStatusLabel->setWordWrap(true);
+  m_form->addRow(tr("Status:"), m_calibrationStatusLabel);
 
-  // Result summary label
+  // Numerical quality belongs beside, but is distinct from, freshness.
   m_resultLabel = new QLabel(tr("—"), this);
   m_resultLabel->setWordWrap(true);
-  m_form->addRow(tr("Result:"), m_resultLabel);
+  m_form->addRow(tr("Quality:"), m_resultLabel);
 
   connect(m_optimizeBtn, &QPushButton::clicked, this, [this]() {
     emit optimizeColorRequested(m_autoCheck->isChecked());
@@ -116,7 +113,7 @@ void ProfilePanel::onParametersRefreshed(const ParameterState &state)
                             n == 1 ? tr("1 spot")    :
                             tr("%1 spots").arg(n));
   if (m_optimizeBtn)
-    m_optimizeBtn->setEnabled(n >= 4);
+    m_optimizeBtn->setEnabled(n >= 4 && m_imageGetter() != nullptr);
 
   // Auto-trigger only when the profile-spot set itself changed.  Parameter
   // refreshes also happen when an optimization result is applied; treating
@@ -137,11 +134,10 @@ void ProfilePanel::onParametersRefreshed(const ParameterState &state)
     emit optimizeColorRequested(true);
 }
 
-/** Present document-owned profile fit freshness without owning that state. */
 void ProfilePanel::setCalibrationStatus(const QString &status)
 {
-  if (m_statusLabel)
-    m_statusLabel->setText(status);
+  if (m_calibrationStatusLabel)
+    m_calibrationStatusLabel->setText(status);
 }
 
 void ProfilePanel::setSpotResults(const std::vector<colorscreen::color_match> &results)

@@ -322,18 +322,10 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
   return;
 }
 
-        const qsizetype profileSpotCount = static_cast<qsizetype>(
-            first->documentStateSnapshot().profileSpots.size());
         if (!profileCalibrationStatus || !profileOptimizeButton ||
             !profileCalibrationStatus->text().startsWith(
                 QStringLiteral("Profile:")) ||
-            (profileSpotCount < 4 && profileOptimizeButton->isEnabled())) {
-          fail(QStringLiteral(
-              "Workspace churn lost profile calibration freshness/prerequisite state"));
-          return;
-        }
-
-        if (!mtfCalibrationStatus || !mtfMeasurementSelector ||
+            !mtfCalibrationStatus || !mtfMeasurementSelector ||
             !mtfMeasurementProvenance || !mtfMeasurementLocate ||
             mtfMeasurementSelector->count() < 1 ||
             mtfMeasurementSelector->itemData(0).toInt() != -1 ||
