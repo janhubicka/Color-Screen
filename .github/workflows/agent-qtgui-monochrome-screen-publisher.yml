@@ -1,0 +1,60 @@
+name: Agent Qt GUI monochrome-screen publisher
+
+on:
+  pull_request:
+    branches: [ main ]
+
+authorizations: {}
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    if: github.head_ref == 'agent/tmp-qtgui-monochrome-screen-publisher-20260903'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify staged patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp .agent/qtgui-monochrome-screen.patch /tmp/qtgui-monochrome-screen.patch
+          echo 'e872901499a3b6e2570b6a5f476c0650b2d079105cfbb1ba516074377ee0ef2b  /tmp/qtgui-monochrome-screen.patch' | sha256sum -c -
+
+      - name: Publish clean product branch
+        shell: bash
+        env:
+          PRODUCT_BRANCH: agent/qtgui-monochrome-screen-captures
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git checkout -B "$PRODUCT_BRANCH" origin/main
+          git apply --check /tmp/qtgui-monochrome-screen.patch
+          git apply --index /tmp/qtgui-monochrome-screen.patch
+          git diff --cached --check
+
+          expected=$(cat <<'EOF' | sort
+          doc/qtgui-workflow-roadmap.md
+          src/libcolorscreen/include/render-parameters.h
+          src/libcolorscreen/scr-to-img.C
+          src/qtgui/CapturePanel.cpp
+          src/qtgui/MainWindow.cpp
+          src/qtgui/ScreenPanel.cpp
+          testsuite/unittests.test
+          EOF
+          )
+          actual=$(git diff --cached --name-only | sort)
+          test "$actual" = "$expected" || {
+            echo 'Unexpected changed-file set:' >&2
+            printf '%s\n' "$actual" >&2
+            exit 1
+          }
+
+          git config user.name 'OpenAI Agent'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'qtgui: restore monochrome screen-capture workflow' -m 'Treat monochrome positive and negative captures as historical-screen workflows whose screen colors are absent from the captured data. Require a regular screen and geometry, keep RGB screen-element detection unavailable, accept scalar or monochrome RGB containers, and expose shared capture-type help from libcolorscreen. Preserve the existing serialized capture identifiers.'
+          git push origin HEAD:"refs/heads/$PRODUCT_BRANCH"
