@@ -1,4 +1,4 @@
-name: Temporary PR252 New View mode setter probe
+name: Temporary PR252 promote verified mode-setter fix
 
 on:
   push:
@@ -6,40 +6,23 @@ on:
       - agent/tmp-pr252-mode-setter-probe
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  probe:
+  promote:
     runs-on: ubuntu-24.04
-    container: ghcr.io/janhubicka/color-screen-ci:ubuntu-24.04
-    env:
-      LC_ALL: C.UTF-8
-      LANG: C.UTF-8
-      PATH: /usr/lib/qt6/libexec:/usr/lib/x86_64-linux-gnu/qt6/libexec:/usr/lib/qt6/bin:/usr/lib/x86_64-linux-gnu/qt6/bin:/usr/lib64/qt6/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-      CC: clang-18
-      CXX: clang++-18
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: agent/render-dispatch-smoke
+          fetch-depth: 0
 
-      - name: Install ThreadSanitizer OpenMP runtime
+      - name: Verify tested PR head
+        shell: bash
         run: |
-          apt-get update
-          apt-get install -y --no-install-recommends clang-18 libclang-rt-18-dev libomp-18-dev llvm-18
-          test -f /usr/lib/llvm-18/lib/libarcher.so
-          test -x /usr/bin/llvm-symbolizer-18
+          test "$(git rev-parse HEAD)" = "54d715ccf489ea257a39307570dd50e385894428"
 
-      - name: Configure ThreadSanitizer build
-        run: |
-          SANITIZER_FLAGS="-O1 -g -fno-omit-frame-pointer -fno-optimize-sibling-calls -fsanitize=thread"
-          CXXFLAGS="$SANITIZER_FLAGS" CFLAGS="$SANITIZER_FLAGS" \
-            LDFLAGS="-fsanitize=thread" \
-            ./configure --enable-checking --disable-static-link \
-              --disable-gtkgui --enable-qtgui
-
-      - name: Build baseline
-        run: make -j"$(nproc)"
-
-      - name: Apply candidate mode-setter fix
+      - name: Apply verified mode-setter fix
         shell: bash
         run: |
           python3 - <<'PY'
@@ -47,23 +30,23 @@ jobs:
 
           path = Path('src/qtgui/ImageViewWindow.cpp')
           text = path.read_text()
-          start_marker = '/** Programmatically select TYPE in this view. */'
-          end_marker = '/** Start or cancel slanted-edge selection in a specialized reference view. */'
-          start = text.index(start_marker)
-          end = text.index(end_marker, start)
-          replacement = '''/** Programmatically select TYPE in this view. */
+          old = '''/** Programmatically select TYPE in this view. */
           bool ImageViewWindow::setRenderType(colorscreen::render_type_t type) {
             const int index = m_modeComboBox->findData(static_cast<int>(type));
-            if (index < 0) {
-              qWarning() << "New View render mode is not available" << (int)type
-                         << "items" << m_modeComboBox->count();
+            if (index < 0)
               return false;
-            }
+            m_modeComboBox->setCurrentIndex(index);
+            return m_renderTypeParams.type == type;
+          }
+          '''
+          new = '''/** Programmatically select TYPE in this view. */
+          bool ImageViewWindow::setRenderType(colorscreen::render_type_t type) {
+            const int index = m_modeComboBox->findData(static_cast<int>(type));
+            if (index < 0)
+              return false;
 
-            // Keep the combo and the private render snapshot in lockstep even
-            // when the combo already happens to point at INDEX. In that case
-            // QComboBox::setCurrentIndex() emits no signal, so relying on
-            // currentIndexChanged alone can leave stale render parameters.
+            // setCurrentIndex() emits no signal when INDEX is already current,
+            // so update the private render snapshot explicitly as well.
             {
               const QSignalBlocker blocker(m_modeComboBox);
               m_modeComboBox->setCurrentIndex(index);
@@ -72,23 +55,19 @@ jobs:
             return m_modeComboBox->currentIndex() == index &&
                    m_renderTypeParams.type == type;
           }
-
           '''
-          path.write_text(text[:start] + replacement + text[end:])
+          if old not in text:
+              raise SystemExit('expected setRenderType implementation not found')
+          path.write_text(text.replace(old, new, 1))
           PY
-          grep -A25 -B2 'Programmatically select TYPE' src/qtgui/ImageViewWindow.cpp
+          git diff --check
+          git diff -- src/qtgui/ImageViewWindow.cpp
 
-      - name: Rebuild candidate
-        run: make -C src/qtgui -j"$(nproc)"
-
-      - name: Run candidate under ThreadSanitizer
+      - name: Commit and update PR branch
         shell: bash
-        env:
-          LD_LIBRARY_PATH: /usr/lib/llvm-18/lib
-          OMP_NUM_THREADS: 4
-          OMP_TOOL: enabled
-          OMP_TOOL_LIBRARIES: /usr/lib/llvm-18/lib/libarcher.so
-          TSAN_OPTIONS: halt_on_error=1:second_deadlock_stack=1:ignore_noninstrumented_modules=1:external_symbolizer_path=/usr/bin/llvm-symbolizer-18
         run: |
-          top_builddir="$PWD" srcdir="$PWD/testsuite" \
-            sh testsuite/qt-tsan-smoke-probe.test
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/qtgui/ImageViewWindow.cpp
+          git commit -m 'qt: keep New View render mode state synchronized'
+          git push origin HEAD:agent/render-dispatch-smoke
