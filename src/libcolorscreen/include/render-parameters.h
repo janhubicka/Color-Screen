@@ -355,9 +355,11 @@ struct render_parameters
     capture_transparency_with_screen_and_infrared,
     capture_negative_with_screen,
     capture_negative_with_screen_and_infrared,
-    /* Monochrome positive capture with no attached color screen.  */
+    /* Monochrome positive made through a separate historical color screen.
+       The screen colors are not present in the captured data.  */
     capture_transparency,
-    /* Monochrome negative capture with no attached color screen.  */
+    /* Monochrome negative made through a separate historical color screen.
+       The screen colors are not present in the captured data.  */
     capture_negative,
     /* Ordinary image with no historical color screen.  */
     capture_plain_image,
@@ -372,6 +374,8 @@ struct render_parameters
     const char *name;
     /* Human readable name.  */
     const char *pretty_name;
+    /* Explanation shown by user interfaces.  */
+    const char *help;
     /* Flags.  */
     int flags;
     /* Supported flags.  */
@@ -379,7 +383,9 @@ struct render_parameters
     {
       SUPPORTS_SCR_DETECT = 1,
       HAS_IR = 2,
-      MAYBE_MONOCHROMATIC_DEMOSAIC = 4
+      MAYBE_MONOCHROMATIC_DEMOSAIC = 4,
+      USES_SCREEN = 8,
+      REGULAR_SCREEN_ONLY = 16
     };
   };
   DLL_PUBLIC static const capture_type_property capture_properties[capture_max];
@@ -968,15 +974,16 @@ struct render_parameters
     return intersection;
   }
 
-  /* Return true if CAPTURE_TYPE describes a plate carrying a historical
-     additive color screen.  */
+  /* Return true if reconstruction of CAPTURE_TYPE uses a historical additive
+     color screen.  For monochrome-through-screen captures the screen itself is
+     separate or its colors were suppressed by capture (for example in IR), so
+     it must be re-attached geometrically.  */
   pure_attr static bool
   capture_has_screen_p (enum capture_type capture_type)
   {
-    return capture_type == capture_transparency_with_screen
-           || capture_type == capture_transparency_with_screen_and_infrared
-           || capture_type == capture_negative_with_screen
-           || capture_type == capture_negative_with_screen_and_infrared;
+    return capture_type >= capture_unknown && capture_type < capture_max
+           && (capture_properties[(int)capture_type].flags
+               & capture_type_property::USES_SCREEN);
   }
 
   /* Return true if CAPTURE_TYPE has RGB information from which individual
@@ -984,16 +991,27 @@ struct render_parameters
   pure_attr static bool
   capture_supports_screen_detection_p (enum capture_type capture_type)
   {
-    return capture_type == capture_transparency_with_screen
-           || capture_type == capture_transparency_with_screen_and_infrared
-           || capture_type == capture_negative_with_screen
-           || capture_type == capture_negative_with_screen_and_infrared;
+    return capture_type >= capture_unknown && capture_type < capture_max
+           && (capture_properties[(int)capture_type].flags
+               & capture_type_property::SUPPORTS_SCR_DETECT);
+  }
+
+  /* Return true if the screen colors are absent from CAPTURE_TYPE, so a
+     stochastic screen cannot be reconstructed and the operator must choose a
+     regular screen with geometry.  */
+  pure_attr static bool
+  capture_requires_regular_screen_p (enum capture_type capture_type)
+  {
+    return capture_type >= capture_unknown && capture_type < capture_max
+           && (capture_properties[(int)capture_type].flags
+               & capture_type_property::REGULAR_SCREEN_ONLY);
   }
 
   /* Return true when CAPTURE_TYPE is compatible with the channel layout of
-     a loaded capture.  Plain monochrome captures require a scalar image;
-     screen captures require RGB, and RGB+IR variants additionally require
-     the fourth grayscale/infrared plane.  */
+     a loaded capture.  Monochrome-through-screen captures may be stored either
+     as a scalar image or in an RGB container whose channels carry the same
+     monochrome signal; captures with recorded screen colors require RGB, and
+     RGB+IR variants additionally require the fourth grayscale/infrared plane.  */
   pure_attr static bool
   capture_type_compatible_p (enum capture_type capture_type,
                              bool has_rgb, bool has_ir)
@@ -1005,7 +1023,7 @@ struct render_parameters
         return true;
       case capture_transparency:
       case capture_negative:
-        return !has_rgb;
+        return has_rgb || has_ir;
       case capture_transparency_with_screen:
       case capture_negative_with_screen:
         return has_rgb;
@@ -1039,8 +1057,8 @@ struct render_parameters
 
   /* Return the capture type only when it matches the loaded image.  A
      parameter file may describe a different capture, so incompatible RGB/IR or
-     monochrome choices are deliberately demoted to Unknown rather than silently
-     changing their physical meaning.  */
+     channel-layout choices are deliberately demoted to Unknown rather than
+     silently changing their physical meaning.  */
   pure_attr static enum capture_type
   get_capture_type (enum capture_type capture_type, const image_data *scan)
   {

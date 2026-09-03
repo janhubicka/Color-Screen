@@ -16,20 +16,55 @@ namespace colorscreen
 std::atomic_ulong scr_to_img::m_nwarnings;
 
 const render_parameters::capture_type_property render_parameters::capture_properties[] = {
-  { "unknown", "Unknown", 0 },
+  { "unknown", "Unknown",
+    "Capture type is not known yet. The GUI keeps the restoration workflow "
+    "conservative until it is selected.",
+    0 },
   { "positive-screen-rgb", "Color positive with screen",
-    render_parameters::capture_type_property::SUPPORTS_SCR_DETECT },
+    "Color transparency in which the historical additive screen colors are "
+    "recorded in RGB. Regular and stochastic screens can be reconstructed.",
+    render_parameters::capture_type_property::SUPPORTS_SCR_DETECT
+    | render_parameters::capture_type_property::USES_SCREEN },
   { "positive-screen-rgb-ir", "Color positive + IR with screen",
-    render_parameters::capture_type_property::SUPPORTS_SCR_DETECT | render_parameters::capture_type_property::HAS_IR },
+    "Color transparency with recorded additive screen colors plus a separate "
+    "infrared/grayscale channel.",
+    render_parameters::capture_type_property::SUPPORTS_SCR_DETECT
+    | render_parameters::capture_type_property::HAS_IR
+    | render_parameters::capture_type_property::USES_SCREEN },
   { "negative-screen-rgb", "Color negative with screen",
-    render_parameters::capture_type_property::SUPPORTS_SCR_DETECT },
+    "Color negative in which the historical additive screen colors are "
+    "recorded in RGB. Regular and stochastic screens can be reconstructed.",
+    render_parameters::capture_type_property::SUPPORTS_SCR_DETECT
+    | render_parameters::capture_type_property::USES_SCREEN },
   { "negative-screen-rgb-ir", "Color negative + IR with screen",
-    render_parameters::capture_type_property::SUPPORTS_SCR_DETECT | render_parameters::capture_type_property::HAS_IR },
-  { "positive-mono", "Monochrome positive (no color screen)",
-    render_parameters::capture_type_property::MAYBE_MONOCHROMATIC_DEMOSAIC },
-  { "negative-mono", "Monochrome negative (no color screen)",
-    render_parameters::capture_type_property::MAYBE_MONOCHROMATIC_DEMOSAIC },
-  { "ordinary-image", "Ordinary image (no color screen)", 0 },
+    "Color negative with recorded additive screen colors plus a separate "
+    "infrared/grayscale channel.",
+    render_parameters::capture_type_property::SUPPORTS_SCR_DETECT
+    | render_parameters::capture_type_property::HAS_IR
+    | render_parameters::capture_type_property::USES_SCREEN },
+  { "positive-mono", "Monochrome transparency taken through color screen",
+    "Monochrome transparency produced through a separate additive color "
+    "screen, or a capture in which the screen colors are not recorded (for "
+    "example an infrared capture of a screen transparency). The original "
+    "screen must be re-attached during reconstruction. Choose the original "
+    "regular screen type and fit its geometry; stochastic screen colors "
+    "cannot be recovered from monochrome data.",
+    render_parameters::capture_type_property::MAYBE_MONOCHROMATIC_DEMOSAIC
+    | render_parameters::capture_type_property::USES_SCREEN
+    | render_parameters::capture_type_property::REGULAR_SCREEN_ONLY },
+  { "negative-mono", "Monochrome negative taken through color screen",
+    "Monochrome negative exposed through a separate additive color screen. "
+    "The screen filter is not part of the negative and must be re-attached "
+    "when producing the reconstructed positive. Choose the original regular "
+    "screen type and fit its geometry; stochastic screen colors cannot be "
+    "recovered from a monochrome negative.",
+    render_parameters::capture_type_property::MAYBE_MONOCHROMATIC_DEMOSAIC
+    | render_parameters::capture_type_property::USES_SCREEN
+    | render_parameters::capture_type_property::REGULAR_SCREEN_ONLY },
+  { "ordinary-image", "Ordinary image (no color screen)",
+    "Ordinary image with no historical additive color screen. Screen "
+    "registration and reconstruction are not applicable.",
+    0 },
 };
 namespace
 {

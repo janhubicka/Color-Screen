@@ -107,6 +107,16 @@ opening several groups.  Process selection determines which later tools are
 applicable and is therefore closer to choosing a camera/lens profile than to a
 creative adjustment.
 
+Monochrome transparency/negative captures made through a separate additive
+colour screen remain historical-screen workflows even though the screen colours
+are absent from the captured data.  This includes an infrared capture that
+effectively suppresses the screen colours of an otherwise screened
+transparency.  In these cases the operator must choose the original **regular**
+screen type and fit its geometry so the screen can be re-attached during
+reconstruction.  Stochastic screens (Random, Autochrome, Agfa Farbenplatte)
+cannot be reconstructed from monochrome data because the colour identity of
+their individual screen elements has been lost.
+
 ### Stage 4 — Screen detection and geometry
 
 Current panels/features:

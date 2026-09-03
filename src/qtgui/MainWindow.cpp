@@ -310,8 +310,9 @@ public:
             colorscreen::render_parameters::capture_unknown)>(i);
         bool show = capture == colorscreen::render_parameters::capture_unknown;
         if (looksMonochrome) {
-          // RGB is only a Bayer-container detail in this case. Until we have
-          // additive-process recognition, do not offer color-screen workflows.
+          // RGB may only be a Bayer-container detail here. Offer the
+          // monochrome-through-screen paths, which reconstruct a regular
+          // screen geometrically, but not RGB screen-color detection paths.
           show = show ||
                  capture == colorscreen::render_parameters::capture_transparency ||
                  capture == colorscreen::render_parameters::capture_negative ||
@@ -321,11 +322,15 @@ public:
                  colorscreen::render_parameters::capture_type_compatible_p(
                      capture, scan);
         }
-        if (show)
-          m_captureType->addItem(
-              QString::fromUtf8(colorscreen::render_parameters::
-                                    capture_properties[i].pretty_name),
-              i);
+        if (show) {
+          const auto &property =
+              colorscreen::render_parameters::capture_properties[i];
+          m_captureType->addItem(QString::fromUtf8(property.pretty_name), i);
+          if (property.help && property.help[0])
+            m_captureType->setItemData(
+                m_captureType->count() - 1, QString::fromUtf8(property.help),
+                Qt::ToolTipRole);
+        }
       }
       m_captureType->setCurrentIndex(
           m_captureType->findData(
@@ -4263,6 +4268,16 @@ void MainWindow::updateWorkflowSummary() {
     nextStep = tr(
         "Next: choose either Geometry-based reconstruction or screen-colour "
         "detection from the RGB scan.");
+  } else if (colorscreen::render_parameters::
+                 capture_requires_regular_screen_p(capture)
+             && !regularScreen) {
+    nextStep = tr(
+        "Next: choose the original regular Screen type. Stochastic screen "
+        "colors cannot be recovered from a monochrome capture.");
+  } else if (!colorDetection && regularScreen) {
+    nextStep = tr(
+        "Next: fit and validate Geometry so the original color screen can be "
+        "re-attached to the monochrome capture.");
   } else if (hasScreen && type == colorscreen::NoScreen) {
     nextStep = tr("Next: choose the physical Screen type.");
   } else {
@@ -4912,6 +4927,9 @@ void MainWindow::updateRegistrationGroupVisibility() {
              : colorscreen::render_parameters::capture_unknown;
   const bool hasScreenCapture =
       m_scan && colorscreen::render_parameters::capture_has_screen_p(capture);
+  const bool hasScreenColorData =
+      m_scan && colorscreen::render_parameters::
+                    capture_supports_screen_detection_p(capture);
   const bool hasRegularGeometry =
       hasScreenCapture && colorscreen::screen_has_regular_geometry_p(
                               m_scrToImgParams.type);
@@ -4941,7 +4959,7 @@ void MainWindow::updateRegistrationGroupVisibility() {
     // captures, so keep the tab available whenever an image is loaded.
     setPanelVisible(m_colorPanel, m_scan != nullptr);
     setPanelVisible(m_profilePanel,
-                    hasScreenCapture && m_scan && m_scan->has_rgb());
+                    hasScreenColorData && m_scan && m_scan->has_rgb());
   }
 
   if (!hasRegularGeometry &&
