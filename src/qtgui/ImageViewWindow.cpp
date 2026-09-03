@@ -784,8 +784,16 @@ bool ImageViewWindow::setRenderType(colorscreen::render_type_t type) {
   const int index = m_modeComboBox->findData(static_cast<int>(type));
   if (index < 0)
     return false;
-  m_modeComboBox->setCurrentIndex(index);
-  return m_renderTypeParams.type == type;
+
+  // setCurrentIndex() emits no signal when INDEX is already current,
+  // so update the private render snapshot explicitly as well.
+  {
+    const QSignalBlocker blocker(m_modeComboBox);
+    m_modeComboBox->setCurrentIndex(index);
+  }
+  onModeChanged(index);
+  return m_modeComboBox->currentIndex() == index &&
+         m_renderTypeParams.type == type;
 }
 
 /** Start or cancel slanted-edge selection in a specialized reference view. */
