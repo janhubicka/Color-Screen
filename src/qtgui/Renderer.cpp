@@ -2,7 +2,6 @@
 #include <QImage>
 #include <QThreadPool>
 #include "Logging.h"
-#include "SynchronizedRunnable.h"
 #include <QColorSpace>
 
 #include "../libcolorscreen/include/render-parameters.h"
@@ -25,9 +24,10 @@ Renderer::Renderer(std::shared_ptr<colorscreen::image_data> scan,
 
 Renderer::~Renderer()
 {
-    // Render tasks use this object while emitting their completion signal.
-    // The private pool gives shutdown an exact set of workers to drain instead
-    // of relying on unrelated work in QThreadPool::globalInstance().
+    // Legacy private-pool state is kept for now because Renderer.h is shared
+    // with older call sites, but rendering itself stays on this QObject's
+    // dedicated QThread.  Nothing can therefore outlive that thread during
+    // detached-view teardown.
     if (m_renderPool)
         m_renderPool->waitForDone();
     std::unique_lock<std::mutex> locker(m_activeMutex);
@@ -128,174 +128,163 @@ void Renderer::render(int reqId)
         return;
     }
     if (progress)
-        progress->set_task("Queuing render task", 1);
-
-    if (progress)
-        progress->set_task("Queuing to thread pool", 1);
+        progress->set_task("Render task started", 1);
 
     {
         std::lock_guard<std::mutex> locker(m_activeMutex);
         ++m_activeTasks;
     }
+    struct CompletionGuard {
+        Renderer *renderer;
+        ~CompletionGuard() { renderer->finishRenderTask(); }
+    } completion{this};
 
-    runSynchronized(
-        m_renderPool,
-        [this, reqId, xOffset, yOffset, scale, width, height, coordinateSpace,
-         frameParams = std::move(frameParams), progress = std::move(progress),
-         taskName, scrToImg = std::move(scrToImg),
-         scrDetect = std::move(scrDetect), renderType = std::move(renderType)]() mutable {
-            struct CompletionGuard {
-                Renderer *renderer;
-                ~CompletionGuard() { renderer->finishRenderTask(); }
-            } completion{this};
+    // Renderer already lives on a dedicated QThread.  Running a second worker
+    // pool from here made object lifetime span two independently shutting-down
+    // thread systems: a detached ImageWidget could stop its renderer QThread
+    // while a pool worker still captured `this`.  Windows ASan reliably hit
+    // that teardown race.  Do the frame on the renderer thread itself instead;
+    // queued render requests remain serialized and QThread::quit()/wait() now
+    // provides the lifetime barrier that ImageWidget expects.
+    if (progress && progress->cancel_requested()) {
+        emit imageReady(reqId, QImage(), xOffset, yOffset, scale, false);
+        return;
+    }
+    if (progress)
+        progress->set_task("Calculating transformation", 1);
 
-            if (progress && progress->cancel_requested()) {
-                emit imageReady(reqId, QImage(), xOffset, yOffset, scale, false);
-                return;
-            }
+    if (!m_scan || (!m_scan->has_grayscale_or_ir() && !m_scan->has_rgb())) {
+        emit imageReady(reqId, QImage(), xOffset, yOffset, scale, true);
+        return;
+    }
+
+    colorscreen::render_coordinate_space requestedSpace =
+        coordinateSpace == (int)colorscreen::render_final_coordinates
+            ? colorscreen::render_final_coordinates
+            : colorscreen::render_scan_coordinates;
+    CoordinateTransformer transformer(m_scan.get(), frameParams, &scrToImg,
+                                      requestedSpace);
+    QSize transformedSize = transformer.getTransformedCropSize();
+
+    QRectF visibleRect(0, 0, transformedSize.width(), transformedSize.height());
+    QRectF requestRect(xOffset, yOffset, (double)width / scale,
+                       (double)height / scale);
+    QRectF intersection = requestRect.intersected(visibleRect);
+
+    if (intersection.isEmpty()) {
+        emit imageReady(reqId, QImage(), xOffset, yOffset, scale, true);
+        return;
+    }
+
+    colorscreen::point_t p0 = transformer.transformedToRenderCrop(
+        {intersection.left(), intersection.top()});
+    colorscreen::point_t p1 = transformer.transformedToRenderCrop(
+        {intersection.right(), intersection.bottom()});
+
+    double sx_unit = std::min(p0.x, p1.x);
+    double sy_unit = std::min(p0.y, p1.y);
+
+    int tw = (int)std::round(intersection.width() * scale);
+    int th = (int)std::round(intersection.height() * scale);
+
+    if (tw <= 0)
+        tw = 1;
+    if (th <= 0)
+        th = 1;
+
+    /* Scan rotation/mirroring are presentation transforms.  Final
+       views already contain their complete orientation in scr_to_img
+       final geometry, so applying the scan transform here a second
+       time changes tile dimensions/placement and clips the zero-based
+       final canvas. */
+    const bool applyScanPresentation =
+        transformer.coordinateSpace() == colorscreen::render_scan_coordinates;
+    int angleIdx = 0;
+    bool mirror = false;
+    if (applyScanPresentation) {
+        angleIdx = (int)(frameParams.scan_rotation) % 4;
+        if (angleIdx < 0)
+            angleIdx += 4;
+        mirror = frameParams.scan_mirror;
+    }
+
+    int renderW = tw;
+    int renderH = th;
+    if (angleIdx == 1 || angleIdx == 3)
+        std::swap(renderW, renderH);
+
+    colorscreen::tile_parameters tile;
+    tile.pos.x = sx_unit * scale;
+    tile.pos.y = sy_unit * scale;
+    tile.step = 1.0 / scale;
+    tile.width = renderW;
+    tile.height = renderH;
+
+    QImage image(renderW, renderH, QImage::Format_RGB888);
+    image.setColorSpace(QColorSpace(QColorSpace::SRgb));
+    tile.pixels = image.bits();
+    tile.rowstride = image.bytesPerLine();
+    tile.pixelbytes = 3;
+
+    double outX = intersection.left();
+    double outY = intersection.top();
+
+    bool success = false;
+
+    if (progress)
+        progress->set_task(taskName, 1);
+
+    if (progress && progress->cancel_requested()) {
+        emit imageReady(reqId, QImage(), xOffset, yOffset, scale, false);
+        return;
+    }
+    colorscreen::sub_task task(progress.get());
+    try {
+        qCDebug(lcRenderSync)
+            << "  Task ID:" << reqId << " starts rendering tile";
+        if (colorscreen::render_tile(*m_scan, scrToImg, scrDetect, frameParams,
+                                     renderType, tile,
+                                     transformer.coordinateSpace(),
+                                     progress.get()))
+            success = true;
+        qCDebug(lcRenderSync)
+            << "  Task ID:" << reqId << " finished rendering tile " << success;
+    } catch (...) {
+        success = false;
+    }
+
+    if (success) {
+        QTransform transform;
+        bool transformed = false;
+
+        if (angleIdx != 0) {
+            transform.rotate(angleIdx * 90);
+            transformed = true;
+        }
+
+        if (mirror) {
+            transform.scale(-1, 1);
+            transformed = true;
+        }
+
+        if (transformed) {
             if (progress)
-                progress->set_task("Render task started", 1);
-            if (progress)
-                progress->set_task("Calculating transformation", 1);
-
-            if (!m_scan ||
-                (!m_scan->has_grayscale_or_ir() && !m_scan->has_rgb())) {
-                emit imageReady(reqId, QImage(), xOffset, yOffset, scale, true);
-                return;
-            }
-
-            colorscreen::render_coordinate_space requestedSpace =
-                coordinateSpace == (int)colorscreen::render_final_coordinates
-                    ? colorscreen::render_final_coordinates
-                    : colorscreen::render_scan_coordinates;
-            CoordinateTransformer transformer(m_scan.get(), frameParams,
-                                              &scrToImg, requestedSpace);
-            QSize transformedSize = transformer.getTransformedCropSize();
-
-            QRectF visibleRect(0, 0, transformedSize.width(),
-                               transformedSize.height());
-            QRectF requestRect(xOffset, yOffset, (double)width / scale,
-                               (double)height / scale);
-            QRectF intersection = requestRect.intersected(visibleRect);
-
-            if (intersection.isEmpty()) {
-                emit imageReady(reqId, QImage(), xOffset, yOffset, scale, true);
-                return;
-            }
-
-            colorscreen::point_t p0 = transformer.transformedToRenderCrop(
-                {intersection.left(), intersection.top()});
-            colorscreen::point_t p1 = transformer.transformedToRenderCrop(
-                {intersection.right(), intersection.bottom()});
-
-            double sx_unit = std::min(p0.x, p1.x);
-            double sy_unit = std::min(p0.y, p1.y);
-
-            int tw = (int)std::round(intersection.width() * scale);
-            int th = (int)std::round(intersection.height() * scale);
-
-            if (tw <= 0)
-                tw = 1;
-            if (th <= 0)
-                th = 1;
-
-            /* Scan rotation/mirroring are presentation transforms.  Final
-               views already contain their complete orientation in scr_to_img
-               final geometry, so applying the scan transform here a second
-               time changes tile dimensions/placement and clips the zero-based
-               final canvas. */
-            const bool applyScanPresentation =
-                transformer.coordinateSpace() ==
-                colorscreen::render_scan_coordinates;
-            int angleIdx = 0;
-            bool mirror = false;
-            if (applyScanPresentation) {
-                angleIdx = (int)(frameParams.scan_rotation) % 4;
-                if (angleIdx < 0)
-                    angleIdx += 4;
-                mirror = frameParams.scan_mirror;
-            }
-
-            int renderW = tw;
-            int renderH = th;
-            if (angleIdx == 1 || angleIdx == 3)
-                std::swap(renderW, renderH);
-
-            colorscreen::tile_parameters tile;
-            tile.pos.x = sx_unit * scale;
-            tile.pos.y = sy_unit * scale;
-            tile.step = 1.0 / scale;
-            tile.width = renderW;
-            tile.height = renderH;
-
-            QImage image(renderW, renderH, QImage::Format_RGB888);
-            image.setColorSpace(QColorSpace(QColorSpace::SRgb));
-            tile.pixels = image.bits();
-            tile.rowstride = image.bytesPerLine();
-            tile.pixelbytes = 3;
-
-            double outX = intersection.left();
-            double outY = intersection.top();
-
-            bool success = false;
-
-            if (progress)
-                progress->set_task(taskName, 1);
-
-            if (progress && progress->cancel_requested()) {
-                emit imageReady(reqId, QImage(), xOffset, yOffset, scale,
-                                false);
-                return;
-            }
-            colorscreen::sub_task task(progress.get());
-            try {
+                progress->set_task("transforming final image", 1);
+            if (!(progress && progress->cancel_requested()))
+                image = image.transformed(transform);
+            else {
                 qCDebug(lcRenderSync)
-                    << "  Task ID:" << reqId << " starts rendering tile";
-                if (colorscreen::render_tile(
-                        *m_scan, scrToImg, scrDetect, frameParams, renderType,
-                        tile, transformer.coordinateSpace(), progress.get()))
-                    success = true;
-                qCDebug(lcRenderSync)
-                    << "  Task ID:" << reqId << " finished rendering tile "
-                    << success;
-            } catch (...) {
+                    << "  Task ID:" << reqId
+                    << " cancelled before transformation";
                 success = false;
             }
+        }
+    }
 
-            if (success) {
-                QTransform transform;
-                bool transformed = false;
-
-                if (angleIdx != 0) {
-                    transform.rotate(angleIdx * 90);
-                    transformed = true;
-                }
-
-                if (mirror) {
-                    transform.scale(-1, 1);
-                    transformed = true;
-                }
-
-                if (transformed) {
-                    if (progress)
-                        progress->set_task("transforming final image", 1);
-                    if (!(progress && progress->cancel_requested()))
-                        image = image.transformed(transform);
-                    else {
-                        qCDebug(lcRenderSync)
-                            << "  Task ID:" << reqId
-                            << " cancelled before transformation";
-                        success = false;
-                    }
-                }
-            }
-
-            qCDebug(lcRenderSync)
-                << "  Task ID:" << reqId << " finished with " << success;
-            if (success)
-                emit imageReady(reqId, image, outX, outY, scale, true);
-            else
-                emit imageReady(reqId, QImage(), xOffset, yOffset, scale,
-                                false);
-        });
+    qCDebug(lcRenderSync)
+        << "  Task ID:" << reqId << " finished with " << success;
+    if (success)
+        emit imageReady(reqId, image, outX, outY, scale, true);
+    else
+        emit imageReady(reqId, QImage(), xOffset, yOffset, scale, false);
 }
