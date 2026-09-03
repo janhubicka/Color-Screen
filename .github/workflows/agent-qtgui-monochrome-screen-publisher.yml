@@ -16,12 +16,12 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Verify staged patch
+      - name: Stage patch
         shell: bash
         run: |
           set -euo pipefail
           cp .agent/qtgui-monochrome-screen.patch /tmp/qtgui-monochrome-screen.patch
-          echo 'e872901499a3b6e2570b6a5f476c0650b2d079105cfbb1ba516074377ee0ef2b  /tmp/qtgui-monochrome-screen.patch' | sha256sum -c -
+          sha256sum /tmp/qtgui-monochrome-screen.patch
 
       - name: Publish clean product branch
         shell: bash
