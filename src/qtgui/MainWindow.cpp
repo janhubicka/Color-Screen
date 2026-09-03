@@ -3720,10 +3720,10 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
 
   const bool suggestDetectedMetadata =
       !suppressParamPrompt && !parameterDataLoaded;
-  const bool offerInitialGuide =
-      !suppressParamPrompt &&
-      (suggestDetectedMetadata ||
-       m_rparams.capture_type == colorscreen::render_parameters::capture_unknown);
+  // Capture-type compatibility can only be checked after image_data has
+  // been loaded. Keep this as permission to offer the guide; the actual
+  // decision is made in the successful-load callback below.
+  const bool allowInitialGuide = !suppressParamPrompt;
 
   auto progress = std::make_shared<colorscreen::progress_info>();
   progress->set_task("Opening image", 0);
@@ -3742,7 +3742,7 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
   connect(
       watcher, &QFutureWatcher<std::pair<bool, QString>>::finished, this,
       [this, watcher, tempScan, progress, fileName, isCsprj,
-       offerInitialGuide, suggestDetectedMetadata]() {
+       allowInitialGuide, suggestDetectedMetadata]() {
         if (m_closing) {
           watcher->deleteLater();
           return;
@@ -3786,6 +3786,11 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
           saveRecoveryState();
           updateWindowTitle();
 
+          const bool offerInitialGuide =
+              allowInitialGuide &&
+              (suggestDetectedMetadata ||
+               m_rparams.get_capture_type(m_scan.get()) ==
+                   colorscreen::render_parameters::capture_unknown);
           if (offerInitialGuide) {
             const colorscreen::monochrome_bayer_analysis analysis =
                 m_scan->analyze_monochrome_bayer();
