@@ -43,10 +43,16 @@ private:
   Function m_function;
 };
 
-template <typename Function> void runSynchronized(Function &&function) {
+template <typename Function>
+void runSynchronized(QThreadPool *pool, Function &&function) {
   using StoredFunction = std::decay_t<Function>;
   auto *task = new SynchronizedRunnable<StoredFunction>(
       StoredFunction(std::forward<Function>(function)));
   task->publish();
-  QThreadPool::globalInstance()->start(task);
+  (pool ? pool : QThreadPool::globalInstance())->start(task);
+}
+
+template <typename Function> void runSynchronized(Function &&function) {
+  runSynchronized(QThreadPool::globalInstance(),
+                  std::forward<Function>(function));
 }
