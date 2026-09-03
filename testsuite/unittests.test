@@ -84,17 +84,27 @@ main (int argc, char **argv)
 
   if (render_parameters::capture_has_screen_p (
           render_parameters::capture_plain_image)
-      || render_parameters::capture_has_screen_p (
+      || !render_parameters::capture_has_screen_p (
           render_parameters::capture_transparency)
-      || render_parameters::capture_has_screen_p (
+      || !render_parameters::capture_has_screen_p (
           render_parameters::capture_negative)
       || !render_parameters::capture_has_screen_p (
           render_parameters::capture_transparency_with_screen)
+      || render_parameters::capture_supports_screen_detection_p (
+          render_parameters::capture_transparency)
+      || render_parameters::capture_supports_screen_detection_p (
+          render_parameters::capture_negative)
       || !render_parameters::capture_supports_screen_detection_p (
+          render_parameters::capture_transparency_with_screen)
+      || !render_parameters::capture_requires_regular_screen_p (
+          render_parameters::capture_transparency)
+      || !render_parameters::capture_requires_regular_screen_p (
+          render_parameters::capture_negative)
+      || render_parameters::capture_requires_regular_screen_p (
           render_parameters::capture_transparency_with_screen)
       || !render_parameters::capture_type_compatible_p (
           render_parameters::capture_transparency, false, true)
-      || render_parameters::capture_type_compatible_p (
+      || !render_parameters::capture_type_compatible_p (
           render_parameters::capture_transparency, true, false)
       || !render_parameters::capture_type_compatible_p (
           render_parameters::capture_transparency_with_screen, true, false)
@@ -139,7 +149,7 @@ main (int argc, char **argv)
              != render_parameters::capture_unknown
       || render_parameters::get_capture_type (
              render_parameters::capture_transparency, &rgb_scan)
-             != render_parameters::capture_unknown
+             != render_parameters::capture_transparency
       || render_parameters::get_capture_type (
              render_parameters::capture_transparency_with_screen_and_infrared,
              &rgb_scan)

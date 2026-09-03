@@ -10,6 +10,7 @@
 #include <QImage>
 #include <QPixmap>
 #include <QPushButton>
+#include <QStandardItemModel>
 #include <QStyleOptionComboBox>
 #include <QStylePainter>
 #include <map>
@@ -149,7 +150,9 @@ void ScreenPanel::setupUi() {
   screenCombo->setToolTip(
       "Select the physical color screen process. None means no historical "
       "screen; Random, Autochrome and Agfa Farbenplatte are stochastic "
-      "screens without a regular geometric lattice.");
+      "screens without a regular geometric lattice. Monochrome captures made "
+      "through a color screen require a regular screen because the color "
+      "identity of stochastic screen elements is not recoverable.");
 
   if (m_currentGroupForm) {
     m_currentGroupForm->addRow("Screen type", screenCombo);
@@ -166,7 +169,22 @@ void ScreenPanel::setupUi() {
           });
 
   // Updater: State -> UI
-  m_paramUpdaters.push_back([screenCombo](const ParameterState &state) {
+  m_paramUpdaters.push_back([this, screenCombo](const ParameterState &state) {
+    const auto img = m_imageGetter();
+    const auto capture =
+        img ? state.rparams.get_capture_type(img.get())
+            : state.rparams.capture_type;
+    const bool regularOnly =
+        render_parameters::capture_requires_regular_screen_p(capture);
+    if (auto *model =
+            qobject_cast<QStandardItemModel *>(screenCombo->model())) {
+      for (int i = 0; i < screenCombo->count(); ++i) {
+        const auto type = (scr_type)screenCombo->itemData(i).toInt();
+        if (QStandardItem *item = model->item(i))
+          item->setEnabled(!regularOnly || screen_has_regular_geometry_p(type));
+      }
+    }
+
     int val = (int)state.scrToImg.type;
     int idx = screenCombo->findData(val);
     if (idx != -1) {
@@ -184,11 +202,12 @@ void ScreenPanel::setupUi() {
           if (!img)
             return false;
           const auto capture = s.rparams.get_capture_type(img.get());
-          return colorscreen::render_parameters::capture_has_screen_p(capture)
-                 && (colorscreen::screen_has_regular_geometry_p(
-                         s.scrToImg.type)
-                     || (s.scrToImg.type == colorscreen::NoScreen
-                         && img->has_rgb()));
+          if (!render_parameters::capture_has_screen_p(capture))
+            return false;
+          if (render_parameters::capture_requires_regular_screen_p(capture))
+            return screen_has_regular_geometry_p(s.scrToImg.type);
+          return screen_has_regular_geometry_p(s.scrToImg.type)
+                 || (s.scrToImg.type == NoScreen && img->has_rgb());
       }, "Attempt to automatically identify the screen type and its orientation from the image content.");
 
   addSeparator("Regular screen");

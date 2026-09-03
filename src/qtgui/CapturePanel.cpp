@@ -105,11 +105,15 @@ void CapturePanel::setupUi()
     m_captureTypeCombo->setSizeAdjustPolicy(
         QComboBox::AdjustToMinimumContentsLengthWithIcon);
     m_captureTypeCombo->setMinimumContentsLength(18);
-    for (int i = 0; i < (int)colorscreen::render_parameters::capture_max; ++i)
-      m_captureTypeCombo->addItem(
-          QString::fromUtf8(
-              colorscreen::render_parameters::capture_properties[i].pretty_name),
-          i);
+    for (int i = 0; i < (int)colorscreen::render_parameters::capture_max; ++i) {
+      const auto &property =
+          colorscreen::render_parameters::capture_properties[i];
+      m_captureTypeCombo->addItem(QString::fromUtf8(property.pretty_name), i);
+      if (property.help && property.help[0])
+        m_captureTypeCombo->setItemData(
+            m_captureTypeCombo->count() - 1, QString::fromUtf8(property.help),
+            Qt::ToolTipRole);
+    }
     m_captureTypeCombo->setToolTip(
         tr("Physical capture/material type. This selects the applicable "
            "restoration path; ordinary images use capture correction and "
@@ -426,11 +430,16 @@ void CapturePanel::setupUi()
               colorscreen::render_parameters::capture_unknown)>(i);
           if (!img || capture == colorscreen::render_parameters::capture_unknown ||
               colorscreen::render_parameters::capture_type_compatible_p(
-                  capture, img.get()))
-            m_captureTypeCombo->addItem(
-                QString::fromUtf8(colorscreen::render_parameters::
-                                      capture_properties[i].pretty_name),
-                i);
+                  capture, img.get())) {
+            const auto &property =
+                colorscreen::render_parameters::capture_properties[i];
+            m_captureTypeCombo->addItem(QString::fromUtf8(property.pretty_name),
+                                        i);
+            if (property.help && property.help[0])
+              m_captureTypeCombo->setItemData(
+                  m_captureTypeCombo->count() - 1,
+                  QString::fromUtf8(property.help), Qt::ToolTipRole);
+          }
         }
         const auto effectiveCapture =
             img ? state.rparams.get_capture_type(img.get())
@@ -712,11 +721,15 @@ void CapturePanel::setupUi()
             if (!img)
                 return false;
             const auto capture = s.rparams.get_capture_type(img.get());
-            return colorscreen::render_parameters::capture_has_screen_p(capture)
-                   && (colorscreen::screen_has_regular_geometry_p(
-                           s.scrToImg.type)
-                       || (s.scrToImg.type == colorscreen::NoScreen
-                           && img->has_rgb()));
+            if (!colorscreen::render_parameters::capture_has_screen_p(capture))
+              return false;
+            if (colorscreen::render_parameters::
+                    capture_requires_regular_screen_p(capture))
+              return colorscreen::screen_has_regular_geometry_p(
+                  s.scrToImg.type);
+            return colorscreen::screen_has_regular_geometry_p(s.scrToImg.type)
+                   || (s.scrToImg.type == colorscreen::NoScreen
+                       && img->has_rgb());
         });
 
     // Initial update
