@@ -916,6 +916,14 @@ int main(int argc, char *argv[]) {
       auto installRenderSmokeState = [](MainWindow *document, const auto &scan,
                                         bool correctionProfile) {
         ParameterState state = document->documentStateSnapshot();
+        // Keep the smoke fixture physically consistent with the capture-aware
+        // GUI mode filter. RGB Dufay scans carry a historical screen; the
+        // monochrome checkerboard is a plain positive capture used only for
+        // modes that remain applicable without RGB screen detection.
+        state.rparams.capture_type =
+            scan->has_rgb()
+                ? colorscreen::render_parameters::capture_transparency_with_screen
+                : colorscreen::render_parameters::capture_transparency;
         state.scrToImg.type = colorscreen::Dufay;
         state.scrToImg.center = {(colorscreen::coord_t)scan->width / 2,
                                  (colorscreen::coord_t)scan->height / 2};
@@ -987,9 +995,28 @@ int main(int argc, char *argv[]) {
             colorscreen::render_type_properties[static_cast<int>(type)];
         if (prop.flags & colorscreen::render_type_property::HIDE_IN_GUI)
           return false;
+
+        // Mirror MainWindow::updateModeMenu() and
+        // ImageViewWindow::rebuildModeList() exactly. In particular, a
+        // geometric Dufay mapping alone does not make screen reconstruction
+        // modes valid for a capture explicitly classified as non-screen.
+        const auto capture =
+            scan ? state.rparams.get_capture_type(scan.get())
+                 : colorscreen::render_parameters::capture_unknown;
+        const bool hasScreenCapture =
+            colorscreen::render_parameters::capture_has_screen_p(capture);
+        const bool supportsScreenDetection =
+            colorscreen::render_parameters::capture_supports_screen_detection_p(
+                capture);
         if ((prop.flags &
              colorscreen::render_type_property::NEEDS_SCR_TO_IMG) &&
-            state.scrToImg.type == colorscreen::Random)
+            (!hasScreenCapture ||
+             !colorscreen::screen_has_regular_geometry_p(state.scrToImg.type)))
+          return false;
+        if ((prop.flags &
+             colorscreen::render_type_property::USES_SCR_DETECT) &&
+            (!supportsScreenDetection ||
+             !colorscreen::screen_present_p(state.scrToImg.type)))
           return false;
         if ((prop.flags & colorscreen::render_type_property::NEEDS_RGB) &&
             (!scan || !scan->has_rgb()))
