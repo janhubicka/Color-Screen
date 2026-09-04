@@ -15,8 +15,6 @@
 #include "../libcolorscreen/include/scr-detect-parameters.h"
 #include "../libcolorscreen/include/progress-info.h"
 
-class QThreadPool;
-
 class Renderer : public QObject
 {
     Q_OBJECT
@@ -42,7 +40,6 @@ public:
                        const colorscreen::render_type_parameters &renderType,
                        std::shared_ptr<colorscreen::progress_info> progress,
                        const char *taskName = nullptr);
-
 
 public slots:
     /** Consume a request previously published by enqueueRender(). */
@@ -74,11 +71,6 @@ private:
     // immutable once inserted, so the GUI thread never mutates Renderer state.
     mutable std::mutex m_mutex;
     std::unordered_map<int, RenderRequest> m_pendingRenders;
-
-    // A render already parallelizes internally with OpenMP.  Keep outer frame
-    // requests serialized per Renderer instead of stacking cancelled/current
-    // OpenMP teams in Qt's process-global pool.
-    QThreadPool *m_renderPool = nullptr;
 
     void finishRenderTask();
     std::mutex m_activeMutex;
