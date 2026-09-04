@@ -24,87 +24,77 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
 
-          path = Path("src/qtgui/main.cpp")
-          text = path.read_text()
-
-          def replace_once(old, new):
-              global text
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
               count = text.count(old)
               if count != 1:
-                  raise SystemExit(f"expected exactly one match, got {count}: {old!r}")
-              text = text.replace(old, new, 1)
+                  raise SystemExit(f"{path}: expected exactly one match, got {count}: {old!r}")
+              p.write_text(text.replace(old, new, 1))
 
           replace_once(
-              '''  if (parser.isSet(newViewOption)) {
-    QTimer::singleShot(300, &app,
-                       [&app, newViewSmokeDone, maybeFinishStructuredSmoke]() {
-''',
-              '''  if (parser.isSet(newViewOption)) {
-    auto startNewViewSmoke = std::make_shared<std::function<void(int)>>();
-    const std::weak_ptr<std::function<void(int)>> weakStartNewViewSmoke =
-        startNewViewSmoke;
-    *startNewViewSmoke =
-        [&app, newViewSmokeDone, maybeFinishStructuredSmoke,
-         weakStartNewViewSmoke](int attemptsLeft) {
-''')
+              "src/qtgui/main.cpp",
+              "  if (parser.isSet(newViewOption)) {\n"
+              "    QTimer::singleShot(300, &app,\n"
+              "                       [&app, newViewSmokeDone, maybeFinishStructuredSmoke]() {\n",
+              "  if (parser.isSet(newViewOption)) {\n"
+              "    auto startNewViewSmoke = std::make_shared<std::function<void(int)>>();\n"
+              "    const std::weak_ptr<std::function<void(int)>> weakStartNewViewSmoke =\n"
+              "        startNewViewSmoke;\n"
+              "    *startNewViewSmoke =\n"
+              "        [&app, newViewSmokeDone, maybeFinishStructuredSmoke,\n"
+              "         weakStartNewViewSmoke](int attemptsLeft) {\n")
 
           replace_once(
-              '''      if (documents.size() < 2) {
-        qCritical() << "New View render-mode smoke requires RGB and monochrome "
-                       "documents";
-        app.exit(14);
-        return;
-      }
-
-''',
-              '''''')
-
-          replace_once(
-              '''      if (!source || !monochromeSource) {
-        qCritical() << "New View render-mode smoke did not receive both RGB "
-                       "and monochrome scans";
-        app.exit(14);
-        return;
-      }
-''',
-              '''      if (!source || !monochromeSource) {
-        if (attemptsLeft > 0) {
-          if (auto retry = weakStartNewViewSmoke.lock()) {
-            QTimer::singleShot(100, &app, [retry, attemptsLeft]() {
-              (*retry)(attemptsLeft - 1);
-            });
-            return;
-          }
-        }
-        qCritical() << "New View render-mode smoke timed out waiting for both "
-                       "RGB and monochrome scans to finish loading";
-        app.exit(14);
-        return;
-      }
-''')
+              "src/qtgui/main.cpp",
+              "      if (documents.size() < 2) {\n"
+              "        qCritical() << \"New View render-mode smoke requires RGB and monochrome \"\n"
+              "                       \"documents\";\n"
+              "        app.exit(14);\n"
+              "        return;\n"
+              "      }\n\n",
+              "")
 
           replace_once(
-              '''      QTimer::singleShot(0, &app, [checkFinalPeerClose]() {
-        (*checkFinalPeerClose)(40);
-      });
-    });
-  }
+              "src/qtgui/main.cpp",
+              "      if (!source || !monochromeSource) {\n"
+              "        qCritical() << \"New View render-mode smoke did not receive both RGB \"\n"
+              "                       \"and monochrome scans\";\n"
+              "        app.exit(14);\n"
+              "        return;\n"
+              "      }\n",
+              "      if (!source || !monochromeSource) {\n"
+              "        if (attemptsLeft > 0) {\n"
+              "          if (auto retry = weakStartNewViewSmoke.lock()) {\n"
+              "            QTimer::singleShot(100, &app, [retry, attemptsLeft]() {\n"
+              "              (*retry)(attemptsLeft - 1);\n"
+              "            });\n"
+              "            return;\n"
+              "          }\n"
+              "        }\n"
+              "        qCritical() << \"New View render-mode smoke timed out waiting for both \"\n"
+              "                       \"RGB and monochrome scans to finish loading\";\n"
+              "        app.exit(14);\n"
+              "        return;\n"
+              "      }\n")
 
-  if (parser.isSet(workspaceChurnOption)) {
-''',
-              '''      QTimer::singleShot(0, &app, [checkFinalPeerClose]() {
-        (*checkFinalPeerClose)(40);
-      });
-    };
-    QTimer::singleShot(0, &app, [startNewViewSmoke]() {
-      (*startNewViewSmoke)(300);
-    });
-  }
-
-  if (parser.isSet(workspaceChurnOption)) {
-''')
-
-          path.write_text(text)
+          replace_once(
+              "src/qtgui/main.cpp",
+              "      QTimer::singleShot(0, &app, [checkFinalPeerClose]() {\n"
+              "        (*checkFinalPeerClose)(40);\n"
+              "      });\n"
+              "    });\n"
+              "  }\n\n"
+              "  if (parser.isSet(workspaceChurnOption)) {\n",
+              "      QTimer::singleShot(0, &app, [checkFinalPeerClose]() {\n"
+              "        (*checkFinalPeerClose)(40);\n"
+              "      });\n"
+              "    };\n"
+              "    QTimer::singleShot(0, &app, [startNewViewSmoke]() {\n"
+              "      (*startNewViewSmoke)(300);\n"
+              "    });\n"
+              "  }\n\n"
+              "  if (parser.isSet(workspaceChurnOption)) {\n")
           PY
 
           rm .github/workflows/agent-update-pr252.yml
