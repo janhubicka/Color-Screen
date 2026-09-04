@@ -1,0 +1,31 @@
+name: TEMP geometry source transport
+
+on:
+  push:
+    branches:
+      - agent/tmp-geometry-source-transport-20260904
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/scr-detect-primary-separation
+          fetch-depth: 0
+      - name: Verify revision and archive source
+        shell: bash
+        run: |
+          set -euxo pipefail
+          test "$(git rev-parse HEAD)" = d159ffbdf3f717b96f9edf9e6a8d6f77eec76509
+          git archive --format=tar.gz --output=/tmp/colorscreen-source-d159ffbd.tar.gz HEAD
+          sha256sum /tmp/colorscreen-source-d159ffbd.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: colorscreen-source-d159ffbd
+          path: /tmp/colorscreen-source-d159ffbd.tar.gz
+          if-no-files-found: error
+          retention-days: 1
