@@ -240,5 +240,8 @@ private:
   QPointer<QObject> m_tabBar;
   QPointer<QWidget> m_dragWindow;
   QPoint m_dragStartGlobal;
+  // QMdiArea can emit subWindowActivated synchronously while a child is still
+  // being inserted. Delay shared-chrome handoff until that child is shown.
+  int m_chromeActivationBlockDepth = 0;
   bool m_closing = false;
 };
