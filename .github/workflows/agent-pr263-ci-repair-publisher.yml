@@ -1,0 +1,51 @@
+name: Agent PR263 CI repair publisher
+
+on:
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    if: github.head_ref == 'agent/tmp-pr263-ci-fix-20260904'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Stage guarded repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp .agent/fix-pr263-ci.py /tmp/fix-pr263-ci.py
+          sha256sum /tmp/fix-pr263-ci.py
+
+      - name: Amend clean product branch
+        shell: bash
+        env:
+          PRODUCT_BRANCH: agent/qtgui-workflow-profile-area-selection
+        run: |
+          set -euo pipefail
+          git fetch origin main "$PRODUCT_BRANCH"
+          old_head=$(git rev-parse "origin/$PRODUCT_BRANCH")
+          test "$(git rev-parse "$old_head^")" = "$(git rev-parse origin/main)" || {
+            echo 'Product branch is no longer exactly one commit on current main' >&2
+            exit 1
+          }
+          git checkout -B "$PRODUCT_BRANCH" "origin/$PRODUCT_BRANCH"
+          python3 /tmp/fix-pr263-ci.py
+          git add -- src/qtgui/WorkspaceChurnSmoke.cpp
+          git diff --cached --check
+          test "$(git diff --cached --name-only)" = 'src/qtgui/WorkspaceChurnSmoke.cpp'
+          grep -q 'const bool profileApplicable =' src/qtgui/WorkspaceChurnSmoke.cpp
+          grep -q 'property("workflowApplicable")' src/qtgui/WorkspaceChurnSmoke.cpp
+          ! grep -A2 -F '!profileCalibrationStatus->text().startsWith(' src/qtgui/WorkspaceChurnSmoke.cpp | grep -q 'QStringLiteral("Profile:")'
+
+          git config user.name 'OpenAI Agent'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit --amend --no-edit
+          git push --force-with-lease="refs/heads/$PRODUCT_BRANCH:$old_head" \
+            origin HEAD:"refs/heads/$PRODUCT_BRANCH"
