@@ -1,0 +1,160 @@
+name: Agent fix PR252 TSan race
+
+on:
+  push:
+    branches:
+      - agent/render-dispatch-smoke
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/render-dispatch-smoke
+          fetch-depth: 0
+
+      - name: Remove cross-thread Renderer parameter mutation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected exactly one match, got {count}: {old!r}")
+              p.write_text(text.replace(old, new, 1))
+
+          replace_once(
+              "src/qtgui/Renderer.h",
+              '''    explicit Renderer(std::shared_ptr<colorscreen::image_data> scan,\n                      const colorscreen::render_parameters &rparams,\n                      const colorscreen::scr_to_img_parameters &scrToImg,\n                      const colorscreen::scr_detect_parameters &scrDetect,\n                      const colorscreen::render_type_parameters &renderType);\n''',
+              '''    explicit Renderer(std::shared_ptr<colorscreen::image_data> scan);\n''')
+          replace_once(
+              "src/qtgui/Renderer.h",
+              '''    bool enqueueRender(int reqId, double xOffset, double yOffset, double scale,\n                       int width, int height, int coordinateSpace,\n                       const colorscreen::render_parameters &frameParams,\n                       std::shared_ptr<colorscreen::progress_info> progress,\n                       const char *taskName = nullptr);\n\n    /** Thread-safe update of the renderer's cached parameter snapshot. */\n    void updateParameters(const colorscreen::render_parameters &rparams,\n                          const colorscreen::scr_to_img_parameters &scrToImg,\n                          const colorscreen::scr_detect_parameters &scrDetect,\n                          const colorscreen::render_type_parameters &renderType);\n''',
+              '''    bool enqueueRender(int reqId, double xOffset, double yOffset, double scale,\n                       int width, int height, int coordinateSpace,\n                       const colorscreen::render_parameters &frameParams,\n                       const colorscreen::scr_to_img_parameters &scrToImg,\n                       const colorscreen::scr_detect_parameters &scrDetect,\n                       const colorscreen::render_type_parameters &renderType,\n                       std::shared_ptr<colorscreen::progress_info> progress,\n                       const char *taskName = nullptr);\n''')
+          replace_once(
+              "src/qtgui/Renderer.h",
+              '''    // Protect both cached renderer state and the cross-thread request handoff.\n    mutable std::mutex m_mutex;\n    colorscreen::render_parameters m_rparams;\n    colorscreen::scr_to_img_parameters m_scrToImg;\n    colorscreen::scr_detect_parameters m_scrDetect;\n    colorscreen::render_type_parameters m_renderType;\n    std::unordered_map<int, RenderRequest> m_pendingRenders;\n''',
+              '''    // Protect the cross-thread request handoff. Parameter snapshots become\n    // immutable once inserted, so the GUI thread never mutates Renderer state.\n    mutable std::mutex m_mutex;\n    std::unordered_map<int, RenderRequest> m_pendingRenders;\n''')
+
+          replace_once(
+              "src/qtgui/Renderer.cpp",
+              '''Renderer::Renderer(std::shared_ptr<colorscreen::image_data> scan,\n                   const colorscreen::render_parameters &rparams,\n                   const colorscreen::scr_to_img_parameters &scrToImg,\n                   const colorscreen::scr_detect_parameters &scrDetect,\n                   const colorscreen::render_type_parameters &renderType)\n    : m_scan(scan), m_rparams(rparams), m_scrToImg(scrToImg),\n      m_scrDetect(scrDetect), m_renderType(renderType)\n{\n''',
+              '''Renderer::Renderer(std::shared_ptr<colorscreen::image_data> scan)\n    : m_scan(std::move(scan))\n{\n''')
+          replace_once(
+              "src/qtgui/Renderer.cpp",
+              '''    int height, int coordinateSpace,\n    const colorscreen::render_parameters &frameParams,\n    std::shared_ptr<colorscreen::progress_info> progress, const char *taskName)\n''',
+              '''    int height, int coordinateSpace,\n    const colorscreen::render_parameters &frameParams,\n    const colorscreen::scr_to_img_parameters &scrToImg,\n    const colorscreen::scr_detect_parameters &scrDetect,\n    const colorscreen::render_type_parameters &renderType,\n    std::shared_ptr<colorscreen::progress_info> progress, const char *taskName)\n''')
+          replace_once(
+              "src/qtgui/Renderer.cpp",
+              '''    request.coordinateSpace = coordinateSpace;\n    request.frameParams = frameParams;\n    request.progress = std::move(progress);\n''',
+              '''    request.coordinateSpace = coordinateSpace;\n    request.frameParams = frameParams;\n    request.scrToImg = scrToImg;\n    request.scrDetect = scrDetect;\n    request.renderType = renderType;\n    request.progress = std::move(progress);\n''')
+          replace_once(
+              "src/qtgui/Renderer.cpp",
+              '''    {\n        std::lock_guard<std::mutex> locker(m_mutex);\n        // Snapshot the cached renderer state together with the request.  A\n        // later GUI update must not overtake an already-enqueued frame and mix\n        // parameter generations before the renderer thread consumes its id.\n        request.scrToImg = m_scrToImg;\n        request.scrDetect = m_scrDetect;\n        request.renderType = m_renderType;\n        m_pendingRenders.insert_or_assign(reqId, std::move(request));\n    }\n''',
+              '''    {\n        std::lock_guard<std::mutex> locker(m_mutex);\n        m_pendingRenders.insert_or_assign(reqId, std::move(request));\n    }\n''')
+          replace_once(
+              "src/qtgui/Renderer.cpp",
+              '''void\nRenderer::updateParameters(\n    const colorscreen::render_parameters &rparams,\n    const colorscreen::scr_to_img_parameters &scrToImg,\n    const colorscreen::scr_detect_parameters &scrDetect,\n    const colorscreen::render_type_parameters &renderType)\n{\n    std::lock_guard<std::mutex> locker(m_mutex);\n    m_rparams = rparams;\n    m_scrToImg = scrToImg;\n    m_scrDetect = scrDetect;\n    m_renderType = renderType;\n}\n\n''',
+              '')
+
+          replace_once(
+              "src/qtgui/ImageWidget.h",
+              '''  struct RenderRequestData {\n    double xOffset;\n    double yOffset;\n    double scale;\n    int w;\n    int h;\n    colorscreen::render_parameters params;\n  };\n''',
+              '''  struct RenderRequestData {\n    double xOffset;\n    double yOffset;\n    double scale;\n    int w;\n    int h;\n    int coordinateSpace;\n    colorscreen::render_parameters params;\n    colorscreen::scr_to_img_parameters scrToImg;\n    colorscreen::scr_detect_parameters scrDetect;\n    colorscreen::render_type_parameters renderType;\n  };\n''')
+
+          replace_once(
+              "src/qtgui/ImageWidget.cpp",
+              '''    m_renderThread = new QThread(this);\n    static colorscreen::scr_to_img_parameters defaultScrToImg;\n    static colorscreen::scr_detect_parameters defaultScrDetect;\n    static colorscreen::render_type_parameters defaultRenderType;\n\n    m_renderer = new Renderer(m_scan, *m_rparams,\n                              m_scrToImg ? *m_scrToImg : defaultScrToImg,\n                              m_scrDetect ? *m_scrDetect : defaultScrDetect,\n                              m_renderType ? *m_renderType : defaultRenderType);\n''',
+              '''    m_renderThread = new QThread(this);\n    m_renderer = new Renderer(m_scan);\n''')
+          replace_once(
+              "src/qtgui/ImageWidget.cpp",
+              '''  // Update renderer's cached parameters if it exists\n  if (m_renderer) {\n    m_renderer->updateParameters(\n        m_rparams ? *m_rparams : colorscreen::render_parameters(),\n        m_scrToImg ? *m_scrToImg : colorscreen::scr_to_img_parameters(),\n        m_scrDetect ? *m_scrDetect : colorscreen::scr_detect_parameters(),\n        m_renderType ? *m_renderType : colorscreen::render_type_parameters());\n  }\n\n''',
+              '')
+          replace_once(
+              "src/qtgui/ImageWidget.cpp",
+              '''    data.h = reqH;\n    data.params = *m_rparams;\n    \n    int reqId = m_renderQueue.requestRender(QVariant::fromValue(data));\n''',
+              '''    data.h = reqH;\n    data.coordinateSpace = (int)m_coordinateSpace;\n    data.params = *m_rparams;\n    data.scrToImg = m_scrToImg ? *m_scrToImg\n                               : colorscreen::scr_to_img_parameters();\n    data.scrDetect = m_scrDetect ? *m_scrDetect\n                                 : colorscreen::scr_detect_parameters();\n    data.renderType = m_renderType ? *m_renderType\n                                   : colorscreen::render_type_parameters();\n    \n    int reqId = m_renderQueue.requestRender(QVariant::fromValue(data));\n''')
+          replace_once(
+              "src/qtgui/ImageWidget.cpp",
+              '''        reqId, data.xOffset, data.yOffset, data.scale, data.w, data.h,\n        (int)m_coordinateSpace, data.params, progress, "Rendering image");\n''',
+              '''        reqId, data.xOffset, data.yOffset, data.scale, data.w, data.h,\n        data.coordinateSpace, data.params, data.scrToImg, data.scrDetect,\n        data.renderType, progress, "Rendering image");\n''')
+
+          replace_once(
+              "src/qtgui/NavigationView.h",
+              '''    struct RenderRequestData {\n      int width;\n      int height;\n      colorscreen::render_parameters params;\n    };\n''',
+              '''    struct RenderRequestData {\n      int width;\n      int height;\n      int coordinateSpace;\n      colorscreen::render_parameters params;\n      colorscreen::scr_to_img_parameters scrToImg;\n      colorscreen::scr_detect_parameters scrDetect;\n      colorscreen::render_type_parameters renderType;\n    };\n''')
+
+          replace_once(
+              "src/qtgui/NavigationView.cpp",
+              '''    m_renderThread = new QThread(this);\n    static colorscreen::scr_to_img_parameters defaultScrToImg;\n    static colorscreen::scr_detect_parameters defaultScrDetect;\n\n    m_renderer = new Renderer(\n        m_scan, *m_rparams, m_scrToImg ? *m_scrToImg : defaultScrToImg,\n        m_scrDetect ? *m_scrDetect : defaultScrDetect, m_renderType);\n''',
+              '''    m_renderThread = new QThread(this);\n    m_renderer = new Renderer(m_scan);\n''')
+          replace_once(
+              "src/qtgui/NavigationView.cpp",
+              '''  if (m_renderer) {\n    m_renderer->updateParameters(\n        *m_rparams,\n        m_scrToImg ? *m_scrToImg : colorscreen::scr_to_img_parameters(),\n        m_scrDetect ? *m_scrDetect : colorscreen::scr_detect_parameters(),\n        m_renderType);\n  }\n\n''',
+              '')
+
+          # Every NavigationView request is created on the GUI thread. Snapshot\n          # the complete parameter generation before TaskQueue may defer it.\n          p = Path("src/qtgui/NavigationView.cpp")
+          text = p.read_text()
+          needle = '''    data.params = *m_rparams;\n'''
+          replacement = '''    data.params = *m_rparams;\n    data.scrToImg = m_scrToImg ? *m_scrToImg\n                               : colorscreen::scr_to_img_parameters();\n    data.scrDetect = m_scrDetect ? *m_scrDetect\n                                 : colorscreen::scr_detect_parameters();\n    data.renderType = m_renderType;\n    data.coordinateSpace = (int)m_coordinateSpace;\n'''
+          if text.count(needle) != 1:
+              raise SystemExit(f"NavigationView.cpp: expected one direct params snapshot, got {text.count(needle)}")
+          text = text.replace(needle, replacement, 1)
+          needle = '''  data.params = m_rparams ? *m_rparams : colorscreen::render_parameters();\n'''
+          replacement = '''  data.params = m_rparams ? *m_rparams : colorscreen::render_parameters();\n  data.scrToImg = m_scrToImg ? *m_scrToImg\n                             : colorscreen::scr_to_img_parameters();\n  data.scrDetect = m_scrDetect ? *m_scrDetect\n                               : colorscreen::scr_detect_parameters();\n  data.renderType = m_renderType;\n  data.coordinateSpace = (int)m_coordinateSpace;\n'''
+          count = text.count(needle)
+          if count != 3:
+              raise SystemExit(f"NavigationView.cpp: expected three generic params snapshots, got {count}")
+          text = text.replace(needle, replacement)
+          p.write_text(text)
+
+          replace_once(
+              "src/qtgui/NavigationView.cpp",
+              '''    CoordinateTransformer transformer(m_scan.get(), data.params, m_scrToImg, m_coordinateSpace);\n''',
+              '''    CoordinateTransformer transformer(m_scan.get(), data.params,\n                                      &data.scrToImg,\n                                      static_cast<colorscreen::render_coordinate_space>(\n                                          data.coordinateSpace));\n''')
+          replace_once(
+              "src/qtgui/NavigationView.cpp",
+              '''        reqId, 0.0, 0.0, scale, targetW, targetH, (int)m_coordinateSpace,\n        data.params, progress, "Rendering navigation");\n''',
+              '''        reqId, 0.0, 0.0, scale, targetW, targetH, data.coordinateSpace,\n        data.params, data.scrToImg, data.scrDetect, data.renderType, progress,\n        "Rendering navigation");\n''')
+
+          # This workflow is transport only; keep it out of the product tree.\n          Path(".github/workflows/agent-fix-pr252-tsan.yml").unlink()\n          PY
+
+          git diff --check
+          changed="$(git diff --name-only | sort)"
+          expected="$(printf '%s\n' \
+            .github/workflows/agent-fix-pr252-tsan.yml \
+            src/qtgui/ImageWidget.cpp src/qtgui/ImageWidget.h \
+            src/qtgui/NavigationView.cpp src/qtgui/NavigationView.h \
+            src/qtgui/Renderer.cpp src/qtgui/Renderer.h | sort)"
+          if test "$changed" != "$expected"; then
+            echo "Unexpected changed files:" >&2
+            printf '%s\n' "$changed" >&2
+            exit 1
+          fi
+
+          # Catch stale callers before the expensive CI matrix.
+          if grep -R "updateParameters(.*Renderer\|m_renderer->updateParameters" -n src/qtgui; then
+            echo "Renderer cross-thread update caller remains" >&2
+            exit 1
+          fi
+          grep -R "new Renderer" -n src/qtgui
+          grep -R "enqueueRender" -n src/qtgui
+
+      - name: Commit renderer handoff fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "qtgui: snapshot renderer parameters per request"
+          git push origin HEAD:agent/render-dispatch-smoke
