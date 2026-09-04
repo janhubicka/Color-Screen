@@ -1,0 +1,57 @@
+name: TEMP geometry CLI transport
+
+on:
+  push:
+    branches:
+      - agent/tmp-geometry-source-transport-20260904
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    container:
+      image: debian:trixie
+    steps:
+      - name: Install build dependencies
+        shell: bash
+        run: |
+          set -euxo pipefail
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            ca-certificates git make g++ gcc pkg-config libtool autoconf automake \
+            libfftw3-dev libgsl-dev libturbojpeg0-dev liblcms2-dev libraw-dev \
+            libzip-dev libexiv2-dev libtiff-dev libjpeg62-turbo-dev \
+            libopenjp2-7-dev libpng-dev
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/scr-detect-primary-separation
+          fetch-depth: 0
+      - name: Build checking CLI
+        shell: bash
+        run: |
+          set -euxo pipefail
+          test "$(git rev-parse HEAD)" = d159ffbdf3f717b96f9edf9e6a8d6f77eec76509
+          mkdir build-cli
+          cd build-cli
+          CFLAGS='-O1 -g0' CXXFLAGS='-O1 -g0' ../configure \
+            --enable-checking --disable-gtkgui --disable-qtgui \
+            --disable-shared --enable-static --disable-static-link
+          make -j"$(nproc)" -C src/libcolorscreen libcolorscreen.la
+          make -j"$(nproc)" -C src/colorscreen colorscreen
+          file src/colorscreen/colorscreen
+          ldd src/colorscreen/colorscreen || true
+          ./src/colorscreen/colorscreen --help >/tmp/help.txt 2>&1 || true
+          head -20 /tmp/help.txt
+          mkdir /tmp/colorscreen-cli
+          cp src/colorscreen/colorscreen /tmp/colorscreen-cli/
+          if test -x src/colorscreen/.libs/colorscreen; then cp src/colorscreen/.libs/colorscreen /tmp/colorscreen-cli/colorscreen.libs; fi
+          tar -C /tmp -czf /tmp/colorscreen-cli-d159ffbd.tar.gz colorscreen-cli
+          sha256sum /tmp/colorscreen-cli-d159ffbd.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: colorscreen-cli-d159ffbd
+          path: /tmp/colorscreen-cli-d159ffbd.tar.gz
+          if-no-files-found: error
+          retention-days: 1
