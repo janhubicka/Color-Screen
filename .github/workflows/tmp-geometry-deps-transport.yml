@@ -29,7 +29,7 @@ jobs:
             liblcms2-dev liblcms2-2 \
             libraw-dev libraw23t64 \
             libzip-dev libzip5 zipcmp zipmerge ziptool \
-            libexiv2-dev libexiv2-28 libexiv2-data libinireader0 \
+            libexiv2-dev libexiv2-28 libexiv2-data libinireader0 libinih1 \
             libtiff-dev libtiff6 libjpeg62-turbo-dev libjpeg62-turbo \
             libopenjp2-7-dev libopenjp2-7 libpng-dev libpng16-16t64
           sha256sum *.deb > SHA256SUMS
