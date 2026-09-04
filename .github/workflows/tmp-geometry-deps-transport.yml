@@ -1,0 +1,42 @@
+name: TEMP geometry dependency transport
+
+on:
+  push:
+    branches:
+      - agent/tmp-geometry-source-transport-20260904
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-24.04
+    container:
+      image: debian:trixie
+    steps:
+      - name: Download Debian 13 build dependencies
+        shell: bash
+        run: |
+          set -euxo pipefail
+          apt-get update
+          apt-get install -y --no-install-recommends ca-certificates apt-utils xz-utils
+          mkdir -p /tmp/debs
+          cd /tmp/debs
+          apt-get download \
+            libfftw3-dev libfftw3-bin libfftw3-long3 libfftw3-quad3 \
+            libgsl-dev libgsl28 libgslcblas0 \
+            libturbojpeg0-dev libturbojpeg0 \
+            liblcms2-dev liblcms2-2 \
+            libraw-dev libraw23t64 \
+            libzip-dev libzip5 zipcmp zipmerge ziptool \
+            libexiv2-dev libexiv2-28 libexiv2-data libinireader0 \
+            libtiff-dev libtiff6 libjpeg62-turbo-dev libjpeg62-turbo \
+            libopenjp2-7-dev libopenjp2-7 libpng-dev libpng16-16t64
+          sha256sum *.deb > SHA256SUMS
+          ls -lh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: colorscreen-debian13-deps
+          path: /tmp/debs
+          if-no-files-found: error
+          retention-days: 1
