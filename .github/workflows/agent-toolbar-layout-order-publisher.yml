@@ -1,0 +1,44 @@
+name: Agent toolbar layout-order publisher
+
+on:
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    if: github.head_ref == 'agent/tmp-toolbar-layout-order-publisher-20260905'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/qtgui-workspace-toolbar-activation-order
+          fetch-depth: 0
+
+      - name: Show workspace before borrowing toolbar
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('src/qtgui/WorkspaceWindow.cpp')
+          text = path.read_text()
+          old = '''  m_mdiArea->setActiveSubWindow(subWindow);\n  --m_chromeActivationBlockDepth;\n  onSubWindowActivated(subWindow);\n  configureTabBar();\n\n  show();\n  if (isMinimized())\n    showNormal();\n  raise();\n  activateWindow();\n'''
+          new = '''  m_mdiArea->setActiveSubWindow(subWindow);\n\n  // Let the outer QMainWindow establish its toolbar-area layout before the\n  // active child's toolbar is borrowed into it. Qt's macOS offscreen plugin\n  // is not robust when a reparented QToolBar participates in the first show.\n  show();\n  if (isMinimized())\n    showNormal();\n  raise();\n  activateWindow();\n\n  --m_chromeActivationBlockDepth;\n  onSubWindowActivated(subWindow);\n  configureTabBar();\n'''
+          count = text.count(old)
+          if count != 2:
+              raise SystemExit(f'workspace show/activation anchor count {count} != 2')
+          path.write_text(text.replace(old, new))
+          PY
+          git diff --check
+          test "$(git diff --name-only)" = 'src/qtgui/WorkspaceWindow.cpp'
+          test "$(grep -c 'Let the outer QMainWindow establish its toolbar-area layout' src/qtgui/WorkspaceWindow.cpp)" -eq 2
+
+      - name: Publish product branch
+        shell: bash
+        run: |
+          git config user.name 'Jan Hubička'
+          git config user.email '46065755+janhubicka@users.noreply.github.com'
+          git add src/qtgui/WorkspaceWindow.cpp
+          git commit -m 'qtgui: show workspace before borrowing child toolbar'
+          git push origin HEAD:agent/qtgui-workspace-toolbar-activation-order
