@@ -34,14 +34,9 @@ jobs:
           set -euxo pipefail
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           test "$(git rev-parse HEAD)" = d159ffbdf3f717b96f9edf9e6a8d6f77eec76509
-          python3 - <<'PY'
-          from pathlib import Path
-          p=Path('src/libcolorscreen/scr-detect-geometry.C')
-          s=p.read_text()
-          old='const bool verbose = false;'
-          if s.count(old)!=1: raise SystemExit('verbose marker mismatch')
-          p.write_text(s.replace(old,'const bool verbose = true;',1))
-          PY
+          sed -i '0,/const bool verbose = false;/s//const bool verbose = true;/' \
+            src/libcolorscreen/scr-detect-geometry.C
+          grep -n 'const bool verbose = true;' src/libcolorscreen/scr-detect-geometry.C
           mkdir build-diag && cd build-diag
           CFLAGS='-O1 -g0' CXXFLAGS='-O1 -g0' ../configure \
             --enable-checking --disable-gtkgui --disable-qtgui \
