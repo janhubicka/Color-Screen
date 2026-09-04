@@ -227,6 +227,10 @@ void WorkspaceWindow::addDocument(MainWindow *document) {
   subWindow->setObjectName(QStringLiteral("documentSubWindow"));
   subWindow->setWindowTitle(document->documentDisplayName());
   subWindow->setWidget(document);
+  // addSubWindow() may activate synchronously. Keep the document toolbar in
+  // its still-valid private QMainWindow layout until the embedded child has
+  // completed its first show/layout pass.
+  ++m_chromeActivationBlockDepth;
   m_mdiArea->addSubWindow(subWindow);
 
   QPointer<MainWindow> guardedDocument(document);
@@ -250,6 +254,7 @@ void WorkspaceWindow::addDocument(MainWindow *document) {
   if (m_mdiArea->viewMode() == QMdiArea::TabbedView)
     subWindow->showMaximized();
   m_mdiArea->setActiveSubWindow(subWindow);
+  --m_chromeActivationBlockDepth;
   onSubWindowActivated(subWindow);
   configureTabBar();
 
@@ -298,6 +303,9 @@ void WorkspaceWindow::addView(ImageViewWindow *view) {
   subWindow->setObjectName(QStringLiteral("imageViewSubWindow"));
   subWindow->setWindowTitle(view->windowTitle());
   subWindow->setWidget(view);
+  // Use the same ordering for secondary views: the view must finish its first
+  // embedded show before its toolbar is borrowed by the workspace shell.
+  ++m_chromeActivationBlockDepth;
   m_mdiArea->addSubWindow(subWindow);
 
   QPointer<ImageViewWindow> guardedView(view);
@@ -326,6 +334,7 @@ void WorkspaceWindow::addView(ImageViewWindow *view) {
   if (m_mdiArea->viewMode() == QMdiArea::TabbedView)
     subWindow->showMaximized();
   m_mdiArea->setActiveSubWindow(subWindow);
+  --m_chromeActivationBlockDepth;
   onSubWindowActivated(subWindow);
   configureTabBar();
 
@@ -1123,6 +1132,12 @@ void WorkspaceWindow::releaseViewChrome(ImageViewWindow *view,
 
 /** Switch the shared shell to WINDOW's document or secondary view. */
 void WorkspaceWindow::onSubWindowActivated(QMdiSubWindow *window) {
+  // QMdiArea emits this signal from addSubWindow()/setActiveSubWindow(). During
+  // insertion the child QMainWindow has not necessarily completed show/layout,
+  // so moving its QToolBar yet can leave Qt's toolbar-area bookkeeping stale.
+  if (m_chromeActivationBlockDepth > 0)
+    return;
+
   MainWindow *document = documentForSubWindow(window);
   ImageViewWindow *view = viewForSubWindow(window);
 
