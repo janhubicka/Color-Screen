@@ -21,104 +21,99 @@ jobs:
           import pathlib, subprocess
 
           target = 'agent/qtgui-workflow-profile-area-selection'
-          subprocess.run(['git','fetch','origin',target], check=True)
-          subprocess.run(['git','checkout','-B','target',f'origin/{target}'], check=True)
+          subprocess.run(['git', 'fetch', 'origin', target], check=True)
+          subprocess.run(['git', 'checkout', '-B', 'target', f'origin/{target}'], check=True)
 
           def replace_exact(path, old, new):
               p = pathlib.Path(path)
-              s = p.read_text()
-              count = s.count(old)
+              text = p.read_text()
+              count = text.count(old)
               if count != 1:
                   raise SystemExit(f'{path}: expected exactly one guarded match, got {count}')
-              p.write_text(s.replace(old, new))
+              p.write_text(text.replace(old, new))
 
-          replace_exact(
-              'src/qtgui/MainWindow.cpp',
-              '''  takeWorkspaceInspector();
-          if (m_toolbar)
-            m_toolbar->hide();
-          if (menuBar())
-          ''',
-              '''  takeWorkspaceInspector();
-          // Once this QMainWindow becomes an MDI child its own toolbar-area
-          // layout must not retain bookkeeping for a toolbar that the workspace
-          // may reparent. Showing the embedded child after reparenting can
-          // otherwise make Qt walk a stale QToolBarAreaLayout entry.
-          if (m_toolbar) {
-            m_toolbar->hide();
-            removeToolBar(m_toolbar);
-          }
-          if (menuBar())
-          ''')
+          old = "  takeWorkspaceInspector();\n  if (m_toolbar)\n    m_toolbar->hide();\n  if (menuBar())\n"
+          new = (
+              "  takeWorkspaceInspector();\n"
+              "  // Once this QMainWindow becomes an MDI child its own toolbar-area\n"
+              "  // layout must not retain bookkeeping for a toolbar that the workspace\n"
+              "  // may reparent. Showing the embedded child after reparenting can\n"
+              "  // otherwise make Qt walk a stale QToolBarAreaLayout entry.\n"
+              "  if (m_toolbar) {\n"
+              "    m_toolbar->hide();\n"
+              "    removeToolBar(m_toolbar);\n"
+              "  }\n"
+              "  if (menuBar())\n"
+          )
+          replace_exact('src/qtgui/MainWindow.cpp', old, new)
 
-          replace_exact(
-              'src/qtgui/ImageViewWindow.cpp',
-              '''  if (m_toolbar)
-            m_toolbar->hide();
-          if (menuBar())
-          ''',
-              '''  // Keep the embedded QMainWindow's toolbar-area layout free of
-          // toolbar entries while WorkspaceWindow owns the presentation.
-          if (m_toolbar) {
-            m_toolbar->hide();
-            removeToolBar(m_toolbar);
-          }
-          if (menuBar())
-          ''')
+          old = "  if (m_toolbar)\n    m_toolbar->hide();\n  if (menuBar())\n"
+          new = (
+              "  // Keep the embedded QMainWindow's toolbar-area layout free of\n"
+              "  // toolbar entries while WorkspaceWindow owns the presentation.\n"
+              "  if (m_toolbar) {\n"
+              "    m_toolbar->hide();\n"
+              "    removeToolBar(m_toolbar);\n"
+              "  }\n"
+              "  if (menuBar())\n"
+          )
+          replace_exact('src/qtgui/ImageViewWindow.cpp', old, new)
 
-          replace_exact(
-              'src/qtgui/WorkspaceWindow.cpp',
-              '''  if (QToolBar *toolbar = document->workspaceToolBar()) {
-            if (toolbar->parentWidget() == this)
-              removeToolBar(toolbar);
-            if (toolbar->parentWidget() != document)
-              toolbar->setParent(document);
-            document->addToolBar(Qt::TopToolBarArea, toolbar);
-            toolbar->setVisible(showInWindow);
-          }
-          ''',
-              '''  if (QToolBar *toolbar = document->workspaceToolBar()) {
-            if (toolbar->parentWidget() == this)
-              removeToolBar(toolbar);
-            toolbar->hide();
-            // Do not put an inactive embedded document's toolbar back into its
-            // private QMainWindowLayout. Re-register it there only when the
-            // document genuinely becomes a standalone window again.
-            if (showInWindow) {
-              if (toolbar->parentWidget() != document)
-                toolbar->setParent(document);
-              document->addToolBar(Qt::TopToolBarArea, toolbar);
-              toolbar->show();
-            }
-          }
-          ''')
+          old = (
+              "  if (QToolBar *toolbar = document->workspaceToolBar()) {\n"
+              "    if (toolbar->parentWidget() == this)\n"
+              "      removeToolBar(toolbar);\n"
+              "    if (toolbar->parentWidget() != document)\n"
+              "      toolbar->setParent(document);\n"
+              "    document->addToolBar(Qt::TopToolBarArea, toolbar);\n"
+              "    toolbar->setVisible(showInWindow);\n"
+              "  }\n"
+          )
+          new = (
+              "  if (QToolBar *toolbar = document->workspaceToolBar()) {\n"
+              "    if (toolbar->parentWidget() == this)\n"
+              "      removeToolBar(toolbar);\n"
+              "    toolbar->hide();\n"
+              "    // Do not put an inactive embedded document's toolbar back into its\n"
+              "    // private QMainWindowLayout. Re-register it there only when the\n"
+              "    // document genuinely becomes a standalone window again.\n"
+              "    if (showInWindow) {\n"
+              "      if (toolbar->parentWidget() != document)\n"
+              "        toolbar->setParent(document);\n"
+              "      document->addToolBar(Qt::TopToolBarArea, toolbar);\n"
+              "      toolbar->show();\n"
+              "    }\n"
+              "  }\n"
+          )
+          replace_exact('src/qtgui/WorkspaceWindow.cpp', old, new)
 
-          replace_exact(
-              'src/qtgui/WorkspaceWindow.cpp',
-              '''  if (QToolBar *toolbar = view->workspaceToolBar()) {
-            if (auto *owner = qobject_cast<QMainWindow *>(toolbar->parentWidget()))
-              owner->removeToolBar(toolbar);
-            view->addToolBar(Qt::TopToolBarArea, toolbar);
-            toolbar->setVisible(showInWindow);
-          }
-          ''',
-              '''  if (QToolBar *toolbar = view->workspaceToolBar()) {
-            if (auto *owner = qobject_cast<QMainWindow *>(toolbar->parentWidget()))
-              owner->removeToolBar(toolbar);
-            toolbar->hide();
-            // Inactive embedded views follow the same toolbar-layout invariant.
-            if (showInWindow) {
-              if (toolbar->parentWidget() != view)
-                toolbar->setParent(view);
-              view->addToolBar(Qt::TopToolBarArea, toolbar);
-              toolbar->show();
-            }
-          }
-          ''')
+          old = (
+              "  if (QToolBar *toolbar = view->workspaceToolBar()) {\n"
+              "    if (auto *owner = qobject_cast<QMainWindow *>(toolbar->parentWidget()))\n"
+              "      owner->removeToolBar(toolbar);\n"
+              "    view->addToolBar(Qt::TopToolBarArea, toolbar);\n"
+              "    toolbar->setVisible(showInWindow);\n"
+              "  }\n"
+          )
+          new = (
+              "  if (QToolBar *toolbar = view->workspaceToolBar()) {\n"
+              "    if (auto *owner = qobject_cast<QMainWindow *>(toolbar->parentWidget()))\n"
+              "      owner->removeToolBar(toolbar);\n"
+              "    toolbar->hide();\n"
+              "    // Inactive embedded views follow the same toolbar-layout invariant.\n"
+              "    if (showInWindow) {\n"
+              "      if (toolbar->parentWidget() != view)\n"
+              "        toolbar->setParent(view);\n"
+              "      view->addToolBar(Qt::TopToolBarArea, toolbar);\n"
+              "      toolbar->show();\n"
+              "    }\n"
+              "  }\n"
+          )
+          replace_exact('src/qtgui/WorkspaceWindow.cpp', old, new)
 
-          subprocess.run(['git','diff','--check'], check=True)
-          subprocess.run(['git','add','src/qtgui/MainWindow.cpp','src/qtgui/ImageViewWindow.cpp','src/qtgui/WorkspaceWindow.cpp'], check=True)
-          subprocess.run(['git','config','user.name','OpenAI Agent'], check=True)
-          subprocess.run(['git','config','user.email','41898282+github-actions[bot]@users.noreply.github.com'], check=True)
-          subprocess.run(['git','commit','-m','qtgui: keep embedded toolbars out of child layouts'], check=True)
-          subprocess.run(['git','push','--force','origin',f'HEAD:{target}'], check=True)
+          subprocess.run(['git', 'diff', '--check'], check=True)
+          subprocess.run(['git', 'add', 'src/qtgui/MainWindow.cpp', 'src/qtgui/ImageViewWindow.cpp', 'src/qtgui/WorkspaceWindow.cpp'], check=True)
+          subprocess.run(['git', 'config', 'user.name', 'OpenAI Agent'], check=True)
+          subprocess.run(['git', 'config', 'user.email', '41898282+github-actions[bot]@users.noreply.github.com'], check=True)
+          subprocess.run(['git', 'commit', '-m', 'qtgui: keep embedded toolbars out of child layouts'], check=True)
+          subprocess.run(['git', 'push', '--force', 'origin', f'HEAD:{target}'], check=True)
