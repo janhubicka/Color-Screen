@@ -18,98 +18,91 @@ jobs:
       - name: Patch PR263 toolbar ownership invariant
         shell: python
         run: |
-          import pathlib, subprocess
+          import pathlib, re, subprocess
 
           target = 'agent/qtgui-workflow-profile-area-selection'
           subprocess.run(['git', 'fetch', 'origin', target], check=True)
           subprocess.run(['git', 'checkout', '-B', 'target', f'origin/{target}'], check=True)
 
-          def replace_exact(path, old, new):
+          def patch_scoped(path, start_marker, end_marker, pattern, replacement):
               p = pathlib.Path(path)
               text = p.read_text()
-              count = text.count(old)
+              start = text.index(start_marker)
+              end = text.index(end_marker, start + len(start_marker))
+              before, scope, after = text[:start], text[start:end], text[end:]
+              scope, count = re.subn(pattern, replacement, scope, count=1,
+                                     flags=re.MULTILINE | re.DOTALL)
               if count != 1:
-                  raise SystemExit(f'{path}: expected exactly one guarded match, got {count}')
-              p.write_text(text.replace(old, new))
+                  raise SystemExit(f'{path}: scoped patch matched {count} times')
+              p.write_text(before + scope + after)
 
-          old = "  takeWorkspaceInspector();\n  if (m_toolbar)\n    m_toolbar->hide();\n  if (menuBar())\n"
-          new = (
-              "  takeWorkspaceInspector();\n"
-              "  // Once this QMainWindow becomes an MDI child its own toolbar-area\n"
-              "  // layout must not retain bookkeeping for a toolbar that the workspace\n"
-              "  // may reparent. Showing the embedded child after reparenting can\n"
-              "  // otherwise make Qt walk a stale QToolBarAreaLayout entry.\n"
-              "  if (m_toolbar) {\n"
-              "    m_toolbar->hide();\n"
-              "    removeToolBar(m_toolbar);\n"
-              "  }\n"
-              "  if (menuBar())\n"
-          )
-          replace_exact('src/qtgui/MainWindow.cpp', old, new)
+          patch_scoped(
+              'src/qtgui/MainWindow.cpp',
+              'void MainWindow::prepareForWorkspaceEmbedding() {',
+              'void MainWindow::restoreFromWorkspaceEmbedding() {',
+              r'^  if \(m_toolbar\)\s*\n\s*m_toolbar->hide\(\);',
+              '  // Once this QMainWindow becomes an MDI child its own toolbar-area\n'
+              '  // layout must not retain bookkeeping for a toolbar that the workspace\n'
+              '  // may reparent. Showing the embedded child after reparenting can\n'
+              '  // otherwise make Qt walk a stale QToolBarAreaLayout entry.\n'
+              '  if (m_toolbar) {\n'
+              '    m_toolbar->hide();\n'
+              '    removeToolBar(m_toolbar);\n'
+              '  }')
 
-          old = "  if (m_toolbar)\n    m_toolbar->hide();\n  if (menuBar())\n"
-          new = (
+          patch_scoped(
+              'src/qtgui/ImageViewWindow.cpp',
+              'void ImageViewWindow::prepareForWorkspaceEmbedding() {',
+              'void ImageViewWindow::restoreFromWorkspaceEmbedding() {',
+              r'^  if \(m_toolbar\)\s*\n\s*m_toolbar->hide\(\);',
               "  // Keep the embedded QMainWindow's toolbar-area layout free of\n"
-              "  // toolbar entries while WorkspaceWindow owns the presentation.\n"
-              "  if (m_toolbar) {\n"
-              "    m_toolbar->hide();\n"
-              "    removeToolBar(m_toolbar);\n"
-              "  }\n"
-              "  if (menuBar())\n"
-          )
-          replace_exact('src/qtgui/ImageViewWindow.cpp', old, new)
+              '  // toolbar entries while WorkspaceWindow owns the presentation.\n'
+              '  if (m_toolbar) {\n'
+              '    m_toolbar->hide();\n'
+              '    removeToolBar(m_toolbar);\n'
+              '  }')
 
-          old = (
-              "  if (QToolBar *toolbar = document->workspaceToolBar()) {\n"
-              "    if (toolbar->parentWidget() == this)\n"
-              "      removeToolBar(toolbar);\n"
-              "    if (toolbar->parentWidget() != document)\n"
-              "      toolbar->setParent(document);\n"
-              "    document->addToolBar(Qt::TopToolBarArea, toolbar);\n"
-              "    toolbar->setVisible(showInWindow);\n"
-              "  }\n"
-          )
-          new = (
-              "  if (QToolBar *toolbar = document->workspaceToolBar()) {\n"
-              "    if (toolbar->parentWidget() == this)\n"
-              "      removeToolBar(toolbar);\n"
-              "    toolbar->hide();\n"
+          patch_scoped(
+              'src/qtgui/WorkspaceWindow.cpp',
+              'void WorkspaceWindow::releaseDocumentChrome(MainWindow *document,',
+              'void WorkspaceWindow::releaseViewChrome(ImageViewWindow *view,',
+              r'^  if \(QToolBar \*toolbar = document->workspaceToolBar\(\)\) \{.*?^  \}',
+              '  if (QToolBar *toolbar = document->workspaceToolBar()) {\n'
+              '    if (toolbar->parentWidget() == this)\n'
+              '      removeToolBar(toolbar);\n'
+              '    toolbar->hide();\n'
               "    // Do not put an inactive embedded document's toolbar back into its\n"
-              "    // private QMainWindowLayout. Re-register it there only when the\n"
-              "    // document genuinely becomes a standalone window again.\n"
-              "    if (showInWindow) {\n"
-              "      if (toolbar->parentWidget() != document)\n"
-              "        toolbar->setParent(document);\n"
-              "      document->addToolBar(Qt::TopToolBarArea, toolbar);\n"
-              "      toolbar->show();\n"
-              "    }\n"
-              "  }\n"
-          )
-          replace_exact('src/qtgui/WorkspaceWindow.cpp', old, new)
+              '    // private QMainWindowLayout. Re-register it there only when the\n'
+              '    // document genuinely becomes a standalone window again.\n'
+              '    if (showInWindow) {\n'
+              '      if (toolbar->parentWidget() != document)\n'
+              '        toolbar->setParent(document);\n'
+              '      document->addToolBar(Qt::TopToolBarArea, toolbar);\n'
+              '      toolbar->show();\n'
+              '    }\n'
+              '  }')
 
-          old = (
-              "  if (QToolBar *toolbar = view->workspaceToolBar()) {\n"
-              "    if (auto *owner = qobject_cast<QMainWindow *>(toolbar->parentWidget()))\n"
-              "      owner->removeToolBar(toolbar);\n"
-              "    view->addToolBar(Qt::TopToolBarArea, toolbar);\n"
-              "    toolbar->setVisible(showInWindow);\n"
-              "  }\n"
-          )
-          new = (
-              "  if (QToolBar *toolbar = view->workspaceToolBar()) {\n"
-              "    if (auto *owner = qobject_cast<QMainWindow *>(toolbar->parentWidget()))\n"
-              "      owner->removeToolBar(toolbar);\n"
-              "    toolbar->hide();\n"
-              "    // Inactive embedded views follow the same toolbar-layout invariant.\n"
-              "    if (showInWindow) {\n"
-              "      if (toolbar->parentWidget() != view)\n"
-              "        toolbar->setParent(view);\n"
-              "      view->addToolBar(Qt::TopToolBarArea, toolbar);\n"
-              "      toolbar->show();\n"
-              "    }\n"
-              "  }\n"
-          )
-          replace_exact('src/qtgui/WorkspaceWindow.cpp', old, new)
+          p = pathlib.Path('src/qtgui/WorkspaceWindow.cpp')
+          text = p.read_text()
+          pattern = r'^  if \(QToolBar \*toolbar = view->workspaceToolBar\(\)\) \{.*?^  \}'
+          replacement = (
+              '  if (QToolBar *toolbar = view->workspaceToolBar()) {\n'
+              '    if (auto *owner = qobject_cast<QMainWindow *>(toolbar->parentWidget()))\n'
+              '      owner->removeToolBar(toolbar);\n'
+              '    toolbar->hide();\n'
+              '    // Inactive embedded views follow the same toolbar-layout invariant.\n'
+              '    if (showInWindow) {\n'
+              '      if (toolbar->parentWidget() != view)\n'
+              '        toolbar->setParent(view);\n'
+              '      view->addToolBar(Qt::TopToolBarArea, toolbar);\n'
+              '      toolbar->show();\n'
+              '    }\n'
+              '  }')
+          text, count = re.subn(pattern, replacement, text, count=1,
+                                flags=re.MULTILINE | re.DOTALL)
+          if count != 1:
+              raise SystemExit(f'WorkspaceWindow.cpp: view toolbar patch matched {count} times')
+          p.write_text(text)
 
           subprocess.run(['git', 'diff', '--check'], check=True)
           subprocess.run(['git', 'add', 'src/qtgui/MainWindow.cpp', 'src/qtgui/ImageViewWindow.cpp', 'src/qtgui/WorkspaceWindow.cpp'], check=True)
