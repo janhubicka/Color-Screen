@@ -1,0 +1,74 @@
+name: Agent toolbar lifetime publisher
+
+on:
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    if: github.head_ref == 'agent/tmp-toolbar-lifetime-publisher-20260904'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/qtgui-workspace-toolbar-activation-order
+          fetch-depth: 0
+
+      - name: Apply guarded toolbar activation-order repair
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          header = Path('src/qtgui/WorkspaceWindow.h')
+          text = header.read_text()
+          old = '''  QPointer<QWidget> m_dragWindow;\n  QPoint m_dragStartGlobal;\n  bool m_closing = false;\n'''
+          new = '''  QPointer<QWidget> m_dragWindow;\n  QPoint m_dragStartGlobal;\n  // QMdiArea can emit subWindowActivated synchronously while a child is still\n  // being inserted. Delay shared-chrome handoff until that child is shown.\n  int m_chromeActivationBlockDepth = 0;\n  bool m_closing = false;\n'''
+          if text.count(old) != 1:
+              raise SystemExit('WorkspaceWindow.h activation guard anchor mismatch')
+          header.write_text(text.replace(old, new, 1))
+
+          source = Path('src/qtgui/WorkspaceWindow.cpp')
+          text = source.read_text()
+
+          old = '''  subWindow->setWindowTitle(document->documentDisplayName());\n  subWindow->setWidget(document);\n  m_mdiArea->addSubWindow(subWindow);\n'''
+          new = '''  subWindow->setWindowTitle(document->documentDisplayName());\n  subWindow->setWidget(document);\n  // addSubWindow() may activate synchronously. Keep the document toolbar in\n  // its still-valid private QMainWindow layout until the embedded child has\n  // completed its first show/layout pass.\n  ++m_chromeActivationBlockDepth;\n  m_mdiArea->addSubWindow(subWindow);\n'''
+          if text.count(old) != 1:
+              raise SystemExit('document addSubWindow anchor mismatch')
+          text = text.replace(old, new, 1)
+
+          old = '''  subWindow->setWindowTitle(view->windowTitle());\n  subWindow->setWidget(view);\n  m_mdiArea->addSubWindow(subWindow);\n'''
+          new = '''  subWindow->setWindowTitle(view->windowTitle());\n  subWindow->setWidget(view);\n  // Use the same ordering for secondary views: the view must finish its first\n  // embedded show before its toolbar is borrowed by the workspace shell.\n  ++m_chromeActivationBlockDepth;\n  m_mdiArea->addSubWindow(subWindow);\n'''
+          if text.count(old) != 1:
+              raise SystemExit('view addSubWindow anchor mismatch')
+          text = text.replace(old, new, 1)
+
+          old = '''  m_mdiArea->setActiveSubWindow(subWindow);\n  onSubWindowActivated(subWindow);\n  configureTabBar();\n'''
+          new = '''  m_mdiArea->setActiveSubWindow(subWindow);\n  --m_chromeActivationBlockDepth;\n  onSubWindowActivated(subWindow);\n  configureTabBar();\n'''
+          if text.count(old) != 2:
+              raise SystemExit(f'activation completion anchor count {text.count(old)} != 2')
+          text = text.replace(old, new)
+
+          old = '''void WorkspaceWindow::onSubWindowActivated(QMdiSubWindow *window) {\n  MainWindow *document = documentForSubWindow(window);\n'''
+          new = '''void WorkspaceWindow::onSubWindowActivated(QMdiSubWindow *window) {\n  // QMdiArea emits this signal from addSubWindow()/setActiveSubWindow(). During\n  // insertion the child QMainWindow has not necessarily completed show/layout,\n  // so moving its QToolBar yet can leave Qt's toolbar-area bookkeeping stale.\n  if (m_chromeActivationBlockDepth > 0)\n    return;\n\n  MainWindow *document = documentForSubWindow(window);\n'''
+          if text.count(old) != 1:
+              raise SystemExit('onSubWindowActivated anchor mismatch')
+          source.write_text(text.replace(old, new, 1))
+          PY
+
+          git diff --check
+          test "$(git diff --name-only | sort)" = $'src/qtgui/WorkspaceWindow.cpp\nsrc/qtgui/WorkspaceWindow.h'
+          grep -q 'm_chromeActivationBlockDepth > 0' src/qtgui/WorkspaceWindow.cpp
+          test "$(grep -c '^  ++m_chromeActivationBlockDepth;' src/qtgui/WorkspaceWindow.cpp)" -eq 2
+          test "$(grep -c '^  --m_chromeActivationBlockDepth;' src/qtgui/WorkspaceWindow.cpp)" -eq 2
+
+      - name: Publish product branch
+        shell: bash
+        run: |
+          git config user.name 'Jan Hubička'
+          git config user.email '46065755+janhubicka@users.noreply.github.com'
+          git add src/qtgui/WorkspaceWindow.cpp src/qtgui/WorkspaceWindow.h
+          git commit -m 'qtgui: stabilize workspace toolbar activation lifetime'
+          git push origin HEAD:agent/qtgui-workspace-toolbar-activation-order
