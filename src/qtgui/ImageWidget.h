@@ -50,7 +50,11 @@ public:
     double scale;
     int w;
     int h;
+    int coordinateSpace;
     colorscreen::render_parameters params;
+    colorscreen::scr_to_img_parameters scrToImg;
+    colorscreen::scr_detect_parameters scrDetect;
+    colorscreen::render_type_parameters renderType;
   };
 
   explicit ImageWidget(QWidget *parent = nullptr);

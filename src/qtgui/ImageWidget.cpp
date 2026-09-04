@@ -316,14 +316,7 @@ void ImageWidget::setImage(std::shared_ptr<colorscreen::image_data> scan,
 
   if (m_scan && m_rparams) {
     m_renderThread = new QThread(this);
-    static colorscreen::scr_to_img_parameters defaultScrToImg;
-    static colorscreen::scr_detect_parameters defaultScrDetect;
-    static colorscreen::render_type_parameters defaultRenderType;
-
-    m_renderer = new Renderer(m_scan, *m_rparams,
-                              m_scrToImg ? *m_scrToImg : defaultScrToImg,
-                              m_scrDetect ? *m_scrDetect : defaultScrDetect,
-                              m_renderType ? *m_renderType : defaultRenderType);
+    m_renderer = new Renderer(m_scan);
     m_renderer->moveToThread(m_renderThread);
 
     connect(m_renderThread, &QThread::finished, m_renderer,
@@ -360,14 +353,6 @@ void ImageWidget::updateParameters(
   m_renderType = renderType;
   m_solver = solver;
 
-  // Update renderer's cached parameters if it exists
-  if (m_renderer) {
-    m_renderer->updateParameters(
-        m_rparams ? *m_rparams : colorscreen::render_parameters(),
-        m_scrToImg ? *m_scrToImg : colorscreen::scr_to_img_parameters(),
-        m_scrDetect ? *m_scrDetect : colorscreen::scr_detect_parameters(),
-        m_renderType ? *m_renderType : colorscreen::render_type_parameters());
-  }
 
   // Selective invalidation: only dirty if scrToImg parameters changed.
   const bool mappingChanged = scrToImg && *scrToImg != m_lastScrToImg;
@@ -2429,7 +2414,14 @@ void ImageWidget::requestRender() {
     data.scale = m_scale;
     data.w = reqW;
     data.h = reqH;
+    data.coordinateSpace = (int)m_coordinateSpace;
     data.params = *m_rparams;
+    data.scrToImg = m_scrToImg ? *m_scrToImg
+                               : colorscreen::scr_to_img_parameters();
+    data.scrDetect = m_scrDetect ? *m_scrDetect
+                                 : colorscreen::scr_detect_parameters();
+    data.renderType = m_renderType ? *m_renderType
+                                   : colorscreen::render_type_parameters();
     
     int reqId = m_renderQueue.requestRender(QVariant::fromValue(data));
     qCDebug(lcRenderSync) << "ImageWidget::requestRender - Created ID:" << reqId << " scale:" << m_scale;
@@ -2458,7 +2450,8 @@ void ImageWidget::onTriggerRender(int reqId, std::shared_ptr<colorscreen::progre
     // Trigger generic render
     bool result = m_renderer->enqueueRender(
         reqId, data.xOffset, data.yOffset, data.scale, data.w, data.h,
-        (int)m_coordinateSpace, data.params, progress, "Rendering image");
+        data.coordinateSpace, data.params, data.scrToImg, data.scrDetect,
+        data.renderType, progress, "Rendering image");
     
     if (!result) {
         m_renderQueue.reportFinished(reqId, false);

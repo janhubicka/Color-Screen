@@ -10,13 +10,8 @@
 
 #include "../libcolorscreen/render-tile.h"
 
-Renderer::Renderer(std::shared_ptr<colorscreen::image_data> scan,
-                   const colorscreen::render_parameters &rparams,
-                   const colorscreen::scr_to_img_parameters &scrToImg,
-                   const colorscreen::scr_detect_parameters &scrDetect,
-                   const colorscreen::render_type_parameters &renderType)
-    : m_scan(scan), m_rparams(rparams), m_scrToImg(scrToImg),
-      m_scrDetect(scrDetect), m_renderType(renderType)
+Renderer::Renderer(std::shared_ptr<colorscreen::image_data> scan)
+    : m_scan(std::move(scan))
 {
     m_renderPool = new QThreadPool(this);
     m_renderPool->setMaxThreadCount(1);
@@ -39,6 +34,9 @@ Renderer::enqueueRender(
     int reqId, double xOffset, double yOffset, double scale, int width,
     int height, int coordinateSpace,
     const colorscreen::render_parameters &frameParams,
+    const colorscreen::scr_to_img_parameters &scrToImg,
+    const colorscreen::scr_detect_parameters &scrDetect,
+    const colorscreen::render_type_parameters &renderType,
     std::shared_ptr<colorscreen::progress_info> progress, const char *taskName)
 {
     RenderRequest request;
@@ -49,17 +47,14 @@ Renderer::enqueueRender(
     request.height = height;
     request.coordinateSpace = coordinateSpace;
     request.frameParams = frameParams;
+    request.scrToImg = scrToImg;
+    request.scrDetect = scrDetect;
+    request.renderType = renderType;
     request.progress = std::move(progress);
     request.taskName = taskName;
 
     {
         std::lock_guard<std::mutex> locker(m_mutex);
-        // Snapshot the cached renderer state together with the request.  A
-        // later GUI update must not overtake an already-enqueued frame and mix
-        // parameter generations before the renderer thread consumes its id.
-        request.scrToImg = m_scrToImg;
-        request.scrDetect = m_scrDetect;
-        request.renderType = m_renderType;
         m_pendingRenders.insert_or_assign(reqId, std::move(request));
     }
 
@@ -72,20 +67,6 @@ Renderer::enqueueRender(
         m_pendingRenders.erase(reqId);
     }
     return queued;
-}
-
-void
-Renderer::updateParameters(
-    const colorscreen::render_parameters &rparams,
-    const colorscreen::scr_to_img_parameters &scrToImg,
-    const colorscreen::scr_detect_parameters &scrDetect,
-    const colorscreen::render_type_parameters &renderType)
-{
-    std::lock_guard<std::mutex> locker(m_mutex);
-    m_rparams = rparams;
-    m_scrToImg = scrToImg;
-    m_scrDetect = scrDetect;
-    m_renderType = renderType;
 }
 
 void Renderer::finishRenderTask()
