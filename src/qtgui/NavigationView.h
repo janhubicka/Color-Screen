@@ -22,7 +22,11 @@ public:
     struct RenderRequestData {
       int width;
       int height;
+      int coordinateSpace;
       colorscreen::render_parameters params;
+      colorscreen::scr_to_img_parameters scrToImg;
+      colorscreen::scr_detect_parameters scrDetect;
+      colorscreen::render_type_parameters renderType;
     };
 
     explicit NavigationView(QWidget *parent = nullptr);

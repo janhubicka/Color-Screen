@@ -17,6 +17,8 @@ enum render_type_t
   render_type_fast,
   render_type_extra,
   render_type_adjusted_color,
+  /* Legacy GTK keyboard grouping only.  Renderer dispatch must never
+     infer ownership from enum ordering.  */
   render_type_first_scr_detect = render_type_adjusted_color,
   render_type_normalized_color,
   render_type_pixel_colors,
@@ -59,8 +61,6 @@ public:
 };
 DLL_PUBLIC extern const render_type_property render_type_properties[render_type_max];
 
-
-//static const enum render_type_t first_scr_detect = render_type_adjusted_color;
 class render_type_parameters
 {
 public:

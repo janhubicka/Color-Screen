@@ -838,11 +838,35 @@ bool ImageViewWindow::setCoordinateSpace(
 
 /** Programmatically select TYPE in this view. */
 bool ImageViewWindow::setRenderType(colorscreen::render_type_t type) {
-  const int index = m_modeComboBox->findData(static_cast<int>(type));
+  int index = m_modeComboBox->findData(static_cast<int>(type));
+
+  // Ordinary secondary views follow shared document parameters. If a caller
+  // selects a mode just after document/inspector churn, synchronize the mode
+  // list from the authoritative document snapshot before deciding that a mode
+  // requiring geometry/profile data is unavailable.
+  if (index < 0 && !m_slantedEdgeReference && m_document) {
+    refreshFromDocument();
+    index = m_modeComboBox->findData(static_cast<int>(type));
+  }
   if (index < 0)
     return false;
-  m_modeComboBox->setCurrentIndex(index);
-  return m_renderTypeParams.type == type;
+
+  // setCurrentIndex() emits no signal when INDEX is already current,
+  // so update the private render snapshot explicitly as well.
+  {
+    const QSignalBlocker blocker(m_modeComboBox);
+    m_modeComboBox->setCurrentIndex(index);
+  }
+  onModeChanged(index);
+
+  // onModeChanged() can request rendering while document/view presentation
+  // state is being synchronized. Re-resolve TYPE after that update instead of
+  // comparing against an index captured from an older combo-box generation.
+  const int selectedIndex =
+      m_modeComboBox->findData(static_cast<int>(type));
+  return selectedIndex >= 0 &&
+         m_modeComboBox->currentIndex() == selectedIndex &&
+         m_renderTypeParams.type == type;
 }
 
 /** Start or cancel slanted-edge selection in a specialized reference view. */

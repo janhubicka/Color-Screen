@@ -16,6 +16,7 @@
 #include "render-scr-detect.h"
 #include "render-screen.h"
 #include "render-simulate.h"
+#include <memory>
 
 namespace colorscreen
 {
@@ -447,22 +448,29 @@ render_tile_final_impl (render_type_parameters rtparam,
   if (tile.width <= 0 || tile.height <= 0)
     return true;
 
-  scr_to_img map;
-  if (!map.set_parameters (map_param, img))
+  /* The final-coordinate loop can run under OpenMP from a Qt thread-pool
+     worker.  Do not publish addresses of renderer/map objects living on that
+     worker's stack into the outlined OpenMP region: macOS ASan catches this
+     as an invalid stack access when the GUI rapidly replaces preview frames.
+     Keep the owning objects alive here and give OpenMP only copied pointers. */
+  auto map_holder = std::make_unique<scr_to_img> ();
+  scr_to_img *map = map_holder.get ();
+  if (!map->set_parameters (map_param, img))
     return false;
 
-  T render (engine_param, img, rparam, 255);
-  render.compute_final_range ();
-  render.set_render_type (rtparam);
+  auto render_holder = std::make_unique<T> (engine_param, img, rparam, 255);
+  T *render = render_holder.get ();
+  render->compute_final_range ();
+  render->set_render_type (rtparam);
   if (progress)
     progress->set_task ("precomputing", 1);
   {
     sub_task task (progress);
-    if (!render.precompute_all (progress))
+    if (!render->precompute_all (progress))
       return false;
   }
 
-  const int_image_area final_range (map.get_final_range (img.width, img.height));
+  const int_image_area final_range (map->get_final_range (img.width, img.height));
   const int final_xshift = -final_range.x;
   const int final_yshift = -final_range.y;
 
@@ -473,35 +481,47 @@ render_tile_final_impl (render_type_parameters rtparam,
   const luminosity_t sample_scale
       = 1 / (luminosity_t)(antialias * antialias);
 
+  /* Likewise copy tile geometry and the output buffer pointer into the
+     OpenMP data environment instead of repeatedly dereferencing TILE, which
+     belongs to the caller's stack. */
+  unsigned char *pixels = tile.pixels;
+  const int pixelbytes = tile.pixelbytes;
+  const int rowstride = tile.rowstride;
+  const int width = tile.width;
+  const int height = tile.height;
+  const coord_t pos_x = tile.pos.x;
+  const coord_t pos_y = tile.pos.y;
+  const coord_t step = tile.step;
+
   if (progress)
-    progress->set_task ("rendering", tile.height);
-#pragma omp parallel for default(none) shared(tile,render,map,progress,final_xshift,final_yshift,antialias,substep,sample_scale) if (tile.width * (size_t)tile.height > render.openmp_size ())
-  for (int y = 0; y < tile.height; y++)
+    progress->set_task ("rendering", height);
+#pragma omp parallel for default(none) firstprivate(render,map,progress,pixels,pixelbytes,rowstride,width,height,pos_x,pos_y,step,final_xshift,final_yshift,antialias,substep,sample_scale) if (width * (size_t)height > render->openmp_size ())
+  for (int y = 0; y < height; y++)
     {
       if (!progress || !progress->cancel_requested ())
-        for (int x = 0; x < tile.width; x++)
+        for (int x = 0; x < width; x++)
           {
             rgbdata d = {0, 0, 0};
-            coord_t xx = (x + tile.pos.x) * tile.step;
-            coord_t yy = (y + tile.pos.y) * tile.step;
+            coord_t xx = (x + pos_x) * step;
+            coord_t yy = (y + pos_y) * step;
             if (antialias == 1)
-              d = sample_data_final (render, map, xx, yy, final_xshift,
+              d = sample_data_final (*render, *map, xx, yy, final_xshift,
                                      final_yshift);
             else
               {
                 for (int ay = 0; ay < antialias; ay++)
                   for (int ax = 0; ax < antialias; ax++)
                     d += sample_data_final (
-                        render, map, xx + (ax + (coord_t)0.5) * substep,
+                        *render, *map, xx + (ax + (coord_t)0.5) * substep,
                         yy + (ay + (coord_t)0.5) * substep, final_xshift,
                         final_yshift);
                 d.red *= sample_scale;
                 d.green *= sample_scale;
                 d.blue *= sample_scale;
               }
-            int_rgbdata out_c = render.out_color.final_color (d);
-            putpixel (tile.pixels, tile.pixelbytes, tile.rowstride, x, y,
-                      out_c.red, out_c.green, out_c.blue);
+            int_rgbdata out_c = render->out_color.final_color (d);
+            putpixel (pixels, pixelbytes, rowstride, x, y, out_c.red,
+                      out_c.green, out_c.blue);
           }
       if (progress)
         progress->inc_progress ();
@@ -509,8 +529,57 @@ render_tile_final_impl (render_type_parameters rtparam,
   return (!progress || !progress->cancelled ());
 }
 
+/* Dispatch scan-coordinate rendering by mode, not by enum position.  The
+   render type order is a UI concern and must not decide which renderer owns a
+   mode.  */
+static bool
+render_tile_scan (image_data &scan, scr_to_img_parameters &param,
+                  scr_detect_parameters &dparam, render_parameters &rparam,
+                  render_type_parameters &rtparam, tile_parameters &tile,
+                  progress_info *progress)
+{
+  switch (rtparam.type)
+    {
+    case render_type_original:
+    case render_type_interpolated:
+    case render_type_predictive:
+    case render_type_image_layer:
+    case render_type_screen:
+    case render_type_realistic:
+    case render_type_combined:
+    case render_type_interpolated_original:
+    case render_type_preview_grid:
+    case render_type_simulate_process:
+    case render_type_fast:
+    case render_type_extra:
+    case render_type_profiled_original:
+    case render_type_interpolated_profiled_original:
+    case render_type_interpolated_diff:
+      return render_to_scr::render_tile (
+          rtparam, param, scan, rparam, tile.pixels, tile.pixelbytes,
+          tile.rowstride, tile.width, tile.height, tile.pos.x, tile.pos.y,
+          tile.step, progress);
+
+    case render_type_adjusted_color:
+    case render_type_normalized_color:
+    case render_type_pixel_colors:
+    case render_type_realistic_scr:
+    case render_type_scr_nearest:
+    case render_type_scr_nearest_scaled:
+    case render_type_scr_relax:
+      return render_scr_detect::render_tile (
+          rtparam, dparam, scan, rparam, tile.pixels, tile.pixelbytes,
+          tile.rowstride, tile.width, tile.height, tile.pos.x, tile.pos.y,
+          tile.step, progress);
+
+    default:
+      abort ();
+    }
+}
+
 /* Dispatch final-coordinate tile rendering using the same renderer-specific
-   sampling policies as render_to_file.  */
+   sampling policies as render_to_file.  Every mode is explicit here so
+   reordering render_type_t cannot silently change renderer ownership.  */
 static bool
 render_tile_final (image_data &scan, scr_to_img_parameters &param,
                    scr_detect_parameters &dparam, render_parameters &rparam,
@@ -519,78 +588,66 @@ render_tile_final (image_data &scan, scr_to_img_parameters &param,
 {
   if (scan.stitch)
     {
-      /* The existing stitched tile renderer already consumes zero-based final
-         viewport coordinates; stitched projects have no useful scan canvas.  */
-      if ((int)rtparam.type < (int)render_type_first_scr_detect
-          && rtparam.type != render_type_interpolated_diff)
-        return render_to_scr::render_tile (
-            rtparam, param, scan, rparam, tile.pixels, tile.pixelbytes,
-            tile.rowstride, tile.width, tile.height, tile.pos.x, tile.pos.y,
-            tile.step, progress);
-      return render_scr_detect::render_tile (
-          rtparam, dparam, scan, rparam, tile.pixels, tile.pixelbytes,
-          tile.rowstride, tile.width, tile.height, tile.pos.x, tile.pos.y,
-          tile.step, progress);
+      /* The stitched tile renderer already consumes zero-based final
+         viewport coordinates; stitched projects have no useful scan canvas. */
+      return render_tile_scan (scan, param, dparam, rparam, rtparam, tile,
+                               progress);
     }
 
-  if ((int)rtparam.type < (int)render_type_first_scr_detect
-      && rtparam.type != render_type_interpolated_diff)
-    {
-      sanitize_render_parameters (rtparam, param, scan);
-      render_parameters my_rparam;
-      my_rparam.adjust_for (rtparam, rparam);
-      switch (rtparam.type)
-        {
-        case render_type_original:
-        case render_type_profiled_original:
-        case render_type_image_layer:
-          return render_tile_final_impl<render_img, sample_data_final_by_img> (
-              rtparam, param, param, scan, my_rparam, tile, progress);
-        case render_type_preview_grid:
-        case render_type_realistic:
-          return render_tile_final_impl<render_superpose_img,
-                                        sample_data_final_by_img> (
-              rtparam, param, param, scan, my_rparam, tile, progress);
-        case render_type_screen:
-          my_rparam.brightness = 1;
-          return render_tile_final_impl<render_screen, sample_data_final_by_scr> (
-              rtparam, param, param, scan, my_rparam, tile, progress);
-        case render_type_simulate_process:
-          return render_tile_final_impl<render_simulate_process,
-                                        sample_data_final_by_img> (
-              rtparam, param, param, scan, my_rparam, tile, progress);
-        case render_type_interpolated_original:
-        case render_type_interpolated_profiled_original:
-        case render_type_interpolated:
-        case render_type_combined:
-        case render_type_predictive:
-          return render_tile_final_impl<render_interpolate,
-                                        sample_data_final_by_final> (
-              rtparam, param, param, scan, my_rparam, tile, progress);
-        case render_type_extra:
-#ifdef RENDER_EXTRA
-          return render_tile_final_impl<render_extra, sample_data_final_by_final> (
-              rtparam, param, param, scan, my_rparam, tile, progress);
-#endif
-        case render_type_fast:
-          return render_tile_final_impl<render_fast, sample_data_final_by_scr> (
-              rtparam, param, param, scan, my_rparam, tile, progress);
-        default:
-          abort ();
-        }
-    }
-
+  sanitize_render_parameters (rtparam, param, scan);
   if (rtparam.type == render_type_scr_nearest
       || rtparam.type == render_type_scr_nearest_scaled
       || rtparam.type == render_type_scr_relax)
     rtparam.antialias = false;
+
   render_parameters my_rparam;
   my_rparam.adjust_for (rtparam, rparam);
   switch (rtparam.type)
     {
+    case render_type_original:
+    case render_type_profiled_original:
+    case render_type_image_layer:
+      return render_tile_final_impl<render_img, sample_data_final_by_img> (
+          rtparam, param, param, scan, my_rparam, tile, progress);
+
+    case render_type_preview_grid:
+    case render_type_realistic:
+      return render_tile_final_impl<render_superpose_img,
+                                    sample_data_final_by_img> (
+          rtparam, param, param, scan, my_rparam, tile, progress);
+
+    case render_type_screen:
+      my_rparam.brightness = 1;
+      return render_tile_final_impl<render_screen, sample_data_final_by_scr> (
+          rtparam, param, param, scan, my_rparam, tile, progress);
+
+    case render_type_simulate_process:
+      return render_tile_final_impl<render_simulate_process,
+                                    sample_data_final_by_img> (
+          rtparam, param, param, scan, my_rparam, tile, progress);
+
+    case render_type_interpolated_original:
+    case render_type_interpolated_profiled_original:
+    case render_type_interpolated:
+    case render_type_combined:
+    case render_type_predictive:
+      return render_tile_final_impl<render_interpolate,
+                                    sample_data_final_by_final> (
+          rtparam, param, param, scan, my_rparam, tile, progress);
+
+    case render_type_extra:
+#ifdef RENDER_EXTRA
+      return render_tile_final_impl<render_extra, sample_data_final_by_final> (
+          rtparam, param, param, scan, my_rparam, tile, progress);
+#endif
+    case render_type_fast:
+      return render_tile_final_impl<render_fast, sample_data_final_by_scr> (
+          rtparam, param, param, scan, my_rparam, tile, progress);
+
     case render_type_interpolated_diff:
       return render_tile_final_impl<render_diff, sample_data_final_by_scr> (
           rtparam, param, param, scan, my_rparam, tile, progress);
+
     case render_type_adjusted_color:
       return render_tile_final_impl<render_scr_detect_adjusted,
                                     sample_data_final_by_img> (
@@ -608,15 +665,18 @@ render_tile_final (image_data &scan, scr_to_img_parameters &param,
                                     sample_data_final_by_img> (
           rtparam, param, dparam, scan, my_rparam, tile, progress);
     case render_type_scr_nearest:
-      return render_tile_final_impl<render_scr_nearest, sample_data_final_by_img> (
+      return render_tile_final_impl<render_scr_nearest,
+                                    sample_data_final_by_img> (
           rtparam, param, dparam, scan, my_rparam, tile, progress);
     case render_type_scr_nearest_scaled:
       return render_tile_final_impl<render_scr_nearest_scaled,
                                     sample_data_final_by_img> (
           rtparam, param, dparam, scan, my_rparam, tile, progress);
     case render_type_scr_relax:
-      return render_tile_final_impl<render_scr_relax, sample_data_final_by_img> (
+      return render_tile_final_impl<render_scr_relax,
+                                    sample_data_final_by_img> (
           rtparam, param, dparam, scan, my_rparam, tile, progress);
+
     default:
       abort ();
     }
@@ -646,17 +706,7 @@ render_tile (image_data &scan, scr_to_img_parameters &param,
   if (coordinates == render_final_coordinates)
     return render_tile_final (scan, param, dparam, rparam, rtparam, tile,
                               progress);
-
-  if ((int)rtparam.type < (int)render_type_first_scr_detect
-      && rtparam.type != render_type_interpolated_diff)
-    return render_to_scr::render_tile (
-        rtparam, param, scan, rparam, tile.pixels, tile.pixelbytes,
-        tile.rowstride, tile.width, tile.height, tile.pos.x, tile.pos.y,
-        tile.step, progress);
-  else
-    return render_scr_detect::render_tile (
-        rtparam, dparam, scan, rparam, tile.pixels, tile.pixelbytes,
-        tile.rowstride, tile.width, tile.height, tile.pos.x, tile.pos.y,
-        tile.step, progress);
+  return render_tile_scan (scan, param, dparam, rparam, rtparam, tile,
+                           progress);
 }
 } // namespace colorscreen

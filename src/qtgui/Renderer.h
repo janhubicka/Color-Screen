@@ -19,11 +19,7 @@ class Renderer : public QObject
 {
     Q_OBJECT
 public:
-    explicit Renderer(std::shared_ptr<colorscreen::image_data> scan,
-                      const colorscreen::render_parameters &rparams,
-                      const colorscreen::scr_to_img_parameters &scrToImg,
-                      const colorscreen::scr_detect_parameters &scrDetect,
-                      const colorscreen::render_type_parameters &renderType);
+    explicit Renderer(std::shared_ptr<colorscreen::image_data> scan);
     ~Renderer() override;
 
     /**
@@ -39,14 +35,11 @@ public:
     bool enqueueRender(int reqId, double xOffset, double yOffset, double scale,
                        int width, int height, int coordinateSpace,
                        const colorscreen::render_parameters &frameParams,
+                       const colorscreen::scr_to_img_parameters &scrToImg,
+                       const colorscreen::scr_detect_parameters &scrDetect,
+                       const colorscreen::render_type_parameters &renderType,
                        std::shared_ptr<colorscreen::progress_info> progress,
                        const char *taskName = nullptr);
-
-    /** Thread-safe update of the renderer's cached parameter snapshot. */
-    void updateParameters(const colorscreen::render_parameters &rparams,
-                          const colorscreen::scr_to_img_parameters &scrToImg,
-                          const colorscreen::scr_detect_parameters &scrDetect,
-                          const colorscreen::render_type_parameters &renderType);
 
 public slots:
     /** Consume a request previously published by enqueueRender(). */
@@ -74,12 +67,9 @@ private:
 
     std::shared_ptr<colorscreen::image_data> m_scan;
 
-    // Protect both cached renderer state and the cross-thread request handoff.
+    // Protect the cross-thread request handoff. Parameter snapshots become
+    // immutable once inserted, so the GUI thread never mutates Renderer state.
     mutable std::mutex m_mutex;
-    colorscreen::render_parameters m_rparams;
-    colorscreen::scr_to_img_parameters m_scrToImg;
-    colorscreen::scr_detect_parameters m_scrDetect;
-    colorscreen::render_type_parameters m_renderType;
     std::unordered_map<int, RenderRequest> m_pendingRenders;
 
     void finishRenderTask();

@@ -109,12 +109,7 @@ void NavigationView::setImage(std::shared_ptr<colorscreen::image_data> scan,
     m_lastMirror = m_rparams->scan_mirror;
 
     m_renderThread = new QThread(this);
-    static colorscreen::scr_to_img_parameters defaultScrToImg;
-    static colorscreen::scr_detect_parameters defaultScrDetect;
-
-    m_renderer = new Renderer(
-        m_scan, *m_rparams, m_scrToImg ? *m_scrToImg : defaultScrToImg,
-        m_scrDetect ? *m_scrDetect : defaultScrDetect, m_renderType);
+    m_renderer = new Renderer(m_scan);
     m_renderer->moveToThread(m_renderThread);
 
     connect(m_renderThread, &QThread::finished, m_renderer,
@@ -128,6 +123,12 @@ void NavigationView::setImage(std::shared_ptr<colorscreen::image_data> scan,
     data.width = width();
     data.height = height();
     data.params = *m_rparams;
+    data.scrToImg = m_scrToImg ? *m_scrToImg
+                               : colorscreen::scr_to_img_parameters();
+    data.scrDetect = m_scrDetect ? *m_scrDetect
+                                 : colorscreen::scr_detect_parameters();
+    data.renderType = m_renderType;
+    data.coordinateSpace = (int)m_coordinateSpace;
     m_renderQueue.requestRender(QVariant::fromValue(data));
   }
   update();
@@ -150,7 +151,9 @@ void NavigationView::onTriggerRender(int reqId, std::shared_ptr<colorscreen::pro
     }
 
     // Use CoordinateTransformer to get effective dimensions (relative to crop)
-    CoordinateTransformer transformer(m_scan.get(), data.params, m_scrToImg, m_coordinateSpace);
+    CoordinateTransformer transformer(
+        m_scan.get(), data.params, &data.scrToImg,
+        static_cast<colorscreen::render_coordinate_space>(data.coordinateSpace));
     QSize transformedSize = transformer.getTransformedCropSize();
     int imgW = transformedSize.width();
     int imgH = transformedSize.height();
@@ -174,8 +177,9 @@ void NavigationView::onTriggerRender(int reqId, std::shared_ptr<colorscreen::pro
     m_currentProgress = progress;
 
     bool result = m_renderer->enqueueRender(
-        reqId, 0.0, 0.0, scale, targetW, targetH, (int)m_coordinateSpace,
-        data.params, progress, "Rendering navigation");
+        reqId, 0.0, 0.0, scale, targetW, targetH, data.coordinateSpace,
+        data.params, data.scrToImg, data.scrDetect, data.renderType, progress,
+        "Rendering navigation");
       
     if (!result) {
         m_renderQueue.reportFinished(reqId, false);
@@ -198,13 +202,6 @@ void NavigationView::updateParameters(
     m_renderType.color = true;
   }
 
-  if (m_renderer) {
-    m_renderer->updateParameters(
-        *m_rparams,
-        m_scrToImg ? *m_scrToImg : colorscreen::scr_to_img_parameters(),
-        m_scrDetect ? *m_scrDetect : colorscreen::scr_detect_parameters(),
-        m_renderType);
-  }
 
   if (m_rparams && (!(m_rparams->scan_crop == m_lastScanCrop) ||
                     m_rparams->scan_rotation != m_lastRotation ||
@@ -219,6 +216,12 @@ void NavigationView::updateParameters(
   data.width = width();
   data.height = height();
   data.params = m_rparams ? *m_rparams : colorscreen::render_parameters();
+  data.scrToImg = m_scrToImg ? *m_scrToImg
+                             : colorscreen::scr_to_img_parameters();
+  data.scrDetect = m_scrDetect ? *m_scrDetect
+                               : colorscreen::scr_detect_parameters();
+  data.renderType = m_renderType;
+  data.coordinateSpace = (int)m_coordinateSpace;
   m_renderQueue.requestRender(QVariant::fromValue(data));
 }
 
@@ -234,6 +237,12 @@ void NavigationView::setCoordinateSpace(
   data.width = width();
   data.height = height();
   data.params = m_rparams ? *m_rparams : colorscreen::render_parameters();
+  data.scrToImg = m_scrToImg ? *m_scrToImg
+                             : colorscreen::scr_to_img_parameters();
+  data.scrDetect = m_scrDetect ? *m_scrDetect
+                               : colorscreen::scr_detect_parameters();
+  data.renderType = m_renderType;
+  data.coordinateSpace = (int)m_coordinateSpace;
   m_renderQueue.requestRender(QVariant::fromValue(data));
   update();
 }
@@ -243,6 +252,12 @@ void NavigationView::resizeEvent(QResizeEvent *event) {
   data.width = event->size().width();
   data.height = event->size().height();
   data.params = m_rparams ? *m_rparams : colorscreen::render_parameters();
+  data.scrToImg = m_scrToImg ? *m_scrToImg
+                             : colorscreen::scr_to_img_parameters();
+  data.scrDetect = m_scrDetect ? *m_scrDetect
+                               : colorscreen::scr_detect_parameters();
+  data.renderType = m_renderType;
+  data.coordinateSpace = (int)m_coordinateSpace;
   m_renderQueue.requestRender(QVariant::fromValue(data)); 
 }
 

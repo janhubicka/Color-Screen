@@ -502,9 +502,14 @@ jobs:
             --smoke-test-tile-activation-stable --smoke-test-menu-order \
             "$image" "$image"
 
-        run_asan_smoke detached-views 60 \
+        # The renderer sweep performs synchronous renderer precomputation for
+        # every GUI mode in both coordinate spaces. Windows clang64 ASan can
+        # spend well over six minutes doing that real work, so keep both the
+        # application and process watchdogs bounded but give them a realistic
+        # budget.
+        run_asan_smoke detached-views 900 \
           ./src/qtgui/colorscreen-qt \
-            --smoke-test 30000 --smoke-test-expect-windows 2 \
+            --smoke-test 720000 --smoke-test-expect-windows 2 \
             --smoke-test-new-view --smoke-test-slanted-reference \
             "$image" "$image"
 
