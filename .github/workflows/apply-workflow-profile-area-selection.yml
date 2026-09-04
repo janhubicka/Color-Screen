@@ -22,6 +22,9 @@ jobs:
       LC_ALL: C.UTF-8
       LANG: C.UTF-8
       PATH: /usr/lib/qt6/libexec:/usr/lib/x86_64-linux-gnu/qt6/libexec:/usr/lib/qt6/bin:/usr/lib/x86_64-linux-gnu/qt6/bin:/usr/lib64/qt6/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    defaults:
+      run:
+        working-directory: ${{ github.workspace }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -35,13 +38,16 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
+          pwd
+          ls -ld .git
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           grep -F 'WorkflowProfileSummary' src/qtgui/MainWindow.cpp
           grep -F 'capture_supports_screen_detection_p(capture)' src/qtgui/MainWindow.cpp
           grep -F 'Image layer + screen filter demosaiced with detail recovery' src/qtgui/MainWindow.cpp
           ! grep -F 'Show registration points and inspect' src/qtgui/MainWindow.cpp
           grep -F 'widgetAreaToImage' src/qtgui/ImageWidget.cpp src/qtgui/MainWindow.cpp src/qtgui/ImageViewWindow.cpp
           grep -F 'getTransformedCropSize' src/qtgui/ImageWidget.cpp
-          git diff --check
+          git -C "$GITHUB_WORKSPACE" diff --check
 
       - name: Configure Qt GUI
         run: ./configure --enable-qtgui
@@ -64,8 +70,9 @@ jobs:
           set -euxo pipefail
           rm .github/workflows/apply-workflow-profile-area-selection.yml
           rm .github/apply-workflow-profile-area-selection.py
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add -A
-          git commit -m "qtgui: clarify workflow and stabilize area selection"
-          git push origin HEAD:qtgui/workflow-profile-area-selection
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git -C "$GITHUB_WORKSPACE" config user.name github-actions[bot]
+          git -C "$GITHUB_WORKSPACE" config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git -C "$GITHUB_WORKSPACE" add -A
+          git -C "$GITHUB_WORKSPACE" commit -m "qtgui: clarify workflow and stabilize area selection"
+          git -C "$GITHUB_WORKSPACE" push origin HEAD:qtgui/workflow-profile-area-selection
