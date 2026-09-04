@@ -812,10 +812,14 @@ void MainWindow::setupUi() {
   workflowLayout->addWidget(workflowToggle);
 
   auto *workflowStages = new QLabel(
-      tr("Capture → Sharpen → Process → Register/Reconstruct → Color"),
+      tr("Capture › Sharpen › Process › Register › Reconstruct › Color"),
       workflowSummary);
   workflowStages->setObjectName(QStringLiteral("WorkflowStages"));
-  workflowStages->setWordWrap(true);
+  workflowStages->setWordWrap(false);
+  QFont workflowStageFont = workflowStages->font();
+  if (workflowStageFont.pointSizeF() > 1.0)
+    workflowStageFont.setPointSizeF(workflowStageFont.pointSizeF() - 1.0);
+  workflowStages->setFont(workflowStageFont);
   workflowStages->setToolTip(tr(
       "Color-Screen processing stages. The specialist tabs below remain in "
       "their existing beta order."));
@@ -845,6 +849,8 @@ void MainWindow::setupUi() {
 
   QFont workflowSectionFont = m_workflowProcessLabel->font();
   workflowSectionFont.setWeight(QFont::DemiBold);
+  if (workflowSectionFont.pointSizeF() > 1.0)
+    workflowSectionFont.setPointSizeF(workflowSectionFont.pointSizeF() - 0.5);
   m_workflowProcessLabel->setFont(workflowSectionFont);
   m_workflowRegistrationLabel->setFont(workflowSectionFont);
   m_workflowCalibrationLabel->setFont(workflowSectionFont);
@@ -4154,14 +4160,14 @@ void MainWindow::updateWorkflowSummary() {
 
   if (capture == colorscreen::render_parameters::capture_unknown) {
     m_workflowProcessLabel->setText(
-        tr("Process: capture type unknown — choose it in Digital capture"));
+        tr("Process: choose capture type in Digital capture"));
   } else if (!hasScreen) {
     m_workflowProcessLabel->setText(
-        tr("Process: %1 — no historical color-screen reconstruction")
+        tr("Process: %1 • no screen reconstruction")
             .arg(captureName));
   } else {
     m_workflowProcessLabel->setText(
-        tr("Process: %1 • screen: %2").arg(captureName, screenName));
+        tr("Process: %1 • %2").arg(captureName, screenName));
   }
 
   QString registration;
@@ -4185,7 +4191,9 @@ void MainWindow::updateWorkflowSummary() {
     }
   } else {
     minimumPoints = colorscreen::solver_parameters::min_points(type);
-    const QString prefix = tr("Registration: optional geometry path");
+    const QString prefix =
+        colorDetection ? tr("Registration: optional geometry")
+                       : tr("Registration: geometry");
     if (pointCount == 0) {
       registration = tr("%1 — no points; detect or add at least %2")
                          .arg(prefix)
@@ -4205,7 +4213,7 @@ void MainWindow::updateWorkflowSummary() {
       if (m_geometryFitPendingInputs) {
         registration += tr(" • fitting geometry…");
       } else if (fitCurrent) {
-        registration += tr(" • geometry current");
+        registration += tr(" • geometry fitted");
         if (failureCurrent)
           registration += tr(" • last refit failed");
       } else if (failureCurrent) {
@@ -4213,7 +4221,7 @@ void MainWindow::updateWorkflowSummary() {
       } else if (m_geometryFitBaseline) {
         registration += tr(" • geometry stale — refit");
       } else {
-        registration += tr(" • ready to fit/validate geometry");
+        registration += tr(" • ready to fit geometry");
       }
       if (m_scrToImgParams.mesh_trans)
         registration += tr(" • nonlinear correction present");
@@ -4230,8 +4238,8 @@ void MainWindow::updateWorkflowSummary() {
   if (!colorscreen::my_isfinite(mtf.scan_dpi) || mtf.scan_dpi <= 0)
     missingLensData << tr("resolution");
   const QString sharpenSummary = missingLensData.isEmpty()
-      ? tr("Sharpening: lens model ready")
-      : tr("Sharpening: lens model needs %1")
+      ? tr("Sharpening: ready")
+      : tr("Sharpening: needs %1")
             .arg(missingLensData.join(", "));
 
   // Preserve #251's richer calibration/provenance summary rather than
@@ -4275,9 +4283,21 @@ void MainWindow::updateWorkflowSummary() {
         "Next: choose the original regular Screen type. Stochastic screen "
         "colors cannot be recovered from a monochrome capture.");
   } else if (!colorDetection && regularScreen) {
-    nextStep = tr(
-        "Next: fit and validate Geometry so the original color screen can be "
-        "re-attached to the monochrome capture.");
+    if (m_geometryFitPendingInputs) {
+      nextStep = tr("Next: Geometry fit is running…");
+    } else if (fitCurrent) {
+      nextStep = tr(
+          "Next: Geometry — turn on Show registration points and inspect "
+          "residual arrows; if they are small and patternless, reconstruct.");
+    } else if (failureCurrent) {
+      nextStep = tr(
+          "Next: Geometry — adjust registration points/settings and optimize "
+          "the fit again.");
+    } else {
+      nextStep = tr(
+          "Next: Geometry — optimize the fit, then turn on Show registration "
+          "points to inspect residual arrows.");
+    }
   } else if (hasScreen && type == colorscreen::NoScreen) {
     nextStep = tr("Next: choose the physical Screen type.");
   } else {
