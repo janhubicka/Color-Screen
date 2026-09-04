@@ -1,0 +1,77 @@
+name: Agent workflow/profile/selection publisher
+
+on:
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    if: github.head_ref == 'agent/tmp-workflow-profile-selection-publisher-20260904'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Stage guarded transformer
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp .agent/workflow-profile-selection.py /tmp/workflow-profile-selection.py
+          python3 -m py_compile /tmp/workflow-profile-selection.py
+          sha256sum /tmp/workflow-profile-selection.py
+
+      - name: Publish clean product branch
+        shell: bash
+        env:
+          PRODUCT_BRANCH: agent/qtgui-workflow-profile-area-selection
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git checkout -B "$PRODUCT_BRANCH" origin/main
+          python3 /tmp/workflow-profile-selection.py
+
+          git add -- \
+            src/qtgui/MainWindow.cpp \
+            src/qtgui/MainWindow.h \
+            src/qtgui/ImageWidget.cpp \
+            src/qtgui/ImageWidget.h \
+            src/qtgui/ImageViewWindow.cpp \
+            src/qtgui/WorkspaceChurnSmoke.cpp
+          git diff --cached --check
+
+          expected=$(cat <<'EOF' | sed 's/^          //' | sort
+          src/qtgui/ImageViewWindow.cpp
+          src/qtgui/ImageWidget.cpp
+          src/qtgui/ImageWidget.h
+          src/qtgui/MainWindow.cpp
+          src/qtgui/MainWindow.h
+          src/qtgui/WorkspaceChurnSmoke.cpp
+          EOF
+          )
+          actual=$(git diff --cached --name-only | sort)
+          test "$actual" = "$expected" || {
+            echo 'Unexpected changed-file set:' >&2
+            printf '%s\n' "$actual" >&2
+            exit 1
+          }
+          test -z "$(git status --porcelain | grep -v '^M  ' || true)" || {
+            echo 'Unexpected unstaged/untracked product changes:' >&2
+            git status --short >&2
+            exit 1
+          }
+
+          git grep -q 'WorkflowProfileSummary' -- src/qtgui/MainWindow.cpp src/qtgui/WorkspaceChurnSmoke.cpp
+          git grep -q 'widgetAreaToImageArea' -- src/qtgui/ImageWidget.cpp src/qtgui/MainWindow.cpp src/qtgui/ImageViewWindow.cpp
+          ! git grep -q 'turn on Show registration points and inspect residual arrows' -- src/qtgui/MainWindow.cpp
+
+          git config user.name 'OpenAI Agent'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit \
+            -m 'qtgui: refine reconstruction workflow guidance' \
+            -m 'After a current geometry fit, guide the operator to validate registration in an actual reconstructed image instead of asking for residual-arrow inspection. Keep Profile as an explicit optional simple-matrix color correction only for RGB captures whose capture type records the historical screen filter, and separate its workflow status from sharpening/MTF.' \
+            -m 'Centralize rubber-band-to-scan rectangle conversion in ImageWidget and use enclosing floor/ceil bounds from both document and reference views, avoiding duplicated coordinate conversion and fractional-zoom truncation that could displace selected analysis areas.'
+          git push --force-with-lease origin HEAD:"refs/heads/$PRODUCT_BRANCH"
