@@ -19,6 +19,7 @@
 #include <QWheelEvent>
 #include <QTimer>
 #include <QtMath>
+#include <cmath>
 
 // Ensure shared ptr can be passed via signals
 Q_DECLARE_METATYPE(std::shared_ptr<colorscreen::progress_info>)
@@ -1699,6 +1700,34 @@ colorscreen::point_t ImageWidget::widgetToImage(QPointF p) const {
   // 2. Use Transformer (Transformed-Crop -> Scan)
   CoordinateTransformer transformer(m_scan.get(), *m_rparams, m_scrToImg, m_coordinateSpace);
   return transformer.transformedToScanCrop({xr, yr});
+}
+
+/** Convert one rubber-band rectangle from this widget's local coordinates to
+    the enclosing scan-pixel rectangle. The rectangle is mapped here, before
+    document/tool state can change, so callers never need to reinterpret a
+    child-widget geometry in another coordinate system. */
+QRect ImageWidget::widgetAreaToImageArea(const QRect &area) const {
+  if (!m_scan || area.isEmpty())
+    return {};
+
+  const colorscreen::point_t p1 = widgetToImage(area.topLeft());
+  const colorscreen::point_t p2 = widgetToImage(area.topRight());
+  const colorscreen::point_t p3 = widgetToImage(area.bottomLeft());
+  const colorscreen::point_t p4 = widgetToImage(area.bottomRight());
+  const double xmin = std::min({p1.x, p2.x, p3.x, p4.x});
+  const double xmax = std::max({p1.x, p2.x, p3.x, p4.x});
+  const double ymin = std::min({p1.y, p2.y, p3.y, p4.y});
+  const double ymax = std::max({p1.y, p2.y, p3.y, p4.y});
+
+  const int left = std::max(0, static_cast<int>(std::floor(xmin)));
+  const int top = std::max(0, static_cast<int>(std::floor(ymin)));
+  const int right = std::min(static_cast<int>(m_scan->width) - 1,
+                             static_cast<int>(std::ceil(xmax)));
+  const int bottom = std::min(static_cast<int>(m_scan->height) - 1,
+                              static_cast<int>(std::ceil(ymax)));
+  if (right < left || bottom < top)
+    return {};
+  return QRect(left, top, right - left + 1, bottom - top + 1);
 }
 
 /**

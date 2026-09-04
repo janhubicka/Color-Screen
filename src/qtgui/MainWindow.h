@@ -554,6 +554,7 @@ private:
   QLabel *m_workflowProcessLabel = nullptr;
   QLabel *m_workflowRegistrationLabel = nullptr;
   QLabel *m_workflowCalibrationLabel = nullptr;
+  QLabel *m_workflowProfileLabel = nullptr;
   QLabel *m_workflowNextStepLabel = nullptr;
 
   QToolBar *m_toolbar;        // New toolbar

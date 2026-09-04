@@ -847,6 +847,16 @@ void MainWindow::setupUi() {
   m_workflowCalibrationLabel->setWordWrap(true);
   workflowLayout->addWidget(m_workflowCalibrationLabel);
 
+  m_workflowProfileLabel = new QLabel(workflowSummary);
+  m_workflowProfileLabel->setObjectName(
+      QStringLiteral("WorkflowProfileSummary"));
+  m_workflowProfileLabel->setWordWrap(true);
+  m_workflowProfileLabel->setProperty("workflowApplicable", false);
+  m_workflowProfileLabel->setToolTip(tr(
+      "Optional RGB screen-capture calibration. It fits a simple matrix "
+      "profile from calibration spots and is not part of sharpening."));
+  workflowLayout->addWidget(m_workflowProfileLabel);
+
   QFont workflowSectionFont = m_workflowProcessLabel->font();
   workflowSectionFont.setWeight(QFont::DemiBold);
   if (workflowSectionFont.pointSizeF() > 1.0)
@@ -854,6 +864,7 @@ void MainWindow::setupUi() {
   m_workflowProcessLabel->setFont(workflowSectionFont);
   m_workflowRegistrationLabel->setFont(workflowSectionFont);
   m_workflowCalibrationLabel->setFont(workflowSectionFont);
+  m_workflowProfileLabel->setFont(workflowSectionFont);
 
   m_workflowNextStepLabel = new QLabel(workflowSummary);
   m_workflowNextStepLabel->setObjectName(
@@ -873,6 +884,9 @@ void MainWindow::setupUi() {
         m_workflowProcessLabel->setVisible(expanded);
         m_workflowRegistrationLabel->setVisible(expanded);
         m_workflowCalibrationLabel->setVisible(expanded);
+        m_workflowProfileLabel->setVisible(
+            expanded &&
+            m_workflowProfileLabel->property("workflowApplicable").toBool());
         m_workflowNextStepLabel->setVisible(expanded);
         workflowToggle->setToolTip(
             expanded ? tr("Hide the document workflow summary.")
@@ -3102,7 +3116,14 @@ void MainWindow::onImageLoaded() {
   if (m_profilePanel) {
     int profileTabIndex = m_configTabs->indexOf(m_profilePanel);
     if (profileTabIndex >= 0) {
-      m_configTabs->setTabVisible(profileTabIndex, m_scan && m_scan->has_rgb());
+      const auto capture =
+          m_scan ? m_rparams.get_capture_type(m_scan.get())
+                 : colorscreen::render_parameters::capture_unknown;
+      const bool profileApplicable =
+          m_scan && m_scan->has_rgb() &&
+          colorscreen::render_parameters::
+              capture_supports_screen_detection_p(capture);
+      m_configTabs->setTabVisible(profileTabIndex, profileApplicable);
     }
   }
 
@@ -4045,21 +4066,21 @@ void MainWindow::finishMtfModelFitWithoutResult() {
 
 QString MainWindow::profileCalibrationSummary() const {
   if (!m_scan)
-    return tr("Profile: load an image to calibrate");
+    return QString();
 
   const auto capture = m_rparams.get_capture_type(m_scan.get());
-  if (!colorscreen::render_parameters::capture_has_screen_p(capture))
-    return tr("Profile: not applicable to this capture workflow");
-  if (!m_scan->has_rgb())
-    return tr("Profile: unavailable — capture has no RGB channels");
+  if (!colorscreen::render_parameters::capture_supports_screen_detection_p(
+          capture) ||
+      !m_scan->has_rgb())
+    return QString();
 
   const qsizetype count = static_cast<qsizetype>(m_profileSpots.size());
   const bool savedCalibration = m_rparams.has_correction_profile();
   if (count < 4) {
     if (savedCalibration)
-      return tr("Profile: saved calibration present — provenance not verified • %1/4 spots")
+      return tr("Profile: optional matrix correction • saved calibration present — provenance not verified • %1/4 spots")
           .arg(count);
-    return tr("Profile: %1/4 calibration spots — add %2 more")
+    return tr("Profile: optional matrix correction • %1/4 calibration spots — add %2 more")
         .arg(count).arg(4 - count);
   }
 
@@ -4070,7 +4091,9 @@ QString MainWindow::profileCalibrationSummary() const {
   const bool failureCurrent = m_profileCalibrationFailureInputs &&
       !profileCalibrationInputsDiffer(*m_profileCalibrationFailureInputs, current);
 
-  QString summary = tr("Profile: %1 calibration spots").arg(count);
+  QString summary =
+      tr("Profile: optional matrix correction • %1 calibration spots")
+          .arg(count);
   if (m_profileCalibrationPendingInputs) {
     summary += tr(" • optimizing…");
   } else if (fitCurrent) {
@@ -4100,7 +4123,8 @@ QString MainWindow::profileCalibrationSummary() const {
     whose inputs changed is cancelled before it can publish an obsolete result. */
 void MainWindow::updateWorkflowSummary() {
   if (!m_workflowProcessLabel || !m_workflowRegistrationLabel ||
-      !m_workflowCalibrationLabel || !m_workflowNextStepLabel)
+      !m_workflowCalibrationLabel || !m_workflowProfileLabel ||
+      !m_workflowNextStepLabel)
     return;
 
   const ParameterState currentState = getCurrentState();
@@ -4246,12 +4270,19 @@ void MainWindow::updateWorkflowSummary() {
   // collapsing it back to a saved-measurement count.
   const QString mtfSummary = mtfCalibrationSummary();
 
-  const QString profileSummary = profileCalibrationSummary();
+  const bool profileApplicable =
+      colorDetection && m_scan && m_scan->has_rgb();
+  const QString profileSummary =
+      profileApplicable ? profileCalibrationSummary() : QString();
   if (m_profilePanel)
     m_profilePanel->setCalibrationStatus(profileSummary);
   m_workflowCalibrationLabel->setText(
-      sharpenSummary + QStringLiteral(" • ") + mtfSummary +
-      QStringLiteral(" • ") + profileSummary);
+      sharpenSummary + QStringLiteral(" • ") + mtfSummary);
+  m_workflowProfileLabel->setProperty("workflowApplicable",
+                                      profileApplicable);
+  m_workflowProfileLabel->setText(profileSummary);
+  m_workflowProfileLabel->setVisible(
+      profileApplicable && m_workflowProcessLabel->isVisible());
 
   QString nextStep;
   if (!m_scan) {
@@ -4272,6 +4303,14 @@ void MainWindow::updateWorkflowSummary() {
     nextStep = tr(
         "Next: reconstruct from detected screen colours; stochastic screens "
         "do not use Geometry.");
+  } else if (regularScreen && m_geometryFitPendingInputs) {
+    nextStep = tr("Next: Geometry fit is running…");
+  } else if (regularScreen && fitCurrent) {
+    nextStep = tr(
+        "Next: reconstruct — choose Mode → Image layer + screen filter (or "
+        "Image layer + screen filter demosaiced with detail recovery) and "
+        "inspect the image. If the reconstructed colours line up cleanly, "
+        "the geometry is good.");
   } else if (colorDetection && regularScreen) {
     nextStep = tr(
         "Next: choose either Geometry-based reconstruction or screen-colour "
@@ -4283,20 +4322,12 @@ void MainWindow::updateWorkflowSummary() {
         "Next: choose the original regular Screen type. Stochastic screen "
         "colors cannot be recovered from a monochrome capture.");
   } else if (!colorDetection && regularScreen) {
-    if (m_geometryFitPendingInputs) {
-      nextStep = tr("Next: Geometry fit is running…");
-    } else if (fitCurrent) {
-      nextStep = tr(
-          "Next: Geometry — turn on Show registration points and inspect "
-          "residual arrows; if they are small and patternless, reconstruct.");
-    } else if (failureCurrent) {
+    if (failureCurrent) {
       nextStep = tr(
           "Next: Geometry — adjust registration points/settings and optimize "
           "the fit again.");
     } else {
-      nextStep = tr(
-          "Next: Geometry — optimize the fit, then turn on Show registration "
-          "points to inspect residual arrows.");
+      nextStep = tr("Next: Geometry — optimize the fit.");
     }
   } else if (hasScreen && type == colorscreen::NoScreen) {
     nextStep = tr("Next: choose the physical Screen type.");
@@ -5684,35 +5715,10 @@ bool MainWindow::loadParameterFile(const QString &fileName) {
   return true;
 }
 
-/** Convert a widget-space rectangle to an image-space rectangle.
-   Maps all four corners through ImageWidget::widgetToImage (which
-   accounts for rotation, zoom, and pan), finds the axis-aligned
-   bounding box, and clamps it to the scan dimensions.  */
+/** Convert a widget-local rectangle to the enclosing scan rectangle. */
 QRect MainWindow::getImageArea(QRect area, ImageWidget *imageWidget) {
   ImageWidget *image = imageWidget ? imageWidget : inspectorImageWidget();
-  if (!m_scan || !image)
-    return QRect();
-
-  // Convert widget coordinates to image coordinates
-  // Get the four corners and find min/max
-  colorscreen::point_t p1 = image->widgetToImage(area.topLeft());
-  colorscreen::point_t p2 = image->widgetToImage(area.topRight());
-  colorscreen::point_t p3 = image->widgetToImage(area.bottomLeft());
-  colorscreen::point_t p4 = image->widgetToImage(area.bottomRight());
-
-  // Find bounding box in image coordinates
-  int xmin = std::min({p1.x, p2.x, p3.x, p4.x});
-  int xmax = std::max({p1.x, p2.x, p3.x, p4.x});
-  int ymin = std::min({p1.y, p2.y, p3.y, p4.y});
-  int ymax = std::max({p1.y, p2.y, p3.y, p4.y});
-
-  // Clamp to image bounds
-  xmin = std::max(0, xmin);
-  ymin = std::max(0, ymin);
-  xmax = std::min((int)m_scan->width - 1, xmax);
-  ymax = std::min((int)m_scan->height - 1, ymax);
-
-  return QRect(xmin, ymin, xmax - xmin + 1, ymax - ymin + 1);
+  return image ? image->widgetAreaToImageArea(area) : QRect();
 }
 
 /** Dispatch a drawn rectangle to the appropriate handler based on the
