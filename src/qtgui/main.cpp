@@ -881,16 +881,13 @@ int main(int argc, char *argv[]) {
       };
 
   if (parser.isSet(newViewOption)) {
-    QTimer::singleShot(300, &app,
-                       [&app, newViewSmokeDone, maybeFinishStructuredSmoke]() {
+    auto startNewViewSmoke = std::make_shared<std::function<void(int)>>();
+    const std::weak_ptr<std::function<void(int)>> weakStartNewViewSmoke =
+        startNewViewSmoke;
+    *startNewViewSmoke =
+        [&app, newViewSmokeDone, maybeFinishStructuredSmoke,
+         weakStartNewViewSmoke](int attemptsLeft) {
       const QList<MainWindow *> documents = app.documentWindows();
-      if (documents.size() < 2) {
-        qCritical() << "New View render-mode smoke requires RGB and monochrome "
-                       "documents";
-        app.exit(14);
-        return;
-      }
-
       MainWindow *source = nullptr;
       MainWindow *monochromeSource = nullptr;
       for (MainWindow *document : documents) {
@@ -903,8 +900,16 @@ int main(int argc, char *argv[]) {
           monochromeSource = document;
       }
       if (!source || !monochromeSource) {
-        qCritical() << "New View render-mode smoke did not receive both RGB "
-                       "and monochrome scans";
+        if (attemptsLeft > 0) {
+          if (auto retry = weakStartNewViewSmoke.lock()) {
+            QTimer::singleShot(100, &app, [retry, attemptsLeft]() {
+              (*retry)(attemptsLeft - 1);
+            });
+            return;
+          }
+        }
+        qCritical() << "New View render-mode smoke timed out waiting for both "
+                       "RGB and monochrome scans to finish loading";
         app.exit(14);
         return;
       }
@@ -1444,6 +1449,9 @@ int main(int argc, char *argv[]) {
       QTimer::singleShot(0, &app, [checkFinalPeerClose]() {
         (*checkFinalPeerClose)(40);
       });
+    };
+    QTimer::singleShot(0, &app, [startNewViewSmoke]() {
+      (*startNewViewSmoke)(300);
     });
   }
 
