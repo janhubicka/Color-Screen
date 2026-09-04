@@ -383,6 +383,9 @@ public:
    */
   colorscreen::point_t widgetToImage(QPointF p) const;
 
+  /** Convert a widget-local selection rectangle to a bounded scan rectangle. */
+  QRect widgetAreaToImageArea(const QRect &area) const;
+
 private slots:
   void handleImageReady(int reqId, QImage image, double x, double y,
                         double scale, bool success);

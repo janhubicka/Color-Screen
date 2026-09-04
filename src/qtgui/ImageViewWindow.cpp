@@ -994,28 +994,9 @@ void ImageViewWindow::updateMtfMeasurementOverlay(bool locate) {
   m_imageWidget->setFocus();
 }
 
-/** Convert a widget-space selection to a bounded rectangle in reference scan. */
+/** Convert a widget-local selection to the reference scan rectangle. */
 QRect ImageViewWindow::referenceImageArea(QRect area) const {
-  if (!m_scan || area.width() <= 0 || area.height() <= 0)
-    return {};
-
-  const colorscreen::point_t p1 = m_imageWidget->widgetToImage(area.topLeft());
-  const colorscreen::point_t p2 = m_imageWidget->widgetToImage(area.topRight());
-  const colorscreen::point_t p3 =
-      m_imageWidget->widgetToImage(area.bottomLeft());
-  const colorscreen::point_t p4 =
-      m_imageWidget->widgetToImage(area.bottomRight());
-  int xmin = std::min({p1.x, p2.x, p3.x, p4.x});
-  int xmax = std::max({p1.x, p2.x, p3.x, p4.x});
-  int ymin = std::min({p1.y, p2.y, p3.y, p4.y});
-  int ymax = std::max({p1.y, p2.y, p3.y, p4.y});
-  xmin = std::max(0, xmin);
-  ymin = std::max(0, ymin);
-  xmax = std::min(static_cast<int>(m_scan->width) - 1, xmax);
-  ymax = std::min(static_cast<int>(m_scan->height) - 1, ymax);
-  return xmax >= xmin && ymax >= ymin
-             ? QRect(xmin, ymin, xmax - xmin + 1, ymax - ymin + 1)
-             : QRect();
+  return m_imageWidget ? m_imageWidget->widgetAreaToImageArea(area) : QRect();
 }
 
 /** Measure the selected reference edge and append results to shared params. */
