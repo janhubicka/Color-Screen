@@ -42,9 +42,9 @@ const render_parameters::capture_type_property render_parameters::capture_proper
     render_parameters::capture_type_property::SUPPORTS_SCR_DETECT
     | render_parameters::capture_type_property::HAS_IR
     | render_parameters::capture_type_property::USES_SCREEN },
-  { "positive-mono", "Monochrome transparency taken through color screen",
-    "Monochrome transparency produced through a separate additive color "
-    "screen, or a capture in which the screen colors are not recorded (for "
+  { "positive-mono", "Monochrome transparency taken using regular color screen",
+    "Monochrome transparency taken using a regular additive color screen, "
+    "or a capture in which the screen colors are not recorded (for "
     "example an infrared capture of a screen transparency). The original "
     "screen must be re-attached during reconstruction. Choose the original "
     "regular screen type and fit its geometry; stochastic screen colors "
@@ -52,8 +52,8 @@ const render_parameters::capture_type_property render_parameters::capture_proper
     render_parameters::capture_type_property::MAYBE_MONOCHROMATIC_DEMOSAIC
     | render_parameters::capture_type_property::USES_SCREEN
     | render_parameters::capture_type_property::REGULAR_SCREEN_ONLY },
-  { "negative-mono", "Monochrome negative taken through color screen",
-    "Monochrome negative exposed through a separate additive color screen. "
+  { "negative-mono", "Monochrome negative taken using regular color screen",
+    "Monochrome negative taken using a regular additive color screen. "
     "The screen filter is not part of the negative and must be re-attached "
     "when producing the reconstructed positive. Choose the original regular "
     "screen type and fit its geometry; stochastic screen colors cannot be "
