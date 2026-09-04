@@ -918,12 +918,12 @@ int main(int argc, char *argv[]) {
         ParameterState state = document->documentStateSnapshot();
         // Keep the smoke fixture physically consistent with the capture-aware
         // GUI mode filter. RGB Dufay scans carry a historical screen; the
-        // monochrome checkerboard is a plain positive capture used only for
+        // monochrome checkerboard is an ordinary no-screen image used only for
         // modes that remain applicable without RGB screen detection.
         state.rparams.capture_type =
             scan->has_rgb()
                 ? colorscreen::render_parameters::capture_transparency_with_screen
-                : colorscreen::render_parameters::capture_transparency;
+                : colorscreen::render_parameters::capture_plain_image;
         state.scrToImg.type = colorscreen::Dufay;
         state.scrToImg.center = {(colorscreen::coord_t)scan->width / 2,
                                  (colorscreen::coord_t)scan->height / 2};
