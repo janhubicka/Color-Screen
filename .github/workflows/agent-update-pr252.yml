@@ -1,0 +1,129 @@
+name: Agent update PR252 readiness
+
+on:
+  push:
+    branches:
+      - agent/render-dispatch-smoke
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/render-dispatch-smoke
+          fetch-depth: 0
+
+      - name: Make New View smoke wait for loaded fixtures
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("src/qtgui/main.cpp")
+          text = path.read_text()
+
+          def replace_once(old, new):
+              global text
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"expected exactly one match, got {count}: {old!r}")
+              text = text.replace(old, new, 1)
+
+          replace_once(
+              '''  if (parser.isSet(newViewOption)) {
+    QTimer::singleShot(300, &app,
+                       [&app, newViewSmokeDone, maybeFinishStructuredSmoke]() {
+''',
+              '''  if (parser.isSet(newViewOption)) {
+    auto startNewViewSmoke = std::make_shared<std::function<void(int)>>();
+    const std::weak_ptr<std::function<void(int)>> weakStartNewViewSmoke =
+        startNewViewSmoke;
+    *startNewViewSmoke =
+        [&app, newViewSmokeDone, maybeFinishStructuredSmoke,
+         weakStartNewViewSmoke](int attemptsLeft) {
+''')
+
+          replace_once(
+              '''      if (documents.size() < 2) {
+        qCritical() << "New View render-mode smoke requires RGB and monochrome "
+                       "documents";
+        app.exit(14);
+        return;
+      }
+
+''',
+              '''''')
+
+          replace_once(
+              '''      if (!source || !monochromeSource) {
+        qCritical() << "New View render-mode smoke did not receive both RGB "
+                       "and monochrome scans";
+        app.exit(14);
+        return;
+      }
+''',
+              '''      if (!source || !monochromeSource) {
+        if (attemptsLeft > 0) {
+          if (auto retry = weakStartNewViewSmoke.lock()) {
+            QTimer::singleShot(100, &app, [retry, attemptsLeft]() {
+              (*retry)(attemptsLeft - 1);
+            });
+            return;
+          }
+        }
+        qCritical() << "New View render-mode smoke timed out waiting for both "
+                       "RGB and monochrome scans to finish loading";
+        app.exit(14);
+        return;
+      }
+''')
+
+          replace_once(
+              '''      QTimer::singleShot(0, &app, [checkFinalPeerClose]() {
+        (*checkFinalPeerClose)(40);
+      });
+    });
+  }
+
+  if (parser.isSet(workspaceChurnOption)) {
+''',
+              '''      QTimer::singleShot(0, &app, [checkFinalPeerClose]() {
+        (*checkFinalPeerClose)(40);
+      });
+    };
+    QTimer::singleShot(0, &app, [startNewViewSmoke]() {
+      (*startNewViewSmoke)(300);
+    });
+  }
+
+  if (parser.isSet(workspaceChurnOption)) {
+''')
+
+          path.write_text(text)
+          PY
+
+          rm .github/workflows/agent-update-pr252.yml
+          git diff --check
+          changed="$(git diff --name-only | sort)"
+          expected="$(printf '%s\n' .github/workflows/agent-update-pr252.yml src/qtgui/main.cpp | sort)"
+          if test "$changed" != "$expected"; then
+            echo "Unexpected changed files:" >&2
+            printf '%s\n' "$changed" >&2
+            exit 1
+          fi
+          git diff -- src/qtgui/main.cpp
+
+      - name: Commit readiness fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "qtgui: wait for render smoke fixtures to load"
+          git push origin HEAD:agent/render-dispatch-smoke
