@@ -32,14 +32,15 @@ jobs:
           fetch-depth: 0
 
       - name: Apply source changes
-        run: python3 .github/apply-workflow-profile-area-selection.py
+        shell: bash
+        run: |
+          python3 .github/apply-workflow-profile-area-selection.py
+          python3 .github/fix-workflow-profile-area-selection.py
 
       - name: Verify patch invariants
         shell: bash
         run: |
           set -euxo pipefail
-          pwd
-          ls -ld .git
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           grep -F 'WorkflowProfileSummary' src/qtgui/MainWindow.cpp
           grep -F 'capture_supports_screen_detection_p(capture)' src/qtgui/MainWindow.cpp
@@ -47,6 +48,8 @@ jobs:
           ! grep -F 'Show registration points and inspect' src/qtgui/MainWindow.cpp
           grep -F 'widgetAreaToImage' src/qtgui/ImageWidget.cpp src/qtgui/MainWindow.cpp src/qtgui/ImageViewWindow.cpp
           grep -F 'getTransformedCropSize' src/qtgui/ImageWidget.cpp
+          grep -F 'bool isTabVisible(int index) const' src/qtgui/MultiLineTabWidget.h
+          grep -F '!m_workflowNextStepLabel->isHidden()' src/qtgui/MainWindow.cpp
           git -C "$GITHUB_WORKSPACE" diff --check
 
       - name: Configure Qt GUI
@@ -70,6 +73,7 @@ jobs:
           set -euxo pipefail
           rm .github/workflows/apply-workflow-profile-area-selection.yml
           rm .github/apply-workflow-profile-area-selection.py
+          rm .github/fix-workflow-profile-area-selection.py
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git -C "$GITHUB_WORKSPACE" config user.name github-actions[bot]
           git -C "$GITHUB_WORKSPACE" config user.email 41898282+github-actions[bot]@users.noreply.github.com
