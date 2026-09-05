@@ -1,0 +1,54 @@
+diff --git a/src/qtgui/ImageWidget.h b/src/qtgui/ImageWidget.h
+index 36baaac..b182c15 100644
+--- a/src/qtgui/ImageWidget.h
++++ b/src/qtgui/ImageWidget.h
+@@ -27,6 +27,7 @@
+ // Forward declarations
+ namespace colorscreen {
+ class image_data;
++class screen_map;
+ struct render_parameters;
+ struct progress_info;
+ } // namespace colorscreen
+@@ -109,6 +110,17 @@ public:
+       Passing null or a measurement without spatial provenance clears it. */
+   void setMtfMeasurementOverlay(const colorscreen::mtf_measurement *measurement);
+ 
++  /** Replace the map of connected screen elements returned by the most recent
++      successful automatic basic-screen detection. */
++  void setDetectedScreenMap(
++      std::shared_ptr<const colorscreen::screen_map> detectedScreenMap);
++
++  /** Show the centers of screen elements found by automatic detection. */
++  void setShowDetectedPatchCenters(bool show);
++  bool detectedPatchCentersVisible() const {
++    return m_showDetectedPatchCenters;
++  }
++
+   /**
+    * @brief Toggles the visibility of registration points.
+    * @param show True to show.
+@@ -305,6 +317,7 @@ signals:
+ 
+ private:
+   // Drawing helpers to keep paintEvent clean
++  void drawDetectedPatchCenters(QPainter &p);
+   void drawPointsOverlay(QPainter &p);
+   void drawProfileSpots(QPainter &p);
+   void drawFocusAreas(QPainter &p);
+@@ -403,6 +416,7 @@ private:
+   colorscreen::solver_parameters *m_solver = nullptr;
+   const std::vector<colorscreen::point_t> *m_profileSpots = nullptr;
+   const std::vector<colorscreen::color_match> *m_profileSpotResults = nullptr;
++  std::shared_ptr<const colorscreen::screen_map> m_detectedScreenMap;
+   std::vector<FocusAreaOverlay> m_focusAreaOverlays;
+   bool m_hasMtfMeasurementOverlay = false;
+   colorscreen::int_image_area m_mtfMeasurementRoi;
+@@ -418,6 +432,7 @@ private:
+   bool m_lockRelativeCoordinates = true;
+ 
+   bool m_showRegistrationPoints = false;
++  bool m_showDetectedPatchCenters = false;
+   bool m_showProfileSpots = true;
+   colorscreen::render_coordinate_space m_coordinateSpace =
+       colorscreen::render_scan_coordinates;
