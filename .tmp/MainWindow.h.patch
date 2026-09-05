@@ -1,0 +1,32 @@
+diff --git a/src/qtgui/MainWindow.h b/src/qtgui/MainWindow.h
+index 3cea778..5c9448b 100644
+--- a/src/qtgui/MainWindow.h
++++ b/src/qtgui/MainWindow.h
+@@ -84,6 +84,10 @@ class CoordinateOptimizationWorker;
+ class AdaptiveSharpeningChart; // Added
+ class QUndoStack; // Forward decl
+ 
++namespace colorscreen {
++class screen_map;
++}
++
+ class MainWindow : public QMainWindow {
+   Q_OBJECT
+ public:
+@@ -508,6 +512,7 @@ private:
+   QAction *m_lockRelativeCoordinatesAction; // Lock relative coords toggle
+   QAction *m_optimizeCoordinatesAction; // Optimize coordinates button
+   QAction *m_registrationPointsAction; // Registration points toggle
++  QAction *m_detectedPatchCentersAction; // Auto-detected patch centers toggle
+   QAction *m_panAction;
+   QAction *m_selectAction;
+   QAction *m_addPointAction;
+@@ -583,6 +588,8 @@ private:
+   colorscreen::scr_detect_parameters m_detectParams;
+   colorscreen::scr_to_img_parameters m_scrToImgParams;
+   colorscreen::solver_parameters m_solverParams;
++  std::shared_ptr<const colorscreen::screen_map> m_detectedScreenMap;
++  bool m_showDetectedPatchCenters = false;
+   /** Last slanted-edge setup used in this session.  Each accepted measurement
+       stores an independent copy of its metadata, while the numerical controls
+       determine the generated curve.  */
