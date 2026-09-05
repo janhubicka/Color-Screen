@@ -718,7 +718,8 @@ void SharpnessPanel::setupUi() {
         s.rparams.sharpen.scanner_mtf.measured_mtf_idx = v ? 0 : -1;
       },
       nullptr,
-      "Use a measured MTF curve directly instead of the fitted analytical physical or fallback model.");
+      "Use a measured MTF curve directly instead of the fitted analytical physical or fallback model.",
+      QStringLiteral("sharpness.capture.use_measured_mtf"));
   useMeasuredMtf->setObjectName(QStringLiteral("MtfUseMeasuredCheck"));
   setParameterApplicability(useMeasuredMtf, [](const ParameterState &state) {
     return !state.rparams.sharpen.scanner_mtf.measurements.empty();
@@ -1192,8 +1193,9 @@ void SharpnessPanel::updateScreenTiles() {
 }
 
 void SharpnessPanel::applyChange(
-    std::function<void(ParameterState &)> modifier, const QString &description) {
-  ParameterPanel::applyChange(modifier, description);
+    std::function<void(ParameterState &)> modifier, const QString &description,
+    const QString &parameterKey) {
+  ParameterPanel::applyChange(modifier, description, parameterKey);
   updateMTFChart();
   updateScreenTiles();
 }

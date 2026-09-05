@@ -82,25 +82,26 @@
 // Undo/Redo Implementation
 
 /** Undo command that captures a full ParameterState snapshot before and after
-   a change.  Successive commands with the same description within a 500 ms
-   window are merged into a single undo step so that one slider drag produces
-   one entry.  Different controls must remain separate even when changed
-   quickly, otherwise undo can silently skip an intermediate user action. */
+   a change. Successive commands with the same stable parameter key within a
+   500 ms window merge so one slider drag produces one entry. During gradual
+   migration, an empty key falls back to the historical description-based
+   identity. Human-visible Undo text is always kept separate from the key. */
 class ChangeParametersCommand : public QUndoCommand {
 public:
   ChangeParametersCommand(MainWindow *window, const ParameterState &oldState,
                           const ParameterState &newState,
-                          const QString &description = QString())
+                          const QString &description = QString(),
+                          const QString &parameterKey = QString())
       : m_window(window), m_oldState(oldState), m_newState(newState),
-        m_description(description) {
+        m_mergeKey(parameterKey.isEmpty() ? description : parameterKey) {
     setText(description.isEmpty() ? "Change Parameters" : description);
     m_timestamp = QDateTime::currentMSecsSinceEpoch();
   }
 
   int id() const override {
-    // Qt never attempts to merge commands whose id is -1.  Calls without a
-    // logical description are therefore conservative one-shot undo entries.
-    return m_description.isEmpty() ? -1 : 1;
+    // Qt never attempts to merge commands whose id is -1. Calls without a
+    // parameter key or legacy description are conservative one-shot edits.
+    return m_mergeKey.isEmpty() ? -1 : 1;
   }
 
   bool mergeWith(const QUndoCommand *other) override {
@@ -110,11 +111,9 @@ public:
     const ChangeParametersCommand *cmd =
         static_cast<const ChangeParametersCommand *>(other);
 
-    // QUndoStack uses id() only as a coarse filter.  The description is the
-    // stable logical identity supplied by ParameterPanel (normally the field
-    // label), so do not merge two different edits merely because they happened
-    // close together.
-    if (cmd->m_description != m_description)
+    // QUndoStack uses id() only as a coarse filter. The stable key, not the
+    // translated/display label, determines whether two updates are one edit.
+    if (cmd->m_mergeKey != m_mergeKey)
       return false;
 
     // Only merge adjacent updates from the same edit gesture.  Also reject a
@@ -139,7 +138,7 @@ private:
   MainWindow *m_window;
   ParameterState m_oldState;
   ParameterState m_newState;
-  QString m_description;
+  QString m_mergeKey;
   qint64 m_timestamp; // Timestamp for merge window
 };
 
@@ -970,57 +969,64 @@ void MainWindow::setupUi() {
       [this]() { finishMtfModelFitWithoutResult(); };
   m_sharpnessPanel =
       new SharpnessPanel([this]() { return getCurrentState(); },
-                         [this](const ParameterState &s, const QString &desc) {
-                           changeParameters(s, desc);
-                         },
+                         [this](const ParameterState &s, const QString &desc,
+                             const QString &parameterKey) {
+                         changeParameters(s, desc, parameterKey);
+                       },
                          [this]() { return m_scan; }, std::move(mtfCalibration),
                          this);
 
   // Create Screen Panel
   m_screenPanel =
       new ScreenPanel([this]() { return getCurrentState(); },
-                      [this](const ParameterState &s, const QString &desc) {
-                        changeParameters(s, desc);
-                      },
+                      [this](const ParameterState &s, const QString &desc,
+                             const QString &parameterKey) {
+                         changeParameters(s, desc, parameterKey);
+                       },
                       [this]() { return m_scan; }, this);
 
   // Create Color Panel (after Sharpness)
   m_contactCopyPanel = new ContactCopyPanel(
       [this]() { return getCurrentState(); },
-      [this](const ParameterState &s, const QString &desc) {
-        changeParameters(s, desc);
-      },
+      [this](const ParameterState &s, const QString &desc,
+                             const QString &parameterKey) {
+                         changeParameters(s, desc, parameterKey);
+                       },
       [this]() { return m_scan; }, this);
 
   m_colorPanel =
       new ColorPanel([this]() { return getCurrentState(); },
-                     [this](const ParameterState &s, const QString &desc) {
-                       changeParameters(s, desc);
-                     },
+                     [this](const ParameterState &s, const QString &desc,
+                             const QString &parameterKey) {
+                         changeParameters(s, desc, parameterKey);
+                       },
                      [this]() { return m_scan; }, this);
 
   // Create Profile Panel
   m_profilePanel =
       new ProfilePanel([this]() { return getCurrentState(); },
-                       [this](const ParameterState &s, const QString &desc) {
-                         changeParameters(s, desc);
+                       [this](const ParameterState &s, const QString &desc,
+                             const QString &parameterKey) {
+                         changeParameters(s, desc, parameterKey);
                        },
                        [this]() { return m_scan; }, this);
 
   // Create Tiles Panel
   m_tilesPanel =
       new TilesPanel([this]() { return getCurrentState(); },
-                     [this](const ParameterState &s, const QString &desc) {
-                       changeParameters(s, desc);
-                     },
+                     [this](const ParameterState &s, const QString &desc,
+                             const QString &parameterKey) {
+                         changeParameters(s, desc, parameterKey);
+                       },
                      [this]() { return m_scan; }, this);
 
   // Create Image Layer Panel
   m_imageLayerPanel =
       new ImageLayerPanel([this]() { return getCurrentState(); },
-                          [this](const ParameterState &s, const QString &desc) {
-                            changeParameters(s, desc);
-                          },
+                          [this](const ParameterState &s, const QString &desc,
+                             const QString &parameterKey) {
+                         changeParameters(s, desc, parameterKey);
+                       },
                           [this]() { return m_scan; }, this);
 
   // Connect Progress Signals from Panels
@@ -1082,8 +1088,9 @@ void MainWindow::setupUi() {
   // Create Digital Capture Panel
   m_capturePanel =
       new CapturePanel([this]() { return getCurrentState(); },
-                       [this](const ParameterState &s, const QString &desc) {
-                         changeParameters(s, desc);
+                       [this](const ParameterState &s, const QString &desc,
+                             const QString &parameterKey) {
+                         changeParameters(s, desc, parameterKey);
                        },
                        [this]() { return m_scan; },
                        [this]() { reloadCurrentImageWithDemosaic(); },
@@ -1092,9 +1099,10 @@ void MainWindow::setupUi() {
   // Create Geometry Panel
   m_geometryPanel =
       new GeometryPanel([this]() { return getCurrentState(); },
-                        [this](const ParameterState &s, const QString &desc) {
-                          changeParameters(s, desc);
-                        },
+                        [this](const ParameterState &s, const QString &desc,
+                             const QString &parameterKey) {
+                         changeParameters(s, desc, parameterKey);
+                       },
                         [this]() { return m_scan; }, this);
 
 
@@ -2299,6 +2307,7 @@ void MainWindow::createMenus() {
 
   m_editMenu = menuBar()->addMenu("&Edit");
   QAction *undoAction = m_undoStack->createUndoAction(this, tr("&Undo"));
+  undoAction->setObjectName(QStringLiteral("UndoParametersAction"));
   undoAction->setIcon(QIcon::fromTheme("edit-undo-symbolic"));
   undoAction->setShortcut(QKeySequence::Undo);
   m_editMenu->addAction(undoAction);
@@ -4415,8 +4424,9 @@ ParameterState MainWindow::documentStateSnapshot() const {
 
 /** Apply shared document parameters changed by a secondary/specialized view. */
 void MainWindow::applySharedDocumentState(const ParameterState &state,
-                                          const QString &description) {
-  changeParameters(state, description);
+                                          const QString &description,
+                                          const QString &parameterKey) {
+  changeParameters(state, description, parameterKey);
 }
 
 /** Rotate the shared document left on behalf of a secondary view. */
@@ -4475,17 +4485,18 @@ ParameterState MainWindow::getCurrentState() const {
 /** Push an undoable parameter change.
    Compares the current state with NEWSTATE; if different, creates a
    ChangeParametersCommand and pushes it onto the undo stack.
-   The DESCRIPTION string appears in the Edit > Undo/Redo menu text.
-   Successive calls with the same DESCRIPTION within 500 ms are merged by the
-   command's mergeWith() into a single undo step.  */
+   DESCRIPTION appears in the Edit > Undo/Redo menu text. PARAMETERKEY is a
+   stable machine-readable merge identity; when empty, DESCRIPTION preserves
+   the historical behavior for controls not migrated yet. */
 void MainWindow::changeParameters(const ParameterState &newState,
-                                  const QString &description) {
+                                  const QString &description,
+                                  const QString &parameterKey) {
   ParameterState currentState = getCurrentState();
   if (currentState == newState)
     return;
 
-  m_undoStack->push(
-      new ChangeParametersCommand(this, currentState, newState, description));
+  m_undoStack->push(new ChangeParametersCommand(
+      this, currentState, newState, description, parameterKey));
 }
 
 /** Return whether this document has parameters not represented by its saved

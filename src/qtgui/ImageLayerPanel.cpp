@@ -24,7 +24,8 @@ void ImageLayerPanel::setupUi() {
     ParameterState s = m_stateGetter();
     s.rparams.ignore_infrared = checked;
     m_stateSetter(s, tr("Use simulated RGB image layer %1")
-                        .arg(checked ? tr("on") : tr("off")));
+                        .arg(checked ? tr("on") : tr("off")),
+                  QString());
   });
 
   QToolButton *simulatedSectionToggle =

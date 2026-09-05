@@ -106,7 +106,9 @@ private:
   void setupUi();
   void updateMTFChart();
   void updateScreenTiles(); // Wrapper to schedule
-  void applyChange(std::function<void(ParameterState &)> modifier, const QString &description = QString()) override;
+  void applyChange(std::function<void(ParameterState &)> modifier,
+                   const QString &description = QString(),
+                   const QString &parameterKey = QString()) override;
   void loadMTF();
   /** Open the explicit fit dialog and run the selected MTF fit off the GUI
       thread.  */

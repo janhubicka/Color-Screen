@@ -327,7 +327,8 @@ void ScreenPanel::setupUi() {
       [](ParameterState &s, double v) { s.rparams.red_strip_width = v; }, 1.0,
       nullptr, false,
       "Relative width of the red filter strips for line-screen processes like "
-      "Joly or Dufaycolor.");
+      "Joly or Dufaycolor.",
+      QStringLiteral("screen.red_strip_width"));
   redStripWidth->setObjectName(QStringLiteral("ScreenRedStripWidth"));
   setParameterApplicability(redStripWidth, [](const ParameterState &state) {
     return screen_with_varying_strips_p(state.scrToImg.type);
@@ -339,7 +340,8 @@ void ScreenPanel::setupUi() {
       [](ParameterState &s, double v) { s.rparams.green_strip_width = v; },
       1.0, nullptr, false,
       "Relative width of the green filter strips for line-screen processes "
-      "like Joly or Dufaycolor.");
+      "like Joly or Dufaycolor.",
+      QStringLiteral("screen.green_strip_width"));
   greenStripWidth->setObjectName(QStringLiteral("ScreenGreenStripWidth"));
   setParameterApplicability(greenStripWidth, [](const ParameterState &state) {
     return screen_with_varying_strips_p(state.scrToImg.type);
