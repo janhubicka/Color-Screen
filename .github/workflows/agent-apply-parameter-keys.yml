@@ -65,11 +65,16 @@ jobs:
           git config user.email "46065755+janhubicka@users.noreply.github.com"
           git add --pathspec-from-file=/tmp/expected-files
           test "$(git diff --cached --name-only | wc -l)" -eq 15
-          git commit -m "qtgui: give parameter edits stable keys" -m "Add an optional untranslated parameterKey to stateful ParameterPanel helpers and carry it through document/shared-view state setters into ChangeParametersCommand. Human-readable Undo text stays separate, while keyed controls merge by stable identity; unconverted controls deliberately keep the historical description fallback so this can be migrated incrementally.
+          cat > /tmp/commit-message <<'EOF'
+          qtgui: give parameter edits stable keys
 
-Store non-empty keys as widget metadata for the upcoming reset/default/modified Phase-C work. Migrate the Screen red/green strip-width controls and the Sharpness measured-MTF selector as representative users. Preserve derived Sharpness/Color refresh hooks and forward keys from ordinary/reference views to the source document.
+          Add an optional untranslated parameterKey to stateful ParameterPanel helpers and carry it through document/shared-view state setters into ChangeParametersCommand. Human-readable Undo text stays separate, while keyed controls merge by stable identity; unconverted controls deliberately keep the historical description fallback so this can be migrated incrementally.
 
-Extend WorkspaceChurnSmoke to exercise the actual undo stack: two edits with the same visible description but different keys must remain separate, while repeated updates carrying one key must coalesce. Also verify the migrated Screen controls expose their expected key metadata.
+          Store non-empty keys as widget metadata for the upcoming reset/default/modified Phase-C work. Migrate the Screen red/green strip-width controls and the Sharpness measured-MTF selector as representative users. Preserve derived Sharpness/Color refresh hooks and forward keys from ordinary/reference views to the source document.
 
-No renderer, parameter serialization, processing defaults, or output semantics change."
+          Extend WorkspaceChurnSmoke to exercise the actual undo stack: two edits with the same visible description but different keys must remain separate, while repeated updates carrying one key must coalesce. Also verify the migrated Screen controls expose their expected key metadata.
+
+          No renderer, parameter serialization, processing defaults, or output semantics change.
+          EOF
+          git commit -F /tmp/commit-message
           git push origin HEAD:agent/qtgui-parameter-keys
