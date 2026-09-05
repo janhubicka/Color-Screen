@@ -18,38 +18,30 @@ jobs:
           ref: agent/qtgui-parameter-applicability
           path: target
           fetch-depth: 0
-      - name: Checkout helper patch
-        uses: actions/checkout@v4
-        with:
-          ref: agent/apply-parameter-applicability
-          path: helper
-          fetch-depth: 1
-      - name: Apply and publish reviewed patch
+      - name: Restore direct QFormLayout include
         shell: bash
         run: |
           set -euo pipefail
-          cat helper/agent/chunks/00 \
-              helper/agent/chunks/01 \
-              helper/agent/chunks/02 \
-              helper/agent/chunks/03 \
-              helper/agent/chunks/04 \
-              helper/agent/chunks/05 \
-              helper/agent/chunks/06 > /tmp/parameter-applicability.patch.b64
-          base64 -d /tmp/parameter-applicability.patch.b64 > /tmp/parameter-applicability.patch
-          actual_sha="$(sha256sum /tmp/parameter-applicability.patch | cut -d' ' -f1)"
-          test "$actual_sha" = "5b5d2e4d7b91f33bbe3b20a4d9a6b40bf4b52f5c421d421f32554bc2679354e2"
           cd target
-          git apply --check /tmp/parameter-applicability.patch
-          git apply /tmp/parameter-applicability.patch
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path("src/qtgui/ScreenPanel.cpp")
+          text = path.read_text()
+          include = "#include <QFormLayout>\n"
+          if include not in text:
+              marker = "#include <QComboBox>\n"
+              if marker not in text:
+                  raise SystemExit("ScreenPanel include insertion point not found")
+              text = text.replace(marker, marker + include, 1)
+              path.write_text(text)
+          PY
           git diff --check
           git config user.name "Jan Hubička"
           git config user.email "46065755+janhubicka@users.noreply.github.com"
-          git add doc/qtgui-internal-cleanup.md \
-                  src/qtgui/ParameterPanel.cpp \
-                  src/qtgui/ParameterPanel.h \
-                  src/qtgui/ScreenPanel.cpp \
-                  src/qtgui/SharpnessPanel.cpp \
-                  src/qtgui/WorkspaceChurnSmoke.cpp
-          test "$(git diff --cached --name-only | wc -l)" -eq 6
-          git commit -m "qtgui: separate applicability from enablement" -m "Introduce ParameterPanel::setParameterApplicability() so panels can hide rows whose concepts do not apply without overloading enabled/prerequisite predicates. Compose row applicability with collapsible-section state so expanding a section cannot resurrect logically unavailable controls.\n\nMigrate Screen pattern preview/strip rows away from their panel-specific visibility workaround and migrate Sharpness measured-MTF controls so measurement existence determines applicability while fit-running/document prerequisites determine enablement. Add stable object names and extend the workspace churn smoke test to exercise collapse/expand with applicability metadata.\n\nUpdate the beta cleanup tracker to record the new framework seam. No rendering, parameter serialization, or workflow-summary behavior changes."
+          git add src/qtgui/ScreenPanel.cpp
+          if git diff --cached --quiet; then
+            echo "QFormLayout include already present"
+            exit 0
+          fi
+          git commit -m "qtgui: restore ScreenPanel QFormLayout include" -m "The applicability migration removed ScreenPanel's direct QFormLayout include while the file still calls QFormLayout::addRow through m_currentGroupForm and m_form. Both focused Ubuntu architectures consequently failed at compile time with an incomplete-type error. Restore the required include; no GUI or processing behavior changes."
           git push origin HEAD:agent/qtgui-parameter-applicability
