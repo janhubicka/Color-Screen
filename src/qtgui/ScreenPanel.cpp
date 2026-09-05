@@ -294,7 +294,7 @@ void ScreenPanel::setupUi() {
   });
 
   QToolButton *screenPatternToggle = addSeparator("Screen pattern");
-  QFormLayout *screenPatternForm = m_currentGroupForm;
+  screenPatternToggle->setObjectName(QStringLiteral("ScreenPatternToggle"));
 
   ScreenPreviewPanel *preview =
       new ScreenPreviewPanel(m_stateGetter, m_stateSetter, m_imageGetter);
@@ -314,6 +314,9 @@ void ScreenPanel::setupUi() {
   } else {
     m_form->addRow(preview);
   }
+  setParameterApplicability(preview, [](const ParameterState &state) {
+    return screen_has_regular_geometry_p(state.scrToImg.type);
+  });
 
   // Strip-width parameters are meaningful only for processes whose line-screen
   // proportions are adjustable. Hide the complete rows otherwise; merely
@@ -325,6 +328,10 @@ void ScreenPanel::setupUi() {
       nullptr, false,
       "Relative width of the red filter strips for line-screen processes like "
       "Joly or Dufaycolor.");
+  redStripWidth->setObjectName(QStringLiteral("ScreenRedStripWidth"));
+  setParameterApplicability(redStripWidth, [](const ParameterState &state) {
+    return screen_with_varying_strips_p(state.scrToImg.type);
+  });
 
   QWidget *greenStripWidth = addSliderParameter(
       "Green Strip Width", 0.0, 1.0, 100.0, 2, "", "",
@@ -333,36 +340,12 @@ void ScreenPanel::setupUi() {
       1.0, nullptr, false,
       "Relative width of the green filter strips for line-screen processes "
       "like Joly or Dufaycolor.");
+  greenStripWidth->setObjectName(QStringLiteral("ScreenGreenStripWidth"));
+  setParameterApplicability(greenStripWidth, [](const ParameterState &state) {
+    return screen_with_varying_strips_p(state.scrToImg.type);
+  });
 
-  auto setPatternRowVisible = [screenPatternForm](QWidget *field,
-                                                   bool visible) {
-    if (!field)
-      return;
-    field->setVisible(visible);
-    if (screenPatternForm) {
-      if (QWidget *label = screenPatternForm->labelForField(field))
-        label->setVisible(visible);
-    }
-  };
-
-  m_widgetStateUpdaters.push_back(
-      [this, preview, screenPatternToggle, redStripWidth, greenStripWidth,
-       setPatternRowVisible]() {
-        const auto type = m_stateGetter().scrToImg.type;
-        const bool expanded = screenPatternToggle->isChecked();
-        const bool regular = screen_has_regular_geometry_p(type);
-        const bool varyingStrips = screen_with_varying_strips_p(type);
-        preview->updateUI();
-        preview->setVisible(expanded && regular);
-        setPatternRowVisible(redStripWidth, expanded && varyingStrips);
-        setPatternRowVisible(greenStripWidth, expanded && varyingStrips);
-      });
-
-  // ParameterPanel's generic section toggle changes child visibility directly.
-  // Reapply the screen-specific applicability immediately afterwards so an
-  // expanded section cannot expose strip controls for a non-strip process.
-  connect(screenPatternToggle, &QToolButton::toggled, this,
-          [this]() { updateUI(); });
+  m_widgetStateUpdaters.push_back([preview]() { preview->updateUI(); });
 
   addSeparator("Reconstruction");
 

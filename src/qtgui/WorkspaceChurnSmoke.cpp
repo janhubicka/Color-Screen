@@ -7,6 +7,7 @@
 #include "WorkspaceWindow.h"
 
 #include <QComboBox>
+#include <QCheckBox>
 #include <QCoreApplication>
 #include <QDebug>
 #include <QEvent>
@@ -302,6 +303,16 @@ QLabel *mtfMeasurementProvenance = inspector->findChild<QLabel *>(
     QStringLiteral("MtfMeasurementProvenance"));
 QPushButton *mtfMeasurementLocate = inspector->findChild<QPushButton *>(
     QStringLiteral("MtfMeasurementLocate"));
+QCheckBox *mtfUseMeasured = inspector->findChild<QCheckBox *>(
+    QStringLiteral("MtfUseMeasuredCheck"));
+QPushButton *mtfFitButton = inspector->findChild<QPushButton *>(
+    QStringLiteral("MtfFitButton"));
+QToolButton *scannerCameraToggle = inspector->findChild<QToolButton *>(
+    QStringLiteral("ScannerCameraPropertiesToggle"));
+QWidget *mtfUseMeasuredRow =
+    mtfUseMeasured ? mtfUseMeasured->parentWidget() : nullptr;
+const bool hasMtfMeasurements =
+    !first->documentStateSnapshot().rparams.sharpen.scanner_mtf.measurements.empty();
 const auto profileCapture =
     first->documentStateSnapshot().rparams.get_capture_type(
         first->sharedImageData().get());
@@ -376,6 +387,43 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
               "Workspace churn source document lost calibration/provenance controls"));
           return;
         }
+
+        // Applicability is logical UI state, independent of section folding.
+        // Expanding Scanner/Camera properties must never resurrect measured-MTF
+        // controls when this document has no measurements.
+        const QVariant useMeasuredApplicable =
+            mtfUseMeasuredRow
+                ? mtfUseMeasuredRow->property("parameterApplicable")
+                : QVariant();
+        const QVariant fitApplicable =
+            mtfFitButton ? mtfFitButton->property("parameterApplicable")
+                         : QVariant();
+        if (!mtfUseMeasured || !mtfUseMeasuredRow || !mtfFitButton ||
+            !scannerCameraToggle || !useMeasuredApplicable.isValid() ||
+            !fitApplicable.isValid() ||
+            useMeasuredApplicable.toBool() != hasMtfMeasurements ||
+            fitApplicable.toBool() != hasMtfMeasurements) {
+          fail(QStringLiteral(
+              "Workspace churn lost measured-MTF applicability metadata"));
+          return;
+        }
+
+        const bool scannerPropertiesWereExpanded =
+            scannerCameraToggle->isChecked();
+        scannerCameraToggle->setChecked(false);
+        if (!mtfUseMeasuredRow->isHidden() || !mtfFitButton->isHidden()) {
+          fail(QStringLiteral(
+              "Collapsing Scanner/Camera properties left an applicable row visible"));
+          return;
+        }
+        scannerCameraToggle->setChecked(true);
+        if (mtfUseMeasuredRow->isHidden() != !hasMtfMeasurements ||
+            mtfFitButton->isHidden() != !hasMtfMeasurements) {
+          fail(QStringLiteral(
+              "Expanding Scanner/Camera properties resurrected an inapplicable measured-MTF row"));
+          return;
+        }
+        scannerCameraToggle->setChecked(scannerPropertiesWereExpanded);
 
         // Folding the guide is presentation state only. It must not hide the
         // processing tabs, and the smoke restores the user's previous fold

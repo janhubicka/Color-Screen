@@ -216,7 +216,11 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   are useful when they teach a prerequisite; hidden controls are useful when a
   whole concept is meaningless for the current process.  A lambda called
   `enabledCheck` should not silently mean different things in different helper
-  functions.
+  functions.  `ParameterPanel::setParameterApplicability()` now establishes
+  this distinction for form rows and composes it with section folding; Screen
+  pattern rows and measured-MTF controls are the first users.  Continue moving
+  panel-specific visibility predicates to this API as the individual panels are
+  simplified.
 
 ### P2 — maintenance refactoring
 

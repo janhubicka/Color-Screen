@@ -25,6 +25,17 @@
 
 namespace {
 
+constexpr auto parameterApplicableProperty = "parameterApplicable";
+constexpr auto parameterSectionExpandedProperty = "parameterSectionExpanded";
+
+/** Return whether WIDGET is logically applicable to the current panel state. */
+bool parameterWidgetApplicable(const QWidget *widget) {
+  if (!widget)
+    return true;
+  const QVariant value = widget->property(parameterApplicableProperty);
+  return !value.isValid() || value.toBool();
+}
+
 /** One uniform detachable section used by every parameter panel.
 
     The section, rather than MainWindow or a specialized view, owns the floating
@@ -1158,17 +1169,21 @@ QToolButton *ParameterPanel::addSeparator(const QString &title) {
   groupLayout->addWidget(titleWidget);
 
   QFormLayout *groupForm = new QFormLayout();
+  groupForm->setProperty(parameterSectionExpandedProperty, true);
+  m_groupForms.push_back(groupForm);
   groupLayout->addLayout(groupForm);
 
   // Connect arrow button to toggle visibility
   connect(arrowBtn, &QToolButton::toggled, [arrowBtn, groupForm](bool checked) {
     arrowBtn->setArrowType(checked ? Qt::DownArrow : Qt::RightArrow);
+    groupForm->setProperty(parameterSectionExpandedProperty, checked);
 
     auto setVisibleRecursive = [](QLayoutItem *item, bool visible) {
         auto recurse = [](auto self, QLayoutItem *itm, bool vis) -> void {
             if (!itm) return;
             if (itm->widget()) {
-                itm->widget()->setVisible(vis);
+                QWidget *widget = itm->widget();
+                widget->setVisible(vis && parameterWidgetApplicable(widget));
             } else if (itm->layout()) {
                 QLayout *subLayout = itm->layout();
                 for (int j = 0; j < subLayout->count(); ++j) {
@@ -1198,6 +1213,64 @@ QToolButton *ParameterPanel::addSeparator(const QString &title) {
   m_currentGroupForm = groupForm;
 
   return arrowBtn; // Return the toggle button
+}
+
+/** Register logical applicability for the form row containing WIDGET. */
+void ParameterPanel::setParameterApplicability(
+    QWidget *widget,
+    std::function<bool(const ParameterState &)> applicableCheck) {
+  if (!widget || !applicableCheck)
+    return;
+
+  QFormLayout *form = nullptr;
+  QWidget *rowWidget = nullptr;
+  auto locateInForm = [](QFormLayout *candidateForm, QWidget *candidate) {
+    if (!candidateForm || !candidate)
+      return false;
+    int row = -1;
+    QFormLayout::ItemRole role = QFormLayout::FieldRole;
+    candidateForm->getWidgetPosition(candidate, &row, &role);
+    return row >= 0 && role != QFormLayout::LabelRole;
+  };
+
+  for (QWidget *candidate = widget; candidate && candidate != this;
+       candidate = candidate->parentWidget()) {
+    if (locateInForm(m_form, candidate)) {
+      form = m_form;
+      rowWidget = candidate;
+      break;
+    }
+    for (QFormLayout *groupForm : m_groupForms) {
+      if (locateInForm(groupForm, candidate)) {
+        form = groupForm;
+        rowWidget = candidate;
+        break;
+      }
+    }
+    if (form)
+      break;
+  }
+
+  if (!form || !rowWidget)
+    return;
+
+  QWidget *labelWidget = form->labelForField(rowWidget);
+  m_widgetStateUpdaters.push_back(
+      [this, form, rowWidget, labelWidget,
+       applicableCheck = std::move(applicableCheck)]() {
+        const bool applicable = applicableCheck(m_stateGetter());
+        const QVariant expandedValue =
+            form->property(parameterSectionExpandedProperty);
+        const bool sectionExpanded =
+            !expandedValue.isValid() || expandedValue.toBool();
+
+        rowWidget->setProperty(parameterApplicableProperty, applicable);
+        rowWidget->setVisible(applicable && sectionExpanded);
+        if (labelWidget) {
+          labelWidget->setProperty(parameterApplicableProperty, applicable);
+          labelWidget->setVisible(applicable && sectionExpanded);
+        }
+      });
 }
 
 QWidget *
