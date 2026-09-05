@@ -12,6 +12,7 @@
 #include <chrono>
 #include <limits.h>
 #include <memory>
+#include <vector>
 namespace colorscreen {
 extern void prune_render_scr_detect_caches();
 namespace {
@@ -784,6 +785,327 @@ bool try_guess_paget_screen(FILE *report_file, const color_class_map &color_map,
   if (verbose)
     printf("Paget: Initial screen found\n");
 
+  return true;
+}
+
+/* One geometrically consistent patch used by the partial Paget/Finlay seed
+   fallback.  R and P are diagonal-grid coordinates used by the exact seed
+   above.  */
+struct paget_seed_hit {
+  bool green;
+  int r, p;
+  patch_info patch;
+};
+
+/* Find the class-C component nearest predicted center X,Y within RADIUS image
+   pixels.  SCRATCH is temporary component-search state; find_patch() clears
+   all bits it sets because these probes are not candidate-visited bookkeeping.
+   Return false if no bounded component has a valid center.  Optionally reject
+   the component centered exactly at AVOID_X,AVOID_Y.  */
+static bool
+find_near_patch (const color_class_map &color_map, scr_detect::color_class c,
+                 coord_t x, coord_t y, int radius, bitmap_2d *scratch,
+                 patch_info *patch, coord_t avoid_x = (coord_t)1e30,
+                 coord_t avoid_y = (coord_t)1e30)
+{
+  const int max_size = 1000;
+  int_point_t entries[max_size];
+  coord_t best_distance2 = (coord_t)1e30;
+  bool found = false;
+  int ix = my_floor (x + (coord_t)0.5);
+  int iy = my_floor (y + (coord_t)0.5);
+
+  for (int dy = -radius; dy <= radius; dy++)
+    for (int dx = -radius; dx <= radius; dx++)
+      {
+        if (dx * dx + dy * dy > radius * radius)
+          continue;
+        int size = find_patch (color_map, c, ix + dx, iy + dy, max_size,
+                               entries, scratch, false);
+        if (!size || size == max_size)
+          continue;
+        coord_t cx, cy;
+        if (!patch_center (entries, size, &cx, &cy)
+            || (cx == avoid_x && cy == avoid_y))
+          continue;
+        coord_t dd = (cx - x) * (cx - x) + (cy - y) * (cy - y);
+        if (!found || dd < best_distance2)
+          {
+            found = true;
+            best_distance2 = dd;
+            patch->x = cx;
+            patch->y = cy;
+          }
+      }
+  return found;
+}
+
+/* Return true if HITS already contains the same component center and color.
+   A bounded prediction can hit several pixels of one connected component; do
+   not count those as independent evidence.  */
+static bool
+paget_seed_hit_used (const std::vector<paget_seed_hit> &hits, bool green,
+                     patch_info patch)
+{
+  for (const paget_seed_hit &hit : hits)
+    if (hit.green == green && hit.patch.x == patch.x
+        && hit.patch.y == patch.y)
+      return true;
+  return false;
+}
+
+/* Return true if PATCHES already contains PATCH.  Supporting checkerboard
+   probes must represent distinct connected components rather than several
+   nearby predictions landing on one component.  */
+static bool
+paget_patch_used (const std::vector<patch_info> &patches, patch_info patch)
+{
+  for (const patch_info &candidate : patches)
+    if (candidate.x == patch.x && candidate.y == patch.y)
+      return true;
+  return false;
+}
+
+/* Robust fallback for Paget/Finlay initial-grid discovery.
+
+   The historical seed above requires a complete 5 by 10 connected-component
+   pattern and reconstructs the second image-space lattice direction by an
+   exact 90-degree rotation.  A planar capture preserves the screen lattice
+   only up to a projective transform, so even a mild camera/plate tilt turns
+   those image-space axes into a parallelogram.  Blur and the deliberately pure
+   color classifier can also leave some predicted component centers unknown.
+
+   Keep the exact path as the first choice.  This fallback starts from the same
+   green patch and two neighboring blue patches, but uses the observed second
+   blue direction to form a local affine basis.  It probes a bounded 5 by 5
+   green/blue grid and accepts only strong, spatially distributed support with
+   a tight residual.  The result is merely a seed: simple_solver() and the
+   normal flood-fill, coverage, border and final-solver checks remain the
+   authoritative acceptance tests.  VISITED only suppresses retrying the same
+   initial green component; SCRATCH is used for non-permanent component probes.
+*/
+static bool
+try_guess_paget_screen_partial_affine (FILE *report_file,
+                                       const color_class_map &color_map,
+                                       solver_parameters &sparam, int x, int y,
+                                       bitmap_2d *visited, bitmap_2d *scratch)
+{
+  const int max_size = 1000;
+  int_point_t green_entries[max_size];
+  int_point_t component_entries[max_size];
+
+  int green_size = find_patch (color_map, scr_detect::green, x, y, max_size,
+                               green_entries, visited, true);
+  if (!green_size || green_size == max_size)
+    return false;
+
+  patch_info green0;
+  if (!patch_center (green_entries, green_size, &green0.x, &green0.y))
+    return false;
+
+  patch_info blue1;
+  bool have_blue1 = false;
+  for (int i = 0; i < green_size && !have_blue1; i++)
+    for (int yy = green_entries[i].y + 1; yy < color_map.height; yy++)
+      {
+        scr_detect::color_class t
+            = color_map.get_class (green_entries[i].x, yy);
+        if (t == scr_detect::blue)
+          {
+            int size = find_patch (color_map, scr_detect::blue,
+                                   green_entries[i].x, yy, max_size,
+                                   component_entries, scratch, false);
+            if (size && size != max_size
+                && patch_center (component_entries, size,
+                                 &blue1.x, &blue1.y))
+              have_blue1 = true;
+            break;
+          }
+        if (t != scr_detect::unknown)
+          break;
+      }
+  if (!have_blue1)
+    return false;
+
+  coord_t v1x = blue1.x - green0.x;
+  coord_t v1y = blue1.y - green0.y;
+  coord_t len1 = my_sqrt (v1x * v1x + v1y * v1y);
+  if (!(len1 > (coord_t)2))
+    return false;
+
+  patch_info second_clockwise, second_counterclockwise;
+  bool have_clockwise = find_near_patch (
+      color_map, scr_detect::blue, green0.x + v1y, green0.y - v1x, 3,
+      scratch, &second_clockwise, blue1.x, blue1.y);
+  bool have_counterclockwise = find_near_patch (
+      color_map, scr_detect::blue, green0.x - v1y, green0.y + v1x, 3,
+      scratch, &second_counterclockwise, blue1.x, blue1.y);
+  if (!have_clockwise && !have_counterclockwise)
+    return false;
+
+  auto perpendicular_error = [&] (patch_info patch)
+    {
+      coord_t vx = patch.x - green0.x;
+      coord_t vy = patch.y - green0.y;
+      coord_t len = my_sqrt (vx * vx + vy * vy);
+      if (!(len > (coord_t)2))
+        return (coord_t)1e30;
+      return std::abs (v1x * vx + v1y * vy) / (len1 * len);
+    };
+
+  patch_info blue2;
+  if (!have_counterclockwise
+      || (have_clockwise
+          && perpendicular_error (second_clockwise)
+                 <= perpendicular_error (second_counterclockwise)))
+    blue2 = second_clockwise;
+  else
+    blue2 = second_counterclockwise;
+
+  coord_t v2x = blue2.x - green0.x;
+  coord_t v2y = blue2.y - green0.y;
+
+  coord_t ax, ay, bx, by;
+  if (v1x > 0 && (v2x <= 0 || v1x >= v2x))
+    ax = v1x, ay = v1y, bx = v2x, by = v2y;
+  else if (v2x > 0)
+    ax = v2x, ay = v2y, bx = v1x, by = v1y;
+  else
+    return false;
+
+  if (ax * by - ay * bx >= 0)
+    bx = -bx, by = -by;
+
+  patch_info observed_b;
+  if (find_near_patch (color_map, scr_detect::blue, green0.x + bx,
+                       green0.y + by, 3, scratch, &observed_b))
+    bx = observed_b.x - green0.x, by = observed_b.y - green0.y;
+
+  coord_t alen = my_sqrt (ax * ax + ay * ay);
+  coord_t blen = my_sqrt (bx * bx + by * by);
+  if (!(alen > (coord_t)2) || !(blen > (coord_t)2)
+      || alen / blen <= (coord_t)0.5 || alen / blen >= (coord_t)2)
+    return false;
+  coord_t sine = std::abs (ax * by - ay * bx) / (alen * blen);
+  if (sine < (coord_t)0.5)
+    return false;
+
+  std::vector<paget_seed_hit> hits;
+  hits.reserve (50);
+  int row_hits[5] = { 0, 0, 0, 0, 0 };
+  int column_hits[5] = { 0, 0, 0, 0, 0 };
+  coord_t residual_sum = 0;
+
+  for (int r = 0; r < 5; r++)
+    for (int q = 0; q < 5; q++)
+      {
+        point_t predicted_green
+            = { green0.x + 2 * q * ax + 2 * r * bx,
+                green0.y + 2 * q * ay + 2 * r * by };
+        patch_info patch;
+        if (find_near_patch (color_map, scr_detect::green,
+                             predicted_green.x, predicted_green.y, 2,
+                             scratch, &patch)
+            && !paget_seed_hit_used (hits, true, patch))
+          {
+            hits.push_back ({ true, r, q, patch });
+            row_hits[r]++;
+            column_hits[q]++;
+            residual_sum += my_sqrt (
+                (patch.x - predicted_green.x)
+                    * (patch.x - predicted_green.x)
+                + (patch.y - predicted_green.y)
+                    * (patch.y - predicted_green.y));
+          }
+
+        point_t predicted_blue
+            = { predicted_green.x + ax, predicted_green.y + ay };
+        if (find_near_patch (color_map, scr_detect::blue,
+                             predicted_blue.x, predicted_blue.y, 2,
+                             scratch, &patch)
+            && !paget_seed_hit_used (hits, false, patch))
+          {
+            hits.push_back ({ false, r, q, patch });
+            row_hits[r]++;
+            column_hits[q]++;
+            residual_sum += my_sqrt (
+                (patch.x - predicted_blue.x) * (patch.x - predicted_blue.x)
+                + (patch.y - predicted_blue.y) * (patch.y - predicted_blue.y));
+          }
+      }
+
+  int good_rows = 0, good_columns = 0;
+  for (int i = 0; i < 5; i++)
+    {
+      if (row_hits[i] >= 2)
+        good_rows++;
+      if (column_hits[i] >= 2)
+        good_columns++;
+    }
+  if (hits.size () < 37 || good_rows < 4 || good_columns < 4)
+    return false;
+
+  coord_t mean_residual = residual_sum / hits.size ();
+  coord_t residual_limit
+      = std::min ((coord_t)5,
+                  std::max ((coord_t)3,
+                            std::min (alen, blen) * (coord_t)0.25));
+  if (!(mean_residual <= residual_limit))
+    return false;
+
+  /* The green/+A-blue seed is sufficient for the initial solver, but by
+     itself can also occur accidentally in scene texture.  Measure the other
+     half of the Paget checkerboard as independent diagnostic evidence: blue
+     at +B and red at +A+B.  These probes do not alter the solver points.  */
+  std::vector<patch_info> alternate_blue_patches;
+  std::vector<patch_info> red_patches;
+  alternate_blue_patches.reserve (25);
+  red_patches.reserve (25);
+  for (int r = 0; r < 5; r++)
+    for (int pp = 0; pp < 5; pp++)
+      {
+        point_t predicted_green
+            = { green0.x + 2 * pp * ax + 2 * r * bx,
+                green0.y + 2 * pp * ay + 2 * r * by };
+        patch_info patch;
+        if (find_near_patch (color_map, scr_detect::blue,
+                             predicted_green.x + bx,
+                             predicted_green.y + by, 2, scratch, &patch)
+            && !paget_patch_used (alternate_blue_patches, patch))
+          alternate_blue_patches.push_back (patch);
+        if (find_near_patch (color_map, scr_detect::red,
+                             predicted_green.x + ax + bx,
+                             predicted_green.y + ay + by, 2, scratch, &patch)
+            && !paget_patch_used (red_patches, patch))
+          red_patches.push_back (patch);
+      }
+
+  if (red_patches.size () < 20)
+    return false;
+
+  sparam.remove_points ();
+  for (const paget_seed_hit &hit : hits)
+    {
+      if (hit.green)
+        sparam.add_point ({ hit.patch.x, hit.patch.y },
+                          { (hit.r + hit.p) / 2.0f,
+                            (hit.p - hit.r) / 2.0f },
+                          solver_parameters::green);
+      else
+        sparam.add_point ({ hit.patch.x, hit.patch.y },
+                          { (hit.r + hit.p + 0.5f) / 2.0f,
+                            (hit.p - hit.r + 0.5f) / 2.0f },
+                          solver_parameters::blue);
+    }
+
+  if (report_file)
+    fprintf (report_file,
+             "Paget partial affine seed: %zu/50 patches, rows=%i columns=%i "
+             "mean residual=%f pixels (limit %f), alternate-blue=%zu/25 "
+             "red=%zu/25\n",
+             hits.size (), good_rows, good_columns, (double)mean_residual,
+             (double)residual_limit, alternate_blue_patches.size (),
+             red_patches.size ());
   return true;
 }
 
@@ -1928,6 +2250,8 @@ detect_regular_screen_1(const image_data &img, scr_detect_parameters &dparam,
     bitmap_2d visited(img.width, img.height);
     bitmap_2d visited_paget(img.width, img.height);
     bitmap_2d visited_paget2(img.width, img.height);
+    bitmap_2d visited_paget_partial(img.width, img.height);
+    bitmap_2d paget_partial_scratch(img.width, img.height);
     bitmap_2d visited_dioptichromeB(img.width, img.height);
     bitmap_2d visited_improved_dioptichromeB(img.width, img.height);
     bitmap_2d visited_omnicolore(img.width, img.height);
@@ -2108,6 +2432,12 @@ detect_regular_screen_1(const image_data &img, scr_detect_parameters &dparam,
                              sparam, x, y, &visited_paget2)) {
                 current_type = type == Finlay ? Finlay : Paget;
                 this_cmap = render->get_color_class_map();
+              } else if (try_paget_finlay && cmap &&
+                         try_guess_paget_screen_partial_affine(
+                             report_file, *cmap, sparam, x, y,
+                             &visited_paget_partial, &paget_partial_scratch)) {
+                current_type = type == Finlay ? Finlay : Paget;
+                this_cmap = cmap.get();
               }
               if (progress && progress->cancel_requested()) {
                 stats.result = "cancelled";
