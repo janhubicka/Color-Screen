@@ -28,8 +28,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          base64 -d helper/agent/parameter-applicability.patch.b64 > /tmp/parameter-applicability.patch
           cd target
-          git apply ../helper/agent/parameter-applicability.patch
+          git apply /tmp/parameter-applicability.patch
           git diff --check
           git config user.name "Jan Hubička"
           git config user.email "46065755+janhubicka@users.noreply.github.com"
