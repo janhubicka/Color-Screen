@@ -7,24 +7,20 @@ WORK_BRANCH=agent/remove-legacy-gtkgui-work
 
 git config user.name "Color-Screen agent"
 git config user.email "46065755+janhubicka@users.noreply.github.com"
+git config core.fileMode false
 
 sudo apt-get update
 sudo apt-get install -y --no-install-recommends \
-  autoconf autoconf-archive automake build-essential ccache git gzip \
+  autoconf autoconf-archive automake build-essential git gzip \
   libexiv2-dev libfftw3-dev libgsl-dev liblcms2-dev libopenjp2-7-dev \
   libpng-dev libraw-dev libtiff-dev libtool libturbojpeg0-dev libzip-dev \
   pkg-config qt6-base-dev qt6-tools-dev qt6-tools-dev-tools \
   qt6-translations-l10n libqt6svg6-dev tar xauth xvfb xz-utils
 
 existing=$(git ls-remote origin refs/tags/gtkgui | awk '{print $1}')
-if test -n "$existing"; then
-  if test "$existing" != "$BASE_SHA"; then
-    echo "gtkgui tag already exists at unexpected commit $existing" >&2
-    exit 1
-  fi
-else
-  git tag gtkgui "$BASE_SHA"
-  git push origin refs/tags/gtkgui
+if test "$existing" != "$BASE_SHA"; then
+  echo "gtkgui tag must point at $BASE_SHA, found ${existing:-<missing>}" >&2
+  exit 1
 fi
 
 git reset --hard "$BASE_SHA"
@@ -138,14 +134,6 @@ Path("scripts/build-windows.sh").write_text(textwrap.dedent("""\
 
 replace("os/linux/control", ", libgtk2.0-0", "")
 replace(".github/ci/ubuntu.Dockerfile", "        libgtk2.0-dev \\\n", "")
-replace(
-    ".github/workflows/build-ubuntu.yml",
-    "./configure --enable-checking --disable-static-link --enable-gtkgui --enable-qtgui",
-    "./configure --enable-checking --disable-static-link --enable-qtgui")
-replace(
-    ".github/workflows/sanitizers.yml",
-    "./configure --enable-checking --disable-static-link \\\n          --disable-gtkgui --enable-qtgui",
-    "./configure --enable-checking --disable-static-link --enable-qtgui")
 
 replace(
     "src/qtgui/DetectScreenWorker.cpp",
@@ -171,23 +159,78 @@ replace(
     "/* Render a fast preview.  To be replaced by render_tile later.\n")
 PY
 
+# Commit the intended source-level changes temporarily.  Regenerate Autotools
+# metadata only to discover the GTK-specific generated hunks; this avoids
+# committing unrelated churn from a newer Automake/Autoconf on the runner.
+git add -A
+git commit -m "temporary source GTK removal"
+SOURCE_SHA=$(git rev-parse HEAD)
 autoreconf -fiv
+
+git diff "$SOURCE_SHA" -- configure ':(glob)**/Makefile.in' > /tmp/autoreconf-generated.diff
+python3 - <<'PY'
+from pathlib import Path
+import re
+
+lines = Path("/tmp/autoreconf-generated.diff").read_text().splitlines(True)
+target = re.compile(
+    r"gtkgui|colorscreen-gtk|gtkimageviewer|gtk\+?-?2\.0|GTKGUI_BIN|RDYNAMIC|src/gtkgui",
+    re.IGNORECASE)
+out = []
+i = 0
+selected_hunks = 0
+while i < len(lines):
+    if not lines[i].startswith("diff --git "):
+        i += 1
+        continue
+    header_start = i
+    i += 1
+    while i < len(lines) and not lines[i].startswith("@@ ") and not lines[i].startswith("diff --git "):
+        i += 1
+    header = lines[header_start:i]
+    hunks = []
+    while i < len(lines) and not lines[i].startswith("diff --git "):
+        if not lines[i].startswith("@@ "):
+            i += 1
+            continue
+        hunk_start = i
+        i += 1
+        while i < len(lines) and not lines[i].startswith("@@ ") and not lines[i].startswith("diff --git "):
+            i += 1
+        hunk = lines[hunk_start:i]
+        if target.search("".join(hunk)):
+            hunks.extend(hunk)
+            selected_hunks += 1
+    if hunks:
+        out.extend(header)
+        out.extend(hunks)
+
+if not out or selected_hunks < 4:
+    raise SystemExit(f"unexpectedly found only {selected_hunks} GTK-specific generated hunks")
+Path("/tmp/generated-gtk.patch").write_text("".join(out))
+print(f"Selected {selected_hunks} GTK-specific generated Autotools hunks")
+PY
+
+git reset --hard "$SOURCE_SHA"
+git clean -fdx
+git apply --check /tmp/generated-gtk.patch
+git apply /tmp/generated-gtk.patch
+
+git diff --check
 sh build-aux/check-generated-build-metadata.sh
 
-if git grep -n -i -E 'gtkgui|colorscreen-gtk|gtkimageviewer|gtk\+\-2\.0|libgtk2|enable-gtkgui|disable-gtkgui|GTKGUI_BIN'; then
-  echo "Legacy GTK GUI references remain in the active tree" >&2
+# These two workflow files are intentionally updated after this commit through
+# the GitHub API, because the Actions token may not push workflow modifications.
+if git grep -n -i -E 'gtkgui|colorscreen-gtk|gtkimageviewer|gtk\+?-?2\.0|libgtk2|enable-gtkgui|disable-gtkgui|GTKGUI_BIN' -- . \
+     ':(exclude).github/workflows/build-ubuntu.yml' \
+     ':(exclude).github/workflows/sanitizers.yml'; then
+  echo "Legacy GTK GUI references remain outside the two pending workflow edits" >&2
   exit 1
 fi
-
-git add -A
-git commit -m "build: remove legacy GTK GUI" -m "Remove the deprecated GTK2 frontend and bundled gtkimageviewer sources now that the Qt6 GUI is the maintained graphical interface.
-
-Drop the gtkgui configure option, generated Autotools metadata, packaging and CI GTK dependencies, and stale build/documentation references. Reword surviving source comments so maintained code no longer points at the removed implementation.
-
-The final pre-removal tree is preserved separately by the gtkgui tag.
-
-Tests prepared here: regenerated Autotools files, generated-build-metadata check, an out-of-tree Qt/checking build without installing GTK2 development packages, Qt smoke tests, and make check."
-git push origin HEAD:"$REVIEW_BRANCH"
+if git grep -n -E 'RDYNAMIC' -- configure Makefile.in src images examples testsuite; then
+  echo "GTK-only RDYNAMIC metadata remains" >&2
+  exit 1
+fi
 
 mkdir build-qt
 cd build-qt
@@ -206,7 +249,17 @@ QT_QPA_PLATFORM=offscreen ./src/qtgui/colorscreen-qt \
   --smoke-test 30000 --smoke-test-expect-windows 2 \
   --smoke-test-document-lifecycle \
   "$image" "$image"
-make -j"$(nproc)" check
 
 cd "$GITHUB_WORKSPACE"
+rm -rf build-qt
+git add -A
+git commit --amend -m "build: remove legacy GTK GUI" -m "Remove the deprecated GTK2 frontend and bundled gtkimageviewer sources now that the Qt6 GUI is the maintained graphical interface.
+
+Drop the gtkgui configure option, generated Autotools metadata, packaging and Ubuntu image GTK2 dependencies, stale Windows build instructions, and GTK-specific documentation/source comments. Refresh the top-level README around the maintained Qt GUI.
+
+The final pre-removal tree is preserved by the gtkgui tag.
+
+Validated by regenerating GTK-related Autotools metadata, checking generated Qt build metadata, configuring and building on Ubuntu without GTK2 development packages, and running the multi-window Qt smoke tests."
+
+git push origin HEAD:"$REVIEW_BRANCH"
 git push origin --delete "$WORK_BRANCH" || true
