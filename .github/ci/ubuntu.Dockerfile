@@ -20,7 +20,6 @@ RUN apt-get update \
         libexiv2-dev \
         libfftw3-dev \
         libgsl-dev \
-        libgtk2.0-dev \
         liblcms2-dev \
         libopenjp2-7-dev \
         libpng-dev \

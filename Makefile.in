@@ -104,7 +104,6 @@ am__CONFIG_DISTCLEAN_FILES = config.status config.cache config.log \
  configure.lineno config.status.lineno
 mkinstalldirs = $(install_sh) -d
 CONFIG_HEADER = $(top_builddir)/src/libcolorscreen/config.h \
-	$(top_builddir)/src/gtkgui/config.h \
 	$(top_builddir)/src/libcolorscreen/include/colorscreen-config.h
 CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
@@ -256,8 +255,6 @@ EXIV2_LIBS = @EXIV2_LIBS@
 FGREP = @FGREP@
 FILECMD = @FILECMD@
 GREP = @GREP@
-GTKGUI_BIN_CFLAGS = @GTKGUI_BIN_CFLAGS@
-GTKGUI_BIN_LIBS = @GTKGUI_BIN_LIBS@
 GUI_LDFLAGS = @GUI_LDFLAGS@
 HAVE_CXX17 = @HAVE_CXX17@
 INSTALL = @INSTALL@
@@ -305,7 +302,6 @@ Qt6_CFLAGS = @Qt6_CFLAGS@
 Qt6_LIBS = @Qt6_LIBS@
 RANLIB = @RANLIB@
 RCC = @RCC@
-RDYNAMIC = @RDYNAMIC@
 SED = @SED@
 SET_MAKE = @SET_MAKE@
 SHELL = @SHELL@

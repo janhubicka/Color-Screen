@@ -16,7 +16,7 @@ void DetectScreenWorker::detect() {
   // Create local copy of solver parameters to work with (avoid race conditions with UI)
   colorscreen::solver_parameters localSolver = m_solverParams;
   
-  // Setup detection parameters (based on gtkgui.C:755)
+  // Set up parameters for the regular-screen detector.
   colorscreen::detect_regular_screen_params dsparams;
   dsparams.return_screen_map = true;
   dsparams.gamma = m_gamma;

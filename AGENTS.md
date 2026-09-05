@@ -31,7 +31,7 @@ To ensure optimal performance and compatibility (especially with GCC 15 + Qt6), 
 ```bash
 CXXFLAGS="-Ofast -march=native -Wall -g" \
 CFLAGS="-Ofast -march=native -Wall -g" \
-../configure --prefix=$HOME/Color-Screen-install --enable-qtgui --enable-maintainer-mode --prefix=/home/jan/barveni-bin --enable-gtkgui 
+../configure --prefix=$HOME/Color-Screen-install --enable-qtgui --enable-maintainer-mode
 ```
 
 ### Checking Mode
@@ -274,7 +274,6 @@ requiring the reader to reconstruct the motivation from the diff.
 - `src/libcolorscreen/include`: Public API of the library.
 - `src/colorscreen`: Command line utility accessing main functions of the library.
 - `src/qtgui/`: Qt6-based graphical user interface. [See Developer Docs](.agents/qtgui.md)
-- `src/gtkgui/`: Legacy GTK-based interface (if enabled) to be deprecated soon.
 - `testsuite/`: Unit tests and verification suites (Check tests/Makefile.am for test registration).
 - `m4/`: Autoconf macros
 
@@ -284,7 +283,6 @@ The project uses different coding styles for its components:
 
 - **`src/libcolorscreen/`**: Follows the **GNU coding style**. C++ files uses .C extensions
 - **`src/colorscreen/`**: Follows the **GNU coding style**. C++ files uses .C extensions
-- **`src/gtkgui/`**: Follows the **GNU coding style**. C++ files uses .C extensions
 - **`src/qtgui/`**: Follows the **Qt-like style**. C++ files uses .cpp extension.
 - Every function should have comment what it does.  In GNU style sections it should explain all function parameters in upper case
 - Every global class and enum should also have comment

@@ -89,8 +89,7 @@ PRE_UNINSTALL = :
 POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
-@gtkgui_TRUE@am__append_1 = gtkgui
-@qtgui_TRUE@am__append_2 = qtgui
+@qtgui_TRUE@am__append_1 = qtgui
 subdir = src
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/ax_cxx_compile_stdcxx.m4 \
@@ -103,7 +102,6 @@ am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 DIST_COMMON = $(srcdir)/Makefile.am $(am__DIST_COMMON)
 mkinstalldirs = $(install_sh) -d
 CONFIG_HEADER = $(top_builddir)/src/libcolorscreen/config.h \
-	$(top_builddir)/src/gtkgui/config.h \
 	$(top_builddir)/src/libcolorscreen/include/colorscreen-config.h
 CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
@@ -159,7 +157,7 @@ am__define_uniq_tagged_files = \
   unique=`for i in $$list; do \
     if test -f "$$i"; then echo $$i; else echo $(srcdir)/$$i; fi; \
   done | $(am__uniquify_input)`
-DIST_SUBDIRS = libcolorscreen colorscreen gtkgui qtgui
+DIST_SUBDIRS = libcolorscreen colorscreen qtgui
 am__DIST_COMMON = $(srcdir)/Makefile.in
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
 am__relativize = \
@@ -223,8 +221,6 @@ EXIV2_LIBS = @EXIV2_LIBS@
 FGREP = @FGREP@
 FILECMD = @FILECMD@
 GREP = @GREP@
-GTKGUI_BIN_CFLAGS = @GTKGUI_BIN_CFLAGS@
-GTKGUI_BIN_LIBS = @GTKGUI_BIN_LIBS@
 GUI_LDFLAGS = @GUI_LDFLAGS@
 HAVE_CXX17 = @HAVE_CXX17@
 INSTALL = @INSTALL@
@@ -272,7 +268,6 @@ Qt6_CFLAGS = @Qt6_CFLAGS@
 Qt6_LIBS = @Qt6_LIBS@
 RANLIB = @RANLIB@
 RCC = @RCC@
-RDYNAMIC = @RDYNAMIC@
 SED = @SED@
 SET_MAKE = @SET_MAKE@
 SHELL = @SHELL@
