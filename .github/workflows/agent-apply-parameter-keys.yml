@@ -30,7 +30,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 helper/agent/apply_parameter_keys_v2.py
+          python3 helper/agent/apply_parameter_keys_v3.py
           cd target
           git diff --check
 
