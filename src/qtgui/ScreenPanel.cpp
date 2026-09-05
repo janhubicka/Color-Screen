@@ -8,6 +8,7 @@
 #include <QFormLayout>
 #include <QIcon>
 #include <QImage>
+#include <QLabel>
 #include <QPixmap>
 #include <QPushButton>
 #include <QStandardItemModel>
@@ -33,6 +34,71 @@ protected:
     painter.drawControl(QStyle::CE_ComboBoxLabel, opt);
   }
 };
+
+enum class ScreenDetectionAvailability {
+  Ready,
+  NoImage,
+  CaptureUnknown,
+  NoHistoricalScreen,
+  StochasticScreen,
+  SelectRegularScreen,
+  NeedsRgb
+};
+
+/** Return whether regular-screen detection can run for STATE and IMAGE. */
+ScreenDetectionAvailability
+screenDetectionAvailability(const ParameterState &state,
+                            const image_data *image) {
+  if (!image)
+    return ScreenDetectionAvailability::NoImage;
+
+  const auto capture = state.rparams.get_capture_type(image);
+  if (capture == render_parameters::capture_unknown)
+    return ScreenDetectionAvailability::CaptureUnknown;
+  if (!render_parameters::capture_has_screen_p(capture))
+    return ScreenDetectionAvailability::NoHistoricalScreen;
+
+  if (render_parameters::capture_requires_regular_screen_p(capture)) {
+    return screen_has_regular_geometry_p(state.scrToImg.type)
+               ? ScreenDetectionAvailability::Ready
+               : ScreenDetectionAvailability::SelectRegularScreen;
+  }
+
+  if (screen_has_regular_geometry_p(state.scrToImg.type))
+    return ScreenDetectionAvailability::Ready;
+  if (stochastic_screen_p(state.scrToImg.type))
+    return ScreenDetectionAvailability::StochasticScreen;
+  if (state.scrToImg.type == NoScreen)
+    return image->has_rgb() ? ScreenDetectionAvailability::Ready
+                            : ScreenDetectionAvailability::NeedsRgb;
+  return ScreenDetectionAvailability::SelectRegularScreen;
+}
+
+/** Explain why regular-screen detection is unavailable, or return empty text. */
+QString screenDetectionUnavailableHint(ScreenDetectionAvailability availability) {
+  switch (availability) {
+  case ScreenDetectionAvailability::Ready:
+    return QString();
+  case ScreenDetectionAvailability::NoImage:
+    return QStringLiteral("Load an image to use screen detection.");
+  case ScreenDetectionAvailability::CaptureUnknown:
+    return QStringLiteral(
+        "Choose the capture type in Digital capture before detecting a screen.");
+  case ScreenDetectionAvailability::NoHistoricalScreen:
+    return QStringLiteral(
+        "Screen detection is not applicable to this capture type.");
+  case ScreenDetectionAvailability::StochasticScreen:
+    return QStringLiteral(
+        "Regular-lattice detection is not used for stochastic screens.");
+  case ScreenDetectionAvailability::SelectRegularScreen:
+    return QStringLiteral("Choose a regular screen type before detection.");
+  case ScreenDetectionAvailability::NeedsRgb:
+    return QStringLiteral(
+        "Automatic screen identification needs RGB screen-colour data; choose "
+        "the regular screen type first.");
+  }
+  return QString();
+}
 
 static bool
 postDemosaicDenoiseAvailable (const ParameterState &state)
@@ -104,6 +170,7 @@ void ScreenPanel::reattachPreview(QWidget *widget) {
 void ScreenPanel::setupUi() {
   // Screen Type Selector
   QComboBox *screenCombo = new ScreenComboBox();
+  screenCombo->setObjectName(QStringLiteral("ScreenTypeCombo"));
   screenCombo->view()->setIconSize(QSize(64, 64));
 
   for (int i = 0; i < max_scr_type; ++i) {
@@ -194,23 +261,39 @@ void ScreenPanel::setupUi() {
     }
   });
 
-  // Autodetect Regular Screen Button
-  addButtonParameter("", "Autodetect regular screen", 
-      [this]() { emit autodetectRequested(); },
-      [this](const ParameterState &s) {
-          auto img = m_imageGetter();
-          if (!img)
-            return false;
-          const auto capture = s.rparams.get_capture_type(img.get());
-          if (!render_parameters::capture_has_screen_p(capture))
-            return false;
-          if (render_parameters::capture_requires_regular_screen_p(capture))
-            return screen_has_regular_geometry_p(s.scrToImg.type);
-          return screen_has_regular_geometry_p(s.scrToImg.type)
-                 || (s.scrToImg.type == NoScreen && img->has_rgb());
-      }, "Attempt to automatically identify the screen type and its orientation from the image content.");
+  // Screen detection is a local operation. Cross-stage progress and next-step
+  // guidance remain in the persistent Workflow summary above the tabs.
+  QPushButton *detectButton = addButtonParameter(
+      "", "Detect screen", [this]() { emit autodetectRequested(); },
+      [this](const ParameterState &state) {
+        const auto image = m_imageGetter();
+        return screenDetectionAvailability(state, image.get()) ==
+               ScreenDetectionAvailability::Ready;
+      },
+      "Detect or refine a regular screen lattice from the current capture. "
+      "RGB captures can identify a regular screen automatically when Screen "
+      "type is None; monochrome screened captures require the physical regular "
+      "screen type to be selected first.");
+  detectButton->setObjectName(QStringLiteral("ScreenDetectButton"));
 
-  addSeparator("Regular screen");
+  auto *detectionHint = new QLabel(this);
+  detectionHint->setObjectName(QStringLiteral("ScreenDetectionHint"));
+  detectionHint->setWordWrap(true);
+  detectionHint->setEnabled(false);
+  detectionHint->hide();
+  if (m_currentGroupForm)
+    m_currentGroupForm->addRow(detectionHint);
+  else
+    m_form->addRow(detectionHint);
+  m_paramUpdaters.push_back([this, detectionHint](const ParameterState &state) {
+    const auto image = m_imageGetter();
+    const QString hint = screenDetectionUnavailableHint(
+        screenDetectionAvailability(state, image.get()));
+    detectionHint->setText(hint);
+    detectionHint->setVisible(!hint.isEmpty());
+  });
+
+  addSeparator("Screen geometry");
   
   ScreenPreviewPanel *preview =
       new ScreenPreviewPanel(m_stateGetter, m_stateSetter, m_imageGetter);
@@ -256,15 +339,17 @@ void ScreenPanel::setupUi() {
         return screen_with_varying_strips_p(s.scrToImg.type);
       }, false, "Relative width of the green filter strips for line-screen processes like Joly or Dufaycolor.");
 
+  addSeparator("Reconstruction");
+
   // Element density collection threshold
   addSliderParameter(
-      "Element density collection threshold", 0.0, 1.0, 100.0, 2, "", "",
+      "Collection threshold", 0.0, 1.0, 100.0, 2, "", "",
       [](const ParameterState &s) { return s.rparams.collection_threshold; },
       [](ParameterState &s, double v) { s.rparams.collection_threshold = v; },
       1.0, nullptr, false, "Threshold for identifying screen elements based on their color density. Smaller values require stronger color enhancement and may result in edge artefacts. Too large values may result in no data being collected at all.");
 
   // Collection Quality
-  addEnumParameter("Collection Quality", 
+  addEnumParameter("Collection quality", 
       render_parameters::collection_quality_names, 
       render_parameters::max_collection_quality,
       [](const ParameterState &s) { return (int)s.rparams.collection_quality; },
@@ -273,7 +358,7 @@ void ScreenPanel::setupUi() {
   );
 
   // Screen Demosaic
-  addEnumParameter("Screen Demosaic",
+  addEnumParameter("Screen demosaicing",
       render_parameters::screen_demosaic_names,
       render_parameters::max_screen_demosaic,
       [](const ParameterState &s) { return (int)s.rparams.screen_demosaic; },
@@ -282,7 +367,7 @@ void ScreenPanel::setupUi() {
   );
 
   // Demosaiced Image Scaling Algorithm
-  addEnumParameter("Demosaiced image scaling algorithm",
+  addEnumParameter("Demosaiced image scaling",
       render_parameters::demosaiced_scaling_names,
       render_parameters::max_demosaiced_scaling,
       [](const ParameterState &s) { return (int)s.rparams.demosaiced_scaling; },
@@ -291,7 +376,7 @@ void ScreenPanel::setupUi() {
   );
 
 
-  addSeparator("Denoising before screen demosaicing");
+  addSeparator("Pre-demosaic denoising");
 
   // Screen Denoise Mode
   addEnumParameter("Denoise Mode",
@@ -353,7 +438,7 @@ void ScreenPanel::setupUi() {
       [](const ParameterState &s) { return s.rparams.screen_denoise.mode == denoise_parameters::bilateral; },
       false, "Range standard deviation for Bilateral filter. Controls how much intensity difference is allowed while smoothing.");
 
-  addSeparator("Denoising after screen demosaicing");
+  addSeparator("Post-demosaic denoising");
 
   addEnumParameter("Denoise Mode",
       denoise_parameters::denoise_mode_names,
