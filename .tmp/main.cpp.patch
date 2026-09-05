@@ -1,0 +1,38 @@
+diff --git a/src/qtgui/main.cpp b/src/qtgui/main.cpp
+index 40f2f66..0108b66 100644
+--- a/src/qtgui/main.cpp
++++ b/src/qtgui/main.cpp
+@@ -1140,11 +1140,30 @@ int main(int argc, char *argv[]) {
+       }
+ 
+       QMenu *viewFileMenu = nullptr;
++      QMenu *viewRegistrationMenu = nullptr;
+       for (QAction *action : view->menuBar()->actions()) {
+-        if (QString(action->text()).remove('&') == QStringLiteral("File")) {
++        const QString menuName = QString(action->text()).remove('&');
++        if (menuName == QStringLiteral("File"))
+           viewFileMenu = action->menu();
+-          break;
+-        }
++        else if (menuName == QStringLiteral("Registration"))
++          viewRegistrationMenu = action->menu();
++      }
++
++      QAction *detectedPatchCentersAction = nullptr;
++      if (viewRegistrationMenu) {
++        for (QAction *action : viewRegistrationMenu->actions())
++          if (action && action->objectName() ==
++                            QStringLiteral("DetectedPatchCentersAction")) {
++            detectedPatchCentersAction = action;
++            break;
++          }
++      }
++      if (!detectedPatchCentersAction ||
++          detectedPatchCentersAction->isEnabled()) {
++        qCritical() << "New View Registration menu is missing the disabled "
++                       "auto-detected patch-center diagnostic";
++        app.exit(14);
++        return;
+       }
+       QStringList viewFileActions;
+       if (viewFileMenu) {
