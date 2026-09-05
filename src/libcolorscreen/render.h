@@ -315,6 +315,9 @@ protected:
      exposure are still applied by the higher-level RGB accessors.  */
   mem_rgbdata *m_rgb_image = nullptr;
   std::shared_ptr<class sharpened_rgb_data> m_rgb_image_holder = nullptr;
+  /* Stable cache ID for M_RGB_IMAGE.  Subclasses can include it in dependent
+     cache keys without duplicating scanner-sharpening parameters.  */
+  uint64_t m_rgb_image_id = m_img.id;
 
   /* Maximal value in M_IMG.  */
   int m_maxval = m_img.has_grayscale_or_ir () ? m_img.maxval : 65535;

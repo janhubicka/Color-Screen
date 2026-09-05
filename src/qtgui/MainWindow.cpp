@@ -6138,7 +6138,7 @@ void MainWindow::onAutodetectScreen() {
   const uint64_t generation = ++m_detectScreenGeneration;
   DetectScreenWorker *worker =
       new DetectScreenWorker(m_detectParams, m_solverParams, m_scrToImgParams,
-                             m_scan, progress, m_rparams.gamma);
+                             m_scan, progress, m_rparams);
   QThread *thread = new QThread(this);
   worker->moveToThread(thread);
   trackBackgroundThread(thread);

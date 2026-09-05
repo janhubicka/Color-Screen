@@ -151,8 +151,8 @@ confidence-valued class map rather than changing hard labels globally.
 
 After a valid initial grid and preliminary geometry fit, fast flood fill still
 required every square-patch component to contain at least the historical
-`min_patch_size` number of hard-classified pixels.  With detector sharpening
-disabled, blur reduces the pure-color interior even when the component centroid
+`min_patch_size` number of hard-classified pixels.  Without capture sharpening,
+blur reduces the pure-color interior even when the component centroid
 remains very close to the predicted lattice point.  On NGS00428 Tile05 at 0/0,
 diagnostics showed roughly 155,000 fast patch confirmations rejected as too
 small, compared with about 23,000 under the historical 2/3 mask.
@@ -175,7 +175,7 @@ that improves both coverage and normal fast+slow runtime.
 
 **Severity:** high robustness/performance
 
-**Status:** fixed for unsharpened Dufay-like flood fill
+**Status:** fixed for Dufay-like flood fill
 
 The hard color map deliberately favors purity: after scanner colors are mapped
 into the optimized three-dye coordinates, `classify_adjusted_color()` assigns a
@@ -192,9 +192,7 @@ fallback, but it changes every pixel in the component graph and therefore has a
 substantially larger false-positive and performance surface.
 
 Fast Dufay-like row growth now keeps the hard component test as its first path.
-Only when that strip component is absent, and only when legacy detector
-sharpening is disabled, it samples the continuous normalized dye fraction at
-three positions along the already predicted strip and at corresponding points
+Only when that strip component is absent, it samples the continuous normalized dye fraction at three positions along the already predicted strip and at corresponding points
 on both neighboring rows.  The expected dye must beat the stronger neighboring
 row by `min_patch_contrast`.  Even then, the row is accepted through this soft
 strip observation only if the destination square patch passes the existing fast
@@ -202,16 +200,12 @@ geometric component confirmation.  A failed soft observation falls through to
 the historical slow image-domain confirmation when that path is enabled.
 
 This keeps the color map itself unchanged and prevents soft strip evidence from
-opening a slow-confirmation frontier by itself.  It also makes the compatibility
-behavior explicit: any active legacy preclassification unsharp mask disables
-the new fallback, so the normal 2/3 path follows the historical control flow.
+opening a slow-confirmation frontier by itself.
 
 On the same optimized local build, NGS00428 Tile05 at 0/0 with fast-only flood
 fill improves from 79.01% screen coverage / 1,726,273 patches to 84.00% /
 1,835,339 patches.  Tile01 moves only from 62.99% / 1,359,400 to 63.58% /
-1,372,414, preserving the real raster-free corner.  With the historical 2/3
-mask, Tile01 remains exactly 93.46% / 2,040,920 patches before and after the
-change because the fallback is disabled.
+1,372,414, preserving the real raster-free corner.
 
 ### DG-027 — slow strip contrast tested an accumulator strip mode zeroed
 
@@ -521,29 +515,32 @@ repeated large stack frames, but heap allocation per candidate would make the
 failure path slower.  Change this only with profiles; prefer per-thread reusable
 storage with an explicit capacity.
 
-### DG-020 — pre-classification unsharp masking is a legacy detector aid
+### DG-020 — detector-only pre-classification unsharp masking
 
 **Severity:** high compatibility/robustness
 
-**Status:** compatibility default retained; removal blocked by DG-019
+**Status:** removed
 
-The `scr_detect_parameters` radius/amount unsharp mask predates the current MTF
-model.  An attempt in PR #35 to change its historical radius 2 / amount 3
-default to zero exposed a real compatibility dependency: both existing Dufay
-CLI integration tests aborted during autodetection.  The Coolscan raw fixture
-exhausted all 36 search regions, while the Capture One stitched fixture failed
-on a later tile after earlier tiles had been detected.
+The historical `scr_detect_parameters` radius/amount unsharp mask predated the
+current capture-sharpening pipeline and made screen classification depend on a
+second, detector-specific sharpening model.  Removing it exposes one remaining
+real compatibility dependency: the Nikon Coolscan Dufay fixture still fails
+without sharpening even after DG-024 through DG-027.
 
-Keep radius 2 / amount 3 as the default for now.  Explicit zero values remain a
-supported experimental mode and are exercised by synthetic fast-only discovery.
-This is not an endorsement of unsharp masking as the long-term detector design;
-it is a regression guard until DG-009 through DG-013 make the classifier robust
-to imperfect boundaries without artificially sharpening them.
+The compatibility aid now lives in the normal capture pipeline instead.  The
+Nikon regression test explicitly selects capture USM radius 2 / amount 3; all
+six mesh/no-mesh, moving/fixed-lens, fast-only, and slow-only cases pass.  A
+representative fixed-lens mesh run reaches about 99.05% screen coverage.  New
+parameter files store only the normal `sharpen`, `sharpen_radius`, and
+`sharpen_amount` settings and no longer write `scr_detect_sharpen_radius` or
+`scr_detect_sharpen_amount`.  The loader accepts and ignores the two legacy
+keys so older projects remain readable.
 
-Before retiring the compatibility mask again, compare the historical default
-and explicit zero values on the current CLI fixtures and the Batch 08 corpus in
-DG-019.  Any replacement must match or improve successful detection without
-increasing false positives or failure time.
+Regular-screen detection otherwise classifies the capture directly.  When
+normal capture sharpening is active, autodetection uses the same sharpened
+native RGB channels as rendering; slow image-domain flood confirmation reuses
+adjusted RGB derived from those channels.  This removes the detector-only mask
+without pretending that every historical scan is robust to capture blur.
 
 ### DG-021 — color optimization copied a padded image through a zero-amount mask
 
@@ -567,27 +564,22 @@ optimizer.
 `scr_detect_parameters::operator==()` participates in the color-class-map cache
 key but did not compare `min_luminosity` or `min_ratio`, even though both values
 change `classify_adjusted_color()`.  Changing either threshold could therefore
-reuse a class map computed with stale classification rules.  Both values are now
-part of the comparison; legacy sharpening parameters remain part of the key as
-before.
+reuse a class map computed with stale classification rules.  Both values are now part of the comparison.
 
 ### DG-023 — fast-only flood fill should not precompute the slow RGB image
 
 **Severity:** medium performance
 
-**Status:** fixed for the explicitly unsharpened path
+**Status:** fixed
 
-Fast flood fill itself uses only the color-class map, but the historical
-pre-classification unsharp mask needs adjusted RGB in order to build that map.
-Consequently a default radius 2 / amount 3 run legitimately performs one RGB
-precomputation even in fast-only mode.  The detector statistics now count this
-implicit precomputation rather than reporting a misleading zero.
-
-When the compatibility mask is explicitly disabled and slow image-domain
-confirmation is also disabled, adjusted RGB is not materialized.  Synthetic
-fast-only discovery exercises this zero-mask mode and requires
-`rgb_precomputes=0`.  Thus the slow-path allocation is still avoidable, while
-DG-020 accurately records the cost of the compatibility mask.
+Without capture sharpening, fast flood fill uses only the color-class map and
+does not materialize the adjusted-RGB image; slow image-domain confirmation
+precomputes adjusted RGB once and reuses it for interpolation.  Synthetic
+fast-only discovery therefore requires `rgb_precomputes=0`, while corresponding
+runs with slow flood fill require one precompute.  Normal capture sharpening
+requires the RGB capture image to be materialized before classification, so a
+fast-only run may also report an adjusted-RGB precompute when that correction is
+active.
 
 ## Validation corpus
 
@@ -600,9 +592,8 @@ DG-020 accurately records the cost of the compatibility mask.
 The report-only DG-014 records now provide a stable baseline format, and the
 existing synthetic discovery tests cover sharp Finlay and Dufay detection with
 both slow+fast and fast-only flood fill.  `testsuite/benchmark-screen-detection.py`
-provides the manual corpus driver.  It runs external scans through `autodetect`,
-uses sparse parameter files to select detector sharpening without changing the
-normal compatibility default, and writes one CSV row per scan/mode together with
+provides the manual corpus driver.  It runs external scans through `autodetect`
+and writes one CSV row per scan/flood-fill mode together with
 full reports, logs, and successful output parameter files.  The CSV includes the
 DG-014 counters and timings, scan/screen coverage, process wall time, and Linux
 peak resident memory when `/proc` is available.
@@ -617,15 +608,14 @@ all scans.  These files are too large for routine CI, so keep the existing small
 real Dufay fixtures as CI gates and use Batch 08 for manual robustness and
 failure-time measurements.
 
-For each Batch 08 input, compare the historical 2 / 3 mask, explicit 0 / 0, and
-future blur-tolerant alternatives.  Record success/type, search regions, seed
+For each Batch 08 input, record success/type, search regions, seed
 pixels, initial grids, final failure stage, patch count, coverage, and stage
 wall times from DG-014.
 
-The first full-resolution baseline uses two 14204 by 10652 NGS00428 EIPs.  Tile
+The first full-resolution historical baseline used two 14204 by 10652 NGS00428 EIPs.  Tile
 05 is an interior tile and should contain screen across essentially the whole
 image.  Tile 01 is a corner tile; its top and right margins deliberately contain
-no additive raster.  Both modes use Dufay, fixed-lens geometry, gamma 1, color
+no additive raster.  Both historical modes used Dufay, fixed-lens geometry, gamma 1, color
 optimization, fast+slow flood fill, and no mesh.
 
 | scan/mode | scan area | screen area | seed pixels | patches | flood ms | detector ms | wall s | peak RSS KiB |
@@ -714,7 +704,8 @@ heuristic becomes the default:
 ## Recommended implementation order
 
 1. Expand DG-019 across Batch 08 with `testsuite/benchmark-screen-detection.py`,
-   including representative negative/no-screen images and repeated timing runs.
+   including representative negative/no-screen images and repeated timing runs
+   on the unsharpened detector baseline.
 2. Continue DG-009 on remaining square-patch/unknown continuity.  DG-025 handles
    geometry-consistent small square fragments and DG-026 handles soft Dufay-like
    strip evidence without globally relaxing the hard color map.

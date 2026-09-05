@@ -631,7 +631,9 @@ stitch_image::analyze (stitch_project *prj, detect_regular_screen_params *dspara
 	  fprintf (stderr, "Warning: unable to detect gamma and assuming 2.2\n");
 	  dsparams.gamma = 2.2;
 	}
-      detected = detect_regular_screen (*img, m_prj->dparam, m_prj->solver_param, &dsparams, progress, m_prj->report_file);
+      detected = detect_regular_screen (*img, m_prj->dparam, m_prj->solver_param,
+                                        &dsparams, progress, m_prj->report_file,
+                                        &m_prj->rparam);
       if (!detected.success)
 	{
 	  progress->pause_stdout ();
@@ -651,7 +653,10 @@ stitch_image::analyze (stitch_project *prj, detect_regular_screen_params *dspara
 	  delete detected.known_patches;
 	  delete detected.smap;
 	  dsparams.optimize_colors = false;
-	  detected = detect_regular_screen (*img, optimized_dparam, m_prj->solver_param, &dsparams, progress, m_prj->report_file);
+	  detected = detect_regular_screen (*img, optimized_dparam,
+	                                    m_prj->solver_param, &dsparams,
+	                                    progress, m_prj->report_file,
+	                                    &m_prj->rparam);
 	  mesh_trans = detected.mesh_trans;
 	  if (!detected.success)
 	    {

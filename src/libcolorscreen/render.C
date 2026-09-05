@@ -682,7 +682,8 @@ render::precompute_all (int flags, rgbdata patch_proportions,
             || (image_layer_needed && ir_simulation
                 && !one_channel_rgb_image_layer);
       if (require_full_rgb)
-        m_rgb_image_holder = rgb_and_sharpened_data_cache.get (p, progress);
+        m_rgb_image_holder
+            = rgb_and_sharpened_data_cache.get (p, progress, &m_rgb_image_id);
       else if (image_layer_needed && ir_simulation
                && one_channel_rgb_image_layer)
         m_rgb_image_holder = rgb_and_sharpened_data_cache.peek (p);

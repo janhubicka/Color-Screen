@@ -7,9 +7,10 @@ DetectScreenWorker::DetectScreenWorker(
     colorscreen::scr_to_img_parameters scrToImgParams,
     std::shared_ptr<colorscreen::image_data> scan,
     std::shared_ptr<colorscreen::progress_info> progress,
-    colorscreen::luminosity_t gamma)
+    colorscreen::render_parameters renderParams)
     : m_detectParams(detectParams), m_solverParams(solverParams),
-      m_scrToImgParams(scrToImgParams), m_scan(scan), m_progress(progress), m_gamma(gamma) {
+      m_scrToImgParams(scrToImgParams), m_scan(scan), m_progress(progress),
+      m_renderParams(renderParams) {
 }
 
 void DetectScreenWorker::detect() {
@@ -19,7 +20,7 @@ void DetectScreenWorker::detect() {
   // Set up parameters for the regular-screen detector.
   colorscreen::detect_regular_screen_params dsparams;
   dsparams.return_screen_map = true;
-  dsparams.gamma = m_gamma;
+  dsparams.gamma = m_renderParams.gamma;
   // Do not abort later in check whether we forgot to set gamma.
   // Configuration is not consistent, but lets do something.
   if (!dsparams.gamma && !m_scan->to_linear[0].size ())
@@ -29,7 +30,8 @@ void DetectScreenWorker::detect() {
   
   // Run detection - this modifies localSolver in place
   colorscreen::detected_screen result = colorscreen::detect_regular_screen(
-      *m_scan, m_detectParams, localSolver, &dsparams, m_progress.get());
+      *m_scan, m_detectParams, localSolver, &dsparams, m_progress.get(),
+      nullptr, &m_renderParams);
   
   // Check if cancelled
   if (m_progress && m_progress->cancelled()) {

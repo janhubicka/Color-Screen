@@ -1019,7 +1019,8 @@ render_cmd (int argc, char **argv)
           if (dsparams.scanner_type == max_scanner_type)
             dsparams.scanner_type = param.scanner_type;
           auto detected = detect_regular_screen (scan, dparam, solver_param,
-                                                 &dsparams, &progress);
+                                                 &dsparams, &progress, NULL,
+                                                 &rparam);
           if (!detected.success)
             {
               progress.pause_stdout ();
@@ -1218,7 +1219,8 @@ autodetect (int argc, char **argv)
       if (dsparams.gamma == 0)
 	dsparams.gamma = 2.2;
       auto detected = detect_regular_screen (scan, dparam, solver_param,
-                                             &dsparams, &progress, report);
+                                             &dsparams, &progress, report,
+                                             &rparam);
       param = detected.param;
       param.mesh_trans = detected.mesh_trans;
       param.mesh_trans_is_scr_to_img = true;

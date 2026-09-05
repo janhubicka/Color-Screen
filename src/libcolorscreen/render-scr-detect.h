@@ -43,6 +43,10 @@ struct precomputed_rgbdata_params
 {
   /* ID of input image.  */
   uint64_t image_id = 0;
+  /* ID of the native RGB source used for adjustment.  This is the image ID
+     for an unsharpened capture and the renderer cache ID when normal capture
+     sharpening materializes processed RGB channels.  */
+  uint64_t source_rgb_id = 0;
   /* Screen detection parameters.  */
   scr_detect_parameters p;
   /* Gamma value for linearization.  */
@@ -59,12 +63,11 @@ struct precomputed_rgbdata_params
   operator==(const precomputed_rgbdata_params &o) const
   {
     return image_id == o.image_id
+           && source_rgb_id == o.source_rgb_id
 	   && p.red == o.p.red
 	   && p.green == o.p.green
 	   && p.blue == o.p.blue
 	   && p.black == o.p.black
-	   && p.sharpen_radius == o.p.sharpen_radius
-	   && p.sharpen_amount == o.p.sharpen_amount
 	   && gamma == o.gamma;
   }
 };
@@ -214,6 +217,11 @@ public:
   /* Precompute adjusted RGB data.
      PROGRESS is used to report progress and check for cancellation.  */
   bool precompute_rgbdata (progress_info *progress);
+  /* Return true if adjusted RGB has already been materialized.  */
+  bool adjusted_rgb_precomputed_p () const
+  {
+    return m_precomputed_rgbdata != nullptr;
+  }
   /* Get the adjusted pixel value at position P.  */
   pure_attr inline rgbdata get_adjusted_pixel (point_t p) const
   {
@@ -303,18 +311,14 @@ public:
   /* Get non-precomputed adjusted pixel at integer position P.  */
   pure_attr inline rgbdata fast_nonprecomputed_get_adjusted_pixel (int_point_t p) const
   {
-    rgbdata d;
-    image_data::pixel p_pixel = m_img.get_rgb_pixel (p.x, p.y);
-    m_scr_detect.adjust_color (p_pixel.r, p_pixel.g, p_pixel.b, &d.red, &d.green, &d.blue);
-    return d;
+    rgbdata c = { get_linearized_data_red (p), get_linearized_data_green (p),
+                  get_linearized_data_blue (p) };
+    return adjust_linearized_color (c);
   }
   /* Get non-precomputed normalized pixel at integer position P.  */
   pure_attr inline rgbdata fast_nonprecomputed_get_normalized_pixel (int_point_t p) const
   {
-    rgbdata d;
-    image_data::pixel p_pixel = m_img.get_rgb_pixel (p.x, p.y);
-    m_scr_detect.adjust_color (p_pixel.r, p_pixel.g, p_pixel.b, &d.red, &d.green, &d.blue);
-    return normalize_color (d);
+    return normalize_color (fast_nonprecomputed_get_adjusted_pixel (p));
   }
   /* Get adjusted pixel at integer position P.  */
   pure_attr inline rgbdata fast_get_adjusted_pixel (int_point_t p) const
