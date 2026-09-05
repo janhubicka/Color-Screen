@@ -5,6 +5,7 @@
 #include "TilePreviewPanel.h"
 #include <QAbstractItemView>
 #include <QComboBox>
+#include <QFormLayout>
 #include <QIcon>
 #include <QImage>
 #include <QLabel>
