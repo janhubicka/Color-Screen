@@ -3,6 +3,7 @@
 #include "CoordinateTransformer.h"
 #include "../libcolorscreen/include/imagedata.h"
 #include "../libcolorscreen/include/progress-info.h"
+#include "../libcolorscreen/include/screen-map.h"
 #include "../libcolorscreen/include/scr-to-img.h"
 #include "../libcolorscreen/include/solver-parameters.h"
 #include "../libcolorscreen/include/stitch.h" // Needed for stitch_project
@@ -20,6 +21,7 @@
 #include <QTimer>
 #include <QtMath>
 #include <cmath>
+#include <limits>
 
 // Ensure shared ptr can be passed via signals
 Q_DECLARE_METATYPE(std::shared_ptr<colorscreen::progress_info>)
@@ -260,6 +262,7 @@ void ImageWidget::setImage(std::shared_ptr<colorscreen::image_data> scan,
 
   if (m_scan != scan) {
     m_pixmap = QImage(); // Clear if new image loaded
+    m_detectedScreenMap.reset();
   }
 
   // Cancel current progress if exists
@@ -450,6 +453,7 @@ void ImageWidget::paintEvent(QPaintEvent *event) {
     
     p.drawImage(targetRect, m_pixmap, QRectF(0, 0, m_pixmap.width(), m_pixmap.height()));
 
+    drawDetectedPatchCenters(p);
     drawPointsOverlay(p);
     drawProfileSpots(p);
     drawFocusAreas(p);
@@ -498,6 +502,147 @@ void ImageWidget::paintEvent(QPaintEvent *event) {
   if (m_activeAnim) {
     m_activeAnim->setGeometry(rect());
   }
+}
+
+/** Draw centers of connected screen elements retained by the most recent
+    successful automatic screen detection.  This intentionally follows the
+    old GTK diagnostic: do not show the dense overlay below 1:1 zoom.  Unlike
+    the GTK implementation, limit map traversal to the current viewport so a
+    full-resolution plate does not scan millions of map entries per repaint. */
+void ImageWidget::drawDetectedPatchCenters(QPainter &p) {
+  if (!m_showDetectedPatchCenters || !m_detectedScreenMap || !m_scan ||
+      !m_rparams || !m_scrToImg || m_scale < 1.0 || width() <= 0 ||
+      height() <= 0)
+    return;
+
+  const colorscreen::screen_map &screenMap = *m_detectedScreenMap;
+  if (screenMap.type != m_scrToImg->type)
+    return;
+
+  colorscreen::scr_to_img map;
+  if (!map.set_parameters(*m_scrToImg, *m_scan))
+    return;
+
+  /* Convert representative viewport positions back to scan and then screen
+     coordinates. Sampling edge midpoints as well as corners keeps the entry
+     bounds conservative for lens/mesh distortion. */
+  const QPointF viewportSamples[] = {
+      QPointF(0, 0),
+      QPointF(width() / 2.0, 0),
+      QPointF(width(), 0),
+      QPointF(0, height() / 2.0),
+      QPointF(width() / 2.0, height() / 2.0),
+      QPointF(width(), height() / 2.0),
+      QPointF(0, height()),
+      QPointF(width() / 2.0, height()),
+      QPointF(width(), height())};
+
+  double minEntryX = std::numeric_limits<double>::infinity();
+  double minEntryY = std::numeric_limits<double>::infinity();
+  double maxEntryX = -std::numeric_limits<double>::infinity();
+  double maxEntryY = -std::numeric_limits<double>::infinity();
+  for (const QPointF &widgetPoint : viewportSamples) {
+    const colorscreen::point_t scanPoint = widgetToImage(widgetPoint);
+    const colorscreen::point_t screenPoint = map.to_scr(scanPoint);
+    double entryX;
+    double entryY;
+    if (colorscreen::dufay_like_screen_p(screenMap.type)) {
+      entryX = 2.0 * screenPoint.x;
+      entryY = screenPoint.y;
+    } else {
+      /* screen_map stores Paget/Finlay in the diagonal coordinates consumed
+         by screen_map::get_screen_coord(). */
+      entryX = 2.0 * (screenPoint.x - screenPoint.y);
+      entryY = 2.0 * (screenPoint.x + screenPoint.y);
+    }
+    if (!std::isfinite(entryX) || !std::isfinite(entryY))
+      continue;
+    minEntryX = std::min(minEntryX, entryX);
+    minEntryY = std::min(minEntryY, entryY);
+    maxEntryX = std::max(maxEntryX, entryX);
+    maxEntryY = std::max(maxEntryY, entryY);
+  }
+  if (!std::isfinite(minEntryX) || !std::isfinite(minEntryY) ||
+      !std::isfinite(maxEntryX) || !std::isfinite(maxEntryY))
+    return;
+
+  constexpr int entryMargin = 16;
+  const int mapMinX = -screenMap.xshift;
+  const int mapMinY = -screenMap.yshift;
+  const int mapMaxX = screenMap.width - screenMap.xshift - 1;
+  const int mapMaxY = screenMap.height - screenMap.yshift - 1;
+  const int firstX = std::max(
+      mapMinX, static_cast<int>(std::floor(minEntryX)) - entryMargin);
+  const int firstY = std::max(
+      mapMinY, static_cast<int>(std::floor(minEntryY)) - entryMargin);
+  const int lastX = std::min(
+      mapMaxX, static_cast<int>(std::ceil(maxEntryX)) + entryMargin);
+  const int lastY = std::min(
+      mapMaxY, static_cast<int>(std::ceil(maxEntryY)) + entryMargin);
+  if (firstX > lastX || firstY > lastY)
+    return;
+
+  CoordinateTransformer transformer(m_scan.get(), *m_rparams, m_scrToImg,
+                                    m_coordinateSpace);
+  auto toWidget = [this, &transformer](const colorscreen::point_t &img) {
+    const colorscreen::point_t transformed =
+        transformer.scanToTransformedCrop(img);
+    return QPointF((transformed.x - m_viewX) * m_scale,
+                   (transformed.y - m_viewY) * m_scale);
+  };
+
+  QList<QPointF> redPoints;
+  QList<QPointF> greenPoints;
+  QList<QPointF> bluePoints;
+  const QRectF visibleRect(-3, -3, width() + 6, height() + 6);
+  for (int y = firstY; y <= lastY; ++y)
+    for (int x = firstX; x <= lastX; ++x) {
+      const colorscreen::int_point_t entry{x, y};
+      if (!screenMap.known_p(entry))
+        continue;
+
+      const QPointF center = toWidget(screenMap.get_coord(entry));
+      if (!visibleRect.contains(center))
+        continue;
+
+      colorscreen::solver_parameters::point_color color;
+      (void)screenMap.get_screen_coord(entry, &color);
+      switch (color) {
+      case colorscreen::solver_parameters::red:
+        redPoints.append(center);
+        break;
+      case colorscreen::solver_parameters::green:
+        greenPoints.append(center);
+        break;
+      case colorscreen::solver_parameters::blue:
+        bluePoints.append(center);
+        break;
+      default:
+        break;
+      }
+    }
+
+  QList<QPointF> allPoints = redPoints;
+  allPoints.append(greenPoints);
+  allPoints.append(bluePoints);
+  if (allPoints.isEmpty())
+    return;
+
+  p.save();
+  p.setRenderHint(QPainter::Antialiasing, true);
+  p.setPen(QPen(QColor(0, 0, 0, 170), 4, Qt::SolidLine, Qt::RoundCap));
+  p.drawPoints(allPoints.constData(), allPoints.size());
+
+  auto drawColor = [&p](const QList<QPointF> &points, const QColor &color) {
+    if (points.isEmpty())
+      return;
+    p.setPen(QPen(color, 2, Qt::SolidLine, Qt::RoundCap));
+    p.drawPoints(points.constData(), points.size());
+  };
+  drawColor(redPoints, QColor(255, 64, 64, 230));
+  drawColor(greenPoints, QColor(64, 255, 64, 230));
+  drawColor(bluePoints, QColor(64, 128, 255, 230));
+  p.restore();
 }
 
 /**
@@ -1888,6 +2033,19 @@ void ImageWidget::setShowRegistrationPoints(bool show) {
   }
   update();
   emit registrationPointsVisibilityChanged(show);
+}
+
+void ImageWidget::setDetectedScreenMap(
+    std::shared_ptr<const colorscreen::screen_map> detectedScreenMap) {
+  m_detectedScreenMap = std::move(detectedScreenMap);
+  update();
+}
+
+void ImageWidget::setShowDetectedPatchCenters(bool show) {
+  if (m_showDetectedPatchCenters == show)
+    return;
+  m_showDetectedPatchCenters = show;
+  update();
 }
 
 /**
