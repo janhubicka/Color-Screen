@@ -19,4 +19,14 @@ jobs:
       - name: Prepare clean GTK-free branch and test it
         run: |
           cp .github/agent-remove-legacy-gtkgui.sh /tmp/agent-remove-legacy-gtkgui.sh
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('/tmp/agent-remove-legacy-gtkgui.sh')
+          text = p.read_text()
+          marker = '# Ubuntu packages moc under Qt\'s libexec directory rather than on PATH.\n'
+          publish = '''# Publish the review commit before the longer compile/smoke validation.\ngit add -A\ngit commit --amend -m "build: remove legacy GTK GUI" -m "Remove the deprecated GTK2 frontend and bundled gtkimageviewer sources now that the Qt6 GUI is the maintained graphical interface.\n\nDrop the gtkgui configure option, generated Autotools metadata, packaging and Ubuntu image GTK2 dependencies, stale Windows build instructions, and GTK-specific documentation/source comments. Refresh the top-level README around the maintained Qt GUI.\n\nThe final pre-removal tree is preserved by the gtkgui tag.\n\nValidation covers GTK-related generated metadata, an Ubuntu Qt/checking build without GTK2 development packages, and the Qt multi-window smoke tests."\ngit push --force origin HEAD:"$REVIEW_BRANCH"\n\n'''
+          if marker not in text:
+              raise SystemExit('publish insertion marker not found')
+          p.write_text(text.replace(marker, publish + marker, 1))
+          PY
           bash /tmp/agent-remove-legacy-gtkgui.sh
