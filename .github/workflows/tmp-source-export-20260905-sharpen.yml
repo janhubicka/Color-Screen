@@ -1,0 +1,23 @@
+name: TEMP source export detector cleanup
+
+on:
+  push:
+    branches:
+      - agent/tmp-source-export-20260905-sharpen
+    paths:
+      - .github/workflows/tmp-source-export-20260905-sharpen.yml
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 08d3954611e2bde1126344138dc329161789ef65
+      - name: Archive source
+        run: tar czf /tmp/colorscreen-main-08d39546.tar.gz --exclude=.git .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: colorscreen-main-08d39546
+          path: /tmp/colorscreen-main-08d39546.tar.gz
+          retention-days: 2
