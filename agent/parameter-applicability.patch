@@ -1,0 +1,383 @@
+diff --git a/doc/qtgui-internal-cleanup.md b/doc/qtgui-internal-cleanup.md
+index 30ea7a5..9107469 100644
+--- a/doc/qtgui-internal-cleanup.md
++++ b/doc/qtgui-internal-cleanup.md
+@@ -216,7 +216,11 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
+   are useful when they teach a prerequisite; hidden controls are useful when a
+   whole concept is meaningless for the current process.  A lambda called
+   `enabledCheck` should not silently mean different things in different helper
+-  functions.
++  functions.  `ParameterPanel::setParameterApplicability()` now establishes
++  this distinction for form rows and composes it with section folding; Screen
++  pattern rows and measured-MTF controls are the first users.  Continue moving
++  panel-specific visibility predicates to this API as the individual panels are
++  simplified.
+ 
+ ### P2 — maintenance refactoring
+ 
+diff --git a/src/qtgui/ParameterPanel.cpp b/src/qtgui/ParameterPanel.cpp
+index 7242946..19dd0f7 100644
+--- a/src/qtgui/ParameterPanel.cpp
++++ b/src/qtgui/ParameterPanel.cpp
+@@ -25,6 +25,17 @@
+ 
+ namespace {
+ 
++constexpr auto parameterApplicableProperty = "parameterApplicable";
++constexpr auto parameterSectionExpandedProperty = "parameterSectionExpanded";
++
++/** Return whether WIDGET is logically applicable to the current panel state. */
++bool parameterWidgetApplicable(const QWidget *widget) {
++  if (!widget)
++    return true;
++  const QVariant value = widget->property(parameterApplicableProperty);
++  return !value.isValid() || value.toBool();
++}
++
+ /** One uniform detachable section used by every parameter panel.
+ 
+     The section, rather than MainWindow or a specialized view, owns the floating
+@@ -1158,17 +1169,21 @@ QToolButton *ParameterPanel::addSeparator(const QString &title) {
+   groupLayout->addWidget(titleWidget);
+ 
+   QFormLayout *groupForm = new QFormLayout();
++  groupForm->setProperty(parameterSectionExpandedProperty, true);
++  m_groupForms.push_back(groupForm);
+   groupLayout->addLayout(groupForm);
+ 
+   // Connect arrow button to toggle visibility
+   connect(arrowBtn, &QToolButton::toggled, [arrowBtn, groupForm](bool checked) {
+     arrowBtn->setArrowType(checked ? Qt::DownArrow : Qt::RightArrow);
++    groupForm->setProperty(parameterSectionExpandedProperty, checked);
+ 
+     auto setVisibleRecursive = [](QLayoutItem *item, bool visible) {
+         auto recurse = [](auto self, QLayoutItem *itm, bool vis) -> void {
+             if (!itm) return;
+             if (itm->widget()) {
+-                itm->widget()->setVisible(vis);
++                QWidget *widget = itm->widget();
++                widget->setVisible(vis && parameterWidgetApplicable(widget));
+             } else if (itm->layout()) {
+                 QLayout *subLayout = itm->layout();
+                 for (int j = 0; j < subLayout->count(); ++j) {
+@@ -1200,6 +1215,64 @@ QToolButton *ParameterPanel::addSeparator(const QString &title) {
+   return arrowBtn; // Return the toggle button
+ }
+ 
++/** Register logical applicability for the form row containing WIDGET. */
++void ParameterPanel::setParameterApplicability(
++    QWidget *widget,
++    std::function<bool(const ParameterState &)> applicableCheck) {
++  if (!widget || !applicableCheck)
++    return;
++
++  QFormLayout *form = nullptr;
++  QWidget *rowWidget = nullptr;
++  auto locateInForm = [](QFormLayout *candidateForm, QWidget *candidate) {
++    if (!candidateForm || !candidate)
++      return false;
++    int row = -1;
++    QFormLayout::ItemRole role = QFormLayout::FieldRole;
++    candidateForm->getWidgetPosition(candidate, &row, &role);
++    return row >= 0 && role != QFormLayout::LabelRole;
++  };
++
++  for (QWidget *candidate = widget; candidate && candidate != this;
++       candidate = candidate->parentWidget()) {
++    if (locateInForm(m_form, candidate)) {
++      form = m_form;
++      rowWidget = candidate;
++      break;
++    }
++    for (QFormLayout *groupForm : m_groupForms) {
++      if (locateInForm(groupForm, candidate)) {
++        form = groupForm;
++        rowWidget = candidate;
++        break;
++      }
++    }
++    if (form)
++      break;
++  }
++
++  if (!form || !rowWidget)
++    return;
++
++  QWidget *labelWidget = form->labelForField(rowWidget);
++  m_widgetStateUpdaters.push_back(
++      [this, form, rowWidget, labelWidget,
++       applicableCheck = std::move(applicableCheck)]() {
++        const bool applicable = applicableCheck(m_stateGetter());
++        const QVariant expandedValue =
++            form->property(parameterSectionExpandedProperty);
++        const bool sectionExpanded =
++            !expandedValue.isValid() || expandedValue.toBool();
++
++        rowWidget->setProperty(parameterApplicableProperty, applicable);
++        rowWidget->setVisible(applicable && sectionExpanded);
++        if (labelWidget) {
++          labelWidget->setProperty(parameterApplicableProperty, applicable);
++          labelWidget->setVisible(applicable && sectionExpanded);
++        }
++      });
++}
++
+ QWidget *
+ ParameterPanel::createDetachableSection(
+     const QString &title, QWidget *content,
+diff --git a/src/qtgui/ParameterPanel.h b/src/qtgui/ParameterPanel.h
+index b6111ce..0a50514 100644
+--- a/src/qtgui/ParameterPanel.h
++++ b/src/qtgui/ParameterPanel.h
+@@ -156,6 +156,19 @@ protected:
+ 
+   QToolButton *addSeparator(const QString &title);
+ 
++  /** Hide the complete form row containing WIDGET whenever APPLICABLECHECK
++      returns false.
++
++      Applicability is deliberately independent of enablement: use this for a
++      control whose concept does not exist for the current process/image, while
++      enabledCheck remains appropriate when a visible control should explain a
++      missing prerequisite. Section collapse/expand state is combined with the
++      applicability predicate, so expanding a section never resurrects an
++      inapplicable row. */
++  void setParameterApplicability(
++      QWidget *widget,
++      std::function<bool(const ParameterState &)> applicableCheck);
++
+   /** Wrap CONTENT in the standard detachable-panel presentation.
+       The returned section owns the floating QDockWidget lifecycle and
+       always reattaches CONTENT when the dock closes or its host changes.
+@@ -178,6 +191,7 @@ protected:
+ 
+   QVBoxLayout *m_layout;
+   QFormLayout *m_form; // Helper to access form layout
++  std::vector<QFormLayout *> m_groupForms;
+ 
+   std::vector<std::function<void(const ParameterState &)>> m_paramUpdaters;
+   std::vector<std::function<void()>> m_widgetStateUpdaters;
+diff --git a/src/qtgui/ScreenPanel.cpp b/src/qtgui/ScreenPanel.cpp
+index ceca322..685191c 100644
+--- a/src/qtgui/ScreenPanel.cpp
++++ b/src/qtgui/ScreenPanel.cpp
+@@ -5,7 +5,6 @@
+ #include "TilePreviewPanel.h"
+ #include <QAbstractItemView>
+ #include <QComboBox>
+-#include <QFormLayout>
+ #include <QIcon>
+ #include <QImage>
+ #include <QLabel>
+@@ -294,7 +293,7 @@ void ScreenPanel::setupUi() {
+   });
+ 
+   QToolButton *screenPatternToggle = addSeparator("Screen pattern");
+-  QFormLayout *screenPatternForm = m_currentGroupForm;
++  screenPatternToggle->setObjectName(QStringLiteral("ScreenPatternToggle"));
+ 
+   ScreenPreviewPanel *preview =
+       new ScreenPreviewPanel(m_stateGetter, m_stateSetter, m_imageGetter);
+@@ -314,6 +313,9 @@ void ScreenPanel::setupUi() {
+   } else {
+     m_form->addRow(preview);
+   }
++  setParameterApplicability(preview, [](const ParameterState &state) {
++    return screen_has_regular_geometry_p(state.scrToImg.type);
++  });
+ 
+   // Strip-width parameters are meaningful only for processes whose line-screen
+   // proportions are adjustable. Hide the complete rows otherwise; merely
+@@ -325,6 +327,10 @@ void ScreenPanel::setupUi() {
+       nullptr, false,
+       "Relative width of the red filter strips for line-screen processes like "
+       "Joly or Dufaycolor.");
++  redStripWidth->setObjectName(QStringLiteral("ScreenRedStripWidth"));
++  setParameterApplicability(redStripWidth, [](const ParameterState &state) {
++    return screen_with_varying_strips_p(state.scrToImg.type);
++  });
+ 
+   QWidget *greenStripWidth = addSliderParameter(
+       "Green Strip Width", 0.0, 1.0, 100.0, 2, "", "",
+@@ -333,36 +339,12 @@ void ScreenPanel::setupUi() {
+       1.0, nullptr, false,
+       "Relative width of the green filter strips for line-screen processes "
+       "like Joly or Dufaycolor.");
++  greenStripWidth->setObjectName(QStringLiteral("ScreenGreenStripWidth"));
++  setParameterApplicability(greenStripWidth, [](const ParameterState &state) {
++    return screen_with_varying_strips_p(state.scrToImg.type);
++  });
+ 
+-  auto setPatternRowVisible = [screenPatternForm](QWidget *field,
+-                                                   bool visible) {
+-    if (!field)
+-      return;
+-    field->setVisible(visible);
+-    if (screenPatternForm) {
+-      if (QWidget *label = screenPatternForm->labelForField(field))
+-        label->setVisible(visible);
+-    }
+-  };
+-
+-  m_widgetStateUpdaters.push_back(
+-      [this, preview, screenPatternToggle, redStripWidth, greenStripWidth,
+-       setPatternRowVisible]() {
+-        const auto type = m_stateGetter().scrToImg.type;
+-        const bool expanded = screenPatternToggle->isChecked();
+-        const bool regular = screen_has_regular_geometry_p(type);
+-        const bool varyingStrips = screen_with_varying_strips_p(type);
+-        preview->updateUI();
+-        preview->setVisible(expanded && regular);
+-        setPatternRowVisible(redStripWidth, expanded && varyingStrips);
+-        setPatternRowVisible(greenStripWidth, expanded && varyingStrips);
+-      });
+-
+-  // ParameterPanel's generic section toggle changes child visibility directly.
+-  // Reapply the screen-specific applicability immediately afterwards so an
+-  // expanded section cannot expose strip controls for a non-strip process.
+-  connect(screenPatternToggle, &QToolButton::toggled, this,
+-          [this]() { updateUI(); });
++  m_widgetStateUpdaters.push_back([preview]() { preview->updateUI(); });
+ 
+   addSeparator("Reconstruction");
+ 
+diff --git a/src/qtgui/SharpnessPanel.cpp b/src/qtgui/SharpnessPanel.cpp
+index 33f8222..f84cbd9 100644
+--- a/src/qtgui/SharpnessPanel.cpp
++++ b/src/qtgui/SharpnessPanel.cpp
+@@ -656,7 +656,8 @@ void SharpnessPanel::setupUi() {
+       }, nullptr, "Select the sharpening algorithm. \"None\" disables sharpening, \"Wiener\" and \"Richardson-Lucy\" use the MTF model, \"Unsharp mask\" is a classic edge enhancement.");
+ 
+   m_scannerCameraSeparatorToggle = addSeparator("Scanner/Camera properties");
+-  QToolButton *separatorToggle = m_scannerCameraSeparatorToggle;
++  m_scannerCameraSeparatorToggle->setObjectName(
++      QStringLiteral("ScannerCameraPropertiesToggle"));
+ 
+   // MTF Chart
+   m_mtfChart = new MTFChartWidget();
+@@ -706,9 +707,9 @@ void SharpnessPanel::setupUi() {
+   if (m_currentGroupForm) m_currentGroupForm->addRow(dotSpread);
+   else m_form->addRow(dotSpread);
+ 
+-  // Add \"Use measured MTF\" checkbox (visible only if measured data exists and
+-  // separator is open)
+-  addCheckboxParameter(
++  // Measured-MTF controls do not exist conceptually until a measurement has
++  // been loaded or made. Keep that applicability separate from enablement.
++  QCheckBox *useMeasuredMtf = addCheckboxParameter(
+       "Use measured MTF",
+       [](const ParameterState &s) {
+         return s.rparams.sharpen.scanner_mtf.measured_mtf_idx >= 0;
+@@ -716,9 +717,12 @@ void SharpnessPanel::setupUi() {
+       [](ParameterState &s, bool v) {
+         s.rparams.sharpen.scanner_mtf.measured_mtf_idx = v ? 0 : -1;
+       },
+-      [](const ParameterState &s) {
+-        return s.rparams.sharpen.scanner_mtf.measurements.size();
+-      }, "Use a measured MTF curve directly instead of the fitted analytical physical or fallback model.");
++      nullptr,
++      "Use a measured MTF curve directly instead of the fitted analytical physical or fallback model.");
++  useMeasuredMtf->setObjectName(QStringLiteral("MtfUseMeasuredCheck"));
++  setParameterApplicability(useMeasuredMtf, [](const ParameterState &state) {
++    return !state.rparams.sharpen.scanner_mtf.measurements.empty();
++  });
+ 
+ 
+   // Gaussian blur (Sigma)
+@@ -821,17 +825,18 @@ void SharpnessPanel::setupUi() {
+   // Add the explicit model-fitting dialog when measured data is available.
+   m_fitMtfBtn = addButtonParameter(
+       "", "Fit measured MTF model", [this]() { fitMeasuredMtf(); },
+-      [this, separatorToggle](const ParameterState &s) {
+-        bool visible = !s.rparams.sharpen.scanner_mtf.measurements.empty();
+-        if (separatorToggle && !separatorToggle->isChecked())
+-          visible = false;
++      [this](const ParameterState &) {
+         const bool documentAvailable =
+             !m_mtfCalibration.fitAvailable || m_mtfCalibration.fitAvailable();
+-        return visible && !m_mtfFitRunning && documentAvailable;
++        return !m_mtfFitRunning && documentAvailable;
+       },
+       "Choose the physical diffraction model, edit capture metadata, and "
+       "explicitly select which values should be optimized. Numeric zero is "
+       "never interpreted implicitly by this dialog.");
++  m_fitMtfBtn->setObjectName(QStringLiteral("MtfFitButton"));
++  setParameterApplicability(m_fitMtfBtn, [](const ParameterState &state) {
++    return !state.rparams.sharpen.scanner_mtf.measurements.empty();
++  });
+ 
+   m_mtfFitStatusLabel = new QLabel(this);
+   m_mtfFitStatusLabel->setWordWrap(true);
+diff --git a/src/qtgui/WorkspaceChurnSmoke.cpp b/src/qtgui/WorkspaceChurnSmoke.cpp
+index 4dd7186..30be8e9 100644
+--- a/src/qtgui/WorkspaceChurnSmoke.cpp
++++ b/src/qtgui/WorkspaceChurnSmoke.cpp
+@@ -7,6 +7,7 @@
+ #include "WorkspaceWindow.h"
+ 
+ #include <QComboBox>
++#include <QCheckBox>
+ #include <QCoreApplication>
+ #include <QDebug>
+ #include <QEvent>
+@@ -302,6 +303,16 @@ QLabel *mtfMeasurementProvenance = inspector->findChild<QLabel *>(
+     QStringLiteral("MtfMeasurementProvenance"));
+ QPushButton *mtfMeasurementLocate = inspector->findChild<QPushButton *>(
+     QStringLiteral("MtfMeasurementLocate"));
++QCheckBox *mtfUseMeasured = inspector->findChild<QCheckBox *>(
++    QStringLiteral("MtfUseMeasuredCheck"));
++QPushButton *mtfFitButton = inspector->findChild<QPushButton *>(
++    QStringLiteral("MtfFitButton"));
++QToolButton *scannerCameraToggle = inspector->findChild<QToolButton *>(
++    QStringLiteral("ScannerCameraPropertiesToggle"));
++QWidget *mtfUseMeasuredRow =
++    mtfUseMeasured ? mtfUseMeasured->parentWidget() : nullptr;
++const bool hasMtfMeasurements =
++    !first->documentStateSnapshot().rparams.sharpen.scanner_mtf.measurements.empty();
+ const auto profileCapture =
+     first->documentStateSnapshot().rparams.get_capture_type(
+         first->sharedImageData().get());
+@@ -377,6 +388,43 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
+           return;
+         }
+ 
++        // Applicability is logical UI state, independent of section folding.
++        // Expanding Scanner/Camera properties must never resurrect measured-MTF
++        // controls when this document has no measurements.
++        const QVariant useMeasuredApplicable =
++            mtfUseMeasuredRow
++                ? mtfUseMeasuredRow->property("parameterApplicable")
++                : QVariant();
++        const QVariant fitApplicable =
++            mtfFitButton ? mtfFitButton->property("parameterApplicable")
++                         : QVariant();
++        if (!mtfUseMeasured || !mtfUseMeasuredRow || !mtfFitButton ||
++            !scannerCameraToggle || !useMeasuredApplicable.isValid() ||
++            !fitApplicable.isValid() ||
++            useMeasuredApplicable.toBool() != hasMtfMeasurements ||
++            fitApplicable.toBool() != hasMtfMeasurements) {
++          fail(QStringLiteral(
++              "Workspace churn lost measured-MTF applicability metadata"));
++          return;
++        }
++
++        const bool scannerPropertiesWereExpanded =
++            scannerCameraToggle->isChecked();
++        scannerCameraToggle->setChecked(false);
++        if (!mtfUseMeasuredRow->isHidden() || !mtfFitButton->isHidden()) {
++          fail(QStringLiteral(
++              "Collapsing Scanner/Camera properties left an applicable row visible"));
++          return;
++        }
++        scannerCameraToggle->setChecked(true);
++        if (mtfUseMeasuredRow->isHidden() != !hasMtfMeasurements ||
++            mtfFitButton->isHidden() != !hasMtfMeasurements) {
++          fail(QStringLiteral(
++              "Expanding Scanner/Camera properties resurrected an inapplicable measured-MTF row"));
++          return;
++        }
++        scannerCameraToggle->setChecked(scannerPropertiesWereExpanded);
++
+         // Folding the guide is presentation state only. It must not hide the
+         // processing tabs, and the smoke restores the user's previous fold
+         // preference immediately after exercising the toggle.
