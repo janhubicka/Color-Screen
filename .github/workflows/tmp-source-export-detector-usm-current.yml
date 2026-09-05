@@ -1,0 +1,23 @@
+name: TEMP source export detector USM current
+
+on:
+  push:
+    branches:
+      - agent/tmp-source-export-detector-usm-current-20260905
+    paths:
+      - .github/workflows/tmp-source-export-detector-usm-current.yml
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Archive pinned current main
+        run: git archive --format=tar.gz -o colorscreen-main-current.tar.gz 0a7d988c41ae0af69601dff3191c585b8a37d337
+      - uses: actions/upload-artifact@v4
+        with:
+          name: colorscreen-main-0a7d988c
+          path: colorscreen-main-current.tar.gz
+          retention-days: 2
