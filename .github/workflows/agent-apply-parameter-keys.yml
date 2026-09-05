@@ -1,0 +1,75 @@
+name: Agent apply parameter keys
+
+on:
+  push:
+    branches:
+      - agent/apply-parameter-keys
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout review branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/qtgui-parameter-keys
+          path: target
+          fetch-depth: 0
+
+      - name: Checkout helper branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/apply-parameter-keys
+          path: helper
+          fetch-depth: 1
+
+      - name: Apply reviewed migration
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 helper/agent/apply_parameter_keys_v2.py
+          cd target
+          git diff --check
+
+          cat > /tmp/expected-files <<'EOF'
+          .agents/qtgui.md
+          doc/qtgui-internal-cleanup.md
+          src/qtgui/ColorPanel.cpp
+          src/qtgui/ColorPanel.h
+          src/qtgui/ImageLayerPanel.cpp
+          src/qtgui/ImageViewWindow.cpp
+          src/qtgui/MainWindow.cpp
+          src/qtgui/MainWindow.h
+          src/qtgui/ParameterPanel.cpp
+          src/qtgui/ParameterPanel.h
+          src/qtgui/ScreenPanel.cpp
+          src/qtgui/SharpnessPanel.cpp
+          src/qtgui/SharpnessPanel.h
+          src/qtgui/TilesPanel.cpp
+          src/qtgui/WorkspaceChurnSmoke.cpp
+          EOF
+          git diff --name-only | sort > /tmp/actual-files
+          sort -o /tmp/expected-files /tmp/expected-files
+          diff -u /tmp/expected-files /tmp/actual-files
+
+          # The state-setter contract is now three arguments everywhere it is
+          # invoked. Keep direct custom controls on the empty-key compatibility
+          # path until they are intentionally migrated.
+          ! git grep -n 'm_stateSetter(state, description);' -- src/qtgui
+          ! git grep -nE 'm_stateSetter\([^,]+,[^,]+\);' -- src/qtgui/TilesPanel.cpp src/qtgui/ImageLayerPanel.cpp
+
+          git config user.name "Jan Hubička"
+          git config user.email "46065755+janhubicka@users.noreply.github.com"
+          git add --pathspec-from-file=/tmp/expected-files
+          test "$(git diff --cached --name-only | wc -l)" -eq 15
+          git commit -m "qtgui: give parameter edits stable keys" -m "Add an optional untranslated parameterKey to stateful ParameterPanel helpers and carry it through document/shared-view state setters into ChangeParametersCommand. Human-readable Undo text stays separate, while keyed controls merge by stable identity; unconverted controls deliberately keep the historical description fallback so this can be migrated incrementally.
+
+Store non-empty keys as widget metadata for the upcoming reset/default/modified Phase-C work. Migrate the Screen red/green strip-width controls and the Sharpness measured-MTF selector as representative users. Preserve derived Sharpness/Color refresh hooks and forward keys from ordinary/reference views to the source document.
+
+Extend WorkspaceChurnSmoke to exercise the actual undo stack: two edits with the same visible description but different keys must remain separate, while repeated updates carrying one key must coalesce. Also verify the migrated Screen controls expose their expected key metadata.
+
+No renderer, parameter serialization, processing defaults, or output semantics change."
+          git push origin HEAD:agent/qtgui-parameter-keys
