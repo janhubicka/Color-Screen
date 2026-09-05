@@ -72,25 +72,25 @@ void GeometryPanel::setupUi() {
 
   addSeparator("Automatic registration");
 
-  addButtonParameter("Step 1", "Autodetect coordinates", [this]() {
+  addButtonParameter("Step 1", "Detect screen coordinates", [this]() {
       emit autodetectCoordinatesRequested();
-  }, nullptr, "Automatically detect the screen pattern and update the coordinate system (center, coordinates, and screen type).");
+  }, nullptr, "Detect the regular screen pattern and establish its coordinate system (center, axes, and screen type).");
   
-  addButtonParameter("Correction", "Alternate colors", [this]() {
+  addButtonParameter("Correction", "Swap screen colors", [this]() {
       emit alternateColorsRequested();
-  }, nullptr, "Adjust registration so symmetric colors get exchanged. Use this if colors looks alien");
+  }, nullptr, "Swap the symmetric screen-color assignment if the reconstructed colors are implausible.");
 
   addButtonParameter("Step 2", "Optimize coordinates", [this]() {
       emit optimizeCoordinatesRequested();
-  }, nullptr, "Refine the current coordinate system using the image data. This is useful for correcting small misalignments.");
+  }, nullptr, "Refine the detected screen coordinate system using the image data.");
 
-  addButtonParameter("Step 3", "Automatically add points", [this]() {
+  addButtonParameter("Step 3", "Add registration points", [this]() {
       emit automaticallyAddPointsRequested(m_finetuneAreaParams);
-  }, nullptr, "Automatically identify and add missing registration points within the current crop area.");
+  }, nullptr, "Automatically identify and add registration points within the current crop area.");
   
-  addButtonParameter("", "Automatically add points in area", [this]() {
+  addButtonParameter("", "Add points in selected area", [this]() {
       emit automaticallyAddPointsInAreaRequested(m_finetuneAreaParams);
-  }, nullptr, "Automatically identify and add missing registration points within a user-selected area.");
+  }, nullptr, "Select an area and automatically identify and add registration points within it.");
 
   auto setupFinetuneSlider = [this](const QString &label, double min, double max, double scale, int decimals, double initial, auto member, double gamma = 1.0, bool logarithmic = false, const QString &tooltip = QString()) {
       QWidget *container = addSlider(label, min, max, scale, decimals, "", "", initial, [this, member](double v) {
@@ -111,18 +111,18 @@ void GeometryPanel::setupUi() {
   setupFinetuneSlider("Max displacement", 0, 0.5, 100, 2, 0.05, &colorscreen::finetune_area_parameters::max_displacement, 3.0, false, "Maximum allowed displacement for a point to be accepted. Measured in screen units.");
 
 
-  addSeparator("Optimization");
+  addSeparator("Geometry fit");
 
-  m_autoOptimizeBox = addCheckboxParameter("Auto optimize",
+  m_autoOptimizeBox = addCheckboxParameter("Auto fit geometry",
       [this](const ParameterState &){ return isAutoEnabled(); },
       [](ParameterState &, bool){ /* Handled by checkbox toggle signal */ },
-      nullptr, "Automatically trigger a geometry optimization whenever registration points are added or moved.");
+      nullptr, "Automatically rerun the geometry fit whenever registration points are added or moved.");
   m_autoOptimizeBox->setObjectName("autoSolverBox");
   m_autoOptimizeBox->setChecked(true);
 
-  m_optimizeButton = addButtonParameter("Optimization", "Optimize geometry", [this]() {
+  m_optimizeButton = addButtonParameter("Fit", "Fit geometry", [this]() {
       emit optimizeRequested(m_autoOptimizeBox->isChecked());
-  }, nullptr, "Run the solver to optimize the geometry parameters (rotation, tilt, lens) to match the registration points.");
+  }, nullptr, "Fit the geometry parameters (rotation, tilt, lens correction, and optional nonlinear correction) to the registration points.");
 
   connect(m_autoOptimizeBox, &QCheckBox::toggled, this, [this](bool checked){
       if (checked) emit optimizeRequested(true);
@@ -141,7 +141,7 @@ void GeometryPanel::setupUi() {
       [](const ParameterState &s){ return s.solver.optimize_lens; },
       [](ParameterState &s, bool v){ s.solver.optimize_lens = v; },
       [](ParameterState &s){ s.scrToImg.lens_correction = colorscreen::lens_warp_correction_parameters(); },
-      nullptr, "Include lens distortion parameters in the optimization solver.");
+      nullptr, "Include lens distortion parameters in the geometry fit.");
   connect(m_lensCb, &QCheckBox::toggled, this, triggerIfAuto);
 
   addDoubleParameter("Lens center distance", 0.0, 100.0,
@@ -167,7 +167,7 @@ void GeometryPanel::setupUi() {
       [](const ParameterState &s){ return s.solver.optimize_tilt; },
       [](ParameterState &s, bool v){ s.solver.optimize_tilt = v; },
       [](ParameterState &s){ s.scrToImg.tilt_x = 0; s.scrToImg.tilt_y = 0; },
-      nullptr, "Include perspective tilt parameters in the optimization solver.");
+      nullptr, "Include perspective tilt parameters in the geometry fit.");
   connect(m_tiltCb, &QCheckBox::toggled, this, triggerIfAuto);
 
   m_tiltMessageLabel = new QLabel();
@@ -182,7 +182,7 @@ void GeometryPanel::setupUi() {
       [this](ParameterState &, bool v){
           m_nonlinearEnabled = v;
       },
-      nullptr, "Enable higher-order mesh-based corrections for complex dewarping (only active after successful optimization).");
+      nullptr, "Enable higher-order mesh-based corrections for complex dewarping (only active after a successful geometry fit).");
   m_nlCb->setObjectName("nonlinearBox");
   connect(m_nlCb, &QCheckBox::toggled, this, &GeometryPanel::nonlinearToggled);
 
@@ -216,7 +216,7 @@ void GeometryPanel::setupUi() {
       "Mirror the final-coordinate image horizontally before Final rotation. "
       "This is part of geometry and is saved in the parameter file.");
 
-  // Ensure Finetune widget is separate from Optimization group
+  // Ensure Finetune widget is separate from the geometry-fit group
   endGroup();
 
   // Finetune Diagnostic Images
@@ -322,7 +322,7 @@ void GeometryPanel::updateRegistrationPointInfo(const ParameterState &state) {
       }
   };
 
-  updateMsg(m_optimizationMessageLabel, colorscreen::solver_parameters::min_points(type), "basic optimization");
+  updateMsg(m_optimizationMessageLabel, colorscreen::solver_parameters::min_points(type), "geometry fit");
   updateMsg(m_lensMessageLabel, colorscreen::solver_parameters::min_lens_points(type), "lens correction");
   updateMsg(m_tiltMessageLabel, colorscreen::solver_parameters::min_perspective_points(type), "perspective correction");
   updateMsg(m_nonlinearMessageLabel, colorscreen::solver_parameters::min_mesh_points(type), "nonlinear correction");
