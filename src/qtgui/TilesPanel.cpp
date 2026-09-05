@@ -129,10 +129,15 @@ void TilesPanel::rebuildTileGrid() {
       selBtn->setMinimumSize(72, 44);
       selBtn->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
       selBtn->setToolTip(tr("Select tile %1, %2").arg(gx).arg(gy));
+      // Keep the compact custom tile shape, but use application palette roles
+      // so selection remains legible in dark themes and platform palettes.
       selBtn->setStyleSheet(
-          "QPushButton { background-color: #e0e0e0; border: 1px solid #888; border-radius: 4px; }"
-          "QPushButton:hover { background-color: #d0d0d0; }"
-          "QPushButton:checked { background-color: #a5d6a7; border: 2px solid #2e7d32; font-weight: bold; }"
+          "QPushButton { background-color: palette(button); color: palette(button-text); "
+          "border: 1px solid palette(mid); border-radius: 4px; }"
+          "QPushButton:hover { background-color: palette(alternate-base); }"
+          "QPushButton:checked { background-color: palette(highlight); "
+          "color: palette(highlighted-text); border: 2px solid palette(highlight); "
+          "font-weight: bold; }"
       );
 
       m_selectorGroup->addButton(selBtn, flatIndex);
