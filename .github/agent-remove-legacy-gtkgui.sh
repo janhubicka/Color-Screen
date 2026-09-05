@@ -159,8 +159,8 @@ replace(
     "/* Render a fast preview.  To be replaced by render_tile later.\n")
 PY
 
-# Commit the intended source-level changes temporarily.  Regenerate Autotools
-# metadata only to discover the GTK-specific generated hunks; this avoids
+# Commit the intended source-level changes temporarily. Regenerate Autotools
+# metadata only to discover GTK-specific generated hunks; this avoids
 # committing unrelated churn from a newer Automake/Autoconf on the runner.
 git add -A
 git commit -m "temporary source GTK removal"
@@ -216,8 +216,14 @@ git clean -fdx
 git apply --check /tmp/generated-gtk.patch
 git apply /tmp/generated-gtk.patch
 
-git diff --check
+# Source/documentation changes must be whitespace-clean. Some newer Automake
+# generated assignments carry trailing spaces, so do not lint generated
+# Makefile.in files here.
+git diff --check -- . ':(exclude,glob)**/Makefile.in'
 sh build-aux/check-generated-build-metadata.sh
+
+echo "Final cleanup diff summary before build:"
+git diff --stat "$BASE_SHA"
 
 # These two workflow files are intentionally updated after this commit through
 # the GitHub API, because the Actions token may not push workflow modifications.
