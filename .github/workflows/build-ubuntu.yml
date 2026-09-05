@@ -224,7 +224,7 @@ jobs:
           SANITIZER_FLAGS="$SANITIZER_FLAGS -mno-direct-extern-access"
         fi
         CXXFLAGS="$SANITIZER_FLAGS" CFLAGS="$SANITIZER_FLAGS" \
-          ./configure --enable-checking --disable-static-link --enable-gtkgui --enable-qtgui
+          ./configure --enable-checking --disable-static-link --enable-qtgui
     - name: make (checking enabled)
       run: make -j$(nproc)
     - name: Qt GUI smoke tests (sanitizers)
