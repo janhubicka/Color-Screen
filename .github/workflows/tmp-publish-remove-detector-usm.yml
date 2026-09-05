@@ -1,0 +1,57 @@
+name: TEMP publish detector USM removal
+
+on:
+  push:
+    branches:
+      - agent/tmp-publish-remove-detector-usm-20260905
+    paths:
+      - .github/workflows/tmp-publish-remove-detector-usm.yml
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Preserve reviewed patch
+        run: |
+          base64 -d .tmp/detector-usm.patch.gz.b64 | gzip -d > /tmp/detector-usm.patch
+          sha256sum /tmp/detector-usm.patch
+      - name: Apply to clean feature branch
+        run: |
+          git fetch origin agent/scr-detect-remove-detector-sharpen
+          git checkout agent/scr-detect-remove-detector-sharpen
+          git apply --check /tmp/detector-usm.patch
+          git apply /tmp/detector-usm.patch
+          git diff --check
+          test "$(git status --short | wc -l)" -eq 18
+      - name: Commit and push
+        run: |
+          git config user.name "OpenAI Agent"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            doc/scr-detect-geometry-tracking.md \
+            src/colorscreen/colorscreen.C \
+            src/libcolorscreen/include/colorscreen.h \
+            src/libcolorscreen/include/scr-detect-parameters.h \
+            src/libcolorscreen/loadsave.C \
+            src/libcolorscreen/render-scr-detect.C \
+            src/libcolorscreen/render-scr-detect.h \
+            src/libcolorscreen/scr-detect-geometry.C \
+            src/libcolorscreen/unittests.C \
+            src/qtgui/DetectScreenWorker.cpp \
+            src/qtgui/DetectScreenWorker.h \
+            src/qtgui/MainWindow.cpp \
+            testsuite/Makefile.am \
+            testsuite/Makefile.in \
+            testsuite/benchmark-screen-detection.py \
+            testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw-autodetect.par \
+            testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.test \
+            testsuite/unittests.test
+          test "$(git diff --cached --name-only | wc -l)" -eq 18
+          git commit -m "detect: remove detector-only preclassification sharpening" -m "Remove the hidden screen-detector unsharp mask and its parameters from classification, caching, serialization, benchmarking and telemetry. Preserve loading of old scr_detect_sharpen_* keys by accepting and ignoring them, and keep the historical detect_regular_screen entry point as an ABI-compatible wrapper.\n\nWhen users need sharpening for detection, route the existing native-channel capture sharpening through regular-screen detection instead. The CLI autodetect path now honors capture sharpening loaded through --par and Qt snapshots the document render parameters for DetectScreenWorker.\n\nThe old Nikon Coolscan Dufay fixture still needs sharpening, so move that compatibility requirement to a small explicit capture-USM parameter fixture. Synthetic Finlay/Paget/Dufay discovery works without sharpening, the Nikon Dufay integration suite passes 6/6 with ordinary capture USM, and the supplied 150 MP Paget plate detects fast-only without any sharpening."
+          git push origin HEAD:agent/scr-detect-remove-detector-sharpen
