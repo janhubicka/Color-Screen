@@ -151,9 +151,10 @@ confidence-valued class map rather than changing hard labels globally.
 
 After a valid initial grid and preliminary geometry fit, fast flood fill still
 required every square-patch component to contain at least the historical
-`min_patch_size` number of hard-classified pixels.  With detector sharpening
-disabled, blur reduces the pure-color interior even when the component centroid
-remains very close to the predicted lattice point.  On NGS00428 Tile05 at 0/0,
+`min_patch_size` number of hard-classified pixels.  In the historical
+unsharpened 0/0 detector runs, blur reduced the pure-color interior even when the
+component centroid remained very close to the predicted lattice point.  On
+NGS00428 Tile05 at 0/0,
 diagnostics showed roughly 155,000 fast patch confirmations rejected as too
 small, compared with about 23,000 under the historical 2/3 mask.
 
@@ -192,8 +193,8 @@ fallback, but it changes every pixel in the component graph and therefore has a
 substantially larger false-positive and performance surface.
 
 Fast Dufay-like row growth now keeps the hard component test as its first path.
-Only when that strip component is absent, and only when legacy detector
-sharpening is disabled, it samples the continuous normalized dye fraction at
+Only when that strip component is absent, it samples the continuous normalized
+dye fraction at
 three positions along the already predicted strip and at corresponding points
 on both neighboring rows.  The expected dye must beat the stronger neighboring
 row by `min_patch_contrast`.  Even then, the row is accepted through this soft
@@ -300,8 +301,9 @@ On NGS00428 Tile01 with the legacy detector mask explicitly disabled, this
 reduces `seed_pixels` from 23,702 to 95 while preserving 93.35% detected screen
 coverage.  A one-pixel neighborhood search produced the same 95-pixel result,
 which is why DG-010 remains deferred rather than being bundled with this fix.
-With the normal 2 / 3 compatibility mask, Tile01 and Tile05 retain the same
-coverage, patch counts, and seed counts as before this change.
+Historical radius 2 / amount 3 detector-mask runs on Tile01 and Tile05 retained
+the same coverage, patch counts, and seed counts as before this change.  Those
+measurements remain useful history, but DG-020 later removed the detector mask.
 
 ### DG-011 — initial grids are accepted or rejected as all-or-nothing patterns
 
@@ -409,9 +411,8 @@ When a report file is supplied, regular-screen detection now emits two stable
 summary records.  `detect_stats:` records the final result, detected type, search
 regions and seed pixels examined, completed initial grids, initial-solver
 failures, flood-fill attempts and failures, patch count, last flood rejection
-reason, color-optimization/precompute failures, class-map builds, RGB
-precomputations, and whether the legacy pre-classification unsharp mask was
-active.  `detect_stats_ms:` records wall time spent in color optimization,
+reason, color-optimization/precompute failures, class-map builds, and adjusted-RGB
+precomputations.  `detect_stats_ms:` records wall time spent in color optimization,
 precomputation, class-map construction, initial solvers, flood fill, final
 solver, mesh solver, and the complete detection.
 
@@ -525,25 +526,45 @@ storage with an explicit capacity.
 
 **Severity:** high compatibility/robustness
 
-**Status:** compatibility default retained; removal blocked by DG-019
+**Status:** fixed; detector-only sharpening removed
 
-The `scr_detect_parameters` radius/amount unsharp mask predates the current MTF
-model.  An attempt in PR #35 to change its historical radius 2 / amount 3
-default to zero exposed a real compatibility dependency: both existing Dufay
-CLI integration tests aborted during autodetection.  The Coolscan raw fixture
-exhausted all 36 search regions, while the Capture One stitched fixture failed
-on a later tile after earlier tiles had been detected.
+The historical `scr_detect_parameters` radius/amount unsharp mask predated the
+current capture-sharpening pipeline and duplicated image processing inside the
+detector.  Earlier attempts to set its radius 2 / amount 3 default to zero
+failed on the real Nikon Coolscan Dufay integration fixture, so simply changing
+the default was not sufficient.
 
-Keep radius 2 / amount 3 as the default for now.  Explicit zero values remain a
-supported experimental mode and are exercised by synthetic fast-only discovery.
-This is not an endorsement of unsharp masking as the long-term detector design;
-it is a regression guard until DG-009 through DG-013 make the classifier robust
-to imperfect boundaries without artificially sharpening them.
+The detector-specific mask is now removed completely.  `scr_detect_parameters`
+contains only color-classification state, `render-scr-detect` no longer calls
+the generic unsharp-mask helper, and new parameter files no longer write
+`scr_detect_sharpen_radius` or `scr_detect_sharpen_amount`.  The loader still
+parses and ignores those two obsolete keys so existing `.par` files remain
+readable.
 
-Before retiring the compatibility mask again, compare the historical default
-and explicit zero values on the current CLI fixtures and the Batch 08 corpus in
-DG-019.  Any replacement must match or improve successful detection without
-increasing false positives or failure time.
+Capture sharpening, when genuinely needed, is supplied through the normal
+`render_parameters::sharpen` path.  `detect_regular_screen()` accepts an optional
+capture render-parameter snapshot; the CLI passes the parameters loaded by
+`autodetect --par=...`, and the Qt worker passes the current document render
+parameters.  Only the capture sharpening configuration is copied into the
+detection renderer; detector color/geometry controls remain independent.
+Native RGB capture sharpening is therefore performed by the same cache and
+implementation used by normal rendering before screen-color classification.
+
+The current Nikon Coolscan Dufay fixture still needs sharpening: fully
+unsharpened autodetection exhausts its search and fails.  Its integration test
+therefore uses a small capture parameter file selecting ordinary unsharp mask
+radius 2 / amount 3.  With that explicit capture setting all six real cases pass,
+including fixed/moving-lens geometry, mesh/no-mesh, fast-only, and slow-only
+flood fill.  This preserves the compatibility requirement without retaining a
+second hidden sharpening system in the detector.
+
+The 150 MP Phase One Paget capture used for DG-011 also succeeds in fast-only
+mode with neither detector nor capture sharpening: 1,692,520 patches and 72.54%
+screen coverage.  It needs six search regions and about 107 s on the local O2
+checking build, compared with the earlier sharpened first-region result.  Thus
+sharpening is no longer a correctness requirement for this difficult Paget
+case, but normal capture sharpening may still materially improve component
+separation and search time when touching or blurred screen elements warrant it.
 
 ### DG-021 — color optimization copied a padded image through a zero-amount mask
 
@@ -568,26 +589,28 @@ optimizer.
 key but did not compare `min_luminosity` or `min_ratio`, even though both values
 change `classify_adjusted_color()`.  Changing either threshold could therefore
 reuse a class map computed with stale classification rules.  Both values are now
-part of the comparison; legacy sharpening parameters remain part of the key as
-before.
+part of the comparison.  Detector-only sharpening parameters were subsequently
+removed by DG-020 and no longer participate in the key.
 
 ### DG-023 — fast-only flood fill should not precompute the slow RGB image
 
 **Severity:** medium performance
 
-**Status:** fixed for the explicitly unsharpened path
+**Status:** fixed
 
-Fast flood fill itself uses only the color-class map, but the historical
-pre-classification unsharp mask needs adjusted RGB in order to build that map.
-Consequently a default radius 2 / amount 3 run legitimately performs one RGB
-precomputation even in fast-only mode.  The detector statistics now count this
-implicit precomputation rather than reporting a misleading zero.
+Fast flood fill itself uses only the color-class map.  With detector-only
+sharpening removed, an unsharpened fast-only detection no longer materializes
+the adjusted-RGB image; synthetic discovery requires `rgb_precomputes=0`.
+When slow image-domain confirmation is enabled, one adjusted-RGB precompute is
+performed and the same synthetic test requires `rgb_precomputes=1`.
 
-When the compatibility mask is explicitly disabled and slow image-domain
-confirmation is also disabled, adjusted RGB is not materialized.  Synthetic
-fast-only discovery exercises this zero-mask mode and requires
-`rgb_precomputes=0`.  Thus the slow-path allocation is still avoidable, while
-DG-020 accurately records the cost of the compatibility mask.
+Explicit capture sharpening is the one intentional exception: classification
+must see the sharpened native RGB capture, so that capture image and a region's
+color-adjusted RGB representation are prepared before the class map even for
+fast-only flood fill.  The native sharpened capture cache is reusable across
+search regions.  Each region can still need a new adjusted-RGB representation
+when optimized screen primaries change, but slow confirmation reuses that same
+regional representation rather than computing it twice.
 
 ## Validation corpus
 
@@ -600,12 +623,13 @@ DG-020 accurately records the cost of the compatibility mask.
 The report-only DG-014 records now provide a stable baseline format, and the
 existing synthetic discovery tests cover sharp Finlay and Dufay detection with
 both slow+fast and fast-only flood fill.  `testsuite/benchmark-screen-detection.py`
-provides the manual corpus driver.  It runs external scans through `autodetect`,
-uses sparse parameter files to select detector sharpening without changing the
-normal compatibility default, and writes one CSV row per scan/mode together with
-full reports, logs, and successful output parameter files.  The CSV includes the
-DG-014 counters and timings, scan/screen coverage, process wall time, and Linux
-peak resident memory when `/proc` is available.
+provides the manual corpus driver.  It runs external scans through `autodetect`
+and writes one CSV row per flood-fill mode together with full reports, logs, and
+successful output parameter files.  Detector-sharpening modes were removed with
+DG-020; scans that require capture sharpening should provide it through the
+normal input parameter file used by the workflow being tested.  The CSV includes
+the DG-014 counters and timings, scan/screen coverage, process wall time, and
+Linux peak resident memory when `/proc` is available.
 
 The historical National Geographic failure corpus is available in Dropbox at
 `/Batch 08 error samples`.  It contains 25 problematic NGS scans, generally as
@@ -645,9 +669,11 @@ prototypes produced the same result, so this scan does not justify DG-010.
 The interior tile is the complementary warning: seed discovery remains immediate
 without sharpening, yet detected patches drop by 12.2% and flood fill becomes
 1.68 times slower.  On the corner tile flood fill becomes 2.96 times slower.
-Therefore DG-024 is not sufficient evidence that the compatibility mask can be
-removed; subsequent work should focus on DG-009 class-map/component continuity
-and flood-fill completeness.
+At the time, DG-024 alone was not sufficient evidence to remove the compatibility
+mask; subsequent work therefore focused on DG-009 class-map/component continuity
+and flood-fill completeness.  DG-020 later removed the duplicate detector mask
+after those robustness fixes and moved the remaining real Dufay requirement to
+normal capture sharpening.
 
 DG-025 addresses one measured part of that gap.  The table below is an
 apples-to-apples before/after run on the same machine, using the accepted DG-024
@@ -665,9 +691,9 @@ Thus Tile05 gains 2.09 percentage points of screen coverage while flood time
 falls 11.7%; Tile01 preserves the real raster-free border while flood time falls
 12.2%.  Historical 2/3 runs remain effectively unchanged: Tile05 measures
 98.70% screen coverage and 3,778,087 patches, while Tile01 measures 97.28% and
-2,140,569 patches.  The compatibility mask is still retained because DG-025 does
-not recover the remaining Tile05 coverage gap or the strip/unknown-pixel part of
-DG-009.
+2,140,569 patches.  At this stage the compatibility mask was still retained
+because DG-025 did not recover the remaining Tile05 coverage gap or the
+strip/unknown-pixel part of DG-009; DG-020 records its later removal.
 
 DG-026 then isolates the strip part without changing the global hard class map.
 Fast-only 0/0 detection on Tile05 rises from 79.01% to 84.00% screen coverage;

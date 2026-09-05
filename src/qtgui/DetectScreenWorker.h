@@ -5,6 +5,7 @@
 #include "../libcolorscreen/include/solver-parameters.h"
 #include "../libcolorscreen/include/detect-regular-screen-parameters.h"
 #include "../libcolorscreen/include/progress-info.h"
+#include "../libcolorscreen/include/render-parameters.h"
 #include <QObject>
 #include <memory>
 
@@ -18,6 +19,7 @@ public:
   DetectScreenWorker(colorscreen::scr_detect_parameters detectParams,
                      colorscreen::solver_parameters solverParams,
                      colorscreen::scr_to_img_parameters scrToImgParams,
+                     colorscreen::render_parameters renderParams,
                      std::shared_ptr<colorscreen::image_data> scan,
                      std::shared_ptr<colorscreen::progress_info> progress,
                      colorscreen::luminosity_t gamma);
@@ -32,6 +34,7 @@ private:
   colorscreen::scr_detect_parameters m_detectParams;
   colorscreen::solver_parameters m_solverParams;
   colorscreen::scr_to_img_parameters m_scrToImgParams;
+  colorscreen::render_parameters m_renderParams;
   std::shared_ptr<colorscreen::image_data> m_scan;
   std::shared_ptr<colorscreen::progress_info> m_progress;
   colorscreen::luminosity_t m_gamma;

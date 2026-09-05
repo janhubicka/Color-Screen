@@ -187,13 +187,7 @@ save_csp (FILE *f, const scr_to_img_parameters *param, const scr_detect_paramete
           || fprintf (f, "scr_detect_min_luminosity: %f\n",
                       dparam->min_luminosity)
                  < 0
-          || fprintf (f, "scr_detect_min_ratio: %f\n", dparam->min_ratio) < 0
-          || fprintf (f, "scr_detect_sharpen_radius: %f\n",
-                      dparam->sharpen_radius)
-                 < 0
-          || fprintf (f, "scr_detect_sharpen_amount: %f\n",
-                      dparam->sharpen_amount)
-                 < 0)
+          || fprintf (f, "scr_detect_min_ratio: %f\n", dparam->min_ratio) < 0)
         return false;
     }
   if (rparam)
@@ -1958,9 +1952,11 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam,
               return false;
             }
         }
+      /* Accept obsolete detector-only unsharp-mask settings so old parameter
+         files remain readable.  Detection no longer applies these values.  */
       else if (!strcmp (buf, "scr_detect_sharpen_radius"))
         {
-          if (!read_scalar (f, dparam_check (sharpen_radius)))
+          if (!read_scalar (f, NULL))
             {
               *error = "error parsing scr_detect_sharpen_radius";
               return false;
@@ -1968,7 +1964,7 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam,
         }
       else if (!strcmp (buf, "scr_detect_sharpen_amount"))
         {
-          if (!read_luminosity (f, dparam_check (sharpen_amount)))
+          if (!read_luminosity (f, NULL))
             {
               *error = "error parsing scr_detect_sharpen_amount";
               return false;

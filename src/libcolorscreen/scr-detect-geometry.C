@@ -42,7 +42,6 @@ struct detection_stats {
   int classmap_builds = 0;
   int rgb_precomputes = 0;
   int patches = 0;
-  bool legacy_preclassification_sharpening = false;
   double optimize_colors_ms = 0;
   double precompute_ms = 0;
   double classmap_ms = 0;
@@ -85,12 +84,11 @@ struct detection_stats {
             "initial_grids=%i initial_solver_failures=%i flood_attempts=%i "
             "flood_failures=%i patches=%i last_flood_failure=%s "
             "color_opt_failures=%i precompute_failures=%i classmap_builds=%i "
-            "rgb_precomputes=%i legacy_preclassification_sharpening=%i\n",
+            "rgb_precomputes=%i\n",
             result, type_name, regions, seed_pixels, initial_grids,
             initial_solver_failures, flood_attempts, flood_failures, patches,
             last_flood_failure, color_opt_failures, precompute_failures,
-            classmap_builds, rgb_precomputes,
-            legacy_preclassification_sharpening);
+            classmap_builds, rgb_precomputes);
     fprintf(report_file,
             "detect_stats_ms: optimize_colors=%.3f precompute=%.3f "
             "classmap=%.3f initial_solver=%.3f flood=%.3f "
@@ -1638,7 +1636,7 @@ static solver_parameters::point_color diagonal_coordinates_to_color(int x,
    Return null when the candidate cannot cover the required screen area
    consistently.  */
 std::unique_ptr<screen_map> flood_fill(
-    FILE *report_file, bool slow, bool fast, bool soft_strip_color,
+    FILE *report_file, bool slow, bool fast,
     coord_t greenx, coord_t greeny,
     const scr_to_img_parameters &param, const image_data &img,
     const render_scr_detect *render, const color_class_map *color_map,
@@ -1825,7 +1823,7 @@ std::unique_ptr<screen_map> flood_fill(
                    &iy, &priority, 1.0f / 3.0f, 0.5f, 0.5f, true, false,       \
                    dsparams->min_patch_contrast))
 #define softstrip(x, y, t, priority)                                           \
-  (fast && soft_strip_color &&                                                 \
+  (fast &&                                                                     \
    confirm_strip_color(render, param.coordinate1, param.coordinate2, x, y, t,  \
                        dsparams->min_patch_contrast, &priority))
 /* Preserve the historical hard-strip control flow.  A hard strip remains
@@ -2206,15 +2204,17 @@ void summarise_quality(const image_data &img, const screen_map *smap,
 /* Detect a regular screen in IMG using color classification DPARAM and limits
    DSPARAMS.  Search candidate regions from the center outward, estimate an
    initial lattice for each supported regular screen, flood-fill accepted
-   patches, and fit the final homography or mesh.  Update SPARAM with final
-   solver points, report optional diagnostics to REPORT_FILE, and use PROGRESS
-   for status and cancellation.  Return an unsuccessful result on any rejected
-   or cancelled stage.  */
+   patches, and fit the final homography or mesh.  CAPTURE_RPARAM optionally
+   supplies native-channel capture sharpening; other render adjustments are
+   ignored.  Update SPARAM with final solver points, report optional diagnostics
+   to REPORT_FILE, and use PROGRESS for status and cancellation.  Return an
+   unsuccessful result on any rejected or cancelled stage.  */
 detected_screen
 detect_regular_screen_1(const image_data &img, scr_detect_parameters &dparam,
                         solver_parameters &sparam,
                         const detect_regular_screen_params *dsparams,
-                        progress_info *progress, FILE *report_file) {
+                        progress_info *progress, FILE *report_file,
+                        const render_parameters *capture_rparam) {
   /* Try all supported regular-screen families.  */
   const bool try_dufay = true;
   const bool try_omnicolore = true;
@@ -2223,11 +2223,15 @@ detect_regular_screen_1(const image_data &img, scr_detect_parameters &dparam,
 
   detected_screen ret;
   render_parameters empty;
+  render_parameters detect_rparam;
   std::unique_ptr<screen_map> smap = NULL;
   scr_type type = dsparams->scr_type;
   assert(dsparams->scanner_type != max_scanner_type);
 
   empty.gamma = dsparams->gamma;
+  detect_rparam.gamma = dsparams->gamma;
+  if (capture_rparam)
+    detect_rparam.sharpen = capture_rparam->sharpen;
   assert(empty.gamma != 0 || img.to_linear[0].size());
   ret.mesh_trans = NULL;
   ret.success = false;
@@ -2243,9 +2247,6 @@ detect_regular_screen_1(const image_data &img, scr_detect_parameters &dparam,
   param.scanner_type = dsparams->scanner_type;
   detection_stats stats(report_file);
   stats.type = type;
-  stats.legacy_preclassification_sharpening =
-      dparam.sharpen_radius > 0 && dparam.sharpen_amount > 0;
-
   {
     bitmap_2d visited(img.width, img.height);
     bitmap_2d visited_paget(img.width, img.height);
@@ -2318,7 +2319,7 @@ detect_regular_screen_1(const image_data &img, scr_detect_parameters &dparam,
           prune_render_scr_detect_caches();
           detection_stats::time_point stage_start = stats.start_timer();
           std::unique_ptr<render_scr_detect> new_render(
-              new render_scr_detect(dparam, img, empty, 256));
+              new render_scr_detect(dparam, img, detect_rparam, 256));
           if (!new_render) {
             stats.add_time(&stats.precompute_ms, stage_start);
             stats.precompute_failures++;
@@ -2328,13 +2329,16 @@ detect_regular_screen_1(const image_data &img, scr_detect_parameters &dparam,
             return ret;
           }
           render = std::move(new_render);
+          const bool capture_sharpening
+              = capture_rparam
+                && capture_rparam->sharpen.get_mode ()
+                       != sharpen_parameters::none;
           bool precompute_ok = render->precompute_all(PRECOMPUTE_NONE, progress);
-          if (precompute_ok && stats.legacy_preclassification_sharpening)
+          if (precompute_ok && capture_sharpening)
             stats.rgb_precomputes++;
           if (precompute_ok && dsparams->slow_floodfill) {
             precompute_ok = render->precompute_rgbdata(progress);
-            if (precompute_ok
-                && !stats.legacy_preclassification_sharpening)
+            if (precompute_ok && !capture_sharpening)
               stats.rgb_precomputes++;
           }
           stats.add_time(&stats.precompute_ms, stage_start);
@@ -2469,8 +2473,6 @@ detect_regular_screen_1(const image_data &img, scr_detect_parameters &dparam,
                 smap =
                     flood_fill(report_file, dsparams->slow_floodfill,
                                dsparams->fast_floodfill,
-                               !(dparam.sharpen_radius > 0
-                                 && dparam.sharpen_amount > 0),
                                sparam.points[0].img.x, sparam.points[0].img.y,
                                param, img, render.get(),
                                this_cmap, NULL /*sparam*/, &visited,
@@ -2790,19 +2792,35 @@ detect_regular_screen_1(const image_data &img, scr_detect_parameters &dparam,
 }
 } // namespace
 
-/* Detect a regular screen and prune temporary render-detection caches before
-   returning.  IMG, DPARAM, SPARAM, DSPARAMS, PROGRESS, and REPORT_FILE have the
-   same roles as in detect_regular_screen_1().  */
+/* Detect a regular screen without capture sharpening and prune temporary
+   render-detection caches before returning.  IMG, DPARAM, SPARAM, DSPARAMS,
+   PROGRESS, and REPORT_FILE have the same roles as in detect_regular_screen_1().
+   This wrapper preserves the historical public entry point.  */
 detected_screen
 detect_regular_screen(const image_data &img, scr_detect_parameters &dparam,
                       solver_parameters &sparam,
                       const detect_regular_screen_params *dsparams,
                       progress_info *progress, FILE *report_file) {
+  return detect_regular_screen(img, dparam, sparam, dsparams, progress,
+                               report_file, NULL);
+}
+
+/* Detect a regular screen, optionally applying CAPTURE_RPARAM's native-channel
+   capture sharpening before screen-color classification.  IMG, DPARAM, SPARAM,
+   DSPARAMS, PROGRESS, and REPORT_FILE have the same roles as in
+   detect_regular_screen_1().  */
+detected_screen
+detect_regular_screen(const image_data &img, scr_detect_parameters &dparam,
+                      solver_parameters &sparam,
+                      const detect_regular_screen_params *dsparams,
+                      progress_info *progress, FILE *report_file,
+                      const render_parameters *capture_rparam) {
   // dsparams->slow_floodfill = false;
   // dsparams->fast_floodfill = true;
   // dsparams->optimize_colors = false;
   detected_screen ret = detect_regular_screen_1(img, dparam, sparam, dsparams,
-                                                progress, report_file);
+                                                progress, report_file,
+                                                capture_rparam);
   prune_render_scr_detect_caches();
   return ret;
 }

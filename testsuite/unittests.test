@@ -191,8 +191,6 @@ main (int argc, char **argv)
   saved_geometry.final_rotation = 0.125;
   saved_geometry.final_mirror = !saved_geometry.final_mirror;
   saved_detection.min_ratio = 1.25;
-  saved_detection.sharpen_radius = 2.5;
-  saved_detection.sharpen_amount = 3.5;
 
   FILE *project = std::tmpfile ();
   if (!project)

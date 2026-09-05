@@ -5,11 +5,13 @@ DetectScreenWorker::DetectScreenWorker(
     colorscreen::scr_detect_parameters detectParams,
     colorscreen::solver_parameters solverParams,
     colorscreen::scr_to_img_parameters scrToImgParams,
+    colorscreen::render_parameters renderParams,
     std::shared_ptr<colorscreen::image_data> scan,
     std::shared_ptr<colorscreen::progress_info> progress,
     colorscreen::luminosity_t gamma)
     : m_detectParams(detectParams), m_solverParams(solverParams),
-      m_scrToImgParams(scrToImgParams), m_scan(scan), m_progress(progress), m_gamma(gamma) {
+      m_scrToImgParams(scrToImgParams), m_renderParams(renderParams),
+      m_scan(scan), m_progress(progress), m_gamma(gamma) {
 }
 
 void DetectScreenWorker::detect() {
@@ -29,7 +31,8 @@ void DetectScreenWorker::detect() {
   
   // Run detection - this modifies localSolver in place
   colorscreen::detected_screen result = colorscreen::detect_regular_screen(
-      *m_scan, m_detectParams, localSolver, &dsparams, m_progress.get());
+      *m_scan, m_detectParams, localSolver, &dsparams, m_progress.get(),
+      nullptr, &m_renderParams);
   
   // Check if cancelled
   if (m_progress && m_progress->cancelled()) {

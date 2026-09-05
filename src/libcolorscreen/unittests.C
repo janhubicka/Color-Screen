@@ -2038,26 +2038,19 @@ test_homography (bool lens_correction, bool joly, coord_t epsilon)
 }
 
 /* Verify that REPORT contains a successful detector statistics record and that
-   it reports EXPECTED_RGB_PRECOMPUTES adjusted-RGB precomputations and the
-   EXPECTED_LEGACY_SHARPENING state.  */
+   it reports EXPECTED_RGB_PRECOMPUTES adjusted-RGB precomputations.  */
 bool
-check_detection_stats (FILE *report, int expected_rgb_precomputes,
-                       bool expected_legacy_sharpening)
+check_detection_stats (FILE *report, int expected_rgb_precomputes)
 {
   rewind (report);
   char line[2048];
   char rgb_precomputes[64];
-  char legacy_sharpening[80];
   snprintf (rgb_precomputes, sizeof (rgb_precomputes), "rgb_precomputes=%i",
             expected_rgb_precomputes);
-  snprintf (legacy_sharpening, sizeof (legacy_sharpening),
-            "legacy_preclassification_sharpening=%i",
-            expected_legacy_sharpening);
   while (fgets (line, sizeof (line), report))
     if (!strncmp (line, "detect_stats:", strlen ("detect_stats:")))
       return strstr (line, "result=success")
-             && strstr (line, rgb_precomputes)
-             && strstr (line, legacy_sharpening);
+             && strstr (line, rgb_precomputes);
   return false;
 }
 
@@ -2068,12 +2061,6 @@ do_test_discovery (scr_to_img_parameters &param, int width, int height, coord_t 
 {
   image_data img;
   scr_detect_parameters dparam;
-  if (dparam.sharpen_radius != 2 || dparam.sharpen_amount != 3)
-    {
-      fprintf (stderr,
-               "Screen detection compatibility sharpening default changed\n");
-      return false;
-    }
   scr_detect_parameters changed_dparam = dparam;
   changed_dparam.min_ratio += (luminosity_t)0.25;
   if (changed_dparam == dparam)
@@ -2110,15 +2097,6 @@ do_test_discovery (scr_to_img_parameters &param, int width, int height, coord_t 
 	{
 	  dsparams.fast_floodfill = alg != 2;
 	  dsparams.slow_floodfill = alg != 1;
-	  scr_detect_parameters run_dparam = dparam;
-	  /* Exercise the fast-only path without the compatibility mask so this
-	     also verifies that adjusted RGB is not materialized unnecessarily.  */
-	  if (!dsparams.slow_floodfill)
-	    {
-	      run_dparam.sharpen_radius = 0;
-	      run_dparam.sharpen_amount = 0;
-	    }
-
 	  /* Save some time with slow floodfill.  */
 	  if (!dsparams.fast_floodfill && m)
 	    continue;
@@ -2129,12 +2107,10 @@ do_test_discovery (scr_to_img_parameters &param, int width, int height, coord_t 
 	  FILE *detection_report = tmpfile ();
 	  if (!detection_report)
 	    return false;
-	  auto detected = detect_regular_screen (img, run_dparam, sparam, &dsparams,
+	  auto detected = detect_regular_screen (img, dparam, sparam, &dsparams,
 	                                         NULL, detection_report);
-	  bool legacy_sharpening = run_dparam.sharpen_radius > 0
-	                           && run_dparam.sharpen_amount > 0;
 	  bool stats_ok = check_detection_stats (
-	      detection_report, legacy_sharpening ? 1 : 0, legacy_sharpening);
+	      detection_report, dsparams.slow_floodfill ? 1 : 0);
 	  fclose (detection_report);
 	  if (!stats_ok)
 	    {
