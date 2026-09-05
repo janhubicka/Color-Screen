@@ -118,6 +118,21 @@ WorkspaceWindow::WorkspaceWindow(QWidget *parent) : QMainWindow(parent) {
   m_mdiArea->setViewMode(QMdiArea::TabbedView);
   setCentralWidget(m_mdiArea);
 
+  // Keep the outer QMainWindow's toolbar-area topology fixed for its complete
+  // lifetime.  Active document/view toolbars are ordinary child widgets in
+  // this host, never QToolBars added to or removed from the workspace layout.
+  m_workspaceToolBar = new QToolBar(tr("Main Toolbar"), this);
+  m_workspaceToolBar->setObjectName(QStringLiteral("WorkspaceToolbar"));
+  m_workspaceToolBar->setMovable(false);
+  m_workspaceToolBarHost = new QWidget(m_workspaceToolBar);
+  m_workspaceToolBarHost->setObjectName(QStringLiteral("WorkspaceToolbarHost"));
+  m_workspaceToolBarLayout = new QHBoxLayout(m_workspaceToolBarHost);
+  m_workspaceToolBarLayout->setContentsMargins(0, 0, 0, 0);
+  m_workspaceToolBarLayout->setSpacing(0);
+  m_workspaceToolBar->addWidget(m_workspaceToolBarHost);
+  addToolBar(Qt::TopToolBarArea, m_workspaceToolBar);
+  m_workspaceToolBar->hide();
+
   statusBar()->setObjectName(QStringLiteral("WorkspaceStatusBar"));
 
   // The status bar is workspace-global. Every attached logical document
@@ -229,8 +244,8 @@ void WorkspaceWindow::addDocument(MainWindow *document) {
   subWindow->setWidget(document);
   // addSubWindow() may activate synchronously. Keep shared chrome handoff
   // blocked until the embedded child and outer workspace have completed their
-  // first show/layout pass. The child toolbar is deliberately not registered
-  // in the child's QMainWindowLayout while embedded.
+  // first show/layout pass. The child toolbar stays in the child's original
+  // QMainWindowLayout until that first layout is complete.
   ++m_chromeActivationBlockDepth;
   m_mdiArea->addSubWindow(subWindow);
 
@@ -256,9 +271,9 @@ void WorkspaceWindow::addDocument(MainWindow *document) {
     subWindow->showMaximized();
   m_mdiArea->setActiveSubWindow(subWindow);
 
-  // Let the outer QMainWindow establish its toolbar-area layout before the
-  // active child's toolbar is borrowed into it. Qt's macOS offscreen plugin
-  // is not robust when a reparented QToolBar participates in the first show.
+  // Let both QMainWindows establish their initial layout before the active
+  // child's toolbar leaves its original layout.  The workspace toolbar-area
+  // itself is already permanent and will not change during the handoff.
   show();
   if (isMinimized())
     showNormal();
@@ -308,8 +323,8 @@ void WorkspaceWindow::addView(ImageViewWindow *view) {
   subWindow->setObjectName(QStringLiteral("imageViewSubWindow"));
   subWindow->setWindowTitle(view->windowTitle());
   subWindow->setWidget(view);
-  // Use the same ordering for secondary views: finish the first embedded
-  // show before the workspace shell borrows the unregistered view toolbar.
+  // Use the same first-show ordering for secondary views: the source toolbar
+  // remains in the view's QMainWindowLayout until the embedded layout settles.
   ++m_chromeActivationBlockDepth;
   m_mdiArea->addSubWindow(subWindow);
 
@@ -340,9 +355,8 @@ void WorkspaceWindow::addView(ImageViewWindow *view) {
     subWindow->showMaximized();
   m_mdiArea->setActiveSubWindow(subWindow);
 
-  // Let the outer QMainWindow establish its toolbar-area layout before the
-  // active child's toolbar is borrowed into it. Qt's macOS offscreen plugin
-  // is not robust when a reparented QToolBar participates in the first show.
+  // As with documents, finish both first layouts before moving the child
+  // toolbar into the permanent workspace slot.
   show();
   if (isMinimized())
     showNormal();
@@ -1012,6 +1026,68 @@ void WorkspaceWindow::installDocumentInspector(MainWindow *document,
   m_inspectorDock->show();
 }
 
+/** Move TOOLBAR into the one permanent outer toolbar slot. */
+void WorkspaceWindow::installWorkspaceToolBar(QMainWindow *owner,
+                                               QToolBar *toolbar) {
+  if (!owner || !toolbar || !m_workspaceToolBar ||
+      !m_workspaceToolBarHost || !m_workspaceToolBarLayout)
+    return;
+
+  if (toolbar->parentWidget() == m_workspaceToolBarHost) {
+    toolbar->show();
+    m_workspaceToolBar->show();
+    return;
+  }
+
+  // This handoff runs only after the child and workspace have completed their
+  // first show/layout.  Removing the child toolbar at that point was already
+  // proven stable by #267; unlike the old model, the outer QMainWindow never
+  // adds or removes a QToolBar here.
+  if (auto *currentOwner = qobject_cast<QMainWindow *>(toolbar->parentWidget())) {
+    if (currentOwner->toolBarArea(toolbar) != Qt::NoToolBarArea)
+      currentOwner->removeToolBar(toolbar);
+  }
+
+  toolbar->hide();
+  toolbar->setParent(m_workspaceToolBarHost);
+  m_workspaceToolBarLayout->addWidget(toolbar);
+  toolbar->show();
+  m_workspaceToolBar->show();
+}
+
+/** Return TOOLBAR to OWNER while leaving the outer toolbar registered. */
+void WorkspaceWindow::releaseWorkspaceToolBar(QMainWindow *owner,
+                                               QToolBar *toolbar,
+                                               bool showInWindow) {
+  if (!owner || !toolbar)
+    return;
+
+  if (m_workspaceToolBarLayout && m_workspaceToolBarHost &&
+      toolbar->parentWidget() == m_workspaceToolBarHost) {
+    m_workspaceToolBarLayout->removeWidget(toolbar);
+  } else if (!showInWindow && toolbar->parentWidget() == owner &&
+             owner->toolBarArea(toolbar) != Qt::NoToolBarArea) {
+    // This only occurs after the child's first layout (for example if chrome
+    // is released before it was ever borrowed).  Keep inactive MDI children
+    // free of toolbar-area ownership once that initial layout has completed.
+    owner->removeToolBar(toolbar);
+  }
+
+  toolbar->hide();
+  if (toolbar->parentWidget() != owner)
+    toolbar->setParent(owner);
+
+  if (showInWindow) {
+    if (owner->toolBarArea(toolbar) == Qt::NoToolBarArea)
+      owner->addToolBar(Qt::TopToolBarArea, toolbar);
+    toolbar->show();
+  }
+
+  if (m_workspaceToolBar && m_workspaceToolBarLayout &&
+      m_workspaceToolBarLayout->count() == 0)
+    m_workspaceToolBar->hide();
+}
+
 /** Present DOCUMENT's menus, toolbar, inspector, and transient status row. */
 void WorkspaceWindow::installDocumentChrome(MainWindow *document) {
   if (!document)
@@ -1021,16 +1097,10 @@ void WorkspaceWindow::installDocumentChrome(MainWindow *document) {
   for (QAction *action : document->menuBar()->actions())
     menuBar()->addAction(action);
 
-  if (QToolBar *toolbar = document->workspaceToolBar()) {
-    if (toolbar->parentWidget() != this)
-      toolbar->setParent(this);
-    if (toolBarArea(toolbar) == Qt::NoToolBarArea)
-      addToolBar(Qt::TopToolBarArea, toolbar);
-    toolbar->show();
-  }
+  if (QToolBar *toolbar = document->workspaceToolBar())
+    installWorkspaceToolBar(document, toolbar);
 
   installDocumentInspector(document, document->primaryImageWidget());
-
 
   document->refreshWindowMenu();
   setWindowTitle(document->documentDisplayName() + tr(" — Color-Screen"));
@@ -1042,21 +1112,8 @@ void WorkspaceWindow::releaseDocumentChrome(MainWindow *document,
   if (!document)
     return;
 
-  if (QToolBar *toolbar = document->workspaceToolBar()) {
-    if (toolbar->parentWidget() == this &&
-        toolBarArea(toolbar) != Qt::NoToolBarArea)
-      removeToolBar(toolbar);
-    toolbar->hide();
-    // Inactive embedded documents must not regain toolbar-area ownership.
-    // restoreFromWorkspaceEmbedding() re-registers the toolbar after detach.
-    if (showInWindow) {
-      if (toolbar->parentWidget() != document)
-        toolbar->setParent(document);
-      if (document->toolBarArea(toolbar) == Qt::NoToolBarArea)
-        document->addToolBar(Qt::TopToolBarArea, toolbar);
-      toolbar->show();
-    }
-  }
+  if (QToolBar *toolbar = document->workspaceToolBar())
+    releaseWorkspaceToolBar(document, toolbar, showInWindow);
 
   document->standaloneStatusBar()->setVisible(showInWindow);
   if (showInWindow)
@@ -1096,13 +1153,8 @@ void WorkspaceWindow::installViewChrome(ImageViewWindow *view) {
   for (QAction *action : view->menuBar()->actions())
     menuBar()->addAction(action);
 
-  if (QToolBar *toolbar = view->workspaceToolBar()) {
-    if (toolbar->parentWidget() != this)
-      toolbar->setParent(this);
-    if (toolBarArea(toolbar) == Qt::NoToolBarArea)
-      addToolBar(Qt::TopToolBarArea, toolbar);
-    toolbar->show();
-  }
+  if (QToolBar *toolbar = view->workspaceToolBar())
+    installWorkspaceToolBar(view, toolbar);
 
   if (view->isSlantedEdgeReference()) {
     if (QWidget *inspector = view->workspaceInspectorWidget()) {
@@ -1127,19 +1179,8 @@ void WorkspaceWindow::releaseViewChrome(ImageViewWindow *view,
   if (!view)
     return;
 
-  if (QToolBar *toolbar = view->workspaceToolBar()) {
-    if (toolbar->parentWidget() == this &&
-        toolBarArea(toolbar) != Qt::NoToolBarArea)
-      removeToolBar(toolbar);
-    toolbar->hide();
-    if (showInWindow) {
-      if (toolbar->parentWidget() != view)
-        toolbar->setParent(view);
-      if (view->toolBarArea(toolbar) == Qt::NoToolBarArea)
-        view->addToolBar(Qt::TopToolBarArea, toolbar);
-      toolbar->show();
-    }
-  }
+  if (QToolBar *toolbar = view->workspaceToolBar())
+    releaseWorkspaceToolBar(view, toolbar, showInWindow);
 
   view->menuBar()->setVisible(showInWindow);
   view->standaloneStatusBar()->setVisible(showInWindow);
@@ -1190,6 +1231,8 @@ void WorkspaceWindow::onSubWindowActivated(QMdiSubWindow *window) {
   } else if (view) {
     installViewChrome(view);
   } else {
+    if (m_workspaceToolBar)
+      m_workspaceToolBar->hide();
     menuBar()->clear();
     m_inspectorDock->hide();
     statusBar()->clearMessage();
@@ -1219,9 +1262,13 @@ void WorkspaceWindow::takeDocumentFromWorkspace(MainWindow *document) {
 
   document->setParent(nullptr);
   document->setWindowFlags(Qt::Window);
-  // Only after the document is top-level again may its private status bar be
-  // restored; embedded tabs deliberately share the workspace status bar.
+  // Only after the document is top-level again may its private status bar and
+  // toolbar-area ownership be restored.
   document->setWorkspaceStatusBar(nullptr);
+  if (QToolBar *toolbar = document->workspaceToolBar()) {
+    if (document->toolBarArea(toolbar) == Qt::NoToolBarArea)
+      document->addToolBar(Qt::TopToolBarArea, toolbar);
+  }
 }
 
 /** Remove secondary VIEW's MDI wrapper while keeping VIEW alive. */
@@ -1251,9 +1298,13 @@ void WorkspaceWindow::takeViewFromWorkspace(ImageViewWindow *view) {
 
   view->setParent(nullptr);
   view->setWindowFlags(Qt::Window);
-  // Match document detach ordering: clear the shared status bar only after
-  // the view has left the MDI hierarchy.
+  // Match document detach ordering: only restore private chrome ownership
+  // after the view has left the MDI hierarchy.
   view->setWorkspaceStatusBar(nullptr);
+  if (QToolBar *toolbar = view->workspaceToolBar()) {
+    if (view->toolBarArea(toolbar) == Qt::NoToolBarArea)
+      view->addToolBar(Qt::TopToolBarArea, toolbar);
+  }
   view->setAttribute(Qt::WA_DeleteOnClose, true);
 }
 
