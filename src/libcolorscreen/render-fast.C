@@ -120,7 +120,7 @@ render_fast::render_pixel_final (point_t p) const
   return out_color.final_color (d);
 }
 
-/* Render preview for GTKGUI.  To be replaced by render_tile later.
+/* Render a fast preview.  To be replaced by render_tile later.
    SCAN is scanned image data, PARAM is screen mapping parameters,
    RPARAMS are rendering parameters. PIXELS is output buffer of size
    WIDTH x HEIGHT with ROWSTRIDE. Update PROGRESS and return true on success.  */

@@ -21,7 +21,7 @@ our [wiki page](https://github.com/janhubicka/Color-Screen/wiki#software-package
 We are happy to build more configurations if that seem useful.
 
 ## Building from source code
-### Prequisities
+### Prerequisites
 Color-Screen can be built using recent versions of either GCC or Clang
 compilers.  For optimal performance, OpenMP support in your compiler is
 recommended. 
@@ -46,7 +46,7 @@ If you wish to develop colorscreen, additional packages are recommended
  - [autoconf-archive](https://www.gnu.org/s/autoconf-archive/Downloads.html)
  - [libtool](https://www.gnu.org/software/libtool/)
 
-To build a QT based gui, QT6 libraries are needed. 
+To build the maintained Qt-based GUI, Qt 6 libraries are needed.
 
 ### Building on Linux (and other UNIX-like systems)
 
@@ -56,8 +56,7 @@ On typical Linux distribution it is enough to do the following.
 	make
 	make install-strip
 
-To build the gui use use addition `--enable-qtgui` option to the configure
-script.
+To build the GUI, add the `--enable-qtgui` option to the configure script.
 
 For better performance, if you are going to use the binary on the same CPU
 as you are building it, add `-march=native` to `CXXFLAGS`.  This will enable use
@@ -87,9 +86,9 @@ For better performance, if you are going to use the binary on the same CPU
 as you are building it, add `-march=native` to `CXXFLAGS`.  This will enable use
 of extended instruction set of your CPU.
 
-As a result native Color-Screen library, GTK gui and command line utilities
-will be built.  Note that `~` does not point to Windows home directory, but to
-a home directory in msys2 tree.
+As a result the native Color-Screen library, Qt GUI, and command-line utility
+will be built. Note that `~` does not point to the Windows home directory, but
+to a home directory in the MSYS2 tree.
 
 
 To make the package stand-alone it is necessary to copy
@@ -149,9 +148,5 @@ recreating or copying the document. `Ctrl+Tab` and `Ctrl+Shift+Tab` cycle the
 open images.  The intended processing order, panel semantics, and the staged
 plan for making the interface more familiar to users of non-destructive RAW
 editors are documented in [the Qt GUI workflow roadmap](doc/qtgui-workflow-roadmap.md).
-
-Finally you may try to build also `colorscreen-gtk` which is a deprecated GTK
-based gui application. Invoke it with `colorscreen-gtk <scan file>`. Scan must
-be in tiff, jpeg, jpeg2000 or png file format.
 
 Jan Hubička (hubicka@ucw.cz)

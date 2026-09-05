@@ -117,8 +117,7 @@ jobs:
         CC="ccache clang-18" CXX="ccache clang++-18" \
           CXXFLAGS="$SANITIZER_FLAGS" CFLAGS="$SANITIZER_FLAGS" \
           LDFLAGS="-fsanitize=thread" \
-          ./configure --enable-checking --disable-static-link \
-          --disable-gtkgui --enable-qtgui
+          ./configure --enable-checking --disable-static-link --enable-qtgui
     - name: Build ThreadSanitizer variant
       shell: bash
       run: |

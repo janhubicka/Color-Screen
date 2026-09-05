@@ -647,13 +647,8 @@ Qt6_LIBS
 Qt6_CFLAGS
 RENDER_EXTRA_FALSE
 RENDER_EXTRA_TRUE
-gtkgui_FALSE
-gtkgui_TRUE
 static_link_FALSE
 static_link_TRUE
-GTKGUI_BIN_LIBS
-GTKGUI_BIN_CFLAGS
-RDYNAMIC
 GUI_LDFLAGS
 WINDRES
 HOST_WIN32_FALSE
@@ -828,7 +823,6 @@ with_openjpeg
 with_libpng
 enable_16bit_float
 enable_checking
-enable_gtkgui
 enable_render_extra
 enable_static_link
 enable_qtgui
@@ -855,8 +849,6 @@ LIBPNG_CFLAGS
 LIBPNG_LIBS
 EXIV2_CFLAGS
 EXIV2_LIBS
-GTKGUI_BIN_CFLAGS
-GTKGUI_BIN_LIBS
 Qt6_CFLAGS
 Qt6_LIBS'
 
@@ -1510,15 +1502,19 @@ Optional Features:
                           (a hack for MacOS static linking)
   --disable-16bit-float   disable use of 16bit floats for temporary data
   --enable-checking       enable extra runtime checking
-  --enable-gtkgui         enable gtk2 based gui interface
   --enable-render-extra   enable additional render from external source tree
-  --disable-static-link   do not link colorscreen statically into colorscreen
-                          and colorscreen-gtk binaries
+  --disable-static-link   do not link colorscreen statically into command-line
+                          and GUI binaries
   --enable-qtgui          enable Qt6 based gui interface
 
 Optional Packages:
   --with-PACKAGE[=ARG]    use PACKAGE [ARG=yes]
   --without-PACKAGE       do not use PACKAGE (same as --with-PACKAGE=no)
+  --with-pic[=PKGS]       try to use only PIC/non-PIC objects [default=use
+                          both]
+  --with-aix-soname=aix|svr4|both
+                          shared library versioning (aka "SONAME") variant to
+                          provide on AIX, [default=aix].
   --with-gnu-ld           assume the C compiler uses GNU ld [default=no]
   --with-sysroot[=DIR]    Search for dependent libraries within DIR (or the
                           compiler's sysroot if not specified).
@@ -1559,14 +1555,10 @@ Some influential environment variables:
   EXIV2_CFLAGS
               C compiler flags for EXIV2, overriding pkg-config
   EXIV2_LIBS  linker flags for EXIV2, overriding pkg-config
-  GTKGUI_BIN_CFLAGS
-              C compiler flags for GTKGUI_BIN, overriding pkg-config
-  GTKGUI_BIN_LIBS
-              linker flags for GTKGUI_BIN, overriding pkg-config
   Qt6_CFLAGS  C compiler flags for Qt6, overriding pkg-config
   Qt6_LIBS    linker flags for Qt6, overriding pkg-config
 
-Use these variables to override the choices made by 'configure' or to help
+Use these variables to override the choices made by `configure' or to help
 it to find libraries and programs with nonstandard names/locations.
 
 Report bugs to <hubicka@ucw.cz>.
@@ -11586,7 +11578,7 @@ fi
       export_dynamic_flag_spec=-rdynamic
       ;;
 
-    cygwin* | mingw* | windows* | pw32* | cegcc*)
+    cygwin* | mingw* | pw32* | cegcc*)
       # When not using gcc, we currently assume that we are using
       # Microsoft Visual C++ or Intel C++ Compiler.
       # hardcode_libdir_flag_spec is actually meaningless, as there is
@@ -22582,58 +22574,6 @@ GUI_LDFLAGS=""
 
 
 
-# Needed only for gtkgui
-
-
-
-{ printf '%s\n' "$as_me:${as_lineno-$LINENO}: checking for compiler -rdynamic option" >&5
-printf %s "checking for compiler -rdynamic option... " >&6; }
-if test ${RDYNAMIC+y}
-then :
-  printf %s "(cached) " >&6
-else case e in #(
-  e)  ac_ext=c
-ac_cpp='$CPP $CPPFLAGS'
-ac_compile='$CC -c $CFLAGS $CPPFLAGS conftest.$ac_ext >&5'
-ac_link='$CC -o conftest$ac_exeext $CFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
-ac_compiler_gnu=$ac_cv_c_compiler_gnu
-
-  oldcflags="$CFLAGS"
-  CFLAGS="$CFLAGS -Wl,-export-dynamic"
-  CFLAGS="$CFLAGS -rdynamic"
-  cat confdefs.h - <<_ACEOF >conftest.$ac_ext
-/* end confdefs.h.  */
-
-int
-main (void)
-{
-
-  ;
-  return 0;
-}
-_ACEOF
-if ac_fn_c_try_link "$LINENO"
-then :
-  RDYNAMIC="-rdynamic"
-else case e in #(
-  e) RDYNAMIC="" ;;
-esac
-fi
-rm -f core conftest.err conftest.$ac_objext conftest.beam \
-    conftest$ac_exeext conftest.$ac_ext
-  CFLAGS="$oldcflags"
-  ac_ext=cpp
-ac_cpp='$CXXCPP $CPPFLAGS'
-ac_compile='$CXX -c $CXXFLAGS $CPPFLAGS conftest.$ac_ext >&5'
-ac_link='$CXX -o conftest$ac_exeext $CXXFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $LIBS >&5'
-ac_compiler_gnu=$ac_cv_cxx_compiler_gnu
-
- ;;
-esac
-fi
-{ printf '%s\n' "$as_me:${as_lineno-$LINENO}: result: $RDYNAMIC" >&5
-printf '%s\n' "$RDYNAMIC" >&6; }
-
 
 # Check whether --enable-16bit-float was given.
 if test ${enable_16bit_float+y}
@@ -22657,142 +22597,10 @@ fi
 if test x"$enable_checking" == x"yes"
 then
 
-printf '%s\n' "#define COLORSCREEN_CHECKING 1" >>confdefs.h
+printf "%s\n" "#define COLORSCREEN_CHECKING 1" >>confdefs.h
 
 fi
 
-# Check whether --enable-gtkgui was given.
-if test ${enable_gtkgui+y}
-then :
-  enableval=$enable_gtkgui;
-fi
-
-if test x"$enable_gtkgui" == x"yes"; then
-
-pkg_failed=no
-{ printf '%s\n' "$as_me:${as_lineno-$LINENO}: checking for
-    glib-2.0
-    gtk+-2.0
-  " >&5
-printf %s "checking for
-    glib-2.0
-    gtk+-2.0
-  ... " >&6; }
-
-if test -n "$GTKGUI_BIN_CFLAGS"; then
-    pkg_cv_GTKGUI_BIN_CFLAGS="$GTKGUI_BIN_CFLAGS"
- elif test -n "$PKG_CONFIG"; then
-    if test -n "$PKG_CONFIG" && \
-    { { printf '%s\n' "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"
-    glib-2.0
-    gtk+-2.0
-  \""; } >&5
-  ($PKG_CONFIG --exists --print-errors "
-    glib-2.0
-    gtk+-2.0
-  ") 2>&5
-  ac_status=$?
-  printf '%s\n' "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
-  test $ac_status = 0; }; then
-  pkg_cv_GTKGUI_BIN_CFLAGS=`$PKG_CONFIG --cflags "
-    glib-2.0
-    gtk+-2.0
-  " 2>/dev/null`
-		      test "x$?" != "x0" && pkg_failed=yes
-else
-  pkg_failed=yes
-fi
- else
-    pkg_failed=untried
-fi
-if test -n "$GTKGUI_BIN_LIBS"; then
-    pkg_cv_GTKGUI_BIN_LIBS="$GTKGUI_BIN_LIBS"
- elif test -n "$PKG_CONFIG"; then
-    if test -n "$PKG_CONFIG" && \
-    { { printf '%s\n' "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"
-    glib-2.0
-    gtk+-2.0
-  \""; } >&5
-  ($PKG_CONFIG --exists --print-errors "
-    glib-2.0
-    gtk+-2.0
-  ") 2>&5
-  ac_status=$?
-  printf '%s\n' "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
-  test $ac_status = 0; }; then
-  pkg_cv_GTKGUI_BIN_LIBS=`$PKG_CONFIG --libs "
-    glib-2.0
-    gtk+-2.0
-  " 2>/dev/null`
-		      test "x$?" != "x0" && pkg_failed=yes
-else
-  pkg_failed=yes
-fi
- else
-    pkg_failed=untried
-fi
-
-
-
-if test $pkg_failed = yes; then
-        { printf '%s\n' "$as_me:${as_lineno-$LINENO}: result: no" >&5
-printf '%s\n' "no" >&6; }
-
-if $PKG_CONFIG --atleast-pkgconfig-version 0.20; then
-        _pkg_short_errors_supported=yes
-else
-        _pkg_short_errors_supported=no
-fi
-        if test $_pkg_short_errors_supported = yes; then
-                GTKGUI_BIN_PKG_ERRORS=`$PKG_CONFIG --short-errors --print-errors --cflags --libs "
-    glib-2.0
-    gtk+-2.0
-  " 2>&1`
-        else
-                GTKGUI_BIN_PKG_ERRORS=`$PKG_CONFIG --print-errors --cflags --libs "
-    glib-2.0
-    gtk+-2.0
-  " 2>&1`
-        fi
-        # Put the nasty error message in config.log where it belongs
-        echo "$GTKGUI_BIN_PKG_ERRORS" >&5
-
-        as_fn_error $? "Package requirements (
-    glib-2.0
-    gtk+-2.0
-  ) were not met:
-
-$GTKGUI_BIN_PKG_ERRORS
-
-Consider adjusting the PKG_CONFIG_PATH environment variable if you
-installed software in a non-standard prefix.
-
-Alternatively, you may set the environment variables GTKGUI_BIN_CFLAGS
-and GTKGUI_BIN_LIBS to avoid the need to call pkg-config.
-See the pkg-config man page for more details." "$LINENO" 5
-elif test $pkg_failed = untried; then
-        { printf '%s\n' "$as_me:${as_lineno-$LINENO}: result: no" >&5
-printf '%s\n' "no" >&6; }
-        { { printf '%s\n' "$as_me:${as_lineno-$LINENO}: error: in '$ac_pwd':" >&5
-printf '%s\n' "$as_me: error: in '$ac_pwd':" >&2;}
-as_fn_error $? "The pkg-config script could not be found or is too old.  Make sure it
-is in your PATH or set the PKG_CONFIG environment variable to the full
-path to pkg-config.
-
-Alternatively, you may set the environment variables GTKGUI_BIN_CFLAGS
-and GTKGUI_BIN_LIBS to avoid the need to call pkg-config.
-See the pkg-config man page for more details.
-
-To get pkg-config, see <http://pkg-config.freedesktop.org/>.
-See 'config.log' for more details" "$LINENO" 5; }
-else
-        GTKGUI_BIN_CFLAGS=$pkg_cv_GTKGUI_BIN_CFLAGS
-        GTKGUI_BIN_LIBS=$pkg_cv_GTKGUI_BIN_LIBS
-        { printf '%s\n' "$as_me:${as_lineno-$LINENO}: result: yes" >&5
-printf '%s\n' "yes" >&6; }
-
-fi
-fi
 
 # Check whether --enable-render-extra was given.
 if test ${enable_render_extra+y}
@@ -22820,14 +22628,6 @@ fi
 else
   static_link_TRUE='#'
   static_link_FALSE=
-fi
-
- if test x"$enable_gtkgui" == x"yes"; then
-  gtkgui_TRUE=
-  gtkgui_FALSE='#'
-else
-  gtkgui_TRUE='#'
-  gtkgui_FALSE=
 fi
 
  if test x"$enable_render_extra" == x"yes"; then
@@ -23063,9 +22863,9 @@ else
 fi
 
 
-ac_config_files="$ac_config_files Makefile src/Makefile src/libcolorscreen/Makefile testsuite/Makefile src/gtkgui/Makefile src/qtgui/Makefile src/colorscreen/Makefile examples/Makefile examples/amcolony/Makefile images/Makefile"
+ac_config_files="$ac_config_files Makefile src/Makefile src/libcolorscreen/Makefile testsuite/Makefile src/qtgui/Makefile src/colorscreen/Makefile examples/Makefile examples/amcolony/Makefile images/Makefile"
 
-ac_config_headers="$ac_config_headers src/libcolorscreen/config.h src/gtkgui/config.h src/libcolorscreen/include/colorscreen-config.h"
+ac_config_headers="$ac_config_headers src/libcolorscreen/config.h src/libcolorscreen/include/colorscreen-config.h"
 
 
 cat >confcache <<\_ACEOF
@@ -23194,10 +22994,6 @@ Usually this means the macro was only invoked conditionally." "$LINENO" 5
 fi
 if test -z "${static_link_TRUE}" && test -z "${static_link_FALSE}"; then
   as_fn_error $? "conditional \"static_link\" was never defined.
-Usually this means the macro was only invoked conditionally." "$LINENO" 5
-fi
-if test -z "${gtkgui_TRUE}" && test -z "${gtkgui_FALSE}"; then
-  as_fn_error $? "conditional \"gtkgui\" was never defined.
 Usually this means the macro was only invoked conditionally." "$LINENO" 5
 fi
 if test -z "${RENDER_EXTRA_TRUE}" && test -z "${RENDER_EXTRA_FALSE}"; then
@@ -24178,17 +23974,15 @@ do
     "src/Makefile") CONFIG_FILES="$CONFIG_FILES src/Makefile" ;;
     "src/libcolorscreen/Makefile") CONFIG_FILES="$CONFIG_FILES src/libcolorscreen/Makefile" ;;
     "testsuite/Makefile") CONFIG_FILES="$CONFIG_FILES testsuite/Makefile" ;;
-    "src/gtkgui/Makefile") CONFIG_FILES="$CONFIG_FILES src/gtkgui/Makefile" ;;
     "src/qtgui/Makefile") CONFIG_FILES="$CONFIG_FILES src/qtgui/Makefile" ;;
     "src/colorscreen/Makefile") CONFIG_FILES="$CONFIG_FILES src/colorscreen/Makefile" ;;
     "examples/Makefile") CONFIG_FILES="$CONFIG_FILES examples/Makefile" ;;
     "examples/amcolony/Makefile") CONFIG_FILES="$CONFIG_FILES examples/amcolony/Makefile" ;;
     "images/Makefile") CONFIG_FILES="$CONFIG_FILES images/Makefile" ;;
     "src/libcolorscreen/config.h") CONFIG_HEADERS="$CONFIG_HEADERS src/libcolorscreen/config.h" ;;
-    "src/gtkgui/config.h") CONFIG_HEADERS="$CONFIG_HEADERS src/gtkgui/config.h" ;;
     "src/libcolorscreen/include/colorscreen-config.h") CONFIG_HEADERS="$CONFIG_HEADERS src/libcolorscreen/include/colorscreen-config.h" ;;
 
-  *) as_fn_error $? "invalid argument: '$ac_config_target'" "$LINENO" 5;;
+  *) as_fn_error $? "invalid argument: \`$ac_config_target'" "$LINENO" 5;;
   esac
 done
 

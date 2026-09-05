@@ -572,8 +572,7 @@ private:
 
   // Core Data
   // We keep shared copies or references.
-  // Using std::shared_ptr or just direct members.
-  // Given the library usage in gtkgui, direct members are fine.
+  // These parameter objects are document-local, so direct members are appropriate.
   QString m_lastOpenDir;
   QString m_lastSaveDir;
 

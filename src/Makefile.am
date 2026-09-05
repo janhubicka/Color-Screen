@@ -1,7 +1,4 @@
-SUBDIRS = libcolorscreen  colorscreen 
-if gtkgui
-  SUBDIRS += gtkgui
-endif
+SUBDIRS = libcolorscreen colorscreen
 
 if qtgui
   SUBDIRS += qtgui

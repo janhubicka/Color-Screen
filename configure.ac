@@ -193,23 +193,6 @@ GUI_LDFLAGS=""
 AC_SUBST([GUI_LDFLAGS])
 
 
-# Needed only for gtkgui
-AC_DEFUN([AC_LINK_EXPORT_DYNAMIC],
-[AC_CACHE_CHECK([for compiler -rdynamic option],
-                [RDYNAMIC],
-[ AC_LANG_PUSH([C])
-  oldcflags="$CFLAGS"
-  CFLAGS="$CFLAGS -Wl,-export-dynamic"
-  CFLAGS="$CFLAGS -rdynamic"
-  AC_LINK_IFELSE([AC_LANG_PROGRAM([[]],[[]])],
-    [RDYNAMIC="-rdynamic"],[RDYNAMIC=""])
-  CFLAGS="$oldcflags"
-  AC_LANG_POP([C])
-])
-])
-AC_SUBST([RDYNAMIC])
-
-AC_LINK_EXPORT_DYNAMIC
 
 AC_ARG_ENABLE([16bit-float],
 	      AS_HELP_STRING([--disable-16bit-float],
@@ -227,14 +210,6 @@ then
   AC_DEFINE([COLORSCREEN_CHECKING], 1, "enable additional checking")
 fi
 
-AC_ARG_ENABLE([gtkgui],AS_HELP_STRING([--enable-gtkgui],
-				      [enable gtk2 based gui interface]))
-if test x"$enable_gtkgui" == x"yes"; then
-  PKG_CHECK_MODULES([GTKGUI_BIN], [
-    glib-2.0
-    gtk+-2.0
-  ])
-fi
 
 AC_ARG_ENABLE([render-extra],AS_HELP_STRING([--enable-render-extra],
 				      [enable additional render from external source tree]))
@@ -244,10 +219,9 @@ then
 fi
 
 AC_ARG_ENABLE([static-link],AS_HELP_STRING([--disable-static-link],
-	      [do not link colorscreen statically into colorscreen and colorscreen-gtk binaries]))
+	      [do not link colorscreen statically into command-line and GUI binaries]))
 
 AM_CONDITIONAL([static_link], [test "$enable_static_link" != "no"])
-AM_CONDITIONAL([gtkgui], [test x"$enable_gtkgui" == x"yes"])
 AM_CONDITIONAL([RENDER_EXTRA], [test x"$enable_render_extra" == x"yes"])
 
 AC_ARG_ENABLE([qtgui],AS_HELP_STRING([--enable-qtgui],
@@ -271,7 +245,7 @@ if test x"$enable_qtgui" == x"yes"; then
 fi
 AM_CONDITIONAL([qtgui], [test x"$enable_qtgui" == x"yes"])
 
-AC_CONFIG_FILES([Makefile src/Makefile src/libcolorscreen/Makefile testsuite/Makefile src/gtkgui/Makefile src/qtgui/Makefile src/colorscreen/Makefile examples/Makefile examples/amcolony/Makefile images/Makefile])
-AC_CONFIG_HEADERS([src/libcolorscreen/config.h src/gtkgui/config.h src/libcolorscreen/include/colorscreen-config.h])
+AC_CONFIG_FILES([Makefile src/Makefile src/libcolorscreen/Makefile testsuite/Makefile src/qtgui/Makefile src/colorscreen/Makefile examples/Makefile examples/amcolony/Makefile images/Makefile])
+AC_CONFIG_HEADERS([src/libcolorscreen/config.h src/libcolorscreen/include/colorscreen-config.h])
 
 AC_OUTPUT

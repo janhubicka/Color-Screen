@@ -505,9 +505,8 @@ void ImageWidget::paintEvent(QPaintEvent *event) {
 }
 
 /** Draw centers of connected screen elements retained by the most recent
-    successful automatic screen detection.  This intentionally follows the
-    old GTK diagnostic: do not show the dense overlay below 1:1 zoom.  Unlike
-    the GTK implementation, limit map traversal to the current viewport so a
+    successful automatic screen detection.  Do not show the dense overlay
+    below 1:1 zoom, and limit map traversal to the current viewport so a
     full-resolution plate does not scan millions of map entries per repaint. */
 void ImageWidget::drawDetectedPatchCenters(QPainter &p) {
   if (!m_showDetectedPatchCenters || !m_detectedScreenMap || !m_scan ||
@@ -681,8 +680,7 @@ void ImageWidget::drawPointsOverlay(QPainter &p) {
  * @param p The QPainter to use.
  */
 void ImageWidget::drawProfileSpots(QPainter &p) {
-  // Draw profile spots: always while in AddPointMode (like gtkgui.C's color_profiling mode),
-  // or when the show_profile_spots flag is set.
+  // Draw profile spots while adding points or when their overlay is enabled.
   bool showSpots = m_profileSpots && !m_profileSpots->empty() && m_scan && m_scrToImg &&
                    (m_interactionMode == AddPointMode || m_showProfileSpots);
   if (!showSpots) return;
@@ -698,7 +696,7 @@ void ImageWidget::drawProfileSpots(QPainter &p) {
   for (size_t i = 0; i < m_profileSpots->size(); ++i) {
     colorscreen::point_t scrPos = (*m_profileSpots)[i];
     
-    // Use stitch mapped coords if relevant (same logic as gtkgui.C)
+    // Use stitch-mapped coordinates for stitched captures.
     colorscreen::point_t imgPos;
     if (!m_scan->stitch) {
         imgPos = map.to_img(scrPos);
