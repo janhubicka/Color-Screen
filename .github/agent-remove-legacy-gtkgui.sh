@@ -247,6 +247,10 @@ if git grep -n -E 'RDYNAMIC' -- configure Makefile.in src images examples testsu
   exit 1
 fi
 
+# Ubuntu packages moc under Qt's libexec directory rather than on PATH.
+export PATH="/usr/lib/qt6/libexec:$PATH"
+command -v moc
+
 mkdir build-qt
 cd build-qt
 CFLAGS="-O2 -g -Wall -Wextra" CXXFLAGS="-O2 -g -Wall -Wextra" \
