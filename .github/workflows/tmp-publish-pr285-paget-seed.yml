@@ -1,0 +1,78 @@
+name: TEMP publish PR285 Paget seed fix
+
+on:
+  push:
+    branches:
+      - agent/tmp-publish-pr285-paget-seed-20260906
+    paths:
+      - .github/workflows/tmp-publish-pr285-paget-seed.yml
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Build clean review commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git checkout -B agent/scr-detect-default-purity-1.2 9975c4a643235f9ddf9e0df541a8cd8be72157d4
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('src/libcolorscreen/scr-detect-geometry.C')
+          text = path.read_text()
+          old = '''          if (progress)
+            progress->set_task("pruning screen", img.height);
+#pragma omp parallel for default(none) shared(progress, img, cmap, render)
+          for (int y = 0; y < img.height; y++) {
+            if (!progress || !progress->cancel_requested())
+              for (int x = 0; x < img.width; x++)
+                cmap->set_class(x, y, render->classify_pixel({x, y}));
+            if (progress)
+              progress->inc_progress();
+          }
+'''
+          new = '''          if (progress)
+            progress->set_task("classifying Paget seed patches", img.height);
+          /* Mixed pixels at blurred Paget/Finlay element boundaries can join
+             same-color elements which only meet at their corners.  Build the
+             existing Paget/Finlay-only seed map with a slightly stricter
+             purity threshold.  The public detector threshold and Dufay class
+             map remain unchanged.  */
+          scr_detect seed_classifier;
+          seed_classifier.m_param = dparam;
+          seed_classifier.m_param.min_ratio =
+              std::max (seed_classifier.m_param.min_ratio,
+                        (luminosity_t)1.2);
+#pragma omp parallel for default(none) shared(progress, img, cmap, render, seed_classifier)
+          for (int y = 0; y < img.height; y++) {
+            if (!progress || !progress->cancel_requested())
+              for (int x = 0; x < img.width; x++) {
+                rgbdata c = render->fast_get_adjusted_pixel ({x, y});
+                cmap->set_class(
+                    x, y,
+                    seed_classifier.classify_adjusted_color(c.red, c.green,
+                                                            c.blue));
+              }
+            if (progress)
+              progress->inc_progress();
+          }
+'''
+          if text.count(old) != 1:
+              raise SystemExit(f'expected one Paget seed-map block, found {text.count(old)}')
+          path.write_text(text.replace(old, new))
+          PY
+          git diff --check
+          test "$(git status --short | wc -l)" -eq 1
+          test "$(git status --short | awk '{print $2}')" = "src/libcolorscreen/scr-detect-geometry.C"
+          grep -q 'min_ratio (1)' src/libcolorscreen/include/scr-detect-parameters.h
+          git config user.name "OpenAI Agent"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/libcolorscreen/scr-detect-geometry.C
+          git commit -m "detect: use purer Paget seed classes" -m "Keep the public screen-class purity default at 1.0 so Dufay retains its existing classification semantics.  For the already-separate Paget/Finlay seed map, classify adjusted pixels with an effective minimum ratio of 1.2.  This breaks mixed-color bridges between touching mosaic elements without reintroducing detector sharpening or changing the fitted process primaries.  The stricter map remains confined to the Paget/Finlay seed/flood candidate path; Dufay uses the renderer's normal map unchanged."
+          git push --force origin HEAD:agent/scr-detect-default-purity-1.2
