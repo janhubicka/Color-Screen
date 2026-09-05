@@ -10,7 +10,6 @@ from pathlib import Path
 import re
 import subprocess
 import sys
-import tempfile
 import time
 
 
@@ -23,8 +22,6 @@ COVERAGE_RE = re.compile(
 CSV_FIELDS = [
     "scan",
     "mode",
-    "sharpen_radius",
-    "sharpen_amount",
     "floodfill",
     "exit_code",
     "success",
@@ -43,7 +40,6 @@ CSV_FIELDS = [
     "precompute_failures",
     "classmap_builds",
     "rgb_precomputes",
-    "legacy_preclassification_sharpening",
     "optimize_colors_ms",
     "precompute_ms",
     "classmap_ms",
@@ -61,34 +57,25 @@ CSV_FIELDS = [
 
 
 class Mode:
-    """One detector-sharpening and flood-fill benchmark configuration."""
+    """One flood-fill benchmark configuration."""
 
-    def __init__(self, name: str, radius: float, amount: float, floodfill: str):
+    def __init__(self, name: str, floodfill: str):
         self.name = name
-        self.radius = radius
-        self.amount = amount
         self.floodfill = floodfill
 
 
 def parse_mode(value: str) -> Mode:
-    """Parse NAME,RADIUS,AMOUNT[,FLOODFILL] from VALUE."""
+    """Parse NAME[,FLOODFILL] from VALUE."""
     fields = value.split(",")
-    if len(fields) not in (3, 4):
-        raise argparse.ArgumentTypeError(
-            "mode must be NAME,RADIUS,AMOUNT[,FLOODFILL]"
-        )
+    if len(fields) not in (1, 2):
+        raise argparse.ArgumentTypeError("mode must be NAME[,FLOODFILL]")
     name = fields[0].strip()
     if not name:
         raise argparse.ArgumentTypeError("mode name must not be empty")
-    try:
-        radius = float(fields[1])
-        amount = float(fields[2])
-    except ValueError as exc:
-        raise argparse.ArgumentTypeError("radius and amount must be numbers") from exc
-    floodfill = fields[3].strip() if len(fields) == 4 else "both"
+    floodfill = fields[1].strip() if len(fields) == 2 else "both"
     if floodfill not in ("both", "fast", "slow"):
         raise argparse.ArgumentTypeError("floodfill must be both, fast, or slow")
-    return Mode(name, radius, amount, floodfill)
+    return Mode(name, floodfill)
 
 
 def parse_key_values(line: str, prefix: str) -> dict[str, str]:
@@ -156,16 +143,6 @@ def run_process(command: list[str], log_path: Path) -> tuple[int, float, int | N
     return exit_code, (time.monotonic() - start) * 1000, peak_rss_kb
 
 
-def sparse_parameter_file(path: Path, mode: Mode) -> None:
-    """Write only detector-sharpening overrides for MODE to PATH."""
-    path.write_text(
-        "screen_alignment_version: 1\n"
-        f"scr_detect_sharpen_radius: {mode.radius:.9g}\n"
-        f"scr_detect_sharpen_amount: {mode.amount:.9g}\n",
-        encoding="ascii",
-    )
-
-
 def floodfill_arguments(mode: Mode) -> list[str]:
     """Return autodetect command-line flags selecting MODE's flood fill."""
     if mode.floodfill == "fast":
@@ -190,35 +167,31 @@ def benchmark_one(
     log_path = output_dir / f"{stem}-{mode_name}.log.txt"
     output_par = output_dir / f"{stem}-{mode_name}.par"
 
-    with tempfile.TemporaryDirectory(prefix="colorscreen-detect-bench-") as temp_dir:
-        input_par = Path(temp_dir) / "detector.par"
-        sparse_parameter_file(input_par, mode)
-        command = [
-            str(args.colorscreen),
-            f"--threads={args.threads}",
-            "autodetect",
-            str(scan),
-            str(output_par),
-            f"--par={input_par}",
-            f"--screen-type={args.screen_type}",
-            f"--scanner-type={args.scanner_type}",
-            f"--gamma={args.gamma}",
-            "--no-mesh",
-            "--no-auto-color-model",
-            "--no-auto-levels",
-            f"--report={report_path}",
-        ]
-        command.extend(floodfill_arguments(mode))
-        if not args.optimize_colors:
-            command.append("--no-optimize-colors")
-        exit_code, wall_ms, peak_rss_kb = run_process(command, log_path)
+    command = [
+        str(args.colorscreen),
+        f"--threads={args.threads}",
+        "autodetect",
+        str(scan),
+        str(output_par),
+        f"--screen-type={args.screen_type}",
+        f"--scanner-type={args.scanner_type}",
+        f"--gamma={args.gamma}",
+        "--no-mesh",
+        "--no-auto-color-model",
+        "--no-auto-levels",
+        f"--report={report_path}",
+    ]
+    if args.par is not None:
+        command.append(f"--par={args.par}")
+    command.extend(floodfill_arguments(mode))
+    if not args.optimize_colors:
+        command.append("--no-optimize-colors")
+    exit_code, wall_ms, peak_rss_kb = run_process(command, log_path)
 
     stats, timings, scan_coverage, screen_coverage = read_report(report_path)
     row: dict[str, str | int | float] = {
         "scan": str(scan),
         "mode": mode.name,
-        "sharpen_radius": mode.radius,
-        "sharpen_amount": mode.amount,
         "floodfill": mode.floodfill,
         "exit_code": exit_code,
         "success": 1 if stats.get("result") == "success" else 0,
@@ -244,7 +217,6 @@ def benchmark_one(
         "precompute_failures",
         "classmap_builds",
         "rgb_precomputes",
-        "legacy_preclassification_sharpening",
     ):
         row[key] = stats.get(key, "")
     timing_names = {
@@ -280,6 +252,11 @@ def main() -> int:
     parser.add_argument(
         "--output-dir", type=Path, default=Path("screen-detection-benchmark")
     )
+    parser.add_argument(
+        "--par",
+        type=Path,
+        help="optional normal capture parameter file passed to autodetect",
+    )
     parser.add_argument("--screen-type", default="Dufay")
     parser.add_argument("--scanner-type", default="fixed-lens")
     parser.add_argument("--gamma", type=float, default=1.0)
@@ -289,7 +266,7 @@ def main() -> int:
         type=parse_mode,
         action="append",
         help=(
-            "benchmark mode NAME,RADIUS,AMOUNT[,FLOODFILL]; may be repeated; "
+            "benchmark mode NAME[,FLOODFILL]; may be repeated; "
             "FLOODFILL is both, fast, or slow"
         ),
     )
@@ -306,14 +283,13 @@ def main() -> int:
         parser.error("--threads must be positive")
     if not args.colorscreen.is_file():
         parser.error(f"colorscreen executable not found: {args.colorscreen}")
+    if args.par is not None and not args.par.is_file():
+        parser.error(f"parameter file not found: {args.par}")
     missing = [scan for scan in args.scans if not scan.is_file()]
     if missing:
         parser.error("scan not found: " + ", ".join(str(scan) for scan in missing))
 
-    modes = args.mode or [
-        Mode("legacy-2-3", 2.0, 3.0, "both"),
-        Mode("unsharpened-0-0", 0.0, 0.0, "both"),
-    ]
+    modes = args.mode or [Mode("default", "both")]
     args.output_dir.mkdir(parents=True, exist_ok=True)
     args.csv.parent.mkdir(parents=True, exist_ok=True)
 

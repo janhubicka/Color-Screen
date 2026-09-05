@@ -7,7 +7,6 @@
 #include "render-scr-detect.h"
 #include "render-to-scr.h"
 #include "lru-cache.h"
-#include "sharpen.h"
 #include "render-tile.h"
 #include "render-to-file.h"
 #include "mapalloc.h"
@@ -123,51 +122,29 @@ std::unique_ptr<color_class_map> get_color_class_map(color_class_params &p, prog
 /* Cache for color class maps.  */
 static color_class_cache_t color_class_cache ("color tables");
 
-/* Helper for the legacy pre-classification unsharp mask.
-   R specifies the renderer.
-   P specifies the point.  */
-rgbdata
-getdata_helper (render_scr_detect &r, int_point_t p, int, int)
-{
-  return r.fast_get_adjusted_pixel (p);
-}
-
-/* Cache helper for precomputed RGB data.
+/* Cache helper for adjusted RGB data used by slow flood fill.
    P specifies parameters for the data.
    PROGRESS is used to report progress and check for cancellation.  */
 std::unique_ptr<precomputed_rgbdata>
 get_precomputed_rgbdata(precomputed_rgbdata_params &p, progress_info *progress)
 {
   auto my_precomputed_rgbdata = std::make_unique<precomputed_rgbdata> (p.img->width, p.img->height);
-  bool ok = true;
-  if (!my_precomputed_rgbdata)
+  if (!my_precomputed_rgbdata || !my_precomputed_rgbdata->m_data)
     return nullptr;
-  if (!my_precomputed_rgbdata->m_data)
-    {
-      return nullptr;
-    }
-  /* This unsharp mask predates measured scanner MTF sharpening and is kept
-     only for compatibility with old screen-detection parameter files.  */
-  if (p.p.sharpen_radius > 0 && p.p.sharpen_amount > 0)
-    ok = sharpen<rgbdata, render_scr_detect::my_mem_rgbdata, render_scr_detect &,int, getdata_helper> (my_precomputed_rgbdata->m_data, *p.r, 0, p.img->width, p.img->height, p.p.sharpen_radius, p.p.sharpen_amount, progress);
-  else
-    {
-      if (progress)
-	progress->set_task ("determining adjusted colors for screen detection", p.img->height);
+  if (progress)
+    progress->set_task ("determining adjusted colors for screen detection", p.img->height);
 #pragma omp parallel for default(none) shared(p,my_precomputed_rgbdata,progress)
-      for (int y = 0; y < p.img->height; y++)
-	{
-	  if (!progress || !progress->cancel_requested ())
-	    for (int x = 0; x < p.img->width; x++)
-	      my_precomputed_rgbdata->m_data[y * p.img->width + x] = p.r->fast_nonprecomputed_get_adjusted_pixel ({x, y});
-	   if (progress)
-	     progress->inc_progress ();
-	}
-    }
-  if (!ok || (progress && progress->cancelled ()))
+  for (int y = 0; y < p.img->height; y++)
     {
-      return nullptr;
+      if (!progress || !progress->cancel_requested ())
+        for (int x = 0; x < p.img->width; x++)
+          my_precomputed_rgbdata->m_data[y * p.img->width + x]
+              = p.r->fast_nonprecomputed_get_adjusted_pixel ({x, y});
+      if (progress)
+        progress->inc_progress ();
     }
+  if (progress && progress->cancelled ())
+    return nullptr;
   return my_precomputed_rgbdata;
 }
 
@@ -419,11 +396,17 @@ render_scr_detect::precompute_all (int flags, progress_info *progress)
 {
   if (!m_scr_detect.set_parameters (m_scr_detect.m_param, m_params.gamma, &m_img, progress))
     return false;
-  if (m_scr_detect.m_param.sharpen_radius > 0 && m_scr_detect.m_param.sharpen_amount > 0)
-    {
-      if (!precompute_rgbdata (progress))
-	return false;
-    }
+
+  const bool capture_sharpening
+      = m_params.sharpen.get_mode () != sharpen_parameters::none;
+  int render_flags = flags;
+  if (capture_sharpening)
+    render_flags |= PRECOMPUTE_RGB_IMAGE;
+  if (!render::precompute_all (render_flags, {1/3.0, 1/3.0, 1/3.0}, progress))
+    return false;
+  if (capture_sharpening && !precompute_rgbdata (progress))
+    return false;
+
   color_class_params p = {m_precomputed_rgbdata ? m_precomputed_rgbdata_id : m_img.id, &m_img, m_precomputed_rgbdata, m_scr_detect.m_param, &m_scr_detect, m_params.gamma};
   if (progress && progress->cancel_requested ())
     return false;
@@ -432,7 +415,7 @@ render_scr_detect::precompute_all (int flags, progress_info *progress)
     return false;
   if (progress && progress->cancel_requested ())
     return false;
-  return render::precompute_all (flags, {1/3.0, 1/3.0, 1/3.0}, progress);
+  return true;
 }
 
 
@@ -441,7 +424,15 @@ render_scr_detect::precompute_rgbdata (progress_info *progress)
 {
   if (m_precomputed_rgbdata)
     return true;
-  struct precomputed_rgbdata_params p = {m_img.id, m_scr_detect.m_param, m_params.gamma, &m_img, &m_scr_detect, this};
+  struct precomputed_rgbdata_params p;
+  p.image_id = m_img.id;
+  p.p = m_scr_detect.m_param;
+  p.gamma = m_params.gamma;
+  for (int c = 0; c < 3; c++)
+    p.sharpen[c] = m_params.get_sharpen_parameters_for_channel (c);
+  p.img = &m_img;
+  p.d = &m_scr_detect;
+  p.r = this;
   m_precomputed_rgbdata_holder = precomputed_rgbdata_cache.get (p, progress, &m_precomputed_rgbdata_id);
   if (!m_precomputed_rgbdata_holder)
     return false;
@@ -529,8 +520,8 @@ render_scr_detect::analyze_color_proportions (scr_to_img_parameters *param, int_
 rgbdata
 analyze_color_proportions (scr_detect_parameters param, render_parameters &rparam, image_data &img, scr_to_img_parameters *map_param, int_image_area area, progress_info *progress)
 {
-  /* Sharpening changes screen proportions.  Lets hope that no sharpening yields to most realistic results.  */
-  //param.sharpen_amount = 0;
+  /* Analyze the same capture preprocessing requested by RPARAM; screen
+     proportions themselves do not add any detector-specific sharpening.  */
   //param.min_ratio = 1.3;
   //param.min_luminosity = 0.01;
   render_scr_detect r (param, img, rparam, 256);

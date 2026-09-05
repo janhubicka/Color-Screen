@@ -12,8 +12,7 @@ struct scr_detect_parameters
   /* Initialize screen-color classification defaults.  */
   scr_detect_parameters ()
       : black ({ 0, 0, 0 }), red ({ 1, 0, 0 }), green ({ 0, 1, 0 }),
-        blue ({ 0, 0, 1 }), min_luminosity (0.000), min_ratio (1),
-        sharpen_radius (2), sharpen_amount (3)
+        blue ({ 0, 0, 1 }), min_luminosity (0.000), min_ratio (1)
   {
   }
 
@@ -26,15 +25,6 @@ struct scr_detect_parameters
      times the sum of luminosities of the other two colors.  */
   luminosity_t min_ratio;
 
-  /* Legacy unsharp-mask parameters used before screen-color classification.
-     Existing real Dufay integration scans still depend on the historical
-     radius 2 / amount 3 default, so retain it until the blur-tolerant
-     classifier can replace this compatibility aid.  Explicit zero values
-     remain valid for benchmarking the unsharpened detector path.  Changing
-     the default requires validation against the real Dufay integration
-     fixtures.  */
-  coord_t sharpen_radius;
-  luminosity_t sharpen_amount;
   /* Return true when OTHER produces the same color classification.  This is
      also used as part of the screen-color cache key.  */
   bool
@@ -42,9 +32,7 @@ struct scr_detect_parameters
   {
     return black == other.black && red == other.red && green == other.green
            && blue == other.blue && min_luminosity == other.min_luminosity
-           && min_ratio == other.min_ratio
-           && sharpen_radius == other.sharpen_radius
-           && sharpen_amount == other.sharpen_amount;
+           && min_ratio == other.min_ratio;
   }
   /* Return true when OTHER changes screen-color classification.  */
   bool

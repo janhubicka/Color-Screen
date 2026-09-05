@@ -1,0 +1,6 @@
+screen_alignment_version: 1
+screen_type: Dufay
+gamma: 1.000000
+sharpen: unsharp-mask
+sharpen_radius: 2.000000
+sharpen_amount: 3.000000

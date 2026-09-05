@@ -273,6 +273,14 @@ DLL_PUBLIC detected_screen detect_regular_screen (
     const detect_regular_screen_params *dsparams,
     progress_info *progress = NULL,
     FILE *report_file = NULL);
+/* Detect a regular screen after applying CAPTURE_RPARAM's native-channel
+   capture sharpening.  Other rendering adjustments are intentionally ignored.  */
+DLL_PUBLIC detected_screen detect_regular_screen (
+    const image_data &img, scr_detect_parameters &dparam,
+    solver_parameters &sparam,
+    const detect_regular_screen_params *dsparams,
+    progress_info *progress, FILE *report_file,
+    const render_parameters *capture_rparam);
 DLL_PUBLIC color_matrix determine_color_matrix (
     rgbdata *colors, xyz *targets, rgbdata *rgbtargets, int n, xyz white,
     int dark_point_elts = 0, std::vector<color_match> *report = NULL,

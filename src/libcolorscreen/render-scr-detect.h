@@ -47,6 +47,8 @@ struct precomputed_rgbdata_params
   scr_detect_parameters p;
   /* Gamma value for linearization.  */
   luminosity_t gamma = 0;
+  /* Effective native-channel capture sharpening used to produce the input.  */
+  sharpen_parameters sharpen[3];
 
   /* Input image data.  */
   const image_data *img = nullptr;
@@ -63,9 +65,10 @@ struct precomputed_rgbdata_params
 	   && p.green == o.p.green
 	   && p.blue == o.p.blue
 	   && p.black == o.p.black
-	   && p.sharpen_radius == o.p.sharpen_radius
-	   && p.sharpen_amount == o.p.sharpen_amount
-	   && gamma == o.gamma;
+	   && gamma == o.gamma
+           && sharpen[0] == o.sharpen[0]
+           && sharpen[1] == o.sharpen[1]
+           && sharpen[2] == o.sharpen[2];
   }
 };
 struct precomputed_rgbdata;
@@ -303,18 +306,12 @@ public:
   /* Get non-precomputed adjusted pixel at integer position P.  */
   pure_attr inline rgbdata fast_nonprecomputed_get_adjusted_pixel (int_point_t p) const
   {
-    rgbdata d;
-    image_data::pixel p_pixel = m_img.get_rgb_pixel (p.x, p.y);
-    m_scr_detect.adjust_color (p_pixel.r, p_pixel.g, p_pixel.b, &d.red, &d.green, &d.blue);
-    return d;
+    return adjust_linearized_color (get_unadjusted_rgb_pixel (p));
   }
   /* Get non-precomputed normalized pixel at integer position P.  */
   pure_attr inline rgbdata fast_nonprecomputed_get_normalized_pixel (int_point_t p) const
   {
-    rgbdata d;
-    image_data::pixel p_pixel = m_img.get_rgb_pixel (p.x, p.y);
-    m_scr_detect.adjust_color (p_pixel.r, p_pixel.g, p_pixel.b, &d.red, &d.green, &d.blue);
-    return normalize_color (d);
+    return normalize_color (fast_nonprecomputed_get_adjusted_pixel (p));
   }
   /* Get adjusted pixel at integer position P.  */
   pure_attr inline rgbdata fast_get_adjusted_pixel (int_point_t p) const
