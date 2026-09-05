@@ -1,0 +1,115 @@
+diff --git a/src/qtgui/MainWindow.cpp b/src/qtgui/MainWindow.cpp
+index 9d09c2d..bd4e6cb 100644
+--- a/src/qtgui/MainWindow.cpp
++++ b/src/qtgui/MainWindow.cpp
+@@ -4,6 +4,7 @@
+ #include "../libcolorscreen/include/histogram.h"
+ #include "../libcolorscreen/include/render-parameters.h"
+ #include "../libcolorscreen/include/scr-to-img.h"
++#include "../libcolorscreen/include/screen-map.h"
+ #include "../libcolorscreen/include/stitch.h"
+ #include "AdaptiveSharpeningChart.h" // Added
+ #include "AdaptiveSharpeningWorker.h"
+@@ -2427,6 +2428,25 @@ void MainWindow::createMenus() {
+ 
+   // Visibility toggle at the top
+   m_registrationMenu->addAction(m_registrationPointsAction);
++
++  m_detectedPatchCentersAction =
++      new QAction(tr("Show Auto-detected Patch &Centers"), this);
++  m_detectedPatchCentersAction->setObjectName(
++      QStringLiteral("DetectedPatchCentersAction"));
++  m_detectedPatchCentersAction->setCheckable(true);
++  m_detectedPatchCentersAction->setChecked(false);
++  m_detectedPatchCentersAction->setEnabled(false);
++  m_detectedPatchCentersAction->setToolTip(
++      tr("Show color-coded centers of screen elements found by the most recent "
++         "automatic basic-screen detection. The dense overlay is drawn at "
++         "100% zoom and above."));
++  connect(m_detectedPatchCentersAction, &QAction::toggled, this,
++          [this](bool show) {
++            m_showDetectedPatchCenters = show;
++            if (ImageWidget *image = inspectorImageWidget())
++              image->setShowDetectedPatchCenters(show);
++          });
++  m_registrationMenu->addAction(m_detectedPatchCentersAction);
+   m_registrationMenu->addSeparator();
+ 
+   m_selectAllAction = m_registrationMenu->addAction("Select &All");
+@@ -3346,6 +3366,8 @@ void MainWindow::setInspectorImageWidget(ImageWidget *imageWidget) {
+     disconnect(connection);
+   m_inspectorImageConnections.clear();
+   m_inspectorImageWidget = target;
++  target->setDetectedScreenMap(m_detectedScreenMap);
++  target->setShowDetectedPatchCenters(m_showDetectedPatchCenters);
+ 
+   // A selected document tool belongs to the document operation, not to the
+   // canvas that happened to be active when it was armed. Move it to the newly
+@@ -3465,6 +3487,12 @@ void MainWindow::setInspectorImageWidget(ImageWidget *imageWidget) {
+     const QSignalBlocker blocker(m_registrationPointsAction);
+     m_registrationPointsAction->setChecked(target->registrationPointsVisible());
+   }
++  if (m_detectedPatchCentersAction) {
++    const QSignalBlocker blocker(m_detectedPatchCentersAction);
++    m_detectedPatchCentersAction->setChecked(m_showDetectedPatchCenters);
++    m_detectedPatchCentersAction->setEnabled(
++        static_cast<bool>(m_detectedScreenMap));
++  }
+   if (m_geometryPanel)
+     m_geometryPanel->setRegistrationPointsVisible(
+         target->registrationPointsVisible());
+@@ -3785,6 +3813,9 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
+         watcher->deleteLater();
+ 
+         if (result.first) {
++          m_detectedScreenMap.reset();
++          if (m_detectedPatchCentersAction)
++            m_detectedPatchCentersAction->setEnabled(false);
+           m_scan = tempScan;
+ 
+           if ((int)m_scan->gamma != -2 && m_scan->gamma > 0 &&
+@@ -6125,8 +6156,15 @@ void MainWindow::onAutodetectScreen() {
+               bool success, colorscreen::detected_screen result,
+               colorscreen::solver_parameters solverParams) {
+             if (!m_closing && generation == m_detectScreenGeneration &&
+-                (!progress || !progress->pool_cancel()))
++                (!progress || !progress->pool_cancel())) {
+               onDetectScreenFinished(success, result, solverParams);
++            } else {
++              /* A discarded detection result still owns its optional raw
++                 diagnostic map.  The accepted path transfers that ownership
++                 in onDetectScreenFinished(). */
++              delete result.smap;
++              result.smap = nullptr;
++            }
+             if (!m_closing)
+               removeProgress(progress);
+           });
+@@ -6144,6 +6182,11 @@ void MainWindow::onAutodetectScreen() {
+ void MainWindow::onDetectScreenFinished(
+     bool success, colorscreen::detected_screen result,
+     colorscreen::solver_parameters solverParams) {
++  /* detect_regular_screen() returns ownership of the optional diagnostic map
++     to its caller. Keep it alive for the Qt overlay instead of leaking the raw
++     pointer as the old Qt path did. */
++  std::shared_ptr<const colorscreen::screen_map> detectedScreenMap(result.smap);
++  result.smap = nullptr;
+   if (!success || !result.success) {
+     QMessageBox::warning(this, "Screen Detection", "Screen detection failed.");
+     return;
+@@ -6211,6 +6254,15 @@ void MainWindow::onDetectScreenFinished(
+   // Copy the modified solver points from the worker's local copy
+   m_solverParams.points = solverParams.points;
+ 
++  m_detectedScreenMap = std::move(detectedScreenMap);
++  m_imageWidget->setDetectedScreenMap(m_detectedScreenMap);
++  if (ImageWidget *image = inspectorImageWidget();
++      image && image != m_imageWidget)
++    image->setDetectedScreenMap(m_detectedScreenMap);
++  if (m_detectedPatchCentersAction)
++    m_detectedPatchCentersAction->setEnabled(
++        static_cast<bool>(m_detectedScreenMap));
++
+   // Change render type to interpolated after successful autodetection
+   m_renderTypeParams.type = colorscreen::render_type_interpolated;
+ 
