@@ -1,0 +1,18 @@
+name: TEMP source export detector cleanup current
+on:
+  push:
+    branches: [agent/tmp-source-export-8d71-detector-sharpen]
+    paths: [.github/workflows/tmp-source-export-8d71-detector-sharpen.yml]
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 8d71dc19ece03aa1d21a83b96408be1a179aa0f0
+      - run: tar czf /tmp/colorscreen-main-8d71dc19.tar.gz --exclude=.git .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: colorscreen-main-8d71dc19
+          path: /tmp/colorscreen-main-8d71dc19.tar.gz
+          retention-days: 2
