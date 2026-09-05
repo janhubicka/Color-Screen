@@ -23,32 +23,36 @@ jobs:
       - name: Finalize workflow cleanup
         run: |
           set -euo pipefail
-          SOURCE_SHA=b1bc271e877a5312b9e5d48dc1f15a4a56ac069c
+          SOURCE_BRANCH=agent/remove-legacy-gtkgui
           FINAL_BRANCH=agent/remove-legacy-gtkgui-final
           TEMP_TAG=agent-remove-legacy-gtkgui-finalize
 
           git config user.name "Color-Screen agent"
           git config user.email "46065755+janhubicka@users.noreply.github.com"
-          git checkout --detach "$SOURCE_SHA"
+          git fetch origin "refs/heads/$SOURCE_BRANCH:refs/remotes/origin/$SOURCE_BRANCH"
+          git checkout --detach "refs/remotes/origin/$SOURCE_BRANCH"
 
           python3 - <<'PY'
           from pathlib import Path
 
-          def replace(path, old, new):
+          edits = {
+              ".github/workflows/build-ubuntu.yml": (
+                  "./configure --enable-checking --disable-static-link --enable-gtkgui --enable-qtgui",
+                  "./configure --enable-checking --disable-static-link --enable-qtgui",
+              ),
+              ".github/workflows/sanitizers.yml": (
+                  "./configure --enable-checking --disable-static-link \\\n          --disable-gtkgui --enable-qtgui",
+                  "./configure --enable-checking --disable-static-link --enable-qtgui",
+              ),
+          }
+          for path, (old, new) in edits.items():
               p = Path(path)
               text = p.read_text()
-              if old not in text:
-                  raise SystemExit(f"expected text not found in {path}: {old!r}")
-              p.write_text(text.replace(old, new))
-
-          replace(
-              ".github/workflows/build-ubuntu.yml",
-              "./configure --enable-checking --disable-static-link --enable-gtkgui --enable-qtgui",
-              "./configure --enable-checking --disable-static-link --enable-qtgui")
-          replace(
-              ".github/workflows/sanitizers.yml",
-              "./configure --enable-checking --disable-static-link \\\n          --disable-gtkgui --enable-qtgui",
-              "./configure --enable-checking --disable-static-link --enable-qtgui")
+              if old in text:
+                  text = text.replace(old, new)
+                  p.write_text(text)
+              if new not in p.read_text():
+                  raise SystemExit(f"expected GTK-free configure command missing in {path}")
           PY
 
           if git grep -n -i -E 'gtkgui|colorscreen-gtk|gtkimageviewer|gtk\+?-?2\.0|libgtk2|enable-gtkgui|disable-gtkgui|GTKGUI_BIN'; then
@@ -58,9 +62,13 @@ jobs:
           git diff --check -- . ':(exclude,glob)**/Makefile.in'
           sh build-aux/check-generated-build-metadata.sh
 
-          git add .github/workflows/build-ubuntu.yml .github/workflows/sanitizers.yml
-          git commit -m "ci: remove legacy GTK workflow switches" -m "Drop the last gtkgui configure switches from the Ubuntu checking and ThreadSanitizer jobs. The GTK2 development package is already removed from the shared Ubuntu CI image by the parent cleanup commit."
-          FINAL_SHA=$(git rev-parse HEAD)
+          if git diff --quiet; then
+            FINAL_SHA=$(git rev-parse HEAD)
+          else
+            git add .github/workflows/build-ubuntu.yml .github/workflows/sanitizers.yml
+            git commit -m "ci: remove legacy GTK workflow switches" -m "Drop the last gtkgui configure switches from the Ubuntu checking and ThreadSanitizer jobs. The GTK2 development package is already removed from the shared Ubuntu CI image by the parent cleanup commit."
+            FINAL_SHA=$(git rev-parse HEAD)
+          fi
           echo "final cleanup commit: $FINAL_SHA"
 
           git tag -f "$TEMP_TAG" "$FINAL_SHA"
