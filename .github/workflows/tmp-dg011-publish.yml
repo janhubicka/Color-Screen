@@ -1,0 +1,81 @@
+name: TEMP publish DG011 Paget seed repair
+
+on:
+  push:
+    branches:
+      - agent/tmp-dg011-publish-20260905
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/scr-detect-paget-partial-affine
+          fetch-depth: 0
+      - name: Apply reviewed DG011 patch
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euxo pipefail
+          test "$(git rev-parse HEAD)" = ef465d60504b2d5ff9650298625b68616f1b95e4
+          curl -fsSL \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/repos/janhubicka/Color-Screen/git/blobs/b1453ff5ef40e7ad27b5dec5fbf6150e662ea582 \
+            > /tmp/dg011-blob.json
+          python3 - <<'PY'
+          import base64, json
+          with open('/tmp/dg011-blob.json', encoding='utf-8') as f:
+              blob = json.load(f)
+          with open('/tmp/dg011.patch', 'wb') as f:
+              f.write(base64.b64decode(blob['content']))
+          PY
+          git apply --check /tmp/dg011.patch
+          git apply /tmp/dg011.patch
+          git diff --check
+          test "$(git diff --name-only | sort)" = "$(printf '%s\n' \
+            doc/scr-detect-geometry-tracking.md \
+            src/libcolorscreen/scr-detect-geometry.C \
+            src/libcolorscreen/unittests.C | sort)"
+          git diff --stat
+          git config user.name "Jan Hubička"
+          git config user.email "46065755+janhubicka@users.noreply.github.com"
+          git add doc/scr-detect-geometry-tracking.md \
+                  src/libcolorscreen/scr-detect-geometry.C \
+                  src/libcolorscreen/unittests.C
+          cat > /tmp/commit-message <<'EOF'
+          detect: recover partial affine Paget seed grids
+
+          Keep the historical complete Paget/Finlay connected-component seed as
+          the preferred path, but add a bounded affine fallback when that exact
+          grid cannot be reconstructed.  The fallback uses two observed blue
+          directions, requires spatially distributed green/blue support, bounds
+          the component residual, and independently verifies distinct red
+          checkerboard components before the existing solver can run.
+
+          This fixes a well-resolved 150 MP Paget capture whose optimized colors
+          are healthy but whose exact seed never reached the solver.  On that
+          scan the guarded seed is 37/50 with 25/25 red support; fast-only
+          detection reaches 76.39% screen coverage and normal fast+slow reaches
+          96.38%, both in the first search region.  The independent red gate
+          rejects two plausible false sublattices before expensive slow flood
+          fill.
+
+          Add Paget to the synthetic discovery regression and record the DG-011
+          design, thresholds, real-scan measurements, negative controls, and the
+          remaining slow-flood performance cost in the geometry tracker.
+
+          Validation on current main includes O2 and -Ofast -march=native
+          discovery, the full/cropped Paget capture, three deterministic
+          no-screen controls with zero Paget flood attempts, and all six Nikon
+          Dufay integration cases.
+          EOF
+          sed -i 's/^          //' /tmp/commit-message
+          git commit -F /tmp/commit-message
+          git push origin HEAD:agent/scr-detect-paget-partial-affine
