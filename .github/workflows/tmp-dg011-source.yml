@@ -1,0 +1,30 @@
+name: TEMP DG011 current-main source transport
+
+on:
+  push:
+    branches:
+      - agent/tmp-dg011-source-20260905
+
+permissions:
+  contents: read
+
+jobs:
+  source:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ffc9b9bf5b8a375dcdf4b02d5c29f39a177a9b34
+          fetch-depth: 0
+      - name: Archive exact current-main source
+        shell: bash
+        run: |
+          set -euxo pipefail
+          test "$(git rev-parse HEAD)" = ffc9b9bf5b8a375dcdf4b02d5c29f39a177a9b34
+          git archive --format=tar.gz --prefix=Color-Screen-main/ HEAD -o /tmp/colorscreen-current-main.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: colorscreen-current-main-ffc9b9bf
+          path: /tmp/colorscreen-current-main.tar.gz
+          if-no-files-found: error
+          retention-days: 2
