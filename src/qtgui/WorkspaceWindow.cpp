@@ -1219,6 +1219,9 @@ void WorkspaceWindow::takeDocumentFromWorkspace(MainWindow *document) {
 
   document->setParent(nullptr);
   document->setWindowFlags(Qt::Window);
+  // Only after the document is top-level again may its private status bar be
+  // restored; embedded tabs deliberately share the workspace status bar.
+  document->setWorkspaceStatusBar(nullptr);
 }
 
 /** Remove secondary VIEW's MDI wrapper while keeping VIEW alive. */
@@ -1248,6 +1251,9 @@ void WorkspaceWindow::takeViewFromWorkspace(ImageViewWindow *view) {
 
   view->setParent(nullptr);
   view->setWindowFlags(Qt::Window);
+  // Match document detach ordering: clear the shared status bar only after
+  // the view has left the MDI hierarchy.
+  view->setWorkspaceStatusBar(nullptr);
   view->setAttribute(Qt::WA_DeleteOnClose, true);
 }
 
