@@ -1,6 +1,7 @@
 #include <QShowEvent>
 #include "ContactCopyPanel.h"
 #include "HDCurveWidget.h"
+#include <QCheckBox>
 #include <QDoubleSpinBox>
 #include <QFormLayout>
 #include <QHBoxLayout>
@@ -41,13 +42,30 @@ void ContactCopyPanel::showEvent(QShowEvent *event) {
     updateUI();
 }
 void ContactCopyPanel::setupUi() {
-  addCheckboxParameter(
+  QCheckBox *simulationCheck = addCheckboxParameter(
       "Contact copy simulation",
       [](const ParameterState &s) { return s.rparams.contact_copy.simulate; },
       [](ParameterState &s, bool v) { s.rparams.contact_copy.simulate = v; },
       nullptr, "Enable physics-based simulation of photographic contact printing. This models the response of a photographic glass plate to the light transmitted through the digitized color screen.");
+  simulationCheck->setObjectName(QStringLiteral("ContactCopySimulationCheck"));
 
-  addSeparator("Film characteristics");
+  // Contact-copy parameters are specialist controls. Keep only the master
+  // switch visible while the simulation is inactive, but retain each section's
+  // independent expanded/collapsed state so enabling the feature restores the
+  // user's previous presentation.
+  auto addSimulationSection = [this](const QString &title,
+                                     const QString &objectName) {
+    addSeparator(title);
+    QWidget *group =
+        m_currentGroupForm ? m_currentGroupForm->parentWidget() : nullptr;
+    if (group)
+      group->setObjectName(objectName);
+    return group;
+  };
+
+  QWidget *filmCharacteristicsGroup = addSimulationSection(
+      QStringLiteral("Film characteristics"),
+      QStringLiteral("ContactCopyFilmCharacteristicsGroup"));
   m_hdCurveWidget = new HDCurveWidget();
   
   QComboBox *modeCombo = new QComboBox();
@@ -154,7 +172,9 @@ void ContactCopyPanel::setupUi() {
   createSpinBox(m_linear1XSpin); createSpinBox(m_linear1YSpin);
   createSpinBox(m_linear2XSpin); createSpinBox(m_linear2YSpin);
   createSpinBox(m_maxXSpin); createSpinBox(m_maxYSpin);
-  addSeparator("H&D Richards model parameters");
+  QWidget *richardsGroup = addSimulationSection(
+      QStringLiteral("H&D Richards model parameters"),
+      QStringLiteral("ContactCopyRichardsGroup"));
 
   auto addRichardsSlider = [this](const QString &label, const QString &tooltip, 
                                  std::function<double(const colorscreen::richards_curve_parameters &)> getter,
@@ -218,7 +238,9 @@ void ContactCopyPanel::setupUi() {
       }
   }
 
-  addSeparator("H&D Coordinate points (manual entry)");
+  QWidget *manualPointsGroup = addSimulationSection(
+      QStringLiteral("H&D Coordinate points (manual entry)"),
+      QStringLiteral("ContactCopyManualPointsGroup"));
 
   auto addRow = [this](const QString &label, QWidget *w1, QWidget *w2) {
       QWidget *row = new QWidget();
@@ -243,7 +265,9 @@ void ContactCopyPanel::setupUi() {
   addRow("Linear end", m_linear2XSpin, m_linear2YSpin);
   addRow("Max point", m_maxXSpin, m_maxYSpin);
 
-  addSeparator("Simulated darkroom");
+  QWidget *darkroomGroup = addSimulationSection(
+      QStringLiteral("Simulated darkroom"),
+      QStringLiteral("ContactCopyDarkroomGroup"));
 
   addSliderParameter(
       "Preflash", 0.0, 100.0, 100.0, 2, "", "",
@@ -285,8 +309,21 @@ void ContactCopyPanel::setupUi() {
   }
 
   // Sync state to UI
-  m_paramUpdaters.push_back([this](const ParameterState &s) {
+  m_paramUpdaters.push_back(
+      [this, filmCharacteristicsGroup, richardsGroup, manualPointsGroup,
+       darkroomGroup](const ParameterState &s) {
       bool sim = s.rparams.contact_copy.simulate;
+      QWidget *simulationGroups[] = {filmCharacteristicsGroup, richardsGroup,
+                                     manualPointsGroup, darkroomGroup};
+      for (QWidget *group : simulationGroups) {
+          if (group)
+              group->setVisible(sim);
+      }
+      if (!sim) {
+          m_taskQueue.cancelAll();
+          m_hdCurveWidget->setHistogram({}, 0, 0);
+      }
+
       m_hdCurveWidget->setEnabled(sim);
       if (m_presetCombo) m_presetCombo->setEnabled(sim);
       if (m_modeCombo) m_modeCombo->setEnabled(sim);
@@ -406,7 +443,8 @@ void ContactCopyPanel::onTriggerHistogram(int reqId, std::shared_ptr<colorscreen
 void ContactCopyPanel::onHistogramFinished(int reqId, std::vector<uint64_t> data, double minx, double maxx, bool success) {
     m_taskQueue.reportFinished(reqId, success);
     
-    if (success && reqId > m_lastHistogramReqId) {
+    if (success && m_stateGetter().rparams.contact_copy.simulate &&
+        reqId > m_lastHistogramReqId) {
         m_lastHistogramReqId = reqId;
         m_hdCurveWidget->setHistogram(data, minx, maxx);
     }
