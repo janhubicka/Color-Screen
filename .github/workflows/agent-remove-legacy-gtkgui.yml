@@ -8,6 +8,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: agent-remove-legacy-gtkgui
+  cancel-in-progress: true
+
 jobs:
   prepare-and-test:
     runs-on: ubuntu-24.04
