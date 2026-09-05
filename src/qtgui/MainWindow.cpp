@@ -3492,8 +3492,14 @@ void MainWindow::prepareForWorkspaceEmbedding() {
   if (m_mainSplitter)
     m_workspaceSplitterState = m_mainSplitter->saveState();
   takeWorkspaceInspector();
-  if (m_toolbar)
+  if (m_toolbar) {
+    // An embedded MainWindow must not keep a QToolBar registered in its own
+    // QMainWindowLayout. Qt 6.11's macOS/offscreen path can otherwise retain
+    // stale toolbar-area bookkeeping when the top-level window becomes an MDI
+    // child. WorkspaceWindow will borrow the toolbar after embedding finishes.
     m_toolbar->hide();
+    removeToolBar(m_toolbar);
+  }
   if (menuBar())
     menuBar()->hide();
   if (statusBar())
@@ -3507,8 +3513,15 @@ void MainWindow::restoreFromWorkspaceEmbedding() {
     return;
 
   restoreWorkspaceInspector();
-  if (m_toolbar)
+  if (m_toolbar) {
+    // Re-register the toolbar only after WorkspaceWindow has made this window
+    // top-level again. This keeps toolbar-area ownership single-valued.
+    if (m_toolbar->parentWidget() != this)
+      m_toolbar->setParent(this);
+    if (toolBarArea(m_toolbar) == Qt::NoToolBarArea)
+      addToolBar(Qt::TopToolBarArea, m_toolbar);
     m_toolbar->show();
+  }
   if (menuBar())
     menuBar()->show();
   if (statusBar())

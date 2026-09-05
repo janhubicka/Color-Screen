@@ -1139,8 +1139,12 @@ void ImageViewWindow::prepareForWorkspaceEmbedding() {
     m_referenceInspectorDock->setWidget(nullptr);
     m_referenceInspectorDock->hide();
   }
-  if (m_toolbar)
+  if (m_toolbar) {
+    // Keep an embedded secondary QMainWindow free of toolbar-area ownership;
+    // the workspace shell owns the visible toolbar while this view is attached.
     m_toolbar->hide();
+    removeToolBar(m_toolbar);
+  }
   if (menuBar())
     menuBar()->hide();
   if (statusBar())
@@ -1157,8 +1161,13 @@ void ImageViewWindow::restoreFromWorkspaceEmbedding() {
     m_referenceInspectorDock->setWidget(m_referenceInspector);
     m_referenceInspectorDock->show();
   }
-  if (m_toolbar)
+  if (m_toolbar) {
+    if (m_toolbar->parentWidget() != this)
+      m_toolbar->setParent(this);
+    if (toolBarArea(m_toolbar) == Qt::NoToolBarArea)
+      addToolBar(Qt::TopToolBarArea, m_toolbar);
     m_toolbar->show();
+  }
   if (menuBar())
     menuBar()->show();
   if (statusBar())

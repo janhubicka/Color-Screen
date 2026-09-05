@@ -227,9 +227,10 @@ void WorkspaceWindow::addDocument(MainWindow *document) {
   subWindow->setObjectName(QStringLiteral("documentSubWindow"));
   subWindow->setWindowTitle(document->documentDisplayName());
   subWindow->setWidget(document);
-  // addSubWindow() may activate synchronously. Keep the document toolbar in
-  // its still-valid private QMainWindow layout until the embedded child has
-  // completed its first show/layout pass.
+  // addSubWindow() may activate synchronously. Keep shared chrome handoff
+  // blocked until the embedded child and outer workspace have completed their
+  // first show/layout pass. The child toolbar is deliberately not registered
+  // in the child's QMainWindowLayout while embedded.
   ++m_chromeActivationBlockDepth;
   m_mdiArea->addSubWindow(subWindow);
 
@@ -307,8 +308,8 @@ void WorkspaceWindow::addView(ImageViewWindow *view) {
   subWindow->setObjectName(QStringLiteral("imageViewSubWindow"));
   subWindow->setWindowTitle(view->windowTitle());
   subWindow->setWidget(view);
-  // Use the same ordering for secondary views: the view must finish its first
-  // embedded show before its toolbar is borrowed by the workspace shell.
+  // Use the same ordering for secondary views: finish the first embedded
+  // show before the workspace shell borrows the unregistered view toolbar.
   ++m_chromeActivationBlockDepth;
   m_mdiArea->addSubWindow(subWindow);
 
@@ -1021,10 +1022,10 @@ void WorkspaceWindow::installDocumentChrome(MainWindow *document) {
     menuBar()->addAction(action);
 
   if (QToolBar *toolbar = document->workspaceToolBar()) {
-    document->removeToolBar(toolbar);
     if (toolbar->parentWidget() != this)
       toolbar->setParent(this);
-    addToolBar(Qt::TopToolBarArea, toolbar);
+    if (toolBarArea(toolbar) == Qt::NoToolBarArea)
+      addToolBar(Qt::TopToolBarArea, toolbar);
     toolbar->show();
   }
 
@@ -1042,12 +1043,19 @@ void WorkspaceWindow::releaseDocumentChrome(MainWindow *document,
     return;
 
   if (QToolBar *toolbar = document->workspaceToolBar()) {
-    if (toolbar->parentWidget() == this)
+    if (toolbar->parentWidget() == this &&
+        toolBarArea(toolbar) != Qt::NoToolBarArea)
       removeToolBar(toolbar);
-    if (toolbar->parentWidget() != document)
-      toolbar->setParent(document);
-    document->addToolBar(Qt::TopToolBarArea, toolbar);
-    toolbar->setVisible(showInWindow);
+    toolbar->hide();
+    // Inactive embedded documents must not regain toolbar-area ownership.
+    // restoreFromWorkspaceEmbedding() re-registers the toolbar after detach.
+    if (showInWindow) {
+      if (toolbar->parentWidget() != document)
+        toolbar->setParent(document);
+      if (document->toolBarArea(toolbar) == Qt::NoToolBarArea)
+        document->addToolBar(Qt::TopToolBarArea, toolbar);
+      toolbar->show();
+    }
   }
 
   document->standaloneStatusBar()->setVisible(showInWindow);
@@ -1089,9 +1097,10 @@ void WorkspaceWindow::installViewChrome(ImageViewWindow *view) {
     menuBar()->addAction(action);
 
   if (QToolBar *toolbar = view->workspaceToolBar()) {
-    if (auto *owner = qobject_cast<QMainWindow *>(toolbar->parentWidget()))
-      owner->removeToolBar(toolbar);
-    addToolBar(Qt::TopToolBarArea, toolbar);
+    if (toolbar->parentWidget() != this)
+      toolbar->setParent(this);
+    if (toolBarArea(toolbar) == Qt::NoToolBarArea)
+      addToolBar(Qt::TopToolBarArea, toolbar);
     toolbar->show();
   }
 
@@ -1119,10 +1128,17 @@ void WorkspaceWindow::releaseViewChrome(ImageViewWindow *view,
     return;
 
   if (QToolBar *toolbar = view->workspaceToolBar()) {
-    if (auto *owner = qobject_cast<QMainWindow *>(toolbar->parentWidget()))
-      owner->removeToolBar(toolbar);
-    view->addToolBar(Qt::TopToolBarArea, toolbar);
-    toolbar->setVisible(showInWindow);
+    if (toolbar->parentWidget() == this &&
+        toolBarArea(toolbar) != Qt::NoToolBarArea)
+      removeToolBar(toolbar);
+    toolbar->hide();
+    if (showInWindow) {
+      if (toolbar->parentWidget() != view)
+        toolbar->setParent(view);
+      if (view->toolBarArea(toolbar) == Qt::NoToolBarArea)
+        view->addToolBar(Qt::TopToolBarArea, toolbar);
+      toolbar->show();
+    }
   }
 
   view->menuBar()->setVisible(showInWindow);
@@ -1187,7 +1203,7 @@ void WorkspaceWindow::takeDocumentFromWorkspace(MainWindow *document) {
   if (!subWindow)
     return;
 
-  releaseDocumentChrome(document, true);
+  releaseDocumentChrome(document, false);
   if (QWidget *inspector = document->workspaceInspectorWidget()) {
     m_inspectorStack->removeWidget(inspector);
     document->takeWorkspaceInspector();
@@ -1212,7 +1228,7 @@ void WorkspaceWindow::takeViewFromWorkspace(ImageViewWindow *view) {
   if (!subWindow)
     return;
 
-  releaseViewChrome(view, true);
+  releaseViewChrome(view, false);
   if (view->ownsWorkspaceInspector()) {
     if (QWidget *inspector = view->workspaceInspectorWidget()) {
       m_inspectorStack->removeWidget(inspector);
