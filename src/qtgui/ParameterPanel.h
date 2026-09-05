@@ -156,6 +156,19 @@ protected:
 
   QToolButton *addSeparator(const QString &title);
 
+  /** Hide the complete form row containing WIDGET whenever APPLICABLECHECK
+      returns false.
+
+      Applicability is deliberately independent of enablement: use this for a
+      control whose concept does not exist for the current process/image, while
+      enabledCheck remains appropriate when a visible control should explain a
+      missing prerequisite. Section collapse/expand state is combined with the
+      applicability predicate, so expanding a section never resurrects an
+      inapplicable row. */
+  void setParameterApplicability(
+      QWidget *widget,
+      std::function<bool(const ParameterState &)> applicableCheck);
+
   /** Wrap CONTENT in the standard detachable-panel presentation.
       The returned section owns the floating QDockWidget lifecycle and
       always reattaches CONTENT when the dock closes or its host changes.
@@ -178,6 +191,7 @@ protected:
 
   QVBoxLayout *m_layout;
   QFormLayout *m_form; // Helper to access form layout
+  std::vector<QFormLayout *> m_groupForms;
 
   std::vector<std::function<void(const ParameterState &)>> m_paramUpdaters;
   std::vector<std::function<void()>> m_widgetStateUpdaters;

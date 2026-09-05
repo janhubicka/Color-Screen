@@ -656,7 +656,8 @@ void SharpnessPanel::setupUi() {
       }, nullptr, "Select the sharpening algorithm. \"None\" disables sharpening, \"Wiener\" and \"Richardson-Lucy\" use the MTF model, \"Unsharp mask\" is a classic edge enhancement.");
 
   m_scannerCameraSeparatorToggle = addSeparator("Scanner/Camera properties");
-  QToolButton *separatorToggle = m_scannerCameraSeparatorToggle;
+  m_scannerCameraSeparatorToggle->setObjectName(
+      QStringLiteral("ScannerCameraPropertiesToggle"));
 
   // MTF Chart
   m_mtfChart = new MTFChartWidget();
@@ -706,9 +707,9 @@ void SharpnessPanel::setupUi() {
   if (m_currentGroupForm) m_currentGroupForm->addRow(dotSpread);
   else m_form->addRow(dotSpread);
 
-  // Add "Use measured MTF" checkbox (visible only if measured data exists and
-  // separator is open)
-  addCheckboxParameter(
+  // Measured-MTF controls do not exist conceptually until a measurement has
+  // been loaded or made. Keep that applicability separate from enablement.
+  QCheckBox *useMeasuredMtf = addCheckboxParameter(
       "Use measured MTF",
       [](const ParameterState &s) {
         return s.rparams.sharpen.scanner_mtf.measured_mtf_idx >= 0;
@@ -716,9 +717,12 @@ void SharpnessPanel::setupUi() {
       [](ParameterState &s, bool v) {
         s.rparams.sharpen.scanner_mtf.measured_mtf_idx = v ? 0 : -1;
       },
-      [](const ParameterState &s) {
-        return s.rparams.sharpen.scanner_mtf.measurements.size();
-      }, "Use a measured MTF curve directly instead of the fitted analytical physical or fallback model.");
+      nullptr,
+      "Use a measured MTF curve directly instead of the fitted analytical physical or fallback model.");
+  useMeasuredMtf->setObjectName(QStringLiteral("MtfUseMeasuredCheck"));
+  setParameterApplicability(useMeasuredMtf, [](const ParameterState &state) {
+    return !state.rparams.sharpen.scanner_mtf.measurements.empty();
+  });
 
 
   // Gaussian blur (Sigma)
@@ -821,17 +825,18 @@ void SharpnessPanel::setupUi() {
   // Add the explicit model-fitting dialog when measured data is available.
   m_fitMtfBtn = addButtonParameter(
       "", "Fit measured MTF model", [this]() { fitMeasuredMtf(); },
-      [this, separatorToggle](const ParameterState &s) {
-        bool visible = !s.rparams.sharpen.scanner_mtf.measurements.empty();
-        if (separatorToggle && !separatorToggle->isChecked())
-          visible = false;
+      [this](const ParameterState &) {
         const bool documentAvailable =
             !m_mtfCalibration.fitAvailable || m_mtfCalibration.fitAvailable();
-        return visible && !m_mtfFitRunning && documentAvailable;
+        return !m_mtfFitRunning && documentAvailable;
       },
       "Choose the physical diffraction model, edit capture metadata, and "
       "explicitly select which values should be optimized. Numeric zero is "
       "never interpreted implicitly by this dialog.");
+  m_fitMtfBtn->setObjectName(QStringLiteral("MtfFitButton"));
+  setParameterApplicability(m_fitMtfBtn, [](const ParameterState &state) {
+    return !state.rparams.sharpen.scanner_mtf.measurements.empty();
+  });
 
   m_mtfFitStatusLabel = new QLabel(this);
   m_mtfFitStatusLabel->setWordWrap(true);
