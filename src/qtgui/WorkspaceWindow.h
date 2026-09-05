@@ -18,6 +18,7 @@ class QMdiSubWindow;
 class QHBoxLayout;
 class QLabel;
 class QStackedWidget;
+class QToolBar;
 class QToolButton;
 class QTabBar;
 class QVBoxLayout;
@@ -190,6 +191,13 @@ private:
   /** Put DOCUMENT's shared inspector in the workspace and target IMAGEWIDGET. */
   void installDocumentInspector(MainWindow *document, ImageWidget *imageWidget);
 
+  /** Move TOOLBAR from OWNER into the permanent workspace toolbar slot. */
+  void installWorkspaceToolBar(QMainWindow *owner, QToolBar *toolbar);
+
+  /** Return TOOLBAR to OWNER without changing the workspace toolbar topology. */
+  void releaseWorkspaceToolBar(QMainWindow *owner, QToolBar *toolbar,
+                               bool showInWindow);
+
   /** Show DOCUMENT's menus, toolbar, and inspector as active chrome. */
   void installDocumentChrome(MainWindow *document);
 
@@ -221,6 +229,9 @@ private:
   void takeViewFromWorkspace(ImageViewWindow *view);
 
   QMdiArea *m_mdiArea = nullptr;
+  QToolBar *m_workspaceToolBar = nullptr;
+  QWidget *m_workspaceToolBarHost = nullptr;
+  QHBoxLayout *m_workspaceToolBarLayout = nullptr;
   QDockWidget *m_inspectorDock = nullptr;
   QStackedWidget *m_inspectorStack = nullptr;
   QWidget *m_workspaceProgressArea = nullptr;
