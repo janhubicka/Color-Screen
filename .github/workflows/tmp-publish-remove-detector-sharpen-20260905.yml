@@ -1,0 +1,54 @@
+name: TEMP publish detector-sharpen cleanup
+
+on:
+  push:
+    branches:
+      - agent/tmp-publish-remove-detector-sharpen-20260905
+    paths:
+      - .github/workflows/tmp-publish-remove-detector-sharpen-20260905.yml
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Preserve reviewed patch
+        run: |
+          base64 -d .tmp/remove-detector-sharpen.patch.gz.b64 | gzip -d > /tmp/remove-detector-sharpen.patch
+      - name: Apply to clean feature branch
+        run: |
+          git fetch origin agent/scr-detect-remove-legacy-sharpening
+          git checkout agent/scr-detect-remove-legacy-sharpening
+          git apply --check /tmp/remove-detector-sharpen.patch
+          git apply /tmp/remove-detector-sharpen.patch
+          git diff --check
+          test "$(git status --short | wc -l)" -eq 18
+      - name: Commit and push
+        run: |
+          git config user.name "OpenAI Agent"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add doc/scr-detect-geometry-tracking.md \
+                  src/colorscreen/colorscreen.C \
+                  src/libcolorscreen/include/colorscreen.h \
+                  src/libcolorscreen/include/scr-detect-parameters.h \
+                  src/libcolorscreen/loadsave.C \
+                  src/libcolorscreen/render.C \
+                  src/libcolorscreen/render.h \
+                  src/libcolorscreen/render-scr-detect.C \
+                  src/libcolorscreen/render-scr-detect.h \
+                  src/libcolorscreen/scr-detect-geometry.C \
+                  src/libcolorscreen/stitch-image.C \
+                  src/libcolorscreen/unittests.C \
+                  src/qtgui/DetectScreenWorker.cpp \
+                  src/qtgui/DetectScreenWorker.h \
+                  src/qtgui/MainWindow.cpp \
+                  testsuite/benchmark-screen-detection.py \
+                  testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.test \
+                  testsuite/unittests.test
+          git commit -m "detect: retire detector-only preclassification sharpening" -m "Remove the historical scr_detect unsharp-mask parameters and implementation. Regular-screen detection now uses normal capture render parameters, so any required sharpening is performed by the shared capture pipeline before screen classification. Preserve the original detector API while adding an overload for capture parameters, retain read compatibility for legacy scr_detect_sharpen keys, and key adjusted-RGB caches by the processed capture source. Migrate the Nikon Dufay regression to explicit capture USM and simplify detector telemetry/benchmarks accordingly."
+          git push origin HEAD:agent/scr-detect-remove-legacy-sharpening
