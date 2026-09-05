@@ -630,13 +630,14 @@ void ImageWidget::drawDetectedPatchCenters(QPainter &p) {
 
   p.save();
   p.setRenderHint(QPainter::Antialiasing, true);
-  p.setPen(QPen(QColor(0, 0, 0, 170), 4, Qt::SolidLine, Qt::RoundCap));
+  const qreal markerScale = m_scale;
+  p.setPen(QPen(QColor(0, 0, 0, 170), 4 * markerScale, Qt::SolidLine, Qt::RoundCap));
   p.drawPoints(allPoints.constData(), allPoints.size());
 
-  auto drawColor = [&p](const QList<QPointF> &points, const QColor &color) {
+  auto drawColor = [&p, markerScale](const QList<QPointF> &points, const QColor &color) {
     if (points.isEmpty())
       return;
-    p.setPen(QPen(color, 2, Qt::SolidLine, Qt::RoundCap));
+    p.setPen(QPen(color, 2 * markerScale, Qt::SolidLine, Qt::RoundCap));
     p.drawPoints(points.constData(), points.size());
   };
   drawColor(redPoints, QColor(255, 64, 64, 230));
