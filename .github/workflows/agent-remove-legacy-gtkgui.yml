@@ -13,24 +13,67 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  prepare-and-test:
+  finalize:
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Prepare clean GTK-free branch and test it
+      - name: Finalize workflow cleanup
         run: |
-          cp .github/agent-remove-legacy-gtkgui.sh /tmp/agent-remove-legacy-gtkgui.sh
+          set -euo pipefail
+          SOURCE_SHA=b1bc271e877a5312b9e5d48dc1f15a4a56ac069c
+          FINAL_BRANCH=agent/remove-legacy-gtkgui-final
+          TEMP_TAG=agent-remove-legacy-gtkgui-finalize
+
+          git config user.name "Color-Screen agent"
+          git config user.email "46065755+janhubicka@users.noreply.github.com"
+          git checkout --detach "$SOURCE_SHA"
+
           python3 - <<'PY'
           from pathlib import Path
-          p = Path('/tmp/agent-remove-legacy-gtkgui.sh')
-          text = p.read_text()
-          marker = '# Ubuntu packages moc under Qt\'s libexec directory rather than on PATH.\n'
-          publish = '''# Publish the review commit before the longer compile/smoke validation.\ngit add -A\ngit commit --amend -m "build: remove legacy GTK GUI" -m "Remove the deprecated GTK2 frontend and bundled gtkimageviewer sources now that the Qt6 GUI is the maintained graphical interface.\n\nDrop the gtkgui configure option, generated Autotools metadata, packaging and Ubuntu image GTK2 dependencies, stale Windows build instructions, and GTK-specific documentation/source comments. Refresh the top-level README around the maintained Qt GUI.\n\nThe final pre-removal tree is preserved by the gtkgui tag.\n\nValidation covers GTK-related generated metadata, an Ubuntu Qt/checking build without GTK2 development packages, and the Qt multi-window smoke tests."\ngit push --force origin HEAD:"$REVIEW_BRANCH"\n\n'''
-          if marker not in text:
-              raise SystemExit('publish insertion marker not found')
-          p.write_text(text.replace(marker, publish + marker, 1))
+
+          def replace(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              if old not in text:
+                  raise SystemExit(f"expected text not found in {path}: {old!r}")
+              p.write_text(text.replace(old, new))
+
+          replace(
+              ".github/workflows/build-ubuntu.yml",
+              "./configure --enable-checking --disable-static-link --enable-gtkgui --enable-qtgui",
+              "./configure --enable-checking --disable-static-link --enable-qtgui")
+          replace(
+              ".github/workflows/sanitizers.yml",
+              "./configure --enable-checking --disable-static-link \\\n          --disable-gtkgui --enable-qtgui",
+              "./configure --enable-checking --disable-static-link --enable-qtgui")
           PY
-          bash /tmp/agent-remove-legacy-gtkgui.sh
+
+          if git grep -n -i -E 'gtkgui|colorscreen-gtk|gtkimageviewer|gtk\+?-?2\.0|libgtk2|enable-gtkgui|disable-gtkgui|GTKGUI_BIN'; then
+            echo "Legacy GTK GUI references remain" >&2
+            exit 1
+          fi
+          git diff --check -- . ':(exclude,glob)**/Makefile.in'
+          sh build-aux/check-generated-build-metadata.sh
+
+          git add .github/workflows/build-ubuntu.yml .github/workflows/sanitizers.yml
+          git commit -m "ci: remove legacy GTK workflow switches" -m "Drop the last gtkgui configure switches from the Ubuntu checking and ThreadSanitizer jobs. The GTK2 development package is already removed from the shared Ubuntu CI image by the parent cleanup commit."
+          FINAL_SHA=$(git rev-parse HEAD)
+          echo "final cleanup commit: $FINAL_SHA"
+
+          git tag -f "$TEMP_TAG" "$FINAL_SHA"
+          git push --force origin "refs/tags/$TEMP_TAG"
+
+          # The connected GitHub client will create the final review branch from
+          # the temporary tag. Remove the transport tag once that branch appears.
+          for i in $(seq 1 120); do
+            if git ls-remote --exit-code origin "refs/heads/$FINAL_BRANCH" >/dev/null 2>&1; then
+              git push origin ":refs/tags/$TEMP_TAG" || true
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Final branch was not created while the transport tag was available" >&2
+          exit 1
