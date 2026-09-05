@@ -1,0 +1,21 @@
+name: TEMP current source export detector cleanup
+
+on:
+  push:
+    branches:
+      - agent/tmp-source-export-20260905-sharpen-current
+    paths:
+      - .github/workflows/tmp-source-export-20260905-sharpen-current.yml
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Archive source
+        run: git archive --format=tar.gz --prefix=colorscreen/ HEAD^ > colorscreen-main-f5419cdd.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: colorscreen-main-f5419cdd
+          path: colorscreen-main-f5419cdd.tar.gz
+          retention-days: 2
