@@ -195,17 +195,13 @@ private:
   void installWorkspaceToolBar(QMainWindow *owner, QToolBar *toolbar);
 
   /** Return TOOLBAR to OWNER without changing the workspace toolbar topology. */
-  void releaseWorkspaceToolBar(QMainWindow *owner, QToolBar *toolbar,
-                               bool showInWindow);
+  void releaseWorkspaceToolBar(QMainWindow *owner, QToolBar *toolbar);
 
   /** Show DOCUMENT's menus, toolbar, and inspector as active chrome. */
   void installDocumentChrome(MainWindow *document);
 
-  /** Return DOCUMENT's toolbar/menu visibility to its own window.
-
-      SHOWINWINDOW is true when the document is becoming detached or closing,
-      and false when it remains an inactive MDI child. */
-  void releaseDocumentChrome(MainWindow *document, bool showInWindow);
+  /** Return DOCUMENT's borrowed toolbar and hide its standalone chrome. */
+  void releaseDocumentChrome(MainWindow *document);
 
   /** Detach DOCUMENT into a top-level window through the application manager. */
   void detachDocument(MainWindow *document);
@@ -216,8 +212,8 @@ private:
   /** Show VIEW's menu and toolbar in the shared shell. */
   void installViewChrome(ImageViewWindow *view);
 
-  /** Return VIEW's shared chrome to its own window. */
-  void releaseViewChrome(ImageViewWindow *view, bool showInWindow);
+  /** Return VIEW's borrowed toolbar and hide its standalone chrome. */
+  void releaseViewChrome(ImageViewWindow *view);
 
   /** Refresh shared chrome after the active MDI subwindow changes. */
   void onSubWindowActivated(QMdiSubWindow *window);

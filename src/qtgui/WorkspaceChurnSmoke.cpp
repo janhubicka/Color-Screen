@@ -12,7 +12,6 @@
 #include <QEvent>
 #include <QFont>
 #include <QLabel>
-#include <QComboBox>
 #include <QList>
 #include <QMdiArea>
 #include <QMdiSubWindow>
@@ -23,6 +22,7 @@
 #include <QStringList>
 #include <QTemporaryDir>
 #include <QTimer>
+#include <QToolBar>
 #include <QToolButton>
 #include <QWidget>
 
@@ -41,6 +41,8 @@ struct WorkspaceChurnState {
   QPointer<MainWindow> first;
   QPointer<MainWindow> second;
   QPointer<ImageViewWindow> view;
+  QPointer<QToolBar> workspaceToolBar;
+  QPointer<QWidget> workspaceToolBarHost;
   bool originalFirstScanMirror = false;
   bool expectedFirstScanMirror = false;
   bool expectedSecondScanMirror = false;
@@ -90,6 +92,13 @@ void startWorkspaceChurnSmoke(ColorScreenApplication &app,
     state->workspace = workspace;
     state->first = documents[0];
     state->second = documents[1];
+    state->workspaceToolBar = workspace->findChild<QToolBar *>(
+        QStringLiteral("WorkspaceToolbar"), Qt::FindDirectChildrenOnly);
+    state->workspaceToolBarHost = state->workspaceToolBar
+        ? state->workspaceToolBar->findChild<QWidget *>(
+              QStringLiteral("WorkspaceToolbarHost"),
+              Qt::FindDirectChildrenOnly)
+        : nullptr;
     state->view = app.createViewWindow(state->first.data());
     state->completed = completed;
     if (!state->view) {
@@ -135,6 +144,22 @@ void startWorkspaceChurnSmoke(ColorScreenApplication &app,
       if (!workspace || !first) {
         fail(QStringLiteral(
             "Workspace churn smoke lost its workspace or source document"));
+        return;
+      }
+
+      QToolBar *workspaceToolBar = state->workspaceToolBar.data();
+      QWidget *workspaceToolBarHost = state->workspaceToolBarHost.data();
+      const QList<QToolBar *> directWorkspaceToolBars =
+          workspace->findChildren<QToolBar *>(QString(),
+                                              Qt::FindDirectChildrenOnly);
+      if (!workspaceToolBar || !workspaceToolBarHost ||
+          directWorkspaceToolBars.size() != 1 ||
+          directWorkspaceToolBars.constFirst() != workspaceToolBar ||
+          workspaceToolBar->parentWidget() != workspace ||
+          !workspaceToolBar->isAncestorOf(workspaceToolBarHost) ||
+          workspace->toolBarArea(workspaceToolBar) != Qt::TopToolBarArea) {
+        fail(QStringLiteral(
+            "Workspace churn changed the permanent workspace toolbar topology"));
         return;
       }
 

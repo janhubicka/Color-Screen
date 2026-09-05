@@ -498,7 +498,7 @@ void WorkspaceWindow::prepareViewForClose(ImageViewWindow *view) {
   // Only return widgets that the shared shell borrowed from the view.  The
   // wrapper then performs the normal Qt MDI close and owns destruction of its
   // child view.
-  releaseViewChrome(view, false);
+  releaseViewChrome(view);
   if (view->ownsWorkspaceInspector()) {
     if (QWidget *inspector = view->workspaceInspectorWidget()) {
       m_inspectorStack->removeWidget(inspector);
@@ -1039,10 +1039,9 @@ void WorkspaceWindow::installWorkspaceToolBar(QMainWindow *owner,
     return;
   }
 
-  // This handoff runs only after the child and workspace have completed their
-  // first show/layout.  Removing the child toolbar at that point was already
-  // proven stable by #267; unlike the old model, the outer QMainWindow never
-  // adds or removes a QToolBar here.
+  // Move the source toolbar only after both QMainWindows have completed their
+  // first show/layout. The source layout is therefore settled before removal,
+  // while the outer QMainWindow keeps one permanent registered toolbar.
   if (auto *currentOwner = qobject_cast<QMainWindow *>(toolbar->parentWidget())) {
     if (currentOwner->toolBarArea(toolbar) != Qt::NoToolBarArea)
       currentOwner->removeToolBar(toolbar);
@@ -1057,31 +1056,24 @@ void WorkspaceWindow::installWorkspaceToolBar(QMainWindow *owner,
 
 /** Return TOOLBAR to OWNER while leaving the outer toolbar registered. */
 void WorkspaceWindow::releaseWorkspaceToolBar(QMainWindow *owner,
-                                               QToolBar *toolbar,
-                                               bool showInWindow) {
+                                               QToolBar *toolbar) {
   if (!owner || !toolbar)
     return;
 
   if (m_workspaceToolBarLayout && m_workspaceToolBarHost &&
       toolbar->parentWidget() == m_workspaceToolBarHost) {
     m_workspaceToolBarLayout->removeWidget(toolbar);
-  } else if (!showInWindow && toolbar->parentWidget() == owner &&
+  } else if (toolbar->parentWidget() == owner &&
              owner->toolBarArea(toolbar) != Qt::NoToolBarArea) {
-    // This only occurs after the child's first layout (for example if chrome
-    // is released before it was ever borrowed).  Keep inactive MDI children
-    // free of toolbar-area ownership once that initial layout has completed.
+    // Once the first embedded layout is complete, inactive MDI children do not
+    // retain private toolbar-area ownership. Detach restores it after the child
+    // is top-level again.
     owner->removeToolBar(toolbar);
   }
 
   toolbar->hide();
   if (toolbar->parentWidget() != owner)
     toolbar->setParent(owner);
-
-  if (showInWindow) {
-    if (owner->toolBarArea(toolbar) == Qt::NoToolBarArea)
-      owner->addToolBar(Qt::TopToolBarArea, toolbar);
-    toolbar->show();
-  }
 
   if (m_workspaceToolBar && m_workspaceToolBarLayout &&
       m_workspaceToolBarLayout->count() == 0)
@@ -1106,23 +1098,17 @@ void WorkspaceWindow::installDocumentChrome(MainWindow *document) {
   setWindowTitle(document->documentDisplayName() + tr(" — Color-Screen"));
 }
 
-/** Remove DOCUMENT's shared chrome and optionally show it in its own window. */
-void WorkspaceWindow::releaseDocumentChrome(MainWindow *document,
-                                             bool showInWindow) {
+/** Return DOCUMENT's borrowed chrome while it remains workspace-managed. */
+void WorkspaceWindow::releaseDocumentChrome(MainWindow *document) {
   if (!document)
     return;
 
   if (QToolBar *toolbar = document->workspaceToolBar())
-    releaseWorkspaceToolBar(document, toolbar, showInWindow);
+    releaseWorkspaceToolBar(document, toolbar);
 
-  document->standaloneStatusBar()->setVisible(showInWindow);
-  if (showInWindow)
-    document->setWorkspaceStatusBar(nullptr);
-
-  document->menuBar()->setVisible(showInWindow);
+  document->standaloneStatusBar()->hide();
+  document->menuBar()->hide();
   if (m_chromeDocument == document) {
-    if (showInWindow)
-      statusBar()->clearMessage();
     menuBar()->clear();
     m_chromeDocument.clear();
   }
@@ -1173,22 +1159,17 @@ void WorkspaceWindow::installViewChrome(ImageViewWindow *view) {
   setWindowTitle(view->windowTitle() + tr(" — Color-Screen"));
 }
 
-/** Return VIEW's toolbar/menu/status presentation to its own window. */
-void WorkspaceWindow::releaseViewChrome(ImageViewWindow *view,
-                                        bool showInWindow) {
+/** Return VIEW's borrowed chrome while it remains workspace-managed. */
+void WorkspaceWindow::releaseViewChrome(ImageViewWindow *view) {
   if (!view)
     return;
 
   if (QToolBar *toolbar = view->workspaceToolBar())
-    releaseWorkspaceToolBar(view, toolbar, showInWindow);
+    releaseWorkspaceToolBar(view, toolbar);
 
-  view->menuBar()->setVisible(showInWindow);
-  view->standaloneStatusBar()->setVisible(showInWindow);
-  if (showInWindow)
-    view->setWorkspaceStatusBar(nullptr);
+  view->menuBar()->hide();
+  view->standaloneStatusBar()->hide();
   if (m_chromeView == view) {
-    if (showInWindow)
-      statusBar()->clearMessage();
     menuBar()->clear();
     m_inspectorDock->setWindowTitle(tr("Document Controls"));
     m_chromeView.clear();
@@ -1220,9 +1201,9 @@ void WorkspaceWindow::onSubWindowActivated(QMdiSubWindow *window) {
   }
 
   if (m_chromeDocument)
-    releaseDocumentChrome(m_chromeDocument, false);
+    releaseDocumentChrome(m_chromeDocument);
   if (m_chromeView)
-    releaseViewChrome(m_chromeView, false);
+    releaseViewChrome(m_chromeView);
 
   m_chromeDocument = document;
   m_chromeView = view;
@@ -1246,7 +1227,7 @@ void WorkspaceWindow::takeDocumentFromWorkspace(MainWindow *document) {
   if (!subWindow)
     return;
 
-  releaseDocumentChrome(document, false);
+  releaseDocumentChrome(document);
   if (QWidget *inspector = document->workspaceInspectorWidget()) {
     m_inspectorStack->removeWidget(inspector);
     document->takeWorkspaceInspector();
@@ -1278,7 +1259,7 @@ void WorkspaceWindow::takeViewFromWorkspace(ImageViewWindow *view) {
   if (!subWindow)
     return;
 
-  releaseViewChrome(view, false);
+  releaseViewChrome(view);
   if (view->ownsWorkspaceInspector()) {
     if (QWidget *inspector = view->workspaceInspectorWidget()) {
       m_inspectorStack->removeWidget(inspector);
