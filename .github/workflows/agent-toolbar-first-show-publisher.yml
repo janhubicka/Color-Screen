@@ -1,0 +1,63 @@
+name: Agent toolbar first-show publisher
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/agent-toolbar-first-show-publisher.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    if: github.event.pull_request.head.ref == 'agent/tmp-toolbar-first-show-publisher-20260905'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/qtgui-toolbar-first-show-order
+          fetch-depth: 0
+      - name: Patch workspace first-show ordering
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path('src/qtgui/WorkspaceWindow.cpp')
+          s = p.read_text()
+          old = '''  m_mdiArea->setActiveSubWindow(subWindow);
+  --m_chromeActivationBlockDepth;
+  onSubWindowActivated(subWindow);
+  configureTabBar();
+
+  show();
+  if (isMinimized())
+    showNormal();
+  raise();
+  activateWindow();
+'''
+          new = '''  m_mdiArea->setActiveSubWindow(subWindow);
+
+  // Keep chrome handoff blocked through the workspace's own first show/layout.
+  // Qt's offscreen macOS backend cannot safely relayout a hidden QMainWindow
+  // after a live QToolBar has been moved into it from the child window.
+  show();
+  if (isMinimized())
+    showNormal();
+
+  --m_chromeActivationBlockDepth;
+  onSubWindowActivated(subWindow);
+  configureTabBar();
+  raise();
+  activateWindow();
+'''
+          count = s.count(old)
+          if count != 2:
+              raise SystemExit(f'expected two insertion tails, found {count}')
+          p.write_text(s.replace(old, new))
+      - name: Commit product patch
+        run: |
+          git config user.name 'Jan Hubička'
+          git config user.email '46065755+janhubicka@users.noreply.github.com'
+          git add src/qtgui/WorkspaceWindow.cpp
+          git commit -m 'qtgui: show workspace before toolbar handoff'
+          git push origin HEAD:agent/qtgui-toolbar-first-show-order
