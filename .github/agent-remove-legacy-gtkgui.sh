@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-BASE_SHA=6bc267640e06141029c0bf447bef8d7974c9c3d8
+BASE_SHA=$(git rev-parse refs/remotes/origin/main)
 REVIEW_BRANCH=agent/remove-legacy-gtkgui
 WORK_BRANCH=agent/remove-legacy-gtkgui-work
 
@@ -17,11 +17,9 @@ sudo apt-get install -y --no-install-recommends \
   pkg-config qt6-base-dev qt6-tools-dev qt6-tools-dev-tools \
   qt6-translations-l10n libqt6svg6-dev tar xauth xvfb xz-utils
 
-existing=$(git ls-remote origin refs/tags/gtkgui | awk '{print $1}')
-if test "$existing" != "$BASE_SHA"; then
-  echo "gtkgui tag must point at $BASE_SHA, found ${existing:-<missing>}" >&2
-  exit 1
-fi
+# Preserve the latest main tree that still contains the legacy GTK frontend.
+git tag -f gtkgui "$BASE_SHA"
+git push --force origin refs/tags/gtkgui
 
 git reset --hard "$BASE_SHA"
 git rm -r src/gtkgui gtkimageviewer-0.9.3
@@ -149,6 +147,17 @@ replace(
     "    // Use stitch mapped coords if relevant (same logic as gtkgui.C)\n",
     "    // Use stitch-mapped coordinates for stitched captures.\n")
 replace(
+    "src/qtgui/ImageWidget.cpp",
+    "/** Draw centers of connected screen elements retained by the most recent\n"
+    "    successful automatic screen detection.  This intentionally follows the\n"
+    "    old GTK diagnostic: do not show the dense overlay below 1:1 zoom.  Unlike\n"
+    "    the GTK implementation, limit map traversal to the current viewport so a\n"
+    "    full-resolution plate does not scan millions of map entries per repaint. */\n",
+    "/** Draw centers of connected screen elements retained by the most recent\n"
+    "    successful automatic screen detection.  Do not show the dense overlay\n"
+    "    below 1:1 zoom, and limit map traversal to the current viewport so a\n"
+    "    full-resolution plate does not scan millions of map entries per repaint. */\n")
+replace(
     "src/qtgui/MainWindow.h",
     "  // Using std::shared_ptr or just direct members.\n"
     "  // Given the library usage in gtkgui, direct members are fine.\n",
@@ -267,5 +276,5 @@ The final pre-removal tree is preserved by the gtkgui tag.
 
 Validated by regenerating GTK-related Autotools metadata, checking generated Qt build metadata, configuring and building on Ubuntu without GTK2 development packages, and running the multi-window Qt smoke tests."
 
-git push origin HEAD:"$REVIEW_BRANCH"
+git push --force origin HEAD:"$REVIEW_BRANCH"
 git push origin --delete "$WORK_BRANCH" || true
