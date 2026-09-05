@@ -405,16 +405,16 @@ $(ACLOCAL_M4): @MAINTAINER_MODE_TRUE@ $(am__aclocal_m4_deps)
 	$(am__cd) $(srcdir) && $(ACLOCAL) $(ACLOCAL_AMFLAGS)
 $(am__aclocal_m4_deps):
 
-src/libcolorscreen/include/colorscreen-config.h: src/libcolorscreen/include/stamp-h3
-	@test -f $@ || rm -f src/libcolorscreen/include/stamp-h3
-	@test -f $@ || $(MAKE) $(AM_MAKEFLAGS) src/libcolorscreen/include/stamp-h3
+src/libcolorscreen/include/colorscreen-config.h: src/libcolorscreen/include/stamp-h2
+	@test -f $@ || rm -f src/libcolorscreen/include/stamp-h2
+	@test -f $@ || $(MAKE) $(AM_MAKEFLAGS) src/libcolorscreen/include/stamp-h2
 
-src/libcolorscreen/include/stamp-h3: $(top_srcdir)/src/libcolorscreen/include/colorscreen-config.h.in $(top_builddir)/config.status
-	$(AM_V_at)rm -f src/libcolorscreen/include/stamp-h3
+src/libcolorscreen/include/stamp-h2: $(top_srcdir)/src/libcolorscreen/include/colorscreen-config.h.in $(top_builddir)/config.status
+	$(AM_V_at)rm -f src/libcolorscreen/include/stamp-h2
 	$(AM_V_GEN)cd $(top_builddir) && $(SHELL) ./config.status src/libcolorscreen/include/colorscreen-config.h
 
 distclean-hdr:
-	-rm -f src/libcolorscreen/include/colorscreen-config.h src/libcolorscreen/include/stamp-h3
+	-rm -f src/libcolorscreen/include/colorscreen-config.h src/libcolorscreen/include/stamp-h2
 
 mostlyclean-libtool:
 	-rm -f *.lo
