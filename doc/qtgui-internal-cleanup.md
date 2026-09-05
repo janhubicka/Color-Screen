@@ -202,8 +202,13 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
 
 ### P1 — early beta
 
-- Give every stateful parameter helper an explicit machine-readable key.  Use
-  that key for undo merge identity, optional reset/bypass state and diagnostics.
+- Give every stateful parameter helper an explicit machine-readable key.
+  `ParameterPanel` now accepts an optional stable `parameterKey`, stores it
+  on the field widget, and uses it for undo merge identity independently of
+  the human Undo description. Unconverted controls deliberately fall back to
+  their historical label-based identity. Screen strip-width controls and the
+  measured-MTF selector are the first migrated users; continue assigning keys
+  as panels gain reset/default/modified metadata.
 - Replace ad-hoc `blockSignals(true/false)` pairs with `QSignalBlocker`, reducing
   paths that accidentally leave a widget blocked after an early return.
 - Make group visibility semantics explicit.  A collapsed group should not force

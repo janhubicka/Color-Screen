@@ -26,7 +26,14 @@
 namespace {
 
 constexpr auto parameterApplicableProperty = "parameterApplicable";
+constexpr auto parameterKeyProperty = "parameterKey";
 constexpr auto parameterSectionExpandedProperty = "parameterSectionExpanded";
+
+/** Attach stable machine-readable PARAMETERKEY metadata to WIDGET. */
+void setParameterKey(QWidget *widget, const QString &parameterKey) {
+  if (widget && !parameterKey.isEmpty())
+    widget->setProperty(parameterKeyProperty, parameterKey);
+}
 
 /** Return whether WIDGET is logically applicable to the current panel state. */
 bool parameterWidgetApplicable(const QWidget *widget) {
@@ -331,10 +338,11 @@ void ParameterPanel::updateUI() {
 }
 
 void ParameterPanel::applyChange(
-    std::function<void(ParameterState &)> modifier, const QString &description) {
+    std::function<void(ParameterState &)> modifier, const QString &description,
+    const QString &parameterKey) {
   ParameterState state = m_stateGetter();
   modifier(state);
-  m_stateSetter(state, description);
+  m_stateSetter(state, description, parameterKey);
 }
 
 void ParameterPanel::addDoubleParameter(
@@ -343,8 +351,8 @@ void ParameterPanel::addDoubleParameter(
     std::function<void(ParameterState &, double)> setter,
     const std::map<double, QString> &specialValues,
     const std::map<double, QString> &quickSelects,
-    std::function<bool(double)> validator,
-    const QString &tooltip) {
+    std::function<bool(double)> validator, const QString &tooltip,
+    const QString &parameterKey) {
   SmartSpinBox *spin = new SmartSpinBox();
   spin->setRange(min, max);
   spin->setSingleStep(0.1);
@@ -358,6 +366,8 @@ void ParameterPanel::addDoubleParameter(
   QHBoxLayout *hLayout = new QHBoxLayout(container);
   hLayout->setContentsMargins(0, 0, 0, 0);
   hLayout->addWidget(spin, 1);
+  setParameterKey(container, parameterKey);
+  setParameterKey(spin, parameterKey);
 
   QComboBox *combo = nullptr;
   if (!quickSelects.empty()) {
@@ -384,8 +394,9 @@ void ParameterPanel::addDoubleParameter(
 
   // Connect changes: UI -> State
   connect(spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
-          [this, setter, label](double val) {
-            applyChange([setter, val](ParameterState &s) { setter(s, val); }, label);
+          [this, setter, label, parameterKey](double val) {
+            applyChange([setter, val](ParameterState &s) { setter(s, val); },
+                        label, parameterKey);
           });
 
   // Updater: State -> UI
@@ -444,7 +455,8 @@ QWidget *ParameterPanel::addSliderParameter(
     std::function<double(const ParameterState &)> getter,
     std::function<void(ParameterState &, double)> setter, double gamma,
     std::function<bool(const ParameterState &)> enabledCheck,
-    bool logarithmic, const QString &tooltip) {
+    bool logarithmic, const QString &tooltip,
+    const QString &parameterKey) {
   // Container: Slider + SpinBox
   QWidget *container = new QWidget();
   QHBoxLayout *hLayout = new QHBoxLayout(container);
@@ -473,6 +485,10 @@ QWidget *ParameterPanel::addSliderParameter(
     spin->setSuffix(QString(" %1").arg(suffix));
   if (!specialValueText.isEmpty())
     spin->setSpecialValueText(specialValueText);
+
+  setParameterKey(container, parameterKey);
+  setParameterKey(slider, parameterKey);
+  setParameterKey(spin, parameterKey);
 
   hLayout->addWidget(slider, 1); // Slider expands
   hLayout->addWidget(spin, 0);   // SpinBox fixed size
@@ -541,14 +557,15 @@ QWidget *ParameterPanel::addSliderParameter(
 
   // Synchronization
   connect(slider, &QSlider::valueChanged, this,
-          [this, spin, sliderToValue, setter, label](int val) {
+          [this, spin, sliderToValue, setter, label, parameterKey](int val) {
             double dVal = sliderToValue(val);
             spin->blockSignals(true);
             spin->setValue(dVal);
             spin->blockSignals(false);
 
             // Trigger update
-            applyChange([setter, dVal](ParameterState &s) { setter(s, dVal); }, label);
+            applyChange([setter, dVal](ParameterState &s) { setter(s, dVal); },
+                        label, parameterKey);
           });
 
   connect(spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
@@ -560,8 +577,9 @@ QWidget *ParameterPanel::addSliderParameter(
 
   // Change
   connect(spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
-          [this, setter, label](double val) {
-            applyChange([setter, val](ParameterState &s) { setter(s, val); }, label);
+          [this, setter, label, parameterKey](double val) {
+            applyChange([setter, val](ParameterState &s) { setter(s, val); },
+                        label, parameterKey);
           });
 
   // Updater: State -> UI
@@ -733,13 +751,14 @@ QComboBox *ParameterPanel::addEnumParameter(
     std::function<int(const ParameterState &)> getter,
     std::function<void(ParameterState &, int)> setter,
     std::function<bool(const ParameterState &)> enabledCheck,
-    const QString &tooltip) {
+    const QString &tooltip, const QString &parameterKey) {
   QComboBox *combo = new QComboBox();
   if (!tooltip.isEmpty())
     combo->setToolTip(tooltip);
   combo->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
   combo->setMinimumContentsLength(10);
   combo->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+  setParameterKey(combo, parameterKey);
   for (auto const &[val, text] : options) {
     combo->addItem(text, val);
   }
@@ -752,9 +771,10 @@ QComboBox *ParameterPanel::addEnumParameter(
 
   // Connect changes: UI -> State
   connect(combo, QOverload<int>::of(&QComboBox::activated), this,
-          [this, combo, setter, label](int index) {
+          [this, combo, setter, label, parameterKey](int index) {
             int val = combo->itemData(index).toInt();
-            applyChange([setter, val](ParameterState &s) { setter(s, val); }, label);
+            applyChange([setter, val](ParameterState &s) { setter(s, val); },
+                        label, parameterKey);
           });
 
   // Updater: State -> UI
@@ -786,7 +806,7 @@ QCheckBox *ParameterPanel::addCheckboxParameter(
     const QString &label, std::function<bool(const ParameterState &)> getter,
     std::function<void(ParameterState &, bool)> setter,
     std::function<bool(const ParameterState &)> enabledCheck,
-    const QString &tooltip) {
+    const QString &tooltip, const QString &parameterKey) {
   // Create container with label on left, checkbox on right
   QWidget *container = new QWidget();
   QHBoxLayout *hLayout = new QHBoxLayout(container);
@@ -794,6 +814,8 @@ QCheckBox *ParameterPanel::addCheckboxParameter(
 
   QCheckBox *checkbox = new QCheckBox();
   QLabel *textLabel = new QLabel(label);
+  setParameterKey(container, parameterKey);
+  setParameterKey(checkbox, parameterKey);
 
   if (!tooltip.isEmpty()) {
     checkbox->setToolTip(tooltip);
@@ -811,8 +833,10 @@ QCheckBox *ParameterPanel::addCheckboxParameter(
   }
 
   // Connect changes: UI -> State
-  connect(checkbox, &QCheckBox::toggled, this, [this, setter, label](bool checked) {
-    applyChange([setter, checked](ParameterState &s) { setter(s, checked); }, label);
+  connect(checkbox, &QCheckBox::toggled, this,
+          [this, setter, label, parameterKey](bool checked) {
+    applyChange([setter, checked](ParameterState &s) { setter(s, checked); },
+                label, parameterKey);
   });
 
   // Updater: State -> UI
@@ -839,7 +863,7 @@ QCheckBox *ParameterPanel::addCheckboxWithReset(
     std::function<void(ParameterState &, bool)> setter,
     std::function<void(ParameterState &)> resetAction,
     std::function<bool(const ParameterState &)> enabledCheck,
-    const QString &tooltip) {
+    const QString &tooltip, const QString &parameterKey) {
   // Create container with label on left, checkbox on right
   QWidget *container = new QWidget();
   QHBoxLayout *hLayout = new QHBoxLayout(container);
@@ -847,12 +871,15 @@ QCheckBox *ParameterPanel::addCheckboxWithReset(
 
   QCheckBox *checkbox = new QCheckBox();
   QLabel *textLabel = new QLabel(label);
+  setParameterKey(container, parameterKey);
+  setParameterKey(checkbox, parameterKey);
 
   if (!tooltip.isEmpty()) {
     checkbox->setToolTip(tooltip);
     textLabel->setToolTip(tooltip);
   }
   QPushButton *resetBtn = new QPushButton("Reset");
+  setParameterKey(resetBtn, parameterKey);
   resetBtn->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
 
   hLayout->addWidget(checkbox, 0);  // Checkbox fixed size on left
@@ -867,8 +894,10 @@ QCheckBox *ParameterPanel::addCheckboxWithReset(
   }
 
   // Connect changes: UI -> State
-  connect(checkbox, &QCheckBox::toggled, this, [this, setter, label](bool checked) {
-    applyChange([setter, checked](ParameterState &s) { setter(s, checked); }, label);
+  connect(checkbox, &QCheckBox::toggled, this,
+          [this, setter, label, parameterKey](bool checked) {
+    applyChange([setter, checked](ParameterState &s) { setter(s, checked); },
+                label, parameterKey);
   });
 
   // Connect Reset Button
@@ -980,11 +1009,12 @@ void ParameterPanel::addCorrelatedRGBParameter(
     std::function<colorscreen::rgbdata(const ParameterState &)> getter,
     std::function<void(ParameterState &, const colorscreen::rgbdata &)> setter,
     std::function<bool(const ParameterState &)> enabledCheck,
-    const QString &tooltip) {
+    const QString &tooltip, const QString &parameterKey) {
 
   // 1. Link Checkbox
   QCheckBox *linkCheck = new QCheckBox("Link channels");
   linkCheck->setChecked(true);
+  setParameterKey(linkCheck, parameterKey);
 
   // 2. Three channels
   struct Channel {
@@ -1012,6 +1042,10 @@ void ParameterPanel::addCorrelatedRGBParameter(
       slider->setToolTip(tooltip);
       spin->setToolTip(tooltip);
     }
+
+    setParameterKey(container, parameterKey);
+    setParameterKey(slider, parameterKey);
+    setParameterKey(spin, parameterKey);
 
     hLayout->addWidget(slider, 1);
     hLayout->addWidget(spin, 0);
@@ -1046,7 +1080,8 @@ void ParameterPanel::addCorrelatedRGBParameter(
 
   // Interaction Logic
   auto handleValueChange = [this, channels, linkCheck, getter, setter,
-                            scale, label](int changedIdx, double newVal) {
+                            scale, label, parameterKey](int changedIdx,
+                                                       double newVal) {
     ParameterState s = m_stateGetter();
     colorscreen::rgbdata current = getter(s);
     double oldVal = current[changedIdx];
@@ -1063,7 +1098,8 @@ void ParameterPanel::addCorrelatedRGBParameter(
       }
     }
 
-    applyChange([setter, next](ParameterState &state) { setter(state, next); }, label);
+    applyChange([setter, next](ParameterState &state) { setter(state, next); },
+                label, parameterKey);
 
     // Optimistic UI update for linked sliders
     if (linkCheck->isChecked()) {

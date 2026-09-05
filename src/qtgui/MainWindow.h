@@ -150,7 +150,8 @@ public:
 
   /** Apply an undoable shared parameter update originating in another view. */
   void applySharedDocumentState(const ParameterState &state,
-                                const QString &description);
+                                const QString &description,
+                                const QString &parameterKey = QString());
 
   /** Return this view's render-mode settings as the initial state for a new
       secondary view. */
@@ -701,7 +702,9 @@ private:
 
   // Undo/Redo
   QUndoStack *m_undoStack;
-  void changeParameters(const ParameterState &newState, const QString &description = QString());
+  void changeParameters(const ParameterState &newState,
+                        const QString &description = QString(),
+                        const QString &parameterKey = QString());
   ParameterState getCurrentState() const;
   void updateUIFromState(const ParameterState &state);
 

@@ -465,9 +465,10 @@ void ImageViewWindow::setupReferenceInspector() {
         return m_document ? m_document->documentStateSnapshot()
                           : ParameterState();
       },
-      [this](const ParameterState &state, const QString &description) {
+      [this](const ParameterState &state, const QString &description,
+             const QString &parameterKey) {
         if (m_document)
-          m_document->applySharedDocumentState(state, description);
+          m_document->applySharedDocumentState(state, description, parameterKey);
       },
       [this]() { return m_scan; }, std::move(mtfCalibration), m_referenceTabs);
   m_referenceTabs->addTab(m_sharpnessPanel, tr("Sharpness"));

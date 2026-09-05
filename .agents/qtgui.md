@@ -253,7 +253,8 @@ addSliderParameter(
     1.0,      // Gamma (non-linear distribution)
     nullptr,  // Enabled check lambda
     false,    // Logarithmic scale
-    "This parameter controls X." // Tooltip
+    "This parameter controls X.", // Tooltip
+    "example.my_parameter"       // Stable parameter key
 );
 ```
 
@@ -261,7 +262,7 @@ addSliderParameter(
 
 - **Getter Lambda**: Returns the current value from the `ParameterState`.
 - **Setter Lambda**: Modifies the `ParameterState` with the new value.
-- **`applyChange`**: Behind the scenes, the helper methods call `applyChange`, which triggers a global state update and UI refresh.
+- **`applyChange`**: Behind the scenes, the helper methods call `applyChange`, which triggers a global state update and UI refresh. Stateful helpers accept an optional stable, untranslated `parameterKey`; use it for new or actively maintained controls so Undo merging and future Reset/default metadata do not depend on the visible label.
 
 ---
 

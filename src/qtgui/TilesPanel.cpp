@@ -162,7 +162,8 @@ void TilesPanel::rebuildTileGrid() {
       connect(enBtn, &QCheckBox::toggled, this, [this, gx, gy](bool checked) {
         ParameterState s = m_stateGetter();
         s.rparams.get_tile_adjustment(gx, gy).enabled = checked;
-        m_stateSetter(s, tr("Toggle tile %1,%2").arg(gx).arg(gy));
+        m_stateSetter(s, tr("Toggle tile %1,%2").arg(gx).arg(gy),
+                      QString());
       });
 
       gridLayout->addWidget(tileWidget, gy, gx);

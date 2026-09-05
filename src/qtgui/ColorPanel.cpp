@@ -520,8 +520,10 @@ bool ColorPanel::isTileRenderingEnabled(const ParameterState &state) const {
   return colorscreen::screen_has_regular_geometry_p(state.scrToImg.type);
 }
 
-void ColorPanel::applyChange(std::function<void(ParameterState &)> modifier, const QString &description) {
-  ParameterPanel::applyChange(modifier, description);
+void ColorPanel::applyChange(std::function<void(ParameterState &)> modifier,
+                             const QString &description,
+                             const QString &parameterKey) {
+  ParameterPanel::applyChange(modifier, description, parameterKey);
   scheduleTileUpdate();
 }
 

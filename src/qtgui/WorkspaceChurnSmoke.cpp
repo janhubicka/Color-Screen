@@ -6,6 +6,7 @@
 #include "MultiLineTabWidget.h"
 #include "WorkspaceWindow.h"
 
+#include <QAction>
 #include <QComboBox>
 #include <QCheckBox>
 #include <QCoreApplication>
@@ -305,6 +306,12 @@ QPushButton *mtfMeasurementLocate = inspector->findChild<QPushButton *>(
     QStringLiteral("MtfMeasurementLocate"));
 QCheckBox *mtfUseMeasured = inspector->findChild<QCheckBox *>(
     QStringLiteral("MtfUseMeasuredCheck"));
+QWidget *redStripWidth = inspector->findChild<QWidget *>(
+    QStringLiteral("ScreenRedStripWidth"));
+QWidget *greenStripWidth = inspector->findChild<QWidget *>(
+    QStringLiteral("ScreenGreenStripWidth"));
+QAction *undoParametersAction = first->findChild<QAction *>(
+    QStringLiteral("UndoParametersAction"));
 QPushButton *mtfFitButton = inspector->findChild<QPushButton *>(
     QStringLiteral("MtfFitButton"));
 QToolButton *scannerCameraToggle = inspector->findChild<QToolButton *>(
@@ -424,6 +431,68 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
           return;
         }
         scannerCameraToggle->setChecked(scannerPropertiesWereExpanded);
+
+        if (!redStripWidth || !greenStripWidth ||
+            redStripWidth->property("parameterKey").toString() !=
+                QStringLiteral("screen.red_strip_width") ||
+            greenStripWidth->property("parameterKey").toString() !=
+                QStringLiteral("screen.green_strip_width")) {
+          fail(QStringLiteral(
+              "Workspace churn lost stable parameter-key metadata"));
+          return;
+        }
+
+        // Exercise undo identity directly. Two edits deliberately use the
+        // same human description: different keys must keep them separate,
+        // while repeated updates carrying one key must coalesce.
+        if (!undoParametersAction) {
+          fail(QStringLiteral("Workspace churn lost the Undo action"));
+          return;
+        }
+        const ParameterState undoBaseline = first->documentStateSnapshot();
+        ParameterState firstKeyEdit = undoBaseline;
+        firstKeyEdit.rparams.brightness = undoBaseline.rparams.brightness + 0.25;
+        first->applySharedDocumentState(
+            firstKeyEdit, QStringLiteral("Undo key smoke"),
+            QStringLiteral("smoke.brightness"));
+        ParameterState secondKeyEdit = first->documentStateSnapshot();
+        secondKeyEdit.rparams.scan_mirror = !undoBaseline.rparams.scan_mirror;
+        first->applySharedDocumentState(
+            secondKeyEdit, QStringLiteral("Undo key smoke"),
+            QStringLiteral("smoke.scan_mirror"));
+        undoParametersAction->trigger();
+        ParameterState afterDifferentKeyUndo = first->documentStateSnapshot();
+        if (afterDifferentKeyUndo.rparams.brightness !=
+                firstKeyEdit.rparams.brightness ||
+            afterDifferentKeyUndo.rparams.scan_mirror !=
+                undoBaseline.rparams.scan_mirror) {
+          fail(QStringLiteral(
+              "Undo merged distinct parameter keys sharing one label"));
+          return;
+        }
+        undoParametersAction->trigger();
+        if (first->documentStateSnapshot() != undoBaseline) {
+          fail(QStringLiteral(
+              "Undo did not restore the baseline after distinct keyed edits"));
+          return;
+        }
+
+        ParameterState sameKeyEdit1 = undoBaseline;
+        sameKeyEdit1.rparams.brightness = undoBaseline.rparams.brightness + 0.5;
+        first->applySharedDocumentState(
+            sameKeyEdit1, QStringLiteral("Undo key smoke"),
+            QStringLiteral("smoke.brightness"));
+        ParameterState sameKeyEdit2 = first->documentStateSnapshot();
+        sameKeyEdit2.rparams.brightness = undoBaseline.rparams.brightness + 0.75;
+        first->applySharedDocumentState(
+            sameKeyEdit2, QStringLiteral("Undo key smoke"),
+            QStringLiteral("smoke.brightness"));
+        undoParametersAction->trigger();
+        if (first->documentStateSnapshot() != undoBaseline) {
+          fail(QStringLiteral(
+              "Undo failed to coalesce repeated updates for one parameter key"));
+          return;
+        }
 
         // Folding the guide is presentation state only. It must not hide the
         // processing tabs, and the smoke restores the user's previous fold

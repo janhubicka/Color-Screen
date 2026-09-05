@@ -25,7 +25,8 @@ class ParameterPanel : public QWidget {
   Q_OBJECT
 public:
   using StateGetter = std::function<ParameterState()>;
-  using StateSetter = std::function<void(const ParameterState &, const QString &)>;
+  using StateSetter = std::function<void(const ParameterState &, const QString &,
+                                         const QString &)>;
   using ImageGetter = std::function<std::shared_ptr<colorscreen::image_data>()>;
 
   explicit ParameterPanel(StateGetter stateGetter, StateSetter stateSetter,
@@ -39,6 +40,11 @@ public:
 protected:
   /*
     Adds a double parameter row (SpinBox + Optional Combo).
+
+    PARAMETERKEY is a stable untranslated identifier for the logical
+    parameter. Stateful helpers store it as widget metadata and use it as
+    undo merge identity. Leave it empty while incrementally migrating old
+    call sites; those retain the historical label-based merge behavior.
   */
   void addDoubleParameter(const QString &label, double min, double max,
                           std::function<double(const ParameterState &)> getter,
@@ -46,7 +52,8 @@ protected:
                           const std::map<double, QString> &specialValues = {},
                           const std::map<double, QString> &quickSelects = {},
                           std::function<bool(double)> validator = nullptr,
-                          const QString &tooltip = QString());
+                          const QString &tooltip = QString(),
+                          const QString &parameterKey = QString());
 
   /*
     Adds a slider parameter row (Slider + SpinBox).
@@ -59,7 +66,8 @@ protected:
       std::function<double(const ParameterState &)> getter,
       std::function<void(ParameterState &, double)> setter, double gamma = 1.0,
       std::function<bool(const ParameterState &)> enabledCheck = nullptr,
-      bool logarithmic = false, const QString &tooltip = QString());
+      bool logarithmic = false, const QString &tooltip = QString(),
+      const QString &parameterKey = QString());
 
   /*
     Adds a slider parameter row (Slider + SpinBox) that does not participate in state.
@@ -76,7 +84,8 @@ protected:
       std::function<int(const ParameterState &)> getter,
       std::function<void(ParameterState &, int)> setter,
       std::function<bool(const ParameterState &)> enabledCheck = nullptr,
-      const QString &tooltip = QString());
+      const QString &tooltip = QString(),
+      const QString &parameterKey = QString());
 
   template <typename T>
   void addEnumTooltips(QComboBox *combo, const T *names, int max) {
@@ -97,7 +106,8 @@ protected:
       std::function<int(const ParameterState &)> getter,
       std::function<void(ParameterState &, int)> setter,
       std::function<bool(const ParameterState &)> enabledCheck = nullptr,
-      const QString &tooltip = QString()) {
+      const QString &tooltip = QString(),
+      const QString &parameterKey = QString()) {
     std::map<int, QString> options;
     for (int i = 0; i < max; ++i) {
       if (names[i].pretty_name && names[i].pretty_name[0]) {
@@ -107,7 +117,8 @@ protected:
       }
     }
 
-    QComboBox *combo = addEnumParameter(label, options, getter, setter, enabledCheck, tooltip);
+    QComboBox *combo = addEnumParameter(label, options, getter, setter,
+                                        enabledCheck, tooltip, parameterKey);
     addEnumTooltips(combo, names, max);
     return combo;
   }
@@ -117,22 +128,26 @@ protected:
       const QString &label, std::function<int(const ParameterState &)> getter,
       std::function<void(ParameterState &, int)> setter,
       std::function<bool(const ParameterState &)> enabledCheck = nullptr,
-      const QString &tooltip = QString()) {
-    return addEnumParameter(label, Names, Max, getter, setter, enabledCheck, tooltip);
+      const QString &tooltip = QString(),
+      const QString &parameterKey = QString()) {
+    return addEnumParameter(label, Names, Max, getter, setter, enabledCheck,
+                            tooltip, parameterKey);
   }
 
   QCheckBox *addCheckboxParameter(
       const QString &label, std::function<bool(const ParameterState &)> getter,
       std::function<void(ParameterState &, bool)> setter,
       std::function<bool(const ParameterState &)> enabledCheck = nullptr,
-      const QString &tooltip = QString());
+      const QString &tooltip = QString(),
+      const QString &parameterKey = QString());
 
   QCheckBox *addCheckboxWithReset(
       const QString &label, std::function<bool(const ParameterState &)> getter,
       std::function<void(ParameterState &, bool)> setter,
       std::function<void(ParameterState &)> resetAction,
       std::function<bool(const ParameterState &)> enabledCheck = nullptr,
-      const QString &tooltip = QString());
+      const QString &tooltip = QString(),
+      const QString &parameterKey = QString());
 
   QPushButton *addButtonParameter(
       const QString &label, const QString &text, std::function<void()> onClicked,
@@ -152,7 +167,8 @@ protected:
       std::function<colorscreen::rgbdata(const ParameterState &)> getter,
       std::function<void(ParameterState &, const colorscreen::rgbdata &)> setter,
       std::function<bool(const ParameterState &)> enabledCheck = nullptr,
-      const QString &tooltip = QString());
+      const QString &tooltip = QString(),
+      const QString &parameterKey = QString());
 
   QToolButton *addSeparator(const QString &title);
 
@@ -182,7 +198,9 @@ protected:
   void endGroup();
 
 protected:
-  virtual void applyChange(std::function<void(ParameterState &)> modifier, const QString &description = QString());
+  virtual void applyChange(std::function<void(ParameterState &)> modifier,
+                           const QString &description = QString(),
+                           const QString &parameterKey = QString());
 
   StateGetter m_stateGetter;
   StateSetter m_stateSetter;
