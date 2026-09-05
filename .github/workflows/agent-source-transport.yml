@@ -1,0 +1,22 @@
+name: Agent source transport
+
+on:
+  push:
+    branches:
+      - agent/source-transport-parameter-applicability
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 0a7d988c41ae0af69601dff3191c585b8a37d337
+          fetch-depth: 1
+      - name: Archive exact main source
+        run: git archive --format=tar.gz --output=Color-Screen-source.tar.gz HEAD
+      - uses: actions/upload-artifact@v4
+        with:
+          name: colorscreen-source
+          path: Color-Screen-source.tar.gz
+          retention-days: 1
