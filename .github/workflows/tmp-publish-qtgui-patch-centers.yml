@@ -17,19 +17,19 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Reassemble reviewed patch
-        run: |
-          cat .tmp/qtgui-patch-centers.00 \
-              .tmp/qtgui-patch-centers.01 \
-              .tmp/qtgui-patch-centers.02 \
-              .tmp/qtgui-patch-centers.03 > /tmp/patch.b64
-          base64 -d /tmp/patch.b64 > /tmp/qtgui-patch-centers.patch
-      - name: Apply to clean feature branch
+      - name: Apply reviewed patches to clean feature branch
         run: |
           git fetch origin agent/qtgui-detected-patch-centers
           git checkout agent/qtgui-detected-patch-centers
-          git apply --check /tmp/qtgui-patch-centers.patch
-          git apply /tmp/qtgui-patch-centers.patch
+          for patch in \
+            .tmp/ImageWidget.cpp.patch \
+            .tmp/ImageWidget.h.patch \
+            .tmp/MainWindow.cpp.patch \
+            .tmp/MainWindow.h.patch \
+            .tmp/main.cpp.patch; do
+            git apply --check "$GITHUB_WORKSPACE/$patch"
+            git apply "$GITHUB_WORKSPACE/$patch"
+          done
           git diff --check
           test "$(git status --short | wc -l)" -eq 5
       - name: Commit and push
