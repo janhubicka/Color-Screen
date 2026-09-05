@@ -1,0 +1,19 @@
+name: TEMP QtGUI patch-center source transport
+on:
+  push:
+    branches:
+      - agent/tmp-qtgui-patch-centers-source-20260905
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Archive current main parent
+        run: git archive --format=tar.gz --output=colorscreen-main-6bc26764.tar.gz HEAD^
+      - uses: actions/upload-artifact@v4
+        with:
+          name: colorscreen-main-6bc26764
+          path: colorscreen-main-6bc26764.tar.gz
+          retention-days: 2
