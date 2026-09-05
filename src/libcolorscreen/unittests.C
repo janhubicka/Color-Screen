@@ -2191,6 +2191,8 @@ test_discovery (coord_t epsilon)
   param.type = Finlay;
   param.scanner_type = fixed_lens;
   ok &= do_test_discovery (param, 1024, 1024, epsilon);
+  param.type = Paget;
+  ok &= do_test_discovery (param, 1024, 1024, epsilon);
   param.type = Dufay;
   ok &= do_test_discovery (param, 1024, 1024, epsilon);
   return ok;

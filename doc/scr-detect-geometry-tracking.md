@@ -307,17 +307,65 @@ coverage, patch counts, and seed counts as before this change.
 
 **Severity:** high
 
-**Status:** open
+**Status:** partially fixed for Paget/Finlay by a guarded affine seed fallback
 
-The current seed requires a complete 5 by 10 Dufay-like pattern or the fixed
-Paget/Finlay validation pattern.  One damaged, occluded, or weak element rejects
-the candidate even when the remaining observations determine a convincing
-lattice.
+The historical Paget/Finlay seed requires a complete fixed connected-component
+pattern.  It also reconstructs the second image-space lattice direction by an
+exact 90-degree rotation of the first.  A well-resolved plate can therefore
+fail before the solver when projective capture geometry makes the local lattice
+a parallelogram or when the deliberately pure color classifier leaves a few
+otherwise coherent elements `unknown`.
 
-Introduce an explicit candidate score and robust lattice fit.  Missing elements
-may be tolerated only when enough independent rows, columns, and colors remain
-to distinguish the requested screen family.  The score must be compared with
-negative/no-screen images before replacing the present exact-grid gate.
+Keep that exact seed as the first and preferred path.  When it fails, Paget and
+Finlay now have a bounded partial-affine fallback.  Starting from the same green
+component and two neighboring blue components, it uses the observed blue
+directions as a local affine basis and probes a 5 by 5 lattice without changing
+the global color classifier.  A candidate reaches the existing initial solver
+only when all of the following hold:
+
+- at least 37 of the 50 expected green and primary-blue observations are unique
+  connected components;
+- at least four of five rows and four of five columns contain independent
+  support;
+- the mean component-center residual is at most one quarter of the local period,
+  clamped to 3 through 5 image pixels;
+- at least 20 of 25 independently predicted red checkerboard positions contain
+  red components.
+
+The independent red test is important.  On the motivating 150 MP Phase One
+Paget capture, two plausible green/blue sublattices had only 14/25 and 22/25 red
+support, while the useful seed had 37/50 solver observations and 25/25 red
+support.  Without this gate those false candidates enter slow flood fill and
+make normal detection substantially slower.  Alternate-blue support is recorded
+for diagnostics but is not an acceptance criterion because it did not separate
+the false and useful candidates on this scan.
+
+The fallback only proposes initial solver points.  `simple_solver()` and the
+existing flood-fill, coverage, border and final-solver checks are unchanged and
+remain authoritative.  The normal exact Paget/Finlay path is unchanged and is
+always attempted first.
+
+On the full external 150 MP Paget capture which previously did not escape the
+first failed search region within 45 seconds, the current-main O2 build now
+succeeds in the first region:
+
+| flood mode | solver seed | screen coverage | patches | detector time |
+| --- | --- | ---: | ---: | ---: |
+| fast only | 37/50, red 25/25 | 76.39% | 1,801,856 | 24.18 s |
+| fast + slow | 37/50, red 25/25 | 96.38% | 2,294,578 | 51.64 s |
+
+The combined run spends 29.70 seconds in slow flood fill, so its remaining
+runtime is a separate flood-fill/performance issue rather than seed discovery.
+A 2400 by 1800 crop from the same Color-Screen-decoded image reaches 98.79%
+screen coverage in O2 and 98.82% with `-Ofast -march=native` on current main.
+
+The fallback has also been checked against deterministic grayscale, low-chroma
+and colorful no-screen controls: none is allowed to start a Paget flood fill.
+Synthetic regular-screen discovery now includes Paget alongside Finlay and
+Dufay.  The broader DG-011 problem remains open for other screen families and
+for future evidence that the present Paget thresholds need generalization; do
+not turn the fallback into a global partial-grid relaxation without new corpus
+measurements.
 
 ### DG-012 — slow confirmation has a fixed blur gap and sampling geometry
 
