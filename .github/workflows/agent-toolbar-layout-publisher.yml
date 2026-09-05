@@ -1,0 +1,116 @@
+name: Agent toolbar layout publisher
+
+on:
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    if: github.head_ref == 'agent/tmp-toolbar-layout-publisher-20260905'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/qtgui-toolbar-layout-ownership
+          fetch-depth: 0
+
+      - name: Keep embedded toolbars out of child QMainWindow layouts
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new, label):
+              p = Path(path)
+              text = p.read_text()
+              if text.count(old) != 1:
+                  raise SystemExit(f'{label}: anchor count {text.count(old)} != 1')
+              p.write_text(text.replace(old, new, 1))
+
+          replace_once(
+              'src/qtgui/MainWindow.cpp',
+              '''  takeWorkspaceInspector();\n  if (m_toolbar)\n    m_toolbar->hide();\n''',
+              '''  takeWorkspaceInspector();\n  if (m_toolbar) {\n    // An embedded MainWindow must not keep a QToolBar registered in its own\n    // QMainWindowLayout. Qt 6.11's macOS/offscreen path can otherwise retain\n    // stale toolbar-area bookkeeping when the top-level window becomes an MDI\n    // child. WorkspaceWindow will borrow the toolbar after embedding finishes.\n    m_toolbar->hide();\n    removeToolBar(m_toolbar);\n  }\n''',
+              'MainWindow prepare toolbar')
+
+          replace_once(
+              'src/qtgui/MainWindow.cpp',
+              '''  restoreWorkspaceInspector();\n  if (m_toolbar)\n    m_toolbar->show();\n''',
+              '''  restoreWorkspaceInspector();\n  if (m_toolbar) {\n    // Re-register the toolbar only after WorkspaceWindow has made this window\n    // top-level again. This keeps toolbar-area ownership single-valued.\n    if (m_toolbar->parentWidget() != this)\n      m_toolbar->setParent(this);\n    if (toolBarArea(m_toolbar) == Qt::NoToolBarArea)\n      addToolBar(Qt::TopToolBarArea, m_toolbar);\n    m_toolbar->show();\n  }\n''',
+              'MainWindow restore toolbar')
+
+          replace_once(
+              'src/qtgui/ImageViewWindow.cpp',
+              '''  if (m_toolbar)\n    m_toolbar->hide();\n  if (menuBar())\n''',
+              '''  if (m_toolbar) {\n    // Keep an embedded secondary QMainWindow free of toolbar-area ownership;\n    // the workspace shell owns the visible toolbar while this view is attached.\n    m_toolbar->hide();\n    removeToolBar(m_toolbar);\n  }\n  if (menuBar())\n''',
+              'ImageView prepare toolbar')
+
+          replace_once(
+              'src/qtgui/ImageViewWindow.cpp',
+              '''  if (m_toolbar)\n    m_toolbar->show();\n  if (menuBar())\n''',
+              '''  if (m_toolbar) {\n    if (m_toolbar->parentWidget() != this)\n      m_toolbar->setParent(this);\n    if (toolBarArea(m_toolbar) == Qt::NoToolBarArea)\n      addToolBar(Qt::TopToolBarArea, m_toolbar);\n    m_toolbar->show();\n  }\n  if (menuBar())\n''',
+              'ImageView restore toolbar')
+
+          source = Path('src/qtgui/WorkspaceWindow.cpp')
+          text = source.read_text()
+
+          replacements = [
+              (
+                  '''  // addSubWindow() may activate synchronously. Keep the document toolbar in\n  // its still-valid private QMainWindow layout until the embedded child has\n  // completed its first show/layout pass.\n''',
+                  '''  // addSubWindow() may activate synchronously. Keep shared chrome handoff\n  // blocked until the embedded child and outer workspace have completed their\n  // first show/layout pass. The child toolbar is deliberately not registered\n  // in the child's QMainWindowLayout while embedded.\n''',
+                  'document insertion comment'),
+              (
+                  '''  // Use the same ordering for secondary views: the view must finish its first\n  // embedded show before its toolbar is borrowed by the workspace shell.\n''',
+                  '''  // Use the same ordering for secondary views: finish the first embedded\n  // show before the workspace shell borrows the unregistered view toolbar.\n''',
+                  'view insertion comment'),
+              (
+                  '''  if (QToolBar *toolbar = document->workspaceToolBar()) {\n    document->removeToolBar(toolbar);\n    if (toolbar->parentWidget() != this)\n      toolbar->setParent(this);\n    addToolBar(Qt::TopToolBarArea, toolbar);\n    toolbar->show();\n  }\n''',
+                  '''  if (QToolBar *toolbar = document->workspaceToolBar()) {\n    if (toolbar->parentWidget() != this)\n      toolbar->setParent(this);\n    if (toolBarArea(toolbar) == Qt::NoToolBarArea)\n      addToolBar(Qt::TopToolBarArea, toolbar);\n    toolbar->show();\n  }\n''',
+                  'install document toolbar'),
+              (
+                  '''  if (QToolBar *toolbar = document->workspaceToolBar()) {\n    if (toolbar->parentWidget() == this)\n      removeToolBar(toolbar);\n    if (toolbar->parentWidget() != document)\n      toolbar->setParent(document);\n    document->addToolBar(Qt::TopToolBarArea, toolbar);\n    toolbar->setVisible(showInWindow);\n  }\n''',
+                  '''  if (QToolBar *toolbar = document->workspaceToolBar()) {\n    if (toolbar->parentWidget() == this &&\n        toolBarArea(toolbar) != Qt::NoToolBarArea)\n      removeToolBar(toolbar);\n    toolbar->hide();\n    // Inactive embedded documents must not regain toolbar-area ownership.\n    // restoreFromWorkspaceEmbedding() re-registers the toolbar after detach.\n    if (showInWindow) {\n      if (toolbar->parentWidget() != document)\n        toolbar->setParent(document);\n      if (document->toolBarArea(toolbar) == Qt::NoToolBarArea)\n        document->addToolBar(Qt::TopToolBarArea, toolbar);\n      toolbar->show();\n    }\n  }\n''',
+                  'release document toolbar'),
+              (
+                  '''  if (QToolBar *toolbar = view->workspaceToolBar()) {\n    if (auto *owner = qobject_cast<QMainWindow *>(toolbar->parentWidget()))\n      owner->removeToolBar(toolbar);\n    addToolBar(Qt::TopToolBarArea, toolbar);\n    toolbar->show();\n  }\n''',
+                  '''  if (QToolBar *toolbar = view->workspaceToolBar()) {\n    if (toolbar->parentWidget() != this)\n      toolbar->setParent(this);\n    if (toolBarArea(toolbar) == Qt::NoToolBarArea)\n      addToolBar(Qt::TopToolBarArea, toolbar);\n    toolbar->show();\n  }\n''',
+                  'install view toolbar'),
+              (
+                  '''  if (QToolBar *toolbar = view->workspaceToolBar()) {\n    if (auto *owner = qobject_cast<QMainWindow *>(toolbar->parentWidget()))\n      owner->removeToolBar(toolbar);\n    view->addToolBar(Qt::TopToolBarArea, toolbar);\n    toolbar->setVisible(showInWindow);\n  }\n''',
+                  '''  if (QToolBar *toolbar = view->workspaceToolBar()) {\n    if (toolbar->parentWidget() == this &&\n        toolBarArea(toolbar) != Qt::NoToolBarArea)\n      removeToolBar(toolbar);\n    toolbar->hide();\n    if (showInWindow) {\n      if (toolbar->parentWidget() != view)\n        toolbar->setParent(view);\n      if (view->toolBarArea(toolbar) == Qt::NoToolBarArea)\n        view->addToolBar(Qt::TopToolBarArea, toolbar);\n      toolbar->show();\n    }\n  }\n''',
+                  'release view toolbar'),
+              (
+                  '  releaseDocumentChrome(document, true);\n',
+                  '  releaseDocumentChrome(document, false);\n',
+                  'detach document release ordering'),
+              (
+                  '  releaseViewChrome(view, true);\n',
+                  '  releaseViewChrome(view, false);\n',
+                  'detach view release ordering'),
+          ]
+
+          for old, new, label in replacements:
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: anchor count {count} != 1')
+              text = text.replace(old, new, 1)
+          source.write_text(text)
+          PY
+
+          git diff --check
+          test "$(git diff --name-only | sort)" = $'src/qtgui/ImageViewWindow.cpp\nsrc/qtgui/MainWindow.cpp\nsrc/qtgui/WorkspaceWindow.cpp'
+          grep -q 'removeToolBar(m_toolbar);' src/qtgui/MainWindow.cpp
+          grep -q 'removeToolBar(m_toolbar);' src/qtgui/ImageViewWindow.cpp
+          grep -q 'releaseDocumentChrome(document, false);' src/qtgui/WorkspaceWindow.cpp
+          grep -q 'releaseViewChrome(view, false);' src/qtgui/WorkspaceWindow.cpp
+
+      - name: Publish product branch
+        shell: bash
+        run: |
+          git config user.name 'Jan Hubička'
+          git config user.email '46065755+janhubicka@users.noreply.github.com'
+          git add src/qtgui/MainWindow.cpp src/qtgui/ImageViewWindow.cpp src/qtgui/WorkspaceWindow.cpp
+          git commit -m 'qtgui: keep embedded toolbars out of child layouts'
+          git push origin HEAD:agent/qtgui-toolbar-layout-ownership
