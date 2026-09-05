@@ -1,0 +1,43 @@
+name: Agent apply parameter applicability
+
+on:
+  push:
+    branches:
+      - agent/apply-parameter-applicability
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout review branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/qtgui-parameter-applicability
+          path: target
+          fetch-depth: 0
+      - name: Checkout helper patch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/apply-parameter-applicability
+          path: helper
+          fetch-depth: 1
+      - name: Apply and publish reviewed patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd target
+          git apply ../helper/agent/parameter-applicability.patch
+          git diff --check
+          git config user.name "Jan Hubička"
+          git config user.email "46065755+janhubicka@users.noreply.github.com"
+          git add doc/qtgui-internal-cleanup.md \
+                  src/qtgui/ParameterPanel.cpp \
+                  src/qtgui/ParameterPanel.h \
+                  src/qtgui/ScreenPanel.cpp \
+                  src/qtgui/SharpnessPanel.cpp \
+                  src/qtgui/WorkspaceChurnSmoke.cpp
+          git commit -m "qtgui: separate applicability from enablement" -m "Introduce ParameterPanel::setParameterApplicability() so panels can hide rows whose concepts do not apply without overloading enabled/prerequisite predicates. Compose row applicability with collapsible-section state so expanding a section cannot resurrect logically unavailable controls.\n\nMigrate Screen pattern preview/strip rows away from their panel-specific visibility workaround and migrate Sharpness measured-MTF controls so measurement existence determines applicability while fit-running/document prerequisites determine enablement. Add stable object names and extend the workspace churn smoke test to exercise collapse/expand with applicability metadata.\n\nUpdate the beta cleanup tracker to record the new framework seam. No rendering, parameter serialization, or workflow-summary behavior changes."
+          git push origin HEAD:agent/qtgui-parameter-applicability
