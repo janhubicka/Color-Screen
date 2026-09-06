@@ -2363,12 +2363,27 @@ detect_regular_screen_1(const image_data &img, scr_detect_parameters &dparam,
           cmap = std::move(new_cmap);
           cmap->allocate(img.width, img.height);
           if (progress)
-            progress->set_task("pruning screen", img.height);
-#pragma omp parallel for default(none) shared(progress, img, cmap, render)
+            progress->set_task("classifying Paget seed patches", img.height);
+          /* Mixed pixels at blurred Paget/Finlay element boundaries can join
+             same-color elements which only meet at their corners.  Build the
+             existing Paget/Finlay-only seed map with a slightly stricter
+             purity threshold.  The public detector threshold and Dufay class
+             map remain unchanged.  */
+          scr_detect seed_classifier;
+          seed_classifier.m_param = dparam;
+          seed_classifier.m_param.min_ratio =
+              std::max (seed_classifier.m_param.min_ratio,
+                        (luminosity_t)1.2);
+#pragma omp parallel for default(none) shared(progress, img, cmap, render, seed_classifier)
           for (int y = 0; y < img.height; y++) {
             if (!progress || !progress->cancel_requested())
-              for (int x = 0; x < img.width; x++)
-                cmap->set_class(x, y, render->classify_pixel({x, y}));
+              for (int x = 0; x < img.width; x++) {
+                rgbdata c = render->fast_get_adjusted_pixel ({x, y});
+                cmap->set_class(
+                    x, y,
+                    seed_classifier.classify_adjusted_color(c.red, c.green,
+                                                            c.blue));
+              }
             if (progress)
               progress->inc_progress();
           }
