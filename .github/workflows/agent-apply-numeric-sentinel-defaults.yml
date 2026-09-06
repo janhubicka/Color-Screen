@@ -30,7 +30,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 helper/agent/apply_numeric_sentinel_defaults.py
+          python3 helper/agent/apply_numeric_sentinel_defaults_v2.py
           cd target
           git diff --check
 
@@ -48,9 +48,6 @@ jobs:
           sort -o /tmp/expected-files /tmp/expected-files
           diff -u /tmp/expected-files /tmp/actual-files
 
-          # The capture wavelength sentinel must remain distinct from the first
-          # explicit wavelength and the review branch must not contain helper
-          # publication files.
           grep -q 'capture.mtf.wavelength.red' src/qtgui/CapturePanel.cpp
           grep -q 'specialMinimumValue' src/qtgui/ParameterPanel.h
           grep -q 'process default' src/qtgui/ScreenPanel.cpp
