@@ -1,0 +1,23 @@
+name: TEMP export ray optimizer source
+
+on:
+  push:
+    branches:
+      - agent/tmp-export-ray-optimizer-20260906
+    paths:
+      - .github/workflows/tmp-export-ray-optimizer.yml
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Archive source
+        run: tar --exclude=.git -czf /tmp/colorscreen-current-main-ray.tar.gz .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: colorscreen-current-main-ray
+          path: /tmp/colorscreen-current-main-ray.tar.gz
