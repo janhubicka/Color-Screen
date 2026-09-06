@@ -1,0 +1,75 @@
+name: Agent apply numeric sentinel defaults
+
+on:
+  push:
+    branches:
+      - agent/apply-numeric-sentinel-defaults
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout review branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/qtgui-numeric-sentinel-defaults
+          path: target
+          fetch-depth: 0
+
+      - name: Checkout helper branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/apply-numeric-sentinel-defaults
+          path: helper
+          fetch-depth: 1
+
+      - name: Apply reviewed sentinel cleanup
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 helper/agent/apply_numeric_sentinel_defaults.py
+          cd target
+          git diff --check
+
+          cat > /tmp/expected-files <<'EOF'
+          .agents/qtgui.md
+          doc/qtgui-internal-cleanup.md
+          doc/qtgui-workflow-roadmap.md
+          src/qtgui/CapturePanel.cpp
+          src/qtgui/ParameterPanel.cpp
+          src/qtgui/ParameterPanel.h
+          src/qtgui/ScreenPanel.cpp
+          src/qtgui/WorkspaceChurnSmoke.cpp
+          EOF
+          git diff --name-only | sort > /tmp/actual-files
+          sort -o /tmp/expected-files /tmp/expected-files
+          diff -u /tmp/expected-files /tmp/actual-files
+
+          # The capture wavelength sentinel must remain distinct from the first
+          # explicit wavelength and the review branch must not contain helper
+          # publication files.
+          grep -q 'capture.mtf.wavelength.red' src/qtgui/CapturePanel.cpp
+          grep -q 'specialMinimumValue' src/qtgui/ParameterPanel.h
+          grep -q 'process default' src/qtgui/ScreenPanel.cpp
+          ! git diff --name-only | grep -E '(^agent/|agent-apply-numeric-sentinel-defaults)'
+
+          git config user.name "Jan Hubička"
+          git config user.email "46065755+janhubicka@users.noreply.github.com"
+          git add --pathspec-from-file=/tmp/expected-files
+          test "$(git diff --cached --name-only | wc -l)" -eq 8
+          cat > /tmp/commit-message <<'EOF'
+          qtgui: preserve explicit numeric sentinel defaults
+
+          Keep values such as zero-as-not-configured as first-class ParameterState values even when the ordinary numeric editing range starts above the sentinel. ParameterPanel now gives a below-range special minimum its own slider/spinbox position instead of conflating it with the first explicit numeric value.
+
+          Use the facility for capture MTF wavelengths: zero remains the stored default, while explicit 380 nm is displayed and edited as 380 nm. Add stable keys and the existing modified/Reset presentation to all four wavelength controls. Also present zero strip widths as process defaults and give the already-keyed strip controls standard Reset behavior.
+
+          Extend WorkspaceChurnSmoke to distinguish zero wavelength from explicit 380 nm and verify Reset/Undo round trips the sentinel exactly. Document the sentinel rule and record the audit: in-range sentinels such as Geometry 0=Auto, slanted-edge 0=unknown/full ROI and Sharpness disabled/not-set values already preserve their state correctly.
+
+          No parameter format, renderer fallback, effective wavelength, process default, or output semantics change.
+          EOF
+          git commit -F /tmp/commit-message
+          git push origin HEAD:agent/qtgui-numeric-sentinel-defaults
