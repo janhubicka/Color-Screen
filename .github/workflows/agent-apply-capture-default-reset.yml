@@ -1,0 +1,67 @@
+name: Agent apply capture default reset
+
+on:
+  push:
+    branches:
+      - agent/apply-capture-default-reset
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout review branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/qtgui-capture-default-reset
+          path: target
+          fetch-depth: 0
+
+      - name: Checkout helper branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/apply-capture-default-reset
+          path: helper
+          fetch-depth: 1
+
+      - name: Apply reviewed pilot
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 helper/agent/apply_capture_default_reset.py
+          cd target
+          git diff --check
+
+          cat > /tmp/expected-files <<'EOF'
+          .agents/qtgui.md
+          doc/qtgui-internal-cleanup.md
+          doc/qtgui-workflow-roadmap.md
+          src/qtgui/CapturePanel.cpp
+          src/qtgui/ParameterPanel.cpp
+          src/qtgui/ParameterPanel.h
+          src/qtgui/WorkspaceChurnSmoke.cpp
+          EOF
+          git diff --name-only | sort > /tmp/actual-files
+          sort -o /tmp/expected-files /tmp/expected-files
+          diff -u /tmp/expected-files /tmp/actual-files
+
+          git config user.name "Jan Hubička"
+          git config user.email "46065755+janhubicka@users.noreply.github.com"
+          git add --pathspec-from-file=/tmp/expected-files
+          test "$(git diff --cached --name-only | wc -l)" -eq 7
+
+          cat > /tmp/commit-message <<'EOF'
+          qtgui: pilot modified/default/reset controls in capture
+
+          Add opt-in numeric default presentation to ParameterPanel. Keyed controls can now derive their reset target from a fresh ParameterState, mark the label semibold while modified, and reveal a compact Reset toolbutton only when the current value differs from that default. Reset deliberately uses a separate undo identity so it cannot collapse into a preceding slider drag.
+
+          Enable the presentation for Digital Capture gamma, resolution, nominal f-stop, sensor pixel pitch, and sensor fill factor. Keep capture type and demosaicing out because they are workflow choices rather than simple numeric defaults, and defer wavelengths because their historical zero sentinel is represented through the slider minimum/special-value text.
+
+          Extend WorkspaceChurnSmoke to verify metadata for the pilot controls and the complete modified -> Reset -> Undo -> Undo gesture with exact state restoration. Update the Qt GUI contributor notes, cleanup tracker, and workflow roadmap.
+
+          No renderer, serialization, processing default, or output behavior changes.
+          EOF
+          git commit -F /tmp/commit-message
+          git push origin HEAD:agent/qtgui-capture-default-reset
