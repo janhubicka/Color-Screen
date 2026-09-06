@@ -11,6 +11,7 @@
 #include <QCheckBox>
 #include <QCoreApplication>
 #include <QDebug>
+#include <QDoubleSpinBox>
 #include <QEvent>
 #include <QFont>
 #include <QLabel>
@@ -327,6 +328,15 @@ QToolButton *resolutionResetButton = findParameterResetButton(
     QStringLiteral("capture.mtf.scan_dpi"));
 QWidget *resolutionField =
     resolutionResetButton ? resolutionResetButton->parentWidget() : nullptr;
+QToolButton *redWavelengthResetButton = findParameterResetButton(
+    QStringLiteral("capture.mtf.wavelength.red"));
+QWidget *redWavelengthField = redWavelengthResetButton
+                                  ? redWavelengthResetButton->parentWidget()
+                                  : nullptr;
+QDoubleSpinBox *redWavelengthSpin =
+    redWavelengthField
+        ? redWavelengthField->findChild<QDoubleSpinBox *>()
+        : nullptr;
 QPushButton *mtfFitButton = inspector->findChild<QPushButton *>(
     QStringLiteral("MtfFitButton"));
 QToolButton *scannerCameraToggle = inspector->findChild<QToolButton *>(
@@ -462,7 +472,11 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
             QStringLiteral("capture.mtf.scan_dpi"),
             QStringLiteral("capture.mtf.f_stop"),
             QStringLiteral("capture.mtf.pixel_pitch"),
-            QStringLiteral("capture.mtf.sensor_fill_factor")};
+            QStringLiteral("capture.mtf.sensor_fill_factor"),
+            QStringLiteral("capture.mtf.wavelength.red"),
+            QStringLiteral("capture.mtf.wavelength.green"),
+            QStringLiteral("capture.mtf.wavelength.blue"),
+            QStringLiteral("capture.mtf.wavelength.scalar")};
         for (const QString &key : captureDefaultKeys) {
           QToolButton *button = findParameterResetButton(key);
           if (!button || !button->property("parameterDefaultValue").isValid()) {
@@ -472,9 +486,13 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
             return;
           }
         }
-        if (!resolutionResetButton || !resolutionField) {
+        if (!resolutionResetButton || !resolutionField ||
+            !redWavelengthResetButton || !redWavelengthField ||
+            !redWavelengthSpin ||
+            redWavelengthField->property("parameterSpecialStateValue")
+                    .toDouble() != 0.0) {
           fail(QStringLiteral(
-              "Workspace churn lost the resolution default/reset row"));
+              "Workspace churn lost numeric default/sentinel rows"));
           return;
         }
 
@@ -585,6 +603,64 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         if (first->documentStateSnapshot() != resetBaseline) {
           fail(QStringLiteral(
               "Capture default/reset smoke did not restore its baseline"));
+          return;
+        }
+
+        // Zero wavelength means not explicitly configured. It must round-trip
+        // as zero and occupy a distinct UI position from an explicit 380 nm,
+        // even though 380 nm is the ordinary numeric minimum.
+        const ParameterState wavelengthBaseline = first->documentStateSnapshot();
+        if (wavelengthBaseline.rparams.sharpen.scanner_mtf.wavelengths[0] != 0 ||
+            redWavelengthSpin->value() != 0 ||
+            !redWavelengthSpin->text().contains(
+                QStringLiteral("default"), Qt::CaseInsensitive) ||
+            !redWavelengthResetButton->isHidden() ||
+            redWavelengthField->property("parameterModified").toBool()) {
+          fail(QStringLiteral(
+              "Capture wavelength zero sentinel was not represented as default"));
+          return;
+        }
+
+        ParameterState explicitWavelength = wavelengthBaseline;
+        explicitWavelength.rparams.sharpen.scanner_mtf.wavelengths[0] = 380;
+        first->applySharedDocumentState(
+            explicitWavelength, QStringLiteral("Red wavelength"),
+            QStringLiteral("capture.mtf.wavelength.red"));
+        if (first->documentStateSnapshot()
+                    .rparams.sharpen.scanner_mtf.wavelengths[0] != 380 ||
+            redWavelengthSpin->value() != 380 ||
+            redWavelengthSpin->text().contains(
+                QStringLiteral("default"), Qt::CaseInsensitive) ||
+            redWavelengthResetButton->isHidden() ||
+            !redWavelengthField->property("parameterModified").toBool()) {
+          fail(QStringLiteral(
+              "Explicit minimum wavelength was confused with default sentinel"));
+          return;
+        }
+
+        redWavelengthResetButton->click();
+        if (first->documentStateSnapshot()
+                    .rparams.sharpen.scanner_mtf.wavelengths[0] != 0 ||
+            redWavelengthSpin->value() != 0 ||
+            !redWavelengthResetButton->isHidden() ||
+            redWavelengthField->property("parameterModified").toBool()) {
+          fail(QStringLiteral(
+              "Wavelength Reset did not restore explicit zero sentinel"));
+          return;
+        }
+        undoParametersAction->trigger();
+        if (first->documentStateSnapshot()
+                    .rparams.sharpen.scanner_mtf.wavelengths[0] != 380 ||
+            redWavelengthSpin->value() != 380 ||
+            redWavelengthResetButton->isHidden()) {
+          fail(QStringLiteral(
+              "Undo of wavelength Reset did not restore explicit minimum"));
+          return;
+        }
+        undoParametersAction->trigger();
+        if (first->documentStateSnapshot() != wavelengthBaseline) {
+          fail(QStringLiteral(
+              "Wavelength sentinel smoke did not restore its baseline"));
           return;
         }
 

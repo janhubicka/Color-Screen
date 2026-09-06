@@ -263,7 +263,7 @@ addSliderParameter(
 
 - **Getter Lambda**: Returns the current value from the `ParameterState`.
 - **Setter Lambda**: Modifies the `ParameterState` with the new value.
-- **`applyChange`**: Behind the scenes, the helper methods call `applyChange`, which triggers a global state update and UI refresh. Stateful helpers accept an optional stable, untranslated `parameterKey`; use it for new or actively maintained controls so Undo merging and Reset/default metadata do not depend on the visible label. Keyed numeric helpers can opt into the standard default presentation: the label becomes semibold and a small Reset control appears only while the value differs from a fresh `ParameterState` default. Reset remains a separate undo gesture.
+- **`applyChange`**: Behind the scenes, the helper methods call `applyChange`, which triggers a global state update and UI refresh. Stateful helpers accept an optional stable, untranslated `parameterKey`; use it for new or actively maintained controls so Undo merging and Reset/default metadata do not depend on the visible label. Keyed numeric helpers can opt into the standard default presentation: the label becomes semibold and a small Reset control appears only while the value differs from a fresh `ParameterState` default. Reset remains a separate undo gesture. Preserve explicit sentinel values such as `0 = not configured/process default`: when a sentinel lies below the ordinary numeric interval, pass it as the helper's separate special minimum instead of clamping it to the first explicit value.
 
 ---
 
