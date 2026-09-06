@@ -312,6 +312,21 @@ QWidget *greenStripWidth = inspector->findChild<QWidget *>(
     QStringLiteral("ScreenGreenStripWidth"));
 QAction *undoParametersAction = first->findChild<QAction *>(
     QStringLiteral("UndoParametersAction"));
+const QList<QToolButton *> parameterResetButtons =
+    inspector->findChildren<QToolButton *>(
+        QStringLiteral("ParameterResetButton"));
+auto findParameterResetButton =
+    [&parameterResetButtons](const QString &parameterKey) {
+      for (QToolButton *button : parameterResetButtons)
+        if (button && button->property("parameterKey").toString() ==
+                          parameterKey)
+          return button;
+      return static_cast<QToolButton *>(nullptr);
+    };
+QToolButton *resolutionResetButton = findParameterResetButton(
+    QStringLiteral("capture.mtf.scan_dpi"));
+QWidget *resolutionField =
+    resolutionResetButton ? resolutionResetButton->parentWidget() : nullptr;
 QPushButton *mtfFitButton = inspector->findChild<QPushButton *>(
     QStringLiteral("MtfFitButton"));
 QToolButton *scannerCameraToggle = inspector->findChild<QToolButton *>(
@@ -442,6 +457,27 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
           return;
         }
 
+        const QStringList captureDefaultKeys = {
+            QStringLiteral("capture.gamma"),
+            QStringLiteral("capture.mtf.scan_dpi"),
+            QStringLiteral("capture.mtf.f_stop"),
+            QStringLiteral("capture.mtf.pixel_pitch"),
+            QStringLiteral("capture.mtf.sensor_fill_factor")};
+        for (const QString &key : captureDefaultKeys) {
+          QToolButton *button = findParameterResetButton(key);
+          if (!button || !button->property("parameterDefaultValue").isValid()) {
+            fail(QStringLiteral(
+                     "Workspace churn lost capture default/reset metadata for %1")
+                     .arg(key));
+            return;
+          }
+        }
+        if (!resolutionResetButton || !resolutionField) {
+          fail(QStringLiteral(
+              "Workspace churn lost the resolution default/reset row"));
+          return;
+        }
+
         // Exercise undo identity directly. Two edits deliberately use the
         // same human description: different keys must keep them separate,
         // while repeated updates carrying one key must coalesce.
@@ -491,6 +527,64 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         if (first->documentStateSnapshot() != undoBaseline) {
           fail(QStringLiteral(
               "Undo failed to coalesce repeated updates for one parameter key"));
+          return;
+        }
+
+        // A visible Reset is progressive disclosure: it appears only
+        // after a keyed value differs from its real ParameterState default.
+        // Reset is a separate undo gesture so one Undo restores the value
+        // immediately before Reset, and a second Undo restores the baseline.
+        const ParameterState resetBaseline = first->documentStateSnapshot();
+        const ParameterState defaults;
+        const double defaultResolution =
+            defaults.rparams.sharpen.scanner_mtf.scan_dpi;
+        double modifiedResolution = defaultResolution + 4321.0;
+        if (std::abs(modifiedResolution -
+                     resetBaseline.rparams.sharpen.scanner_mtf.scan_dpi) <
+            0.1)
+          modifiedResolution = defaultResolution + 3210.0;
+        ParameterState modifiedCapture = resetBaseline;
+        modifiedCapture.rparams.sharpen.scanner_mtf.scan_dpi =
+            modifiedResolution;
+        first->applySharedDocumentState(
+            modifiedCapture, QStringLiteral("Resolution"),
+            QStringLiteral("capture.mtf.scan_dpi"));
+        if (std::abs(first->documentStateSnapshot()
+                         .rparams.sharpen.scanner_mtf.scan_dpi -
+                     modifiedResolution) >
+                0.01 ||
+            resolutionResetButton->isHidden() ||
+            !resolutionField->property("parameterModified").toBool()) {
+          fail(QStringLiteral(
+              "Modified capture parameter did not expose Reset state"));
+          return;
+        }
+        resolutionResetButton->click();
+        if (std::abs(first->documentStateSnapshot()
+                         .rparams.sharpen.scanner_mtf.scan_dpi -
+                     defaultResolution) >
+                0.01 ||
+            !resolutionResetButton->isHidden() ||
+            resolutionField->property("parameterModified").toBool()) {
+          fail(QStringLiteral(
+              "Capture Reset did not restore and hide the default state"));
+          return;
+        }
+        undoParametersAction->trigger();
+        if (std::abs(first->documentStateSnapshot()
+                         .rparams.sharpen.scanner_mtf.scan_dpi -
+                     modifiedResolution) >
+                0.01 ||
+            resolutionResetButton->isHidden() ||
+            !resolutionField->property("parameterModified").toBool()) {
+          fail(QStringLiteral(
+              "Undo of capture Reset did not restore modified state"));
+          return;
+        }
+        undoParametersAction->trigger();
+        if (first->documentStateSnapshot() != resetBaseline) {
+          fail(QStringLiteral(
+              "Capture default/reset smoke did not restore its baseline"));
           return;
         }
 

@@ -16,6 +16,7 @@ class image_data;
 }
 
 class QVBoxLayout;
+class QHBoxLayout;
 class QFormLayout;
 class QGroupBox;
 class QCheckBox;
@@ -53,7 +54,8 @@ protected:
                           const std::map<double, QString> &quickSelects = {},
                           std::function<bool(double)> validator = nullptr,
                           const QString &tooltip = QString(),
-                          const QString &parameterKey = QString());
+                          const QString &parameterKey = QString(),
+                          bool showDefaultReset = false);
 
   /*
     Adds a slider parameter row (Slider + SpinBox).
@@ -67,7 +69,8 @@ protected:
       std::function<void(ParameterState &, double)> setter, double gamma = 1.0,
       std::function<bool(const ParameterState &)> enabledCheck = nullptr,
       bool logarithmic = false, const QString &tooltip = QString(),
-      const QString &parameterKey = QString());
+      const QString &parameterKey = QString(),
+      bool showDefaultReset = false);
 
   /*
     Adds a slider parameter row (Slider + SpinBox) that does not participate in state.
@@ -184,6 +187,17 @@ protected:
   void setParameterApplicability(
       QWidget *widget,
       std::function<bool(const ParameterState &)> applicableCheck);
+
+  /** Add opt-in default/modified/reset presentation to a keyed numeric
+      FIELD. The reset target comes from a fresh ParameterState so there is
+      no second table of defaults. Reset is intentionally a separate undo
+      gesture rather than another update carrying PARAMETERKEY. */
+  void addNumericDefaultPresentation(
+      QWidget *field, QHBoxLayout *layout, const QString &label,
+      const QString &parameterKey, double defaultValue,
+      std::function<double(const ParameterState &)> getter,
+      std::function<void(ParameterState &, double)> setter,
+      double tolerance);
 
   /** Wrap CONTENT in the standard detachable-panel presentation.
       The returned section owns the floating QDockWidget lifecycle and

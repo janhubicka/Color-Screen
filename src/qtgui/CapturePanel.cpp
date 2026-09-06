@@ -182,7 +182,8 @@ void CapturePanel::setupUi()
         gammas,
         quickSelects,
         nullptr,
-        "Gamma correction applied to the input scan."
+        "Gamma correction applied to the input scan.",
+        QStringLiteral("capture.gamma"), true
     );
 
     // 2. Detected gamma (Label) + Use
@@ -196,7 +197,9 @@ void CapturePanel::setupUi()
         },
         [](ParameterState &s, double v) {
           s.rparams.sharpen.scanner_mtf.scan_dpi = v;
-        }, 1.0, nullptr, false, "Scanner or camera resolution in Pixels Per Inch (PPI). Crucial for MTF-based sharpening.");
+        }, 1.0, nullptr, false,
+        "Scanner or camera resolution in Pixels Per Inch (PPI). Crucial for MTF-based sharpening.",
+        QStringLiteral("capture.mtf.scan_dpi"), true);
     
     addButtonParameter("Resolution", "Measure", [this]() { emit measureRequested(); });
 
@@ -254,7 +257,9 @@ void CapturePanel::setupUi()
         },
         [](ParameterState &s, double v) {
           s.rparams.sharpen.scanner_mtf.f_stop = v;
-        }, 1.0, nullptr, false, "Lens aperture used during capture. Affects diffraction part of the MTF model used for sharpening.");
+        }, 1.0, nullptr, false,
+        "Lens aperture used during capture. Affects diffraction part of the MTF model used for sharpening.",
+        QStringLiteral("capture.mtf.f_stop"), true);
 
     // 10. F-stop (Label) + Use
     addValueWithUseButton("Exif F-stop", &m_fStopValue, &m_useFStopBtn, [this, onUseFStop]() { onUseFStop(); });
@@ -346,7 +351,9 @@ void CapturePanel::setupUi()
         },
         [](ParameterState &s, double v) {
           s.rparams.sharpen.scanner_mtf.pixel_pitch = v;
-        }, 1.0, nullptr, false, "Physical distance between centers of adjacent pixels on the sensor.");
+        }, 1.0, nullptr, false,
+        "Physical distance between centers of adjacent pixels on the sensor.",
+        QStringLiteral("capture.mtf.pixel_pitch"), true);
 
     // 15. Pixel pitch (Label) + Use
     addValueWithUseButton("Pixel pitch", &m_pixelPitchValue, &m_usePixelPitchBtn, [this, onUsePixelPitch]() { onUsePixelPitch(); });
@@ -359,7 +366,9 @@ void CapturePanel::setupUi()
         },
         [](ParameterState &s, double v) {
           s.rparams.sharpen.scanner_mtf.sensor_fill_factor = v;
-        }, 1.0, nullptr, false, "The fraction of the pixel area that is sensitive to light. Affects sensor MTF used for sharpening.");
+        }, 1.0, nullptr, false,
+        "The fraction of the pixel area that is sensitive to light. Affects sensor MTF used for sharpening.",
+        QStringLiteral("capture.mtf.sensor_fill_factor"), true);
 
     // 16b. Detected sensor fill (Label) + Use
     addValueWithUseButton("Detected sensor fill factor", &m_detectedSensorFillValue, &m_useDetectedSensorFillBtn, [this]() {
