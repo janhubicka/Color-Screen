@@ -9,6 +9,7 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <optional>
 #include <vector>
 
 namespace colorscreen {
@@ -60,7 +61,10 @@ protected:
   /*
     Adds a slider parameter row (Slider + SpinBox).
     scale: factor to map double value to integer slider range (e.g. 100 for 0.01
-    precision). decimals: precision for SpinBox.
+    precision). decimals: precision for SpinBox. SPECIALMINIMUMVALUE is an
+    optional stored sentinel below MIN, such as 0 meaning not configured.
+    It gets one separate slider/spinbox position and is never confused with
+    the first explicit numeric value.
   */
   QWidget *addSliderParameter(
       const QString &label, double min, double max, double scale, int decimals,
@@ -70,7 +74,8 @@ protected:
       std::function<bool(const ParameterState &)> enabledCheck = nullptr,
       bool logarithmic = false, const QString &tooltip = QString(),
       const QString &parameterKey = QString(),
-      bool showDefaultReset = false);
+      bool showDefaultReset = false,
+      std::optional<double> specialMinimumValue = std::nullopt);
 
   /*
     Adds a slider parameter row (Slider + SpinBox) that does not participate in state.

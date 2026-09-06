@@ -322,26 +322,26 @@ void ScreenPanel::setupUi() {
   // proportions are adjustable. Hide the complete rows otherwise; merely
   // disabling them leaves unexplained strip terminology on unrelated screens.
   QWidget *redStripWidth = addSliderParameter(
-      "Red Strip Width", 0.0, 1.0, 100.0, 2, "", "",
+      "Red Strip Width", 0.0, 1.0, 100.0, 2, "", "process default",
       [](const ParameterState &s) { return s.rparams.red_strip_width; },
       [](ParameterState &s, double v) { s.rparams.red_strip_width = v; }, 1.0,
       nullptr, false,
       "Relative width of the red filter strips for line-screen processes like "
       "Joly or Dufaycolor.",
-      QStringLiteral("screen.red_strip_width"));
+      QStringLiteral("screen.red_strip_width"), true);
   redStripWidth->setObjectName(QStringLiteral("ScreenRedStripWidth"));
   setParameterApplicability(redStripWidth, [](const ParameterState &state) {
     return screen_with_varying_strips_p(state.scrToImg.type);
   });
 
   QWidget *greenStripWidth = addSliderParameter(
-      "Green Strip Width", 0.0, 1.0, 100.0, 2, "", "",
+      "Green Strip Width", 0.0, 1.0, 100.0, 2, "", "process default",
       [](const ParameterState &s) { return s.rparams.green_strip_width; },
       [](ParameterState &s, double v) { s.rparams.green_strip_width = v; },
       1.0, nullptr, false,
       "Relative width of the green filter strips for line-screen processes "
       "like Joly or Dufaycolor.",
-      QStringLiteral("screen.green_strip_width"));
+      QStringLiteral("screen.green_strip_width"), true);
   greenStripWidth->setObjectName(QStringLiteral("ScreenGreenStripWidth"));
   setParameterApplicability(greenStripWidth, [](const ParameterState &state) {
     return screen_with_varying_strips_p(state.scrToImg.type);

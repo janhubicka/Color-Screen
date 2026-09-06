@@ -213,6 +213,12 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   `ParameterState` supplies the reset target, the label is emphasized while
   modified, and Reset is hidden at the default. Digital Capture is the first
   pilot (gamma, resolution, f-stop, pixel pitch and sensor fill factor).
+  Numeric sentinel defaults are state, not presentation: preserve values
+  such as `0 = not configured/use process default` exactly. `ParameterPanel`
+  gives a below-range sentinel its own slider/spinbox position; capture MTF
+  wavelengths and process strip widths exercise this rule. Values whose
+  sentinel is already inside the ordinary range (for example Geometry's
+  `0 = Auto`) need no special range handling.
 - Replace ad-hoc `blockSignals(true/false)` pairs with `QSignalBlocker`, reducing
   paths that accidentally leave a widget blocked after an early return.
 - Make group visibility semantics explicit.  A collapsed group should not force

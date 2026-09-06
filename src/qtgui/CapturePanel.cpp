@@ -382,40 +382,44 @@ void CapturePanel::setupUi()
 
     // 17. Scanner MTF Wavelengths
     m_redWavelengthWidget = addSliderParameter(
-        "Red wavelength", 380.0, 780.0, 1.0, 0, "nm", "default (600nm)",
+        "Red wavelength", 380.0, 780.0, 1.0, 0, "nm", "default (600 nm)",
         [](const ParameterState &s) {
           return s.rparams.sharpen.scanner_mtf.wavelengths[0];
         },
         [](ParameterState &s, double v) {
           s.rparams.sharpen.scanner_mtf.wavelengths[0] = v;
-        }, 1.0, nullptr, false, "Wavelength in nanometers used for MTF modeling of diffraction for the red channel.");
+        }, 1.0, nullptr, false, "Wavelength in nanometers used for MTF modeling of diffraction for the red channel.",
+        QStringLiteral("capture.mtf.wavelength.red"), true, 0.0);
 
     m_greenWavelengthWidget = addSliderParameter(
-        "Green wavelength", 380.0, 780.0, 1.0, 0, "nm", "default (530nm)",
+        "Green wavelength", 380.0, 780.0, 1.0, 0, "nm", "default (530 nm)",
         [](const ParameterState &s) {
           return s.rparams.sharpen.scanner_mtf.wavelengths[1];
         },
         [](ParameterState &s, double v) {
           s.rparams.sharpen.scanner_mtf.wavelengths[1] = v;
-        }, 1.0, nullptr, false, "Wavelength in nanometers used for MTF modeling of diffraction for the green channel.");
+        }, 1.0, nullptr, false, "Wavelength in nanometers used for MTF modeling of diffraction for the green channel.",
+        QStringLiteral("capture.mtf.wavelength.green"), true, 0.0);
 
     m_blueWavelengthWidget = addSliderParameter(
-        "Blue wavelength", 380.0, 780.0, 1.0, 0, "nm", "default (450nm)",
+        "Blue wavelength", 380.0, 780.0, 1.0, 0, "nm", "default (450 nm)",
         [](const ParameterState &s) {
           return s.rparams.sharpen.scanner_mtf.wavelengths[2];
         },
         [](ParameterState &s, double v) {
           s.rparams.sharpen.scanner_mtf.wavelengths[2] = v;
-        }, 1.0, nullptr, false, "Wavelength in nanometers used for MTF modeling of diffraction for the blue channel.");
+        }, 1.0, nullptr, false, "Wavelength in nanometers used for MTF modeling of diffraction for the blue channel.",
+        QStringLiteral("capture.mtf.wavelength.blue"), true, 0.0);
 
     m_irWavelengthWidget = addSliderParameter(
-        "IR wavelength", 380.0, 1100.0, 1.0, 0, "nm", "default (750nm)",
+        "IR wavelength", 380.0, 1100.0, 1.0, 0, "nm", "default (750 nm)",
         [](const ParameterState &s) {
           return s.rparams.sharpen.scanner_mtf.wavelengths[3];
         },
         [](ParameterState &s, double v) {
           s.rparams.sharpen.scanner_mtf.wavelengths[3] = v;
-        }, 1.0, nullptr, false, "Wavelength in nanometers used for MTF modeling of diffraction for the scalar or infrared channel.");
+        }, 1.0, nullptr, false, "Wavelength in nanometers used for MTF modeling of diffraction for the scalar or infrared channel.",
+        QStringLiteral("capture.mtf.wavelength.scalar"), true, 0.0);
 
     // Detected scanner/camera wavelengths use the same explicit Use workflow
     // as f-stop, pixel pitch, fill factor and resolution.
@@ -507,7 +511,7 @@ void CapturePanel::setupUi()
             }
             if (auto spin = m_irWavelengthWidget->findChild<QDoubleSpinBox*>())
                 spin->setSpecialValueText(
-                    has_rgb ? "default (750nm)" : "default (550nm)");
+                    has_rgb ? "default (750 nm)" : "default (550 nm)");
 
             QStringList detectedWavelengths;
             bool wavelengthsDiffer = false;

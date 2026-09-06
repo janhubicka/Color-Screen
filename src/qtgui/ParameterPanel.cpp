@@ -32,6 +32,7 @@ constexpr auto parameterApplicableProperty = "parameterApplicable";
 constexpr auto parameterDefaultValueProperty = "parameterDefaultValue";
 constexpr auto parameterKeyProperty = "parameterKey";
 constexpr auto parameterModifiedProperty = "parameterModified";
+constexpr auto parameterSpecialStateValueProperty = "parameterSpecialStateValue";
 constexpr auto parameterSectionExpandedProperty = "parameterSectionExpanded";
 
 /** Attach stable machine-readable PARAMETERKEY metadata to WIDGET. */
@@ -47,6 +48,75 @@ bool parameterWidgetApplicable(const QWidget *widget) {
   const QVariant value = widget->property(parameterApplicableProperty);
   return !value.isValid() || value.toBool();
 }
+
+/** Numeric editor with one explicit stored sentinel below its ordinary range.
+
+    QDoubleSpinBox normally ties specialValueText() to minimum().  Extending the
+    internal range down to the sentinel would therefore also make all values
+    between the sentinel and the real numeric minimum editable.  This editor
+    keeps that interval unavailable while still letting the sentinel round-trip
+    exactly. */
+class ParameterSliderSpinBox final : public QDoubleSpinBox {
+public:
+  using QDoubleSpinBox::QDoubleSpinBox;
+
+  void setSeparatedMinimum(double specialValue, double regularMinimum) {
+    Q_ASSERT(specialValue < regularMinimum);
+    m_specialValue = specialValue;
+    m_regularMinimum = regularMinimum;
+    m_hasSeparatedMinimum = true;
+  }
+
+protected:
+  QValidator::State validate(QString &input, int &pos) const override {
+    const QValidator::State baseState = QDoubleSpinBox::validate(input, pos);
+    if (!m_hasSeparatedMinimum || baseState != QValidator::Acceptable)
+      return baseState;
+    if (!specialValueText().isEmpty() &&
+        input.trimmed() == specialValueText())
+      return QValidator::Acceptable;
+
+    const double parsed = QDoubleSpinBox::valueFromText(input);
+    if (near(parsed, m_specialValue) || parsed >= m_regularMinimum)
+      return QValidator::Acceptable;
+
+    // Keep partial input such as "4" valid while the user is typing "400",
+    // but never commit a value from the sentinel-to-numeric gap.
+    return QValidator::Intermediate;
+  }
+
+  void stepBy(int steps) override {
+    if (!m_hasSeparatedMinimum || steps == 0) {
+      QDoubleSpinBox::stepBy(steps);
+      return;
+    }
+
+    const double current = value();
+    if (steps > 0 && near(current, m_specialValue)) {
+      setValue(m_regularMinimum);
+      --steps;
+    } else if (steps < 0 && near(current, m_regularMinimum)) {
+      setValue(m_specialValue);
+      ++steps;
+    }
+    if (steps == 0)
+      return;
+
+    QDoubleSpinBox::stepBy(steps);
+    const double stepped = value();
+    if (stepped > m_specialValue && stepped < m_regularMinimum)
+      setValue(steps > 0 ? m_regularMinimum : m_specialValue);
+  }
+
+private:
+  bool near(double a, double b) const {
+    return qAbs(a - b) <= qMax(1e-12, singleStep() * 0.5);
+  }
+
+  bool m_hasSeparatedMinimum = false;
+  double m_specialValue = 0;
+  double m_regularMinimum = 0;
+};
 
 /** One uniform detachable section used by every parameter panel.
 
@@ -542,7 +612,15 @@ QWidget *ParameterPanel::addSliderParameter(
     std::function<void(ParameterState &, double)> setter, double gamma,
     std::function<bool(const ParameterState &)> enabledCheck,
     bool logarithmic, const QString &tooltip,
-    const QString &parameterKey, bool showDefaultReset) {
+    const QString &parameterKey, bool showDefaultReset,
+    std::optional<double> specialMinimumValue) {
+  Q_ASSERT(!specialMinimumValue.has_value() ||
+           *specialMinimumValue <= min);
+  const bool hasSeparatedSpecialMinimum =
+      specialMinimumValue.has_value() && *specialMinimumValue < min;
+  const double specialStateValue =
+      specialMinimumValue.value_or(min);
+
   // Container: Slider + SpinBox
   QWidget *container = new QWidget();
   QHBoxLayout *hLayout = new QHBoxLayout(container);
@@ -555,16 +633,28 @@ QWidget *ParameterPanel::addSliderParameter(
   // For non-linear, use fixed high resolution range
   const int SLIDER_MAX = 65535;
 
-  if (gamma != 1.0 || logarithmic) {
+  const int regularLinearSliderMin = (int)(min * scale);
+  const int regularLinearSliderMax = (int)(max * scale);
+  const bool nonlinearSlider = gamma != 1.0 || logarithmic;
+  const int regularSliderMin =
+      nonlinearSlider ? (hasSeparatedSpecialMinimum ? 1 : 0)
+                      : regularLinearSliderMin;
+  const int specialSliderPosition =
+      nonlinearSlider ? 0 : regularLinearSliderMin - 1;
+  if (nonlinearSlider)
     slider->setRange(0, SLIDER_MAX);
-  } else {
-    int minInt = min * scale;
-    int maxInt = max * scale;
-    slider->setRange(minInt, maxInt);
-  }
+  else
+    slider->setRange(hasSeparatedSpecialMinimum ? specialSliderPosition
+                                                : regularLinearSliderMin,
+                     regularLinearSliderMax);
 
-  QDoubleSpinBox *spin = new QDoubleSpinBox();
-  spin->setRange(min, max);
+  auto *spin = new ParameterSliderSpinBox();
+  if (hasSeparatedSpecialMinimum) {
+    spin->setRange(specialStateValue, max);
+    spin->setSeparatedMinimum(specialStateValue, min);
+  } else {
+    spin->setRange(min, max);
+  }
   spin->setDecimals(decimals);
   spin->setSingleStep(1.0 / scale);
   if (!suffix.isEmpty())
@@ -575,6 +665,14 @@ QWidget *ParameterPanel::addSliderParameter(
   setParameterKey(container, parameterKey);
   setParameterKey(slider, parameterKey);
   setParameterKey(spin, parameterKey);
+  if (specialMinimumValue.has_value()) {
+    container->setProperty(parameterSpecialStateValueProperty,
+                           *specialMinimumValue);
+    slider->setProperty(parameterSpecialStateValueProperty,
+                        *specialMinimumValue);
+    spin->setProperty(parameterSpecialStateValueProperty,
+                      *specialMinimumValue);
+  }
 
   hLayout->addWidget(slider, 1); // Slider expands
   hLayout->addWidget(spin, 0);   // SpinBox fixed size
@@ -595,12 +693,17 @@ QWidget *ParameterPanel::addSliderParameter(
   }
 
   // Helper to map Slider -> Value
-  auto sliderToValue = [min, max, scale, gamma, SLIDER_MAX,
-                        logarithmic](int s) -> double {
+  auto sliderToValue =
+      [min, max, scale, gamma, SLIDER_MAX, logarithmic,
+       hasSeparatedSpecialMinimum, specialStateValue,
+       regularSliderMin, specialSliderPosition](int s) -> double {
+    if (hasSeparatedSpecialMinimum && s == specialSliderPosition)
+      return specialStateValue;
     if (!logarithmic && gamma == 1.0)
       return (double)s / scale;
 
-    double t = (double)s / SLIDER_MAX; // 0..1
+    const double t =
+        (double)(s - regularSliderMin) / (SLIDER_MAX - regularSliderMin);
 
     if (logarithmic) {
       if (min <= 0) {
@@ -617,10 +720,20 @@ QWidget *ParameterPanel::addSliderParameter(
   };
 
   // Helper to map Value -> Slider
-  auto valueToSlider = [min, max, scale, gamma, SLIDER_MAX,
-                        logarithmic](double v) -> int {
-    if (!logarithmic && gamma == 1.0)
-      return qRound(v * scale);
+  auto valueToSlider =
+      [min, max, scale, gamma, SLIDER_MAX, logarithmic,
+       hasSeparatedSpecialMinimum, specialStateValue, regularSliderMin,
+       regularLinearSliderMax, specialSliderPosition](double v) -> int {
+    if (hasSeparatedSpecialMinimum &&
+        qAbs(v - specialStateValue) <= 1e-12)
+      return specialSliderPosition;
+    if (!logarithmic && gamma == 1.0) {
+      const int mapped = qRound(v * scale);
+      return hasSeparatedSpecialMinimum
+                 ? std::clamp(mapped, regularSliderMin,
+                              regularLinearSliderMax)
+                 : mapped;
+    }
 
     double t = 0;
     if (logarithmic) {
@@ -647,7 +760,10 @@ QWidget *ParameterPanel::addSliderParameter(
       else
         t = std::pow(ratio, 1.0 / gamma);
     }
-    return std::clamp((int)qRound(t * SLIDER_MAX), 0, SLIDER_MAX);
+    return std::clamp(
+        (int)qRound(t * (SLIDER_MAX - regularSliderMin) +
+                    regularSliderMin),
+        regularSliderMin, SLIDER_MAX);
   };
 
   // Synchronization
