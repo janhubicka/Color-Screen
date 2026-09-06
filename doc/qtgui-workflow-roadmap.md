@@ -460,7 +460,9 @@ specialist stages.
 
 ### Phase C — module grammar
 
-- teach `ParameterPanel` reset/default/modified metadata;
+- teach `ParameterPanel` reset/default/modified metadata; the first numeric
+  pilot is active in Digital Capture, with Reset disclosed only for values
+  that differ from their real `ParameterState` defaults;
 - standardize collapsible Common/Diagnostics/Advanced sections;
 - remember expansion state;
 - add consistent per-module reset/bypass only where semantically valid.

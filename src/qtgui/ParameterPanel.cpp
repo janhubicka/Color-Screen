@@ -4,6 +4,7 @@
 #include <QCheckBox>
 #include <QDockWidget>
 #include <QEvent>
+#include <QFont>
 #include <QLayout>
 #include <QComboBox>
 #include <QFormLayout>
@@ -22,11 +23,15 @@
 #include <QTimer>
 #include <utility>
 #include <QVBoxLayout>
+#include <cmath>
+#include <limits>
 
 namespace {
 
 constexpr auto parameterApplicableProperty = "parameterApplicable";
+constexpr auto parameterDefaultValueProperty = "parameterDefaultValue";
 constexpr auto parameterKeyProperty = "parameterKey";
+constexpr auto parameterModifiedProperty = "parameterModified";
 constexpr auto parameterSectionExpandedProperty = "parameterSectionExpanded";
 
 /** Attach stable machine-readable PARAMETERKEY metadata to WIDGET. */
@@ -345,6 +350,80 @@ void ParameterPanel::applyChange(
   m_stateSetter(state, description, parameterKey);
 }
 
+/** Add quiet modified/default/reset UI for one keyed numeric parameter. */
+void ParameterPanel::addNumericDefaultPresentation(
+    QWidget *field, QHBoxLayout *layout, const QString &label,
+    const QString &parameterKey, double defaultValue,
+    std::function<double(const ParameterState &)> getter,
+    std::function<void(ParameterState &, double)> setter,
+    double tolerance) {
+  Q_ASSERT(field);
+  Q_ASSERT(layout);
+  Q_ASSERT(!parameterKey.isEmpty());
+
+  field->setProperty(parameterDefaultValueProperty, defaultValue);
+  field->setProperty(parameterModifiedProperty, false);
+
+  auto *resetButton = new QToolButton(field);
+  resetButton->setObjectName(QStringLiteral("ParameterResetButton"));
+  resetButton->setText(tr("Reset"));
+  resetButton->setAutoRaise(true);
+  resetButton->setToolTip(tr("Reset %1 to its default value").arg(label));
+  resetButton->setProperty(parameterKeyProperty, parameterKey);
+  resetButton->setProperty(parameterDefaultValueProperty, defaultValue);
+  resetButton->setProperty(parameterModifiedProperty, false);
+  resetButton->hide();
+  layout->addWidget(resetButton, 0);
+
+  QWidget *labelWidget = nullptr;
+  if (m_currentGroupForm)
+    labelWidget = m_currentGroupForm->labelForField(field);
+  if (!labelWidget && m_form)
+    labelWidget = m_form->labelForField(field);
+  if (!labelWidget) {
+    for (QFormLayout *form : m_groupForms) {
+      labelWidget = form ? form->labelForField(field) : nullptr;
+      if (labelWidget)
+        break;
+    }
+  }
+
+  const QFont normalFont = labelWidget ? labelWidget->font() : QFont();
+  QFont modifiedFont = normalFont;
+  if (modifiedFont.weight() < QFont::DemiBold)
+    modifiedFont.setWeight(QFont::DemiBold);
+  if (labelWidget) {
+    labelWidget->setProperty(parameterDefaultValueProperty, defaultValue);
+    labelWidget->setProperty(parameterModifiedProperty, false);
+  }
+
+  connect(resetButton, &QToolButton::clicked, this,
+          [this, setter, defaultValue, label]() {
+            applyChange(
+                [setter, defaultValue](ParameterState &state) {
+                  setter(state, defaultValue);
+                },
+                tr("Reset %1").arg(label), QString());
+          });
+
+  m_paramUpdaters.push_back(
+      [field, labelWidget, resetButton, getter, defaultValue, tolerance,
+       normalFont, modifiedFont](const ParameterState &state) {
+        const double value = getter(state);
+        bool modified = value != defaultValue;
+        if (std::isfinite(value) && std::isfinite(defaultValue))
+          modified = std::abs(value - defaultValue) > tolerance;
+
+        field->setProperty(parameterModifiedProperty, modified);
+        resetButton->setProperty(parameterModifiedProperty, modified);
+        resetButton->setVisible(modified);
+        if (labelWidget) {
+          labelWidget->setProperty(parameterModifiedProperty, modified);
+          labelWidget->setFont(modified ? modifiedFont : normalFont);
+        }
+      });
+}
+
 void ParameterPanel::addDoubleParameter(
     const QString &label, double min, double max,
     std::function<double(const ParameterState &)> getter,
@@ -352,7 +431,7 @@ void ParameterPanel::addDoubleParameter(
     const std::map<double, QString> &specialValues,
     const std::map<double, QString> &quickSelects,
     std::function<bool(double)> validator, const QString &tooltip,
-    const QString &parameterKey) {
+    const QString &parameterKey, bool showDefaultReset) {
   SmartSpinBox *spin = new SmartSpinBox();
   spin->setRange(min, max);
   spin->setSingleStep(0.1);
@@ -390,6 +469,13 @@ void ParameterPanel::addDoubleParameter(
     m_currentGroupForm->addRow(label, container);
   } else {
     m_form->addRow(label, container);
+  }
+
+  if (showDefaultReset) {
+    Q_ASSERT(!parameterKey.isEmpty());
+    const double defaultValue = getter(ParameterState());
+    addNumericDefaultPresentation(container, hLayout, label, parameterKey,
+                                  defaultValue, getter, setter, 1e-12);
   }
 
   // Connect changes: UI -> State
@@ -456,7 +542,7 @@ QWidget *ParameterPanel::addSliderParameter(
     std::function<void(ParameterState &, double)> setter, double gamma,
     std::function<bool(const ParameterState &)> enabledCheck,
     bool logarithmic, const QString &tooltip,
-    const QString &parameterKey) {
+    const QString &parameterKey, bool showDefaultReset) {
   // Container: Slider + SpinBox
   QWidget *container = new QWidget();
   QHBoxLayout *hLayout = new QHBoxLayout(container);
@@ -497,6 +583,15 @@ QWidget *ParameterPanel::addSliderParameter(
     m_currentGroupForm->addRow(label, container);
   } else {
     m_form->addRow(label, container);
+  }
+
+  if (showDefaultReset) {
+    Q_ASSERT(!parameterKey.isEmpty());
+    const double defaultValue = getter(ParameterState());
+    const double tolerance =
+        scale > 0 ? 0.5 / scale : std::numeric_limits<double>::epsilon();
+    addNumericDefaultPresentation(container, hLayout, label, parameterKey,
+                                  defaultValue, getter, setter, tolerance);
   }
 
   // Helper to map Slider -> Value

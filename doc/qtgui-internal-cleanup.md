@@ -208,7 +208,11 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   the human Undo description. Unconverted controls deliberately fall back to
   their historical label-based identity. Screen strip-width controls and the
   measured-MTF selector are the first migrated users; continue assigning keys
-  as panels gain reset/default/modified metadata.
+  as panels gain reset/default/modified metadata. Keyed numeric helpers can
+  now opt into that presentation without a parallel defaults table: a fresh
+  `ParameterState` supplies the reset target, the label is emphasized while
+  modified, and Reset is hidden at the default. Digital Capture is the first
+  pilot (gamma, resolution, f-stop, pixel pitch and sensor fill factor).
 - Replace ad-hoc `blockSignals(true/false)` pairs with `QSignalBlocker`, reducing
   paths that accidentally leave a widget blocked after an early return.
 - Make group visibility semantics explicit.  A collapsed group should not force
