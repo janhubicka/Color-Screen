@@ -173,11 +173,11 @@ struct scr_to_img_parameters
   /* First coordinate vector:
      image's (center.x+coordinate1.x, center.y+coordinate1.y) should describe
      a green dot just on the right side of (center_x, center_y).  */
-  point_t coordinate1 = { (coord_t)1, (coord_t)0 };
+  point_t coordinate1 = { (coord_t)0, (coord_t)0 };
   /* Second coordinate vector:
      image's (center.x+coordinate2.x, center.y+coordinate2.y) should describe
      a green dot just below (center.x, center.y).  */
-  point_t coordinate2 = { (coord_t)0, (coord_t)1 };
+  point_t coordinate2 = { (coord_t)0, (coord_t)0 };
 
   /* Distance of the perspective plane from the camera coordinate.  */
   coord_t projection_distance = 1;
@@ -200,6 +200,24 @@ struct scr_to_img_parameters
   enum scanner_type scanner_type = fixed_lens;
 
   lens_warp_correction_parameters lens_correction;
+
+  /* Return true when a usable screen-to-image mapping has been
+     configured.  Zero coordinate vectors are the explicit sentinel for
+     geometry that has not been detected or entered yet.  A mesh is a
+     complete mapping in its own right.  */
+  pure_attr bool
+  geometry_configured_p () const
+  {
+    if (mesh_trans)
+      return true;
+    if (!my_isfinite (coordinate1.x) || !my_isfinite (coordinate1.y)
+        || !my_isfinite (coordinate2.x)
+        || !my_isfinite (coordinate2.y))
+      return false;
+    const coord_t determinant
+        = coordinate1.x * coordinate2.y - coordinate1.y * coordinate2.x;
+    return my_isfinite (determinant) && determinant != 0;
+  }
 
   bool
   operator== (const scr_to_img_parameters &other) const
@@ -286,5 +304,16 @@ struct scr_to_img_parameters
      Also update solver parameters.  */
   DLL_PUBLIC void alternate_colors (solver_parameters &params);
 };
+
+/* Return true when PARAM describes a selected regular screen and a
+   usable mapping has actually been configured for it.  Use
+   screen_has_regular_geometry_p(TYPE) only for process capability; use
+   this predicate for operations that consume screen coordinates.  */
+inline bool
+screen_geometry_configured_p (const scr_to_img_parameters &param)
+{
+  return screen_has_regular_geometry_p (param.type)
+         && param.geometry_configured_p ();
+}
 } // namespace colorscreen
 #endif

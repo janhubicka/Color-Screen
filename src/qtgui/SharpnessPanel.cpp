@@ -615,8 +615,9 @@ protected:
   bool requiresScan() const override { return false; }
   
   bool isTileRenderingEnabled(const ParameterState &state) const override {
-      // Always enabled regardless of scrToImg setting
-      return true;
+      /* Blurred and sharpened screen tiles convert capture MTF dimensions to
+         screen units, so an arbitrary fallback scale would be misleading. */
+      return colorscreen::screen_geometry_configured_p(state.scrToImg);
   }
 
 private:
@@ -1039,7 +1040,9 @@ void SharpnessPanel::setupUi() {
 
   m_analyzeAreaBtn = addToggleButtonParameter("", tr("Analyze area"), [this](bool checked) {
     emit focusAnalysisRequested(checked, m_finetuneFlags);
-  }, nullptr, nullptr, "Experimental tool that attempts to find the best Focus/Sigma by analyzing the local contrast and sharpness of the selected area.");
+  }, nullptr, [](const ParameterState &s) {
+    return colorscreen::screen_geometry_configured_p(s.scrToImg);
+  }, "Experimental tool that attempts to find the best Focus/Sigma by analyzing the local contrast and sharpness of the selected area.");
 
   m_findFocusAreasBtn = new QPushButton(tr("Find focus analysis areas"), this);
   m_findFocusAreasBtn->setToolTip(
@@ -1097,14 +1100,12 @@ void SharpnessPanel::setupUi() {
 
   addSeparator("Adaptive sharpening");
   
-  QPushButton *analyzeDisplacementsBtn = new QPushButton(tr("Analyze displacements"));
-  analyzeDisplacementsBtn->setToolTip(tr("Run adaptive sharpening analysis"));
-  connect(analyzeDisplacementsBtn, &QPushButton::clicked, this, &SharpnessPanel::onAnalyzeDisplacements);
-  
-  if (m_currentGroupForm)
-    m_currentGroupForm->addRow(analyzeDisplacementsBtn);
-  else
-    m_form->addRow(analyzeDisplacementsBtn);
+  addButtonParameter("", tr("Analyze displacements"),
+      [this]() { onAnalyzeDisplacements(); },
+      [](const ParameterState &s) {
+        return colorscreen::screen_geometry_configured_p(s.scrToImg);
+      },
+      tr("Run adaptive sharpening analysis after screen geometry has been established."));
 
   m_adaptiveChart = new AdaptiveSharpeningChart(this);
   m_adaptiveChart->initialize(10, 10); // Default size until real data comes
@@ -1156,8 +1157,7 @@ void SharpnessPanel::updateMTFChart() {
         && chartParameters.can_simulate_diffraction_p();
   // Calculate screen frequency if applicable
   double screenFreq = -1;
-  if (img && colorscreen::screen_has_regular_geometry_p(
-                 state.scrToImg.type)) {
+  if (img && colorscreen::screen_geometry_configured_p(state.scrToImg)) {
       colorscreen::scr_to_img scrToImgObj;
       scrToImgObj.set_parameters(state.scrToImg, *img);
       double pixel_size = scrToImgObj.pixel_size({0, 0, img->width, img->height});
@@ -1867,12 +1867,17 @@ void SharpnessPanel::setFocusAnalysisChecked(bool checked) {
 /** Update controls for the document-local automatic focus-area workflow. */
 void SharpnessPanel::setFocusAreaAnalysisState(int candidateCount, bool running,
                                                const QString &summary) {
+    const bool geometryReady = colorscreen::screen_geometry_configured_p(
+        m_stateGetter().scrToImg);
     if (m_findFocusAreasBtn)
-        m_findFocusAreasBtn->setEnabled(!running);
+        m_findFocusAreasBtn->setEnabled(!running && geometryReady);
     if (m_analyzeFocusAreasBtn)
-        m_analyzeFocusAreasBtn->setEnabled(!running && candidateCount >= 3);
+        m_analyzeFocusAreasBtn->setEnabled(!running && geometryReady && candidateCount >= 3);
     if (m_focusAreaStatusLabel) {
-        if (!summary.isEmpty())
+        if (!geometryReady)
+            m_focusAreaStatusLabel->setText(
+                tr("Fit screen geometry before focus analysis."));
+        else if (!summary.isEmpty())
             m_focusAreaStatusLabel->setText(summary);
         else if (running)
             m_focusAreaStatusLabel->setText(tr("Focus-area analysis running…"));

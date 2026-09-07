@@ -35,6 +35,7 @@ trap cleanup EXIT HUP INT TERM
 
 cat >"$test_source" <<'EOF'
 #include "ParameterState.h"
+#include "scr-to-img.h"
 
 #include <cstdio>
 #include <vector>
@@ -79,6 +80,50 @@ main (int argc, char **argv)
       || !screen_has_regular_geometry_p (Paget))
     {
       std::fprintf (stderr, "Screen geometry classification is inconsistent\n");
+      return 1;
+    }
+
+  // Geometry state is independent from the selected process.  A fresh regular
+  // screen has no mapping until detection or explicit entry supplies a
+  // non-degenerate basis.  Core mapping setup must reject the sentinel before
+  // any final-range or allocation calculation.
+  scr_to_img_parameters default_geometry;
+  default_geometry.type = Paget;
+  if (default_geometry.coordinate1.x != 0
+      || default_geometry.coordinate1.y != 0
+      || default_geometry.coordinate2.x != 0
+      || default_geometry.coordinate2.y != 0
+      || default_geometry.geometry_configured_p ()
+      || screen_geometry_configured_p (default_geometry))
+    {
+      std::fprintf (stderr, "Fresh geometry is not explicitly unconfigured\n");
+      return 1;
+    }
+  image_data geometry_image;
+  if (!geometry_image.set_dimensions (8, 8, true, false))
+    {
+      std::fprintf (stderr, "Could not allocate geometry sentinel test image\n");
+      return 1;
+    }
+  scr_to_img geometry_map;
+  if (geometry_map.set_parameters (default_geometry, geometry_image))
+    {
+      std::fprintf (stderr, "Unconfigured geometry produced a full map\n");
+      return 1;
+    }
+  default_geometry.coordinate1 = { 8, 0 };
+  default_geometry.coordinate2 = { 16, 0 };
+  if (default_geometry.geometry_configured_p ())
+    {
+      std::fprintf (stderr, "Singular geometry was accepted\n");
+      return 1;
+    }
+  default_geometry.coordinate2 = { 0, 8 };
+  if (!default_geometry.geometry_configured_p ()
+      || !screen_geometry_configured_p (default_geometry)
+      || !geometry_map.set_parameters (default_geometry, geometry_image))
+    {
+      std::fprintf (stderr, "Configured regular geometry was rejected\n");
       return 1;
     }
 

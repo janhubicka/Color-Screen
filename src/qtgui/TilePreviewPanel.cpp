@@ -115,9 +115,12 @@ TilePreviewPanel::TilePreviewPanel(StateGetter stateGetter,
       if (scan) {
         req.scanWidth = scan->width;
         req.scanHeight = scan->height;
-        scr_to_img scrToImgObj;
-        scrToImgObj.set_parameters(state.scrToImg, scan->width, scan->height);
-        req.pixelSize = scrToImgObj.pixel_size({0,0,scan->width, scan->height});
+        req.pixelSize = 1.0;
+        if (screen_geometry_configured_p(state.scrToImg)) {
+          scr_to_img scrToImgObj;
+          if (scrToImgObj.set_parameters(state.scrToImg, scan->width, scan->height))
+            req.pixelSize = scrToImgObj.pixel_size({0,0,scan->width, scan->height});
+        }
       } else {
         req.scanWidth = 0; req.scanHeight = 0; req.pixelSize = 1.0;
       }

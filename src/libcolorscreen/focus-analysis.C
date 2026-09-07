@@ -113,7 +113,8 @@ static coord_t
 process_screen_frequency (const scr_to_img_parameters &param,
                           const image_data &img)
 {
-  if (param.type < 0 || param.type >= max_scr_type)
+  if (param.type < 0 || param.type >= max_scr_type
+      || !screen_geometry_configured_p (param))
     return -1;
   scr_to_img map;
   if (!map.set_parameters (param, img))
@@ -460,7 +461,7 @@ finetune_find_focus_area_candidates_in_image (
         *error = "automatic focus-area discovery requires image data";
       return false;
     }
-  if (!screen_has_regular_geometry_p (param.type) || parameters.max_analysis_dimension < 32
+  if (!screen_geometry_configured_p (param) || parameters.max_analysis_dimension < 32
       || !my_isfinite (parameters.automatic_window_screen_periods)
       || parameters.automatic_window_screen_periods <= 0)
     {

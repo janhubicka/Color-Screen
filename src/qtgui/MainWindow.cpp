@@ -1858,8 +1858,7 @@ void MainWindow::updateCoordinateSpaceControls() {
     return;
   const bool stitched = m_scan && m_scan->stitch;
   const bool hasFinal = stitched ||
-      (m_scan && colorscreen::screen_has_regular_geometry_p(
-                     m_scrToImgParams.type));
+      (m_scan && colorscreen::screen_geometry_configured_p(m_scrToImgParams));
 
   m_coordinateComboBox->blockSignals(true);
   m_coordinateComboBox->clear();
@@ -2109,8 +2108,7 @@ void MainWindow::updateModeMenu() {
             capture);
 
     if ((prop.flags & render_type_property::NEEDS_SCR_TO_IMG) &&
-        (!hasScreenCapture || !colorscreen::screen_has_regular_geometry_p(
-                                  m_scrToImgParams.type)))
+        (!hasScreenCapture || !colorscreen::screen_geometry_configured_p(m_scrToImgParams)))
       show = false;
 
     if ((prop.flags & render_type_property::USES_SCR_DETECT) &&
@@ -3764,8 +3762,7 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
 
             // If we have a valid screen type, default to formatted
             // (interpolated) view
-            if (colorscreen::screen_has_regular_geometry_p(
-                    m_scrToImgParams.type)) {
+            if (colorscreen::screen_geometry_configured_p(m_scrToImgParams)) {
               m_renderTypeParams.type = colorscreen::render_type_interpolated;
             }
           }
@@ -4205,6 +4202,8 @@ void MainWindow::updateWorkflowSummary() {
       colorscreen::render_parameters::capture_supports_screen_detection_p(
           capture);
   const bool regularScreen = colorscreen::screen_has_regular_geometry_p(type);
+  const bool geometryConfigured =
+      colorscreen::screen_geometry_configured_p(m_scrToImgParams);
   const bool stochasticScreen = colorscreen::stochastic_screen_p(type);
 
   QString captureName = tr("Unknown");
@@ -4258,7 +4257,14 @@ void MainWindow::updateWorkflowSummary() {
     const QString prefix =
         colorDetection ? tr("Registration: optional geometry")
                        : tr("Registration: geometry");
-    if (pointCount == 0) {
+    if (!geometryConfigured) {
+      registration = pointCount >= minimumPoints
+          ? tr("%1 — geometry not configured; fit from the existing %2 points")
+                .arg(prefix)
+                .arg(pointCount)
+          : tr("%1 — geometry not configured; detect screen coordinates")
+                .arg(prefix);
+    } else if (pointCount == 0) {
       registration = tr("%1 — no points; detect or add at least %2")
                          .arg(prefix)
                          .arg(minimumPoints);
@@ -5229,7 +5235,8 @@ void MainWindow::onPruneMisplaced() {
 
   // Create map for current geometry
   colorscreen::scr_to_img map;
-  map.set_parameters(m_scrToImgParams, *m_scan);
+  if (!map.set_parameters(m_scrToImgParams, *m_scan))
+    return;
 
   // Build histogram of distances
   colorscreen::histogram hist;
@@ -5342,6 +5349,8 @@ void MainWindow::updateRegistrationActions() {
   bool hasPoints = image && image->registrationPointsVisible() &&
                    image->registrationPointCount() > 0;
   bool hasSelection = image && !image->selectedPoints().empty();
+  const bool geometryConfigured = m_scan &&
+      colorscreen::screen_geometry_configured_p(m_scrToImgParams);
 
   // Disable selection actions if registration points aren't visible
   if (m_selectAllAction) {
@@ -5354,13 +5363,12 @@ void MainWindow::updateRegistrationActions() {
     m_deleteSelectedAction->setEnabled(hasSelection);
   }
   if (m_pruneMisplacedAction) {
-    m_pruneMisplacedAction->setEnabled(hasSelection);
+    m_pruneMisplacedAction->setEnabled(hasSelection && geometryConfigured);
   }
 
   // Add Point and Set Center need a loaded image and a regular screen lattice.
   if (m_addPointAction) {
-    bool canAddPoints = m_scan && colorscreen::screen_has_regular_geometry_p(
-                                     m_scrToImgParams.type);
+    bool canAddPoints = geometryConfigured;
     m_addPointAction->setEnabled(canAddPoints);
     // If tool is active but we can't add points, switch to Pan mode
     if (!canAddPoints && m_addPointAction->isChecked()) {
@@ -5368,8 +5376,7 @@ void MainWindow::updateRegistrationActions() {
     }
   }
   if (m_setCenterAction) {
-    bool canSetCenter = m_scan && colorscreen::screen_has_regular_geometry_p(
-                                     m_scrToImgParams.type);
+    bool canSetCenter = geometryConfigured;
     m_setCenterAction->setEnabled(canSetCenter);
     // If tool is active but we can't set center, switch to Pan mode
     if (!canSetCenter && m_setCenterAction->isChecked()) {
@@ -5386,6 +5393,8 @@ void MainWindow::updateRegistrationActions() {
   if (m_optimizeGeometryAction) {
     m_optimizeGeometryAction->setEnabled(count >= (size_t)min_points);
   }
+  if (m_optimizeCoordinatesAction)
+    m_optimizeCoordinatesAction->setEnabled(geometryConfigured);
 
   // Update buttons in GeometryPanel is now handled by the panel itself
   if (m_geometryPanel) {
@@ -5440,7 +5449,10 @@ void MainWindow::onPointAdded(colorscreen::point_t imgPos,
   // Profile spot mode: convert img coords → screen coords and store
   if (m_addingProfileSpot) {
     colorscreen::scr_to_img map;
-    map.set_parameters(m_scrToImgParams, *m_scan);
+    if (!map.set_parameters(m_scrToImgParams, *m_scan)) {
+      statusBar()->showMessage(tr("Fit screen geometry before adding profile spots."), 3000);
+      return;
+    }
     colorscreen::point_t screen = map.to_scr(imgPos);
     ParameterState newState = getCurrentState();
     newState.profileSpots.push_back(screen);
@@ -5874,6 +5886,10 @@ void MainWindow::onAutomaticallyAddPointsInAreaRequested(
     const colorscreen::finetune_area_parameters &params) {
   if (!m_scan)
     return;
+  if (!colorscreen::screen_geometry_configured_p(m_scrToImgParams)) {
+    statusBar()->showMessage(tr("Detect screen coordinates before adding registration points."), 3000);
+    return;
+  }
 
   startAreaSelection(
       tr("Select area to add points"), [this, params](QRect area) {
@@ -5980,6 +5996,10 @@ void MainWindow::onAutomaticallyAddPointsInAreaRequested(
    the main thread.  */
 void MainWindow::onAutomaticallyAddPointsRequested(const colorscreen::finetune_area_parameters &params) {
   if (!m_scan) {
+    return;
+  }
+  if (!colorscreen::screen_geometry_configured_p(m_scrToImgParams)) {
+    statusBar()->showMessage(tr("Detect screen coordinates before adding registration points."), 3000);
     return;
   }
 
@@ -6308,6 +6328,11 @@ void MainWindow::onAdaptiveSharpeningRequested(
     const AdaptiveSharpeningParameters &parameters) {
   if (!m_scan)
     return;
+  if (!colorscreen::screen_geometry_configured_p(m_scrToImgParams)) {
+    statusBar()->showMessage(
+        tr("Fit screen geometry before adaptive sharpening analysis."), 3000);
+    return;
+  }
 
   // Create progress info
   auto progress = std::make_shared<colorscreen::progress_info>();
@@ -6506,6 +6531,10 @@ void MainWindow::onAutodetectCoordinatesFinished(
 void MainWindow::onOptimizeCoordinates() {
   if (!m_scan || !m_coordOptimizationWorker)
     return;
+  if (!colorscreen::screen_geometry_configured_p(m_scrToImgParams)) {
+    statusBar()->showMessage(tr("Detect screen coordinates before refining them."), 3000);
+    return;
+  }
 
   m_coordOptimizationWorker->setScan(m_scan);
 
@@ -7238,6 +7267,10 @@ void MainWindow::onColorOptimizeRequested(bool /*autoMode*/) {
   if (!m_scan || !m_colorOptimizerWorker)
     return;
   ParameterState state = getCurrentState();
+  if (!colorscreen::screen_geometry_configured_p(state.scrToImg)) {
+    statusBar()->showMessage(tr("Fit screen geometry before optimizing the color profile."), 3000);
+    return;
+  }
   if (state.profileSpots.size() < 4)
     return;
 

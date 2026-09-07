@@ -665,7 +665,7 @@ void ImageViewWindow::rebuildModeList() {
         render_parameters::capture_supports_screen_detection_p(capture);
     if (show && (prop.flags & render_type_property::NEEDS_SCR_TO_IMG) &&
         (!hasScreenCapture ||
-         !screen_has_regular_geometry_p(m_scrToImgParams.type)))
+         !screen_geometry_configured_p(m_scrToImgParams)))
       show = false;
     if (show && (prop.flags & render_type_property::USES_SCR_DETECT) &&
         (!supportsScreenDetection || !screen_present_p(m_scrToImgParams.type)))
@@ -717,8 +717,7 @@ void ImageViewWindow::updateViewControls() {
   if (m_coordinateComboBox) {
     const bool stitched = m_scan && m_scan->stitch;
     const bool hasFinal = stitched ||
-        (m_scan && colorscreen::screen_has_regular_geometry_p(
-                       m_scrToImgParams.type));
+        (m_scan && colorscreen::screen_geometry_configured_p(m_scrToImgParams));
     const QSignalBlocker blocker(m_coordinateComboBox);
     m_coordinateComboBox->clear();
     if (!stitched)

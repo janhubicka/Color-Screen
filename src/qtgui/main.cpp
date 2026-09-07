@@ -1016,7 +1016,7 @@ int main(int argc, char *argv[]) {
         if ((prop.flags &
              colorscreen::render_type_property::NEEDS_SCR_TO_IMG) &&
             (!hasScreenCapture ||
-             !colorscreen::screen_has_regular_geometry_p(state.scrToImg.type)))
+             !colorscreen::screen_geometry_configured_p(state.scrToImg)))
           return false;
         if ((prop.flags &
              colorscreen::render_type_property::USES_SCR_DETECT) &&

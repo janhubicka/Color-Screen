@@ -30,6 +30,11 @@ stitch_project::initialize ()
 
   image_data data;
   scr_param.type = NoScreen;
+  /* The project bootstrap needs a local identity map before any tile has
+     supplied real geometry.  Do not rely on document parameter defaults:
+     zero coordinates now deliberately mean unconfigured geometry.  */
+  scr_param.coordinate1 = { 1, 0 };
+  scr_param.coordinate2 = { 0, 1 };
   data.width=1000;
   data.height=1000;
   if (!common_scr_to_img.set_parameters (scr_param, data, rotation_adjustment))

@@ -160,7 +160,7 @@ sanitize_render_parameters (render_type_parameters &rtparam,
           & render_type_property::NEEDS_RGB))
     rtparam.type = render_type_original;
 
-  if (!screen_has_regular_geometry_p (param.type)
+  if (!screen_geometry_configured_p (param)
       && (render_type_properties[(int)rtparam.type].flags
           & render_type_property::NEEDS_SCR_TO_IMG))
     rtparam.type = render_type_original;

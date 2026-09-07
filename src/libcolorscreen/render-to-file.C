@@ -58,6 +58,9 @@ complete_rendered_file_parameters (render_type_parameters *rtparams, scr_to_img_
   /* Do we render using scr_to_img map?  */
   if (p->geometry == render_to_file_params::screen_geometry)
     {
+      if (!stitch && (!param || !scan
+                      || !screen_geometry_configured_p (*param)))
+        return false;
       coord_t render_width, render_height;
       if (!stitch)
 	{
@@ -254,6 +257,15 @@ render_to_file (image_data & scan, scr_to_img_parameters & param,
   if ((prop.flags & render_type_property::NEEDS_RGB) && !scan.has_rgb ())
     {
       *error = "Selected rendering algorithm is impossible on monochromatic scan";
+      return false;
+    }
+  const bool needs_screen_geometry
+      = rfparams.geometry == render_to_file_params::screen_geometry
+        || (rfparams.geometry == render_to_file_params::default_geometry
+            && (prop.flags & render_type_property::NEEDS_SCR_TO_IMG));
+  if (needs_screen_geometry && !screen_geometry_configured_p (param))
+    {
+      *error = "Screen geometry is not configured";
       return false;
     }
   if (rfparams.hdr || rfparams.dng)
