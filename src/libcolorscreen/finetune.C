@@ -5545,6 +5545,15 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
       ret.err = flag_error;
       return finish ();
     }
+  /* Broad coordinate discovery constructs its own trial mapping and is
+     precisely the operation that is allowed to start from the zero
+     sentinel.  Every other finetune mode consumes an existing map.  */
+  if (!(fparams.flags & finetune_guess_coordinates)
+      && !screen_geometry_configured_p (param))
+    {
+      ret.err = "screen geometry is not configured";
+      return finish ();
+    }
   if (!my_isfinite (fparams.ignore_outliers)
       || fparams.ignore_outliers < 0 || fparams.ignore_outliers >= 1)
     {
@@ -6297,7 +6306,7 @@ finetune_misregistered_area (solver_parameters *solver,
     return false;
   int_image_area area = in_area.intersect ({ 0, 0, img.width, img.height });
   const bool verbose = false;
-  if (area.empty_p () || !screen_has_regular_geometry_p (param.type))
+  if (area.empty_p () || !screen_geometry_configured_p (param))
     {
       if (verbose)
 	printf ("Finetuning area failed since area is empty or screen is "
@@ -6772,7 +6781,7 @@ finetune_area (solver_parameters *solver, render_parameters &rparam,
   if (!solver || !valid_finetune_area_parameters_p (fparam))
     return false;
   int_image_area area = in_area.intersect ({ 0, 0, img.width, img.height });
-  if (area.empty_p ())
+  if (area.empty_p () || !screen_geometry_configured_p (param))
     return false;
   int xsteps, ysteps;
   fparam.get_grid_dimensions (area, param, &xsteps, &ysteps);

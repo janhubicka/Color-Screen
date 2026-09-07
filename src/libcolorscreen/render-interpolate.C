@@ -302,7 +302,7 @@ bool
 render_interpolate::precompute (int_image_area area, progress_info *progress)
 {
   uint64_t screen_id = 0;
-  if (!screen_has_regular_geometry_p (m_scr_to_img_param.type))
+  if (!screen_geometry_configured_p (m_scr_to_img_param))
     return false;
   /* When doing profiled matrix, we need to pre-scale the profile so black
      point correction goes right. Without doing so, for example black from red

@@ -421,6 +421,13 @@ scr_to_img::set_parameters (const scr_to_img_parameters &param,
   if (!scr_to_img::set_parameters_for_early_correction (param, width, height))
     return false;
 
+  /* The all-zero basis is an explicit unconfigured sentinel.  Refuse it
+     before matrix inversion or range computation can manufacture huge or
+     non-finite output dimensions.  Early correction remains available
+     through set_parameters_for_early_correction().  */
+  if (!m_param.geometry_configured_p ())
+    return false;
+
   if (m_scr_to_img_mesh)
     {
       int_image_area area = {0, 0, width, height};

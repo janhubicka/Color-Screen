@@ -469,6 +469,8 @@ optimize_color_model_colors (scr_to_img_parameters *param, image_data &img,
                              std::vector<color_match> *report,
                              progress_info *progress)
 {
+  if (!img.stitch && (!param || !screen_geometry_configured_p (*param)))
+    return false;
   bool verbose = false;
   int n = points.size ();
   render_parameters my_rparam = rparam;
