@@ -1,0 +1,50 @@
+name: Agent geometry discovery fix v2
+
+on:
+  push:
+    branches:
+      - agent/geometry-unconfigured-publisher
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/geometry-unconfigured-sentinel
+          fetch-depth: 0
+      - name: Preserve zero-state coordinate discovery
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+          p = Path("src/libcolorscreen/finetune.C")
+          text = p.read_text()
+          old = "              if (!map.set_parameters (param, *imgp[tileid]))"
+          new = """              /* Coordinate discovery historically started from the default
+                 one-pixel identity basis.  Document defaults are now the zero
+                 sentinel, so keep that bootstrap local to discovery rather
+                 than pretending the document already has geometry.  */
+              scr_to_img_parameters map_param = param;
+              if ((fparams.flags & finetune_guess_coordinates)
+                  && !map_param.geometry_configured_p ())
+                {
+                  map_param.coordinate1 = { 1, 0 };
+                  map_param.coordinate2 = { 0, 1 };
+                }
+              if (!map.set_parameters (map_param, *imgp[tileid]))"""
+          if text.count(old) != 1:
+              raise SystemExit(f"expected one discovery map setup, found {text.count(old)}")
+          p.write_text(text.replace(old, new, 1))
+          PY
+          git diff --check
+          test "$(git diff --name-only)" = "src/libcolorscreen/finetune.C"
+          git config user.name "OpenAI Agent"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/libcolorscreen/finetune.C
+          git commit -m "geometry: keep coordinate discovery bootstrap local" -m "Broad coordinate discovery used to inherit the global one-pixel identity basis from scr_to_img_parameters. With zero vectors now representing an unconfigured document, construct that provisional identity only inside finetune_guess_coordinates before determining its initial pixel scale. The trial basis never enters document state; successful discovery still publishes only the fitted center and coordinate vectors."
+          git push origin HEAD:agent/geometry-unconfigured-sentinel
