@@ -137,10 +137,18 @@ public:
  	m_simulated_screen (), m_simulated_screen_id (0),
 	m_final_range ()
   {
-    /* Initialize early so we can determine ranges before precomputing.  */
-    m_ok = m_scr_to_img.set_parameters (param, img);
-    if (m_ok)
-      m_pixel_size = m_scr_to_img.pixel_size (rparam.get_image_area (img.width, img.height));
+    /* Capture-only renderers still need lens/early correction even when no
+       screen mapping has been fitted.  Build the full map only when geometry
+       exists; otherwise initialize just the geometry-independent correction
+       path.  Screen/final-coordinate consumers are gated separately.  */
+    m_geometry_configured = param.geometry_configured_p ();
+    m_ok = m_geometry_configured
+               ? m_scr_to_img.set_parameters (param, img)
+               : m_scr_to_img.set_parameters_for_early_correction (
+                     param, img.width, img.height);
+    if (m_ok && m_geometry_configured)
+      m_pixel_size = m_scr_to_img.pixel_size (
+          rparam.get_image_area (img.width, img.height));
   }
   ~render_to_scr ();
 
@@ -295,6 +303,9 @@ protected:
 private:
   int_image_area m_final_range;
   bool m_ok;
+  /* True only when M_SCR_TO_IMG contains a complete screen mapping rather
+     than the early-correction-only state used by scan renderers.  */
+  bool m_geometry_configured = false;
   coord_t m_pixel_size = -1;
 };
 

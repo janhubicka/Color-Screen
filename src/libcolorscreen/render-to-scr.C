@@ -307,6 +307,10 @@ render_to_scr::precompute_all (int flags, progress_info *progress)
   if (!m_ok)
     return false;
   const bool normalized_patches = flags & NORMALIZED_PATCHES;
+  /* Normalized screen patches have no meaning before a screen mapping is
+     configured.  Ordinary scan/image-layer precomputation remains valid.  */
+  if (normalized_patches && !m_geometry_configured)
+    return false;
   const rgbdata proportions
       = normalized_patches
             ? m_scr_to_img.patch_proportions (&m_params)

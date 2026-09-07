@@ -5894,6 +5894,11 @@ test_lens_warp ()
     scr_to_img_parameters truth;
     truth.type = Paget;
     truth.scanner_type = fixed_lens;
+    /* This test synthesizes registration points through a complete screen
+       map.  Make its identity geometry explicit now that default parameters
+       deliberately mean "geometry not configured".  */
+    truth.coordinate1 = {1, 0};
+    truth.coordinate2 = {0, 1};
     truth.lens_correction.center = {0.5, 0.5};
     truth.lens_correction.kr[1] = -0.15;
     truth.lens_correction.kr[2] = -0.05;
