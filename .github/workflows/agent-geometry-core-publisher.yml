@@ -1,0 +1,269 @@
+name: Agent geometry core publisher
+
+on:
+  push:
+    branches:
+      - agent/geometry-unconfigured-publisher
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/geometry-unconfigured-sentinel
+          fetch-depth: 0
+      - name: Apply explicit unconfigured geometry core semantics
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+
+          def replace(path, old, new, count=1):
+              p = Path(path)
+              text = p.read_text()
+              actual = text.count(old)
+              if actual != count:
+                  raise SystemExit(f"{path}: expected {count} occurrences, found {actual}: {old[:100]!r}")
+              p.write_text(text.replace(old, new, count))
+
+          path = "src/libcolorscreen/include/scr-to-img-parameters.h"
+          replace(path,
+                  "  point_t coordinate1 = { (coord_t)1, (coord_t)0 };",
+                  "  point_t coordinate1 = { (coord_t)0, (coord_t)0 };")
+          replace(path,
+                  "  point_t coordinate2 = { (coord_t)0, (coord_t)1 };",
+                  "  point_t coordinate2 = { (coord_t)0, (coord_t)0 };")
+          replace(path,
+                  "  lens_warp_correction_parameters lens_correction;\n\n  bool\n  operator==",
+                  "  lens_warp_correction_parameters lens_correction;\n\n"
+                  "  /* Return true when a usable screen-to-image mapping has been\n"
+                  "     configured.  Zero coordinate vectors are the explicit sentinel for\n"
+                  "     geometry that has not been detected or entered yet.  A mesh is a\n"
+                  "     complete mapping in its own right.  */\n"
+                  "  pure_attr bool\n"
+                  "  geometry_configured_p () const\n"
+                  "  {\n"
+                  "    if (mesh_trans)\n"
+                  "      return true;\n"
+                  "    if (!my_isfinite (coordinate1.x) || !my_isfinite (coordinate1.y)\n"
+                  "        || !my_isfinite (coordinate2.x)\n"
+                  "        || !my_isfinite (coordinate2.y))\n"
+                  "      return false;\n"
+                  "    const coord_t determinant\n"
+                  "        = coordinate1.x * coordinate2.y - coordinate1.y * coordinate2.x;\n"
+                  "    return my_isfinite (determinant) && determinant != 0;\n"
+                  "  }\n\n"
+                  "  bool\n  operator==")
+          replace(path,
+                  "  DLL_PUBLIC void alternate_colors (solver_parameters &params);\n};\n} // namespace colorscreen\n#endif\n",
+                  "  DLL_PUBLIC void alternate_colors (solver_parameters &params);\n};\n\n"
+                  "/* Return true when PARAM describes a selected regular screen and a\n"
+                  "   usable mapping has actually been configured for it.  Use\n"
+                  "   screen_has_regular_geometry_p(TYPE) only for process capability; use\n"
+                  "   this predicate for operations that consume screen coordinates.  */\n"
+                  "inline bool\n"
+                  "screen_geometry_configured_p (const scr_to_img_parameters &param)\n"
+                  "{\n"
+                  "  return screen_has_regular_geometry_p (param.type)\n"
+                  "         && param.geometry_configured_p ();\n"
+                  "}\n"
+                  "} // namespace colorscreen\n#endif\n")
+
+          replace("src/libcolorscreen/scr-to-img.C",
+                  "  if (!scr_to_img::set_parameters_for_early_correction (param, width, height))\n    return false;\n\n  if (m_scr_to_img_mesh)",
+                  "  if (!scr_to_img::set_parameters_for_early_correction (param, width, height))\n    return false;\n\n"
+                  "  /* The all-zero basis is an explicit unconfigured sentinel.  Refuse it\n"
+                  "     before matrix inversion or range computation can manufacture huge or\n"
+                  "     non-finite output dimensions.  Early correction remains available\n"
+                  "     through set_parameters_for_early_correction().  */\n"
+                  "  if (!m_param.geometry_configured_p ())\n"
+                  "    return false;\n\n"
+                  "  if (m_scr_to_img_mesh)")
+
+          replace("src/libcolorscreen/stitch-project.C",
+                  "  image_data data;\n  scr_param.type = NoScreen;\n  data.width=1000;",
+                  "  image_data data;\n"
+                  "  scr_param.type = NoScreen;\n"
+                  "  /* The project bootstrap needs a local identity map before any tile has\n"
+                  "     supplied real geometry.  Do not rely on document parameter defaults:\n"
+                  "     zero coordinates now deliberately mean unconfigured geometry.  */\n"
+                  "  scr_param.coordinate1 = { 1, 0 };\n"
+                  "  scr_param.coordinate2 = { 0, 1 };\n"
+                  "  data.width=1000;")
+
+          replace("src/libcolorscreen/render-tile.C",
+                  "  if (!screen_has_regular_geometry_p (param.type)\n      && (render_type_properties[(int)rtparam.type].flags\n          & render_type_property::NEEDS_SCR_TO_IMG))",
+                  "  if (!screen_geometry_configured_p (param)\n      && (render_type_properties[(int)rtparam.type].flags\n          & render_type_property::NEEDS_SCR_TO_IMG))")
+
+          replace("src/libcolorscreen/render-interpolate.C",
+                  "  if (!screen_has_regular_geometry_p (m_scr_to_img_param.type))\n    return false;",
+                  "  if (!screen_geometry_configured_p (m_scr_to_img_param))\n    return false;")
+
+          replace("src/libcolorscreen/focus-analysis.C",
+                  "  if (param.type < 0 || param.type >= max_scr_type)\n    return -1;",
+                  "  if (param.type < 0 || param.type >= max_scr_type\n      || !screen_geometry_configured_p (param))\n    return -1;")
+          replace("src/libcolorscreen/focus-analysis.C",
+                  "  if (!screen_has_regular_geometry_p (param.type) || parameters.max_analysis_dimension < 32",
+                  "  if (!screen_geometry_configured_p (param) || parameters.max_analysis_dimension < 32")
+
+          replace("src/libcolorscreen/finetune.C",
+                  "  if (const char *flag_error = finetune_flag_error (fparams.flags))\n    {\n      ret.err = flag_error;\n      return finish ();\n    }\n  if (!my_isfinite (fparams.ignore_outliers)",
+                  "  if (const char *flag_error = finetune_flag_error (fparams.flags))\n    {\n      ret.err = flag_error;\n      return finish ();\n    }\n"
+                  "  /* Broad coordinate discovery constructs its own trial mapping and is\n"
+                  "     precisely the operation that is allowed to start from the zero\n"
+                  "     sentinel.  Every other finetune mode consumes an existing map.  */\n"
+                  "  if (!(fparams.flags & finetune_guess_coordinates)\n"
+                  "      && !screen_geometry_configured_p (param))\n"
+                  "    {\n"
+                  "      ret.err = \"screen geometry is not configured\";\n"
+                  "      return finish ();\n"
+                  "    }\n"
+                  "  if (!my_isfinite (fparams.ignore_outliers)")
+          replace("src/libcolorscreen/finetune.C",
+                  "  if (area.empty_p () || !screen_has_regular_geometry_p (param.type))",
+                  "  if (area.empty_p () || !screen_geometry_configured_p (param))")
+          replace("src/libcolorscreen/finetune.C",
+                  "  int_image_area area = in_area.intersect ({ 0, 0, img.width, img.height });\n  if (area.empty_p ())\n    return false;\n  int xsteps, ysteps;",
+                  "  int_image_area area = in_area.intersect ({ 0, 0, img.width, img.height });\n"
+                  "  if (area.empty_p () || !screen_geometry_configured_p (param))\n"
+                  "    return false;\n"
+                  "  int xsteps, ysteps;")
+
+          replace("src/libcolorscreen/render-to-file.C",
+                  "  if (p->geometry == render_to_file_params::screen_geometry)\n    {\n      coord_t render_width, render_height;",
+                  "  if (p->geometry == render_to_file_params::screen_geometry)\n"
+                  "    {\n"
+                  "      if (!stitch && (!param || !scan\n"
+                  "                      || !screen_geometry_configured_p (*param)))\n"
+                  "        return false;\n"
+                  "      coord_t render_width, render_height;")
+          replace("src/libcolorscreen/render-to-file.C",
+                  "  if ((prop.flags & render_type_property::NEEDS_RGB) && !scan.has_rgb ())\n    {\n      *error = \"Selected rendering algorithm is impossible on monochromatic scan\";\n      return false;\n    }\n  if (rfparams.hdr || rfparams.dng)",
+                  "  if ((prop.flags & render_type_property::NEEDS_RGB) && !scan.has_rgb ())\n"
+                  "    {\n"
+                  "      *error = \"Selected rendering algorithm is impossible on monochromatic scan\";\n"
+                  "      return false;\n"
+                  "    }\n"
+                  "  const bool needs_screen_geometry\n"
+                  "      = rfparams.geometry == render_to_file_params::screen_geometry\n"
+                  "        || (rfparams.geometry == render_to_file_params::default_geometry\n"
+                  "            && (prop.flags & render_type_property::NEEDS_SCR_TO_IMG));\n"
+                  "  if (needs_screen_geometry && !screen_geometry_configured_p (param))\n"
+                  "    {\n"
+                  "      *error = \"Screen geometry is not configured\";\n"
+                  "      return false;\n"
+                  "    }\n"
+                  "  if (rfparams.hdr || rfparams.dng)")
+
+          replace("src/libcolorscreen/matrix-profile.C",
+                  "{\n  bool verbose = false;\n  int n = points.size ();\n  render_parameters my_rparam = rparam;",
+                  "{\n"
+                  "  if (!img.stitch && (!param || !screen_geometry_configured_p (*param)))\n"
+                  "    return false;\n"
+                  "  bool verbose = false;\n"
+                  "  int n = points.size ();\n"
+                  "  render_parameters my_rparam = rparam;",
+                  count=1)
+
+          path = "testsuite/unittests.test"
+          replace(path, "#include \"ParameterState.h\"\n", "#include \"ParameterState.h\"\n#include \"scr-to-img.h\"\n")
+          marker = "\n  if (render_parameters::capture_has_screen_p (\n"
+          p = Path(path)
+          text = p.read_text()
+          if text.count(marker) != 1:
+              raise SystemExit(f"{path}: capture classification marker count {text.count(marker)}")
+          test = r'''
+
+  // Geometry state is independent from the selected process.  A fresh regular
+  // screen has no mapping until detection or explicit entry supplies a
+  // non-degenerate basis.  Core mapping setup must reject the sentinel before
+  // any final-range or allocation calculation.
+  scr_to_img_parameters default_geometry;
+  default_geometry.type = Paget;
+  if (default_geometry.coordinate1.x != 0
+      || default_geometry.coordinate1.y != 0
+      || default_geometry.coordinate2.x != 0
+      || default_geometry.coordinate2.y != 0
+      || default_geometry.geometry_configured_p ()
+      || screen_geometry_configured_p (default_geometry))
+    {
+      std::fprintf (stderr, "Fresh geometry is not explicitly unconfigured\n");
+      return 1;
+    }
+  image_data geometry_image;
+  if (!geometry_image.set_dimensions (8, 8, true, false))
+    {
+      std::fprintf (stderr, "Could not allocate geometry sentinel test image\n");
+      return 1;
+    }
+  scr_to_img geometry_map;
+  if (geometry_map.set_parameters (default_geometry, geometry_image)
+      || !geometry_map.set_parameters_for_early_correction (
+          default_geometry, geometry_image.width, geometry_image.height))
+    {
+      std::fprintf (stderr,
+                    "Unconfigured geometry was accepted or early correction rejected\n");
+      return 1;
+    }
+  default_geometry.coordinate1 = { 8, 0 };
+  default_geometry.coordinate2 = { 16, 0 };
+  if (default_geometry.geometry_configured_p ())
+    {
+      std::fprintf (stderr, "Singular geometry was accepted\n");
+      return 1;
+    }
+  default_geometry.coordinate2 = { 0, 8 };
+  if (!default_geometry.geometry_configured_p ()
+      || !screen_geometry_configured_p (default_geometry)
+      || !geometry_map.set_parameters (default_geometry, geometry_image))
+    {
+      std::fprintf (stderr, "Configured regular geometry was rejected\n");
+      return 1;
+    }
+'''
+          p.write_text(text.replace(marker, test + marker, 1))
+          PY
+
+          git diff --check
+          expected="src/libcolorscreen/finetune.C
+          src/libcolorscreen/focus-analysis.C
+          src/libcolorscreen/include/scr-to-img-parameters.h
+          src/libcolorscreen/matrix-profile.C
+          src/libcolorscreen/render-interpolate.C
+          src/libcolorscreen/render-tile.C
+          src/libcolorscreen/render-to-file.C
+          src/libcolorscreen/scr-to-img.C
+          src/libcolorscreen/stitch-project.C
+          testsuite/unittests.test"
+          actual="$(git diff --name-only | sort)"
+          test "$actual" = "$expected"
+
+          git config user.name "OpenAI Agent"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- $actual
+          git commit -F - <<'EOF'
+          geometry: make unconfigured mapping explicit
+
+          Use zero screen-coordinate vectors as the persistent sentinel for geometry
+          that has not been detected or entered yet.  Add separate predicates for
+          process capability and an actually configured non-degenerate mapping, and
+          reject the unconfigured sentinel in scr_to_img before matrix inversion or
+          range computation.
+
+          Keep early optical correction and broad coordinate discovery usable without
+          fitted geometry.  Give stitching its previous identity bootstrap explicitly
+          rather than inheriting it from document defaults.  Gate core reconstruction,
+          finetune/focus analysis, file-output geometry, and matrix-profile sampling on
+          an actual mapping, returning a specific render error instead of allowing a
+          bogus range to become a large allocation.
+
+          Extend the persistence integration test with zero/singular/valid geometry
+          checks and verify that early correction remains available in the sentinel
+          state.
+          EOF
+          git push origin HEAD:agent/geometry-unconfigured-sentinel
