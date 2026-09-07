@@ -192,8 +192,15 @@ QSize CoordinateTransformer::getTransformedCropSize() const {
 colorscreen::point_t CoordinateTransformer::baseToTransformed(
     colorscreen::point_t p, double baseWidth, double baseHeight) const {
     if (baseWidth <= 0 || baseHeight <= 0) return p;
-    double px = p.x / baseWidth;
-    double py = p.y / baseHeight;
+
+    /* Scan coordinates name pixel centers with integer coordinates, while the
+       quarter-turn/mirror transform used by QImage::transformed() operates on
+       pixel-cell edges.  Move to edge coordinates before applying the
+       presentation transform and back to center coordinates afterwards.  The
+       old width-x convention placed mirrored/rotated mouse tools one source
+       pixel away from the rendered image (notably one pixel down at 270°). */
+    double px = (p.x + 0.5) / baseWidth;
+    double py = (p.y + 0.5) / baseHeight;
     if (m_mirror) px = 1.0 - px;
     double u = 0, v = 0;
     if (m_rotation == 0) { u = px; v = py; }
@@ -201,22 +208,22 @@ colorscreen::point_t CoordinateTransformer::baseToTransformed(
     else if (m_rotation == 2) { u = 1.0 - px; v = 1.0 - py; }
     else { u = py; v = 1.0 - px; }
     QSize ts = transformedSize(baseWidth, baseHeight);
-    return {u * ts.width(), v * ts.height()};
+    return {u * ts.width() - 0.5, v * ts.height() - 0.5};
 }
 
 colorscreen::point_t CoordinateTransformer::transformedToBase(
     colorscreen::point_t p, double baseWidth, double baseHeight) const {
     QSize ts = transformedSize(baseWidth, baseHeight);
     if (ts.width() <= 0 || ts.height() <= 0) return p;
-    double u = p.x / ts.width();
-    double v = p.y / ts.height();
+    double u = (p.x + 0.5) / ts.width();
+    double v = (p.y + 0.5) / ts.height();
     double px = 0, py = 0;
     if (m_rotation == 0) { px = u; py = v; }
     else if (m_rotation == 1) { px = v; py = 1.0 - u; }
     else if (m_rotation == 2) { px = 1.0 - u; py = 1.0 - v; }
     else { px = 1.0 - v; py = u; }
     if (m_mirror) px = 1.0 - px;
-    return {px * baseWidth, py * baseHeight};
+    return {px * baseWidth - 0.5, py * baseHeight - 0.5};
 }
 
 colorscreen::point_t CoordinateTransformer::scanToRender(
