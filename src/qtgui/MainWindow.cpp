@@ -6328,6 +6328,11 @@ void MainWindow::onAdaptiveSharpeningRequested(
     const AdaptiveSharpeningParameters &parameters) {
   if (!m_scan)
     return;
+  if (!colorscreen::screen_geometry_configured_p(m_scrToImgParams)) {
+    statusBar()->showMessage(
+        tr("Fit screen geometry before adaptive sharpening analysis."), 3000);
+    return;
+  }
 
   // Create progress info
   auto progress = std::make_shared<colorscreen::progress_info>();

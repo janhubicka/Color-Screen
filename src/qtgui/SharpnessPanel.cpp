@@ -615,8 +615,9 @@ protected:
   bool requiresScan() const override { return false; }
   
   bool isTileRenderingEnabled(const ParameterState &state) const override {
-      // Always enabled regardless of scrToImg setting
-      return true;
+      /* Blurred and sharpened screen tiles convert capture MTF dimensions to
+         screen units, so an arbitrary fallback scale would be misleading. */
+      return colorscreen::screen_geometry_configured_p(state.scrToImg);
   }
 
 private:
@@ -1099,14 +1100,12 @@ void SharpnessPanel::setupUi() {
 
   addSeparator("Adaptive sharpening");
   
-  QPushButton *analyzeDisplacementsBtn = new QPushButton(tr("Analyze displacements"));
-  analyzeDisplacementsBtn->setToolTip(tr("Run adaptive sharpening analysis"));
-  connect(analyzeDisplacementsBtn, &QPushButton::clicked, this, &SharpnessPanel::onAnalyzeDisplacements);
-  
-  if (m_currentGroupForm)
-    m_currentGroupForm->addRow(analyzeDisplacementsBtn);
-  else
-    m_form->addRow(analyzeDisplacementsBtn);
+  addButtonParameter("", tr("Analyze displacements"),
+      [this]() { onAnalyzeDisplacements(); },
+      [](const ParameterState &s) {
+        return colorscreen::screen_geometry_configured_p(s.scrToImg);
+      },
+      tr("Run adaptive sharpening analysis after screen geometry has been established."));
 
   m_adaptiveChart = new AdaptiveSharpeningChart(this);
   m_adaptiveChart->initialize(10, 10); // Default size until real data comes
