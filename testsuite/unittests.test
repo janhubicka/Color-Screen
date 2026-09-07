@@ -106,12 +106,9 @@ main (int argc, char **argv)
       return 1;
     }
   scr_to_img geometry_map;
-  if (geometry_map.set_parameters (default_geometry, geometry_image)
-      || !geometry_map.set_parameters_for_early_correction (
-          default_geometry, geometry_image.width, geometry_image.height))
+  if (geometry_map.set_parameters (default_geometry, geometry_image))
     {
-      std::fprintf (stderr,
-                    "Unconfigured geometry was accepted or early correction rejected\n");
+      std::fprintf (stderr, "Unconfigured geometry produced a full map\n");
       return 1;
     }
   default_geometry.coordinate1 = { 8, 0 };
