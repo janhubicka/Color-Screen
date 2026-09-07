@@ -1,0 +1,132 @@
+name: Agent mouse coordinate helper
+
+on:
+  push:
+    branches: [agent/qtgui-mouse-coordinate-helper]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/qtgui-mouse-coordinate-alignment
+          fetch-depth: 0
+      - name: Add coordinate regression and active-view routing
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          changed = set()
+
+          def edit(path, old, new, count=1):
+              p = Path(path)
+              text = p.read_text()
+              found = text.count(old)
+              if found != count:
+                  raise SystemExit(f"{path}: expected {count} occurrence(s), found {found}: {old[:120]!r}")
+              p.write_text(text.replace(old, new, count))
+              changed.add(path)
+
+          def edit_function(path, signature, old, new, count=1):
+              p = Path(path)
+              text = p.read_text()
+              start = text.find(signature)
+              if start < 0:
+                  raise SystemExit(f"{path}: function not found: {signature}")
+              brace = text.find('{', start)
+              if brace < 0:
+                  raise SystemExit(f"{path}: opening brace not found: {signature}")
+              depth = 0
+              end = None
+              for i in range(brace, len(text)):
+                  if text[i] == '{':
+                      depth += 1
+                  elif text[i] == '}':
+                      depth -= 1
+                      if depth == 0:
+                          end = i + 1
+                          break
+              if end is None:
+                  raise SystemExit(f"{path}: closing brace not found: {signature}")
+              body = text[start:end]
+              found = body.count(old)
+              if found != count:
+                  raise SystemExit(f"{path}: {signature}: expected {count} occurrence(s), found {found}: {old[:120]!r}")
+              body = body.replace(old, new, count)
+              p.write_text(text[:start] + body + text[end:])
+              changed.add(path)
+
+          # Lock CoordinateTransformer to the same pixel-center convention used
+          # by Renderer/QImage::transformed, across every quarter-turn/mirror.
+          edit('src/qtgui/main.cpp',
+               '#include <QIcon>\n',
+               '#include <QIcon>\n#include <QImage>\n')
+          edit('src/qtgui/main.cpp',
+               '#include <QToolBar>\n',
+               '#include <QToolBar>\n#include <QTransform>\n')
+
+          marker = '''      auto renderModeAvailable = [](const ParameterState &state,\n'''
+          regression = '''      // Mouse tools and overlays use CoordinateTransformer, while the rendered\n      // scan uses QImage::transformed for quarter-turn/mirror presentation.\n      // Compare a real marker pixel so the two paths cannot drift by one pixel\n      // (the old edge-coordinate math mapped 270-degree rotation one pixel\n      // below the rendered pixel at high zoom).\n      {\n        constexpr int probeWidth = 7;\n        constexpr int probeHeight = 5;\n        constexpr int probeX = 1;\n        constexpr int probeY = 2;\n        colorscreen::image_data probeScan;\n        if (!probeScan.set_dimensions(probeWidth, probeHeight, true, false)) {\n          qCritical() << "Could not allocate coordinate-transform probe image";\n          app.exit(14);\n          return;\n        }\n\n        for (int rotation = 0; rotation < 4; ++rotation) {\n          for (bool mirror : {false, true}) {\n            QImage markerImage(probeWidth, probeHeight, QImage::Format_RGB32);\n            markerImage.fill(Qt::black);\n            markerImage.setPixelColor(probeX, probeY, Qt::red);\n            QTransform imageTransform;\n            if (rotation)\n              imageTransform.rotate(rotation * 90.0);\n            if (mirror)\n              imageTransform.scale(-1, 1);\n            const QImage transformed = markerImage.transformed(imageTransform);\n\n            QPoint expected(-1, -1);\n            for (int y = 0; y < transformed.height(); ++y)\n              for (int x = 0; x < transformed.width(); ++x)\n                if (transformed.pixelColor(x, y) == QColor(Qt::red))\n                  expected = QPoint(x, y);\n            if (expected.x() < 0) {\n              qCritical() << "QImage marker disappeared during coordinate smoke";\n              app.exit(14);\n              return;\n            }\n\n            colorscreen::render_parameters presentation;\n            presentation.scan_rotation = rotation;\n            presentation.scan_mirror = mirror;\n            CoordinateTransformer transformer(\n                &probeScan, presentation, nullptr,\n                colorscreen::render_scan_coordinates);\n            const colorscreen::point_t scanPoint = {probeX, probeY};\n            const colorscreen::point_t mapped =\n                transformer.scanToTransformedCrop(scanPoint);\n            const colorscreen::point_t roundTrip =\n                transformer.transformedToScanCrop(\n                    {(colorscreen::coord_t)expected.x(),\n                     (colorscreen::coord_t)expected.y()});\n            if (qAbs(mapped.x - expected.x()) > 1e-9 ||\n                qAbs(mapped.y - expected.y()) > 1e-9 ||\n                qAbs(roundTrip.x - probeX) > 1e-9 ||\n                qAbs(roundTrip.y - probeY) > 1e-9) {\n              qCritical() << "Mouse/render pixel-center transform mismatch"\n                          << "rotation" << rotation << "mirror" << mirror\n                          << "mapped" << mapped.x << mapped.y\n                          << "rendered" << expected;\n              app.exit(14);\n              return;\n            }\n          }\n        }\n      }\n\n''' + marker
+          edit('src/qtgui/main.cpp', marker, regression)
+
+          # Point and coordinate-system signals carry scan coordinates produced
+          # by the ImageWidget that received the event. Keep any immediate view
+          # refresh/counting on that same active canvas; this is the point-tool
+          # counterpart of the sender-aware rectangle conversion fixed in #263.
+          edit_function(
+              'src/qtgui/MainWindow.cpp',
+              'void MainWindow::onCoordinateSystemChanged()',
+              '  if (!m_scan)\n    return;\n',
+              '''  if (!m_scan)\n    return;\n\n  ImageWidget *image = qobject_cast<ImageWidget *>(sender());\n  if (!acceptsInspectorImageWidget(image))\n    image = inspectorImageWidget();\n''')
+          edit_function(
+              'src/qtgui/MainWindow.cpp',
+              'void MainWindow::onCoordinateSystemChanged()',
+              '''    if (prop.flags & colorscreen::render_type_property::NEEDS_SCR_TO_IMG) {\n      m_imageWidget->updateParameters(&m_rparams, &m_scrToImgParams,\n                                      &m_detectParams, &m_renderTypeParams,\n                                      &m_solverParams);\n    }\n''',
+              '''    if (image &&\n        (prop.flags & colorscreen::render_type_property::NEEDS_SCR_TO_IMG)) {\n      image->updateParameters(&m_rparams, &m_scrToImgParams,\n                              &m_detectParams, &m_renderTypeParams,\n                              &m_solverParams);\n    }\n''')
+
+          edit_function(
+              'src/qtgui/MainWindow.cpp',
+              'void MainWindow::onPointAdded(colorscreen::point_t imgPos,',
+              '  if (!m_scan)\n    return;\n',
+              '''  if (!m_scan)\n    return;\n\n  ImageWidget *image = qobject_cast<ImageWidget *>(sender());\n  if (!acceptsInspectorImageWidget(image))\n    image = inspectorImageWidget();\n''')
+          edit_function(
+              'src/qtgui/MainWindow.cpp',
+              'void MainWindow::onPointAdded(colorscreen::point_t imgPos,',
+              '''    // Update the image widget\n    m_imageWidget->updateParameters(&m_rparams, &m_scrToImgParams,\n                                    &m_detectParams, &m_renderTypeParams,\n                                    &m_solverParams);\n    m_imageWidget->update();\n''',
+              '''    // Refresh the canvas that produced the click.\n    if (image) {\n      image->updateParameters(&m_rparams, &m_scrToImgParams,\n                              &m_detectParams, &m_renderTypeParams,\n                              &m_solverParams);\n      image->update();\n    }\n''')
+          edit_function(
+              'src/qtgui/MainWindow.cpp',
+              'void MainWindow::onPointAdded(colorscreen::point_t imgPos,',
+              '      size_t count = m_imageWidget->registrationPointCount();\n',
+              '      size_t count = image ? image->registrationPointCount() : 0;\n')
+
+          edit_function(
+              'src/qtgui/MainWindow.cpp',
+              'void MainWindow::maybeTriggerAutoSolver()',
+              '  ParameterState newState = getCurrentState();\n',
+              '''  ImageWidget *image = qobject_cast<ImageWidget *>(sender());\n  if (!acceptsInspectorImageWidget(image))\n    image = inspectorImageWidget();\n\n  ParameterState newState = getCurrentState();\n''')
+          edit_function(
+              'src/qtgui/MainWindow.cpp',
+              'void MainWindow::maybeTriggerAutoSolver()',
+              '    size_t count = m_imageWidget->registrationPointCount();\n',
+              '    size_t count = image ? image->registrationPointCount() : 0;\n')
+
+          expected = {'src/qtgui/main.cpp', 'src/qtgui/MainWindow.cpp'}
+          if changed != expected:
+              raise SystemExit(f"unexpected changed set: {sorted(changed)}")
+          PY
+
+          git diff --check
+          git status --short
+          test "$(git diff --name-only | sort)" = "$(printf '%s\n' src/qtgui/MainWindow.cpp src/qtgui/main.cpp | sort)"
+          git add src/qtgui/MainWindow.cpp src/qtgui/main.cpp
+          git -c user.name='OpenAI Agent' \
+              -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+              commit -m 'qtgui: keep mouse edits on the active canvas' \
+                     -m 'Add a pixel-center transform regression against QImage quarter-turn/mirror presentation and keep point/coordinate callbacks tied to the ImageWidget that produced each mouse gesture.'
+          git push origin HEAD:agent/qtgui-mouse-coordinate-alignment
