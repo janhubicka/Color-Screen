@@ -1,0 +1,75 @@
+name: Agent geometry sentinel followup
+
+on:
+  push:
+    branches: [agent/geometry-unconfigured-helper]
+
+permissions:
+  contents: write
+
+jobs:
+  apply-followup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/geometry-unconfigured-sentinel
+          fetch-depth: 0
+      - name: Fix scan-only rendering and test geometry assumptions
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import subprocess
+
+          def edit(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              n = text.count(old)
+              if n != 1:
+                  raise SystemExit(f"{path}: expected exactly one match, found {n}")
+              p.write_text(text.replace(old, new, 1))
+
+          edit('src/libcolorscreen/render-to-scr.h',
+          '''  {\n    /* Initialize early so we can determine ranges before precomputing.  */\n    m_ok = m_scr_to_img.set_parameters (param, img);\n    if (m_ok)\n      m_pixel_size = m_scr_to_img.pixel_size (rparam.get_image_area (img.width, img.height));\n  }\n''',
+          '''  {\n    /* Capture-only renderers still need lens/early correction even when no\n       screen mapping has been fitted.  Build the full map only when geometry\n       exists; otherwise initialize just the geometry-independent correction\n       path.  Screen/final-coordinate consumers are gated separately.  */\n    m_geometry_configured = param.geometry_configured_p ();\n    m_ok = m_geometry_configured\n               ? m_scr_to_img.set_parameters (param, img)\n               : m_scr_to_img.set_parameters_for_early_correction (\n                     param, img.width, img.height);\n    if (m_ok && m_geometry_configured)\n      m_pixel_size = m_scr_to_img.pixel_size (\n          rparam.get_image_area (img.width, img.height));\n  }\n''')
+
+          edit('src/libcolorscreen/render-to-scr.h',
+          '''private:\n  int_image_area m_final_range;\n  bool m_ok;\n  coord_t m_pixel_size = -1;\n};\n''',
+          '''private:\n  int_image_area m_final_range;\n  bool m_ok;\n  /* True only when M_SCR_TO_IMG contains a complete screen mapping rather\n     than the early-correction-only state used by scan renderers.  */\n  bool m_geometry_configured = false;\n  coord_t m_pixel_size = -1;\n};\n''')
+
+          edit('src/libcolorscreen/render-to-scr.C',
+          '''  if (!m_ok)\n    return false;\n  const bool normalized_patches = flags & NORMALIZED_PATCHES;\n''',
+          '''  if (!m_ok)\n    return false;\n  const bool normalized_patches = flags & NORMALIZED_PATCHES;\n  /* Normalized screen patches have no meaning before a screen mapping is\n     configured.  Ordinary scan/image-layer precomputation remains valid.  */\n  if (normalized_patches && !m_geometry_configured)\n    return false;\n''')
+
+          edit('src/libcolorscreen/unittests.C',
+          '''    truth.type = Paget;\n    truth.scanner_type = fixed_lens;\n    truth.lens_correction.center = {0.5, 0.5};\n''',
+          '''    truth.type = Paget;\n    truth.scanner_type = fixed_lens;\n    /* This test synthesizes registration points through a complete screen\n       map.  Make its identity geometry explicit now that default parameters\n       deliberately mean \"geometry not configured\".  */\n    truth.coordinate1 = {1, 0};\n    truth.coordinate2 = {0, 1};\n    truth.lens_correction.center = {0.5, 0.5};\n''')
+
+          changed = [line[3:] for line in subprocess.check_output(
+              ['git','status','--short'], text=True).splitlines()]
+          expected = sorted(['src/libcolorscreen/render-to-scr.h',
+                             'src/libcolorscreen/render-to-scr.C',
+                             'src/libcolorscreen/unittests.C'])
+          if sorted(changed) != expected:
+              raise SystemExit(f"unexpected changed files: {changed}")
+          PY
+          git diff --check
+          git diff --stat
+          git config user.name "OpenAI Agent"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/libcolorscreen/render-to-scr.h src/libcolorscreen/render-to-scr.C src/libcolorscreen/unittests.C
+          git commit -F - <<'EOF'
+          render: keep scan-only paths independent of screen geometry
+
+          A zero screen mapping must disable operations that consume screen or
+          final coordinates, but it must not disable capture-only rendering.
+          Let render_to_scr initialize the early optical-correction path when no
+          full geometry is configured, while continuing to reject normalized
+          screen-patch precomputation without a mapping.
+
+          Also make the lens-warp solver regression's intentional identity map
+          explicit instead of inheriting it from the old global geometry default.
+          This preserves the zero sentinel without weakening existing scan output.
+          EOF
+          git push origin HEAD:agent/geometry-unconfigured-sentinel
