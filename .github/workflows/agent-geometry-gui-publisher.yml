@@ -1,0 +1,216 @@
+name: Agent geometry GUI publisher
+
+on:
+  push:
+    branches:
+      - agent/geometry-unconfigured-publisher
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/geometry-unconfigured-sentinel
+          fetch-depth: 0
+      - name: Gate geometry consumers in QtGUI
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+
+          def replace(path, old, new, count=1):
+              p = Path(path)
+              text = p.read_text()
+              actual = text.count(old)
+              if actual != count:
+                  raise SystemExit(f"{path}: expected {count} occurrences, found {actual}: {old[:120]!r}")
+              p.write_text(text.replace(old, new, count))
+
+          replace("src/qtgui/NavigationView.cpp",
+                  "colorscreen::screen_has_regular_geometry_p(\n                         m_scrToImg->type)",
+                  "colorscreen::screen_geometry_configured_p(*m_scrToImg)", 2)
+
+          replace("src/qtgui/CoordinateTransformer.cpp",
+                  "scrToImg && colorscreen::screen_has_regular_geometry_p(\n                              scrToImg->type)",
+                  "scrToImg && colorscreen::screen_geometry_configured_p(*scrToImg)")
+
+          replace("src/qtgui/RenderDialog.cpp",
+                  "(!hasScreenCapture || !screen_has_regular_geometry_p(scrParams.type))",
+                  "(!hasScreenCapture || !screen_geometry_configured_p(scrParams))")
+          replace("src/qtgui/RenderDialog.cpp",
+                  "if (colorscreen::screen_has_regular_geometry_p(scrParams.type)) {",
+                  "if (colorscreen::screen_geometry_configured_p(scrParams)) {")
+
+          replace("src/qtgui/ImageViewWindow.cpp",
+                  "!screen_has_regular_geometry_p(m_scrToImgParams.type)",
+                  "!screen_geometry_configured_p(m_scrToImgParams)")
+          replace("src/qtgui/ImageViewWindow.cpp",
+                  "colorscreen::screen_has_regular_geometry_p(\n                       m_scrToImgParams.type)",
+                  "colorscreen::screen_geometry_configured_p(m_scrToImgParams)")
+
+          replace("src/qtgui/main.cpp",
+                  "!colorscreen::screen_has_regular_geometry_p(state.scrToImg.type)",
+                  "!colorscreen::screen_geometry_configured_p(state.scrToImg)")
+
+          path = "src/qtgui/CapturePanel.cpp"
+          replace(path,
+                  "        if (img && img->width > 0 && img->height > 0) {\n            colorscreen::scr_to_img map;\n            map.set_parameters(state.scrToImg, *img);\n            double pixel_size = map.pixel_size({0, 0, img->width, img->height});\n            double estimated_dpi = state.scrToImg.estimate_dpi(pixel_size);\n            onUseRes(estimated_dpi);\n        }",
+                  "        if (img && img->width > 0 && img->height > 0\n            && colorscreen::screen_geometry_configured_p(state.scrToImg)) {\n            colorscreen::scr_to_img map;\n            if (!map.set_parameters(state.scrToImg, *img))\n                return;\n            double pixel_size = map.pixel_size({0, 0, img->width, img->height});\n            double estimated_dpi = state.scrToImg.estimate_dpi(pixel_size);\n            onUseRes(estimated_dpi);\n        }")
+          replace(path,
+                  "        bool showScreenRes = false;\n        if (colorscreen::screen_has_regular_geometry_p(state.scrToImg.type)) {\n            if (img && img->width > 0 && img->height > 0) {\n                colorscreen::scr_to_img map;\n                map.set_parameters(state.scrToImg, *img);\n                double pixel_size = map.pixel_size({0, 0, img->width, img->height});\n                double estimated_dpi = state.scrToImg.estimate_dpi(pixel_size);\n                if (estimated_dpi > 0) {\n                    showScreenRes = true;\n                    m_screenResolutionValue->setText(QString(\"%1 PPI\").arg(estimated_dpi, 0, 'f', 1));\n                    m_useScreenResBtn->setVisible(std::abs(estimated_dpi - state.rparams.sharpen.scanner_mtf.scan_dpi) > 0.1);\n                }\n            }\n        }",
+                  "        bool showScreenRes = false;\n        if (colorscreen::screen_geometry_configured_p(state.scrToImg)) {\n            if (img && img->width > 0 && img->height > 0) {\n                colorscreen::scr_to_img map;\n                if (map.set_parameters(state.scrToImg, *img)) {\n                    double pixel_size = map.pixel_size({0, 0, img->width, img->height});\n                    double estimated_dpi = state.scrToImg.estimate_dpi(pixel_size);\n                    if (estimated_dpi > 0) {\n                        showScreenRes = true;\n                        m_screenResolutionValue->setText(QString(\"%1 PPI\").arg(estimated_dpi, 0, 'f', 1));\n                        m_useScreenResBtn->setVisible(std::abs(estimated_dpi - state.rparams.sharpen.scanner_mtf.scan_dpi) > 0.1);\n                    }\n                }\n            }\n        }")
+
+          path = "src/qtgui/GeometryPanel.cpp"
+          replace(path,
+                  "  addSeparator(\"Automatic registration\");\n\n  addButtonParameter(\"Step 1\"",
+                  "  addSeparator(\"Automatic registration\");\n\n"
+                  "  auto hasConfiguredGeometry = [](const ParameterState &s) {\n"
+                  "      return colorscreen::screen_geometry_configured_p(s.scrToImg);\n"
+                  "  };\n\n"
+                  "  addButtonParameter(\"Step 1\"")
+          replace(path,
+                  "  addButtonParameter(\"Correction\", \"Swap screen colors\", [this]() {\n      emit alternateColorsRequested();\n  }, nullptr,",
+                  "  addButtonParameter(\"Correction\", \"Swap screen colors\", [this]() {\n      emit alternateColorsRequested();\n  }, hasConfiguredGeometry,")
+          replace(path,
+                  "  addButtonParameter(\"Step 2\", \"Optimize coordinates\", [this]() {\n      emit optimizeCoordinatesRequested();\n  }, nullptr,",
+                  "  addButtonParameter(\"Step 2\", \"Optimize coordinates\", [this]() {\n      emit optimizeCoordinatesRequested();\n  }, hasConfiguredGeometry,")
+          replace(path,
+                  "  addButtonParameter(\"Step 3\", \"Add registration points\", [this]() {\n      emit automaticallyAddPointsRequested(m_finetuneAreaParams);\n  }, nullptr,",
+                  "  addButtonParameter(\"Step 3\", \"Add registration points\", [this]() {\n      emit automaticallyAddPointsRequested(m_finetuneAreaParams);\n  }, hasConfiguredGeometry,")
+          replace(path,
+                  "  addButtonParameter(\"\", \"Add points in selected area\", [this]() {\n      emit automaticallyAddPointsInAreaRequested(m_finetuneAreaParams);\n  }, nullptr,",
+                  "  addButtonParameter(\"\", \"Add points in selected area\", [this]() {\n      emit automaticallyAddPointsInAreaRequested(m_finetuneAreaParams);\n  }, hasConfiguredGeometry,")
+          replace(path,
+                  "  auto hasFinalGeometry = [](const ParameterState &s) {\n      return colorscreen::screen_has_regular_geometry_p(s.scrToImg.type);\n  };",
+                  "  auto hasFinalGeometry = [](const ParameterState &s) {\n      return colorscreen::screen_geometry_configured_p(s.scrToImg);\n  };")
+          replace(path,
+                  "  bool showLens = hasScan && !state.scrToImg.lens_correction.is_noop();\n  bool showPerspective = hasScan && (std::abs(state.scrToImg.tilt_x) > 1e-6 || std::abs(state.scrToImg.tilt_y) > 1e-6);\n  bool showNonlinear = hasScan && (state.scrToImg.mesh_trans != nullptr);\n  bool showFinal = hasScan && colorscreen::screen_has_regular_geometry_p(\n                                  state.scrToImg.type);",
+                  "  const bool hasGeometry = hasScan &&\n      colorscreen::screen_geometry_configured_p(state.scrToImg);\n  bool showLens = hasGeometry && !state.scrToImg.lens_correction.is_noop();\n  bool showPerspective = hasGeometry && (std::abs(state.scrToImg.tilt_x) > 1e-6 || std::abs(state.scrToImg.tilt_y) > 1e-6);\n  bool showNonlinear = hasGeometry && (state.scrToImg.mesh_trans != nullptr);\n  bool showFinal = hasGeometry;")
+          replace(path,
+                  "  if (!hasScan) {\n    if(m_deformationChart) m_deformationChart->clear();",
+                  "  if (!hasGeometry) {\n    if(m_deformationChart) m_deformationChart->clear();")
+
+          path = "src/qtgui/SharpnessPanel.cpp"
+          replace(path,
+                  "img && colorscreen::screen_has_regular_geometry_p(\n                 state.scrToImg.type)",
+                  "img && colorscreen::screen_geometry_configured_p(state.scrToImg)")
+          replace(path,
+                  "  m_analyzeAreaBtn = addToggleButtonParameter(\"\", tr(\"Analyze area\"), [this](bool checked) {\n    emit focusAnalysisRequested(checked, m_finetuneFlags);\n  }, nullptr, nullptr,",
+                  "  m_analyzeAreaBtn = addToggleButtonParameter(\"\", tr(\"Analyze area\"), [this](bool checked) {\n    emit focusAnalysisRequested(checked, m_finetuneFlags);\n  }, nullptr, [](const ParameterState &s) {\n    return colorscreen::screen_geometry_configured_p(s.scrToImg);\n  },")
+          replace(path,
+                  "void SharpnessPanel::setFocusAreaAnalysisState(int candidateCount, bool running,\n                                               const QString &summary) {\n    if (m_findFocusAreasBtn)\n        m_findFocusAreasBtn->setEnabled(!running);\n    if (m_analyzeFocusAreasBtn)\n        m_analyzeFocusAreasBtn->setEnabled(!running && candidateCount >= 3);\n    if (m_focusAreaStatusLabel) {\n        if (!summary.isEmpty())\n            m_focusAreaStatusLabel->setText(summary);\n        else if (running)\n            m_focusAreaStatusLabel->setText(tr(\"Focus-area analysis running…\"));\n        else\n            m_focusAreaStatusLabel->setText(\n                tr(\"%1 candidate focus area(s) available.\").arg(candidateCount));\n    }\n}",
+                  "void SharpnessPanel::setFocusAreaAnalysisState(int candidateCount, bool running,\n                                               const QString &summary) {\n    const bool geometryReady = colorscreen::screen_geometry_configured_p(\n        m_stateGetter().scrToImg);\n    if (m_findFocusAreasBtn)\n        m_findFocusAreasBtn->setEnabled(!running && geometryReady);\n    if (m_analyzeFocusAreasBtn)\n        m_analyzeFocusAreasBtn->setEnabled(!running && geometryReady && candidateCount >= 3);\n    if (m_focusAreaStatusLabel) {\n        if (!geometryReady)\n            m_focusAreaStatusLabel->setText(\n                tr(\"Fit screen geometry before focus analysis.\"));\n        else if (!summary.isEmpty())\n            m_focusAreaStatusLabel->setText(summary);\n        else if (running)\n            m_focusAreaStatusLabel->setText(tr(\"Focus-area analysis running…\"));\n        else\n            m_focusAreaStatusLabel->setText(\n                tr(\"%1 candidate focus area(s) available.\").arg(candidateCount));\n    }\n}")
+
+          path = "src/qtgui/ProfilePanel.cpp"
+          replace(path,
+                  "  // Update spot count label\n  int n = (int)state.profileSpots.size();",
+                  "  const bool geometryReady =\n      colorscreen::screen_geometry_configured_p(state.scrToImg);\n  const bool hasImage = m_imageGetter() != nullptr;\n  if (m_addSpotBtn) {\n    if (!geometryReady && m_addSpotBtn->isChecked())\n      m_addSpotBtn->setChecked(false);\n    m_addSpotBtn->setEnabled(geometryReady && hasImage);\n  }\n  if (m_autoCheck)\n    m_autoCheck->setEnabled(geometryReady);\n\n  // Update spot count label\n  int n = (int)state.profileSpots.size();")
+          replace(path,
+                  "    m_optimizeBtn->setEnabled(n >= 4 && m_imageGetter() != nullptr);",
+                  "    m_optimizeBtn->setEnabled(geometryReady && n >= 4 && hasImage);")
+          replace(path,
+                  "  if (isAutoEnabled() && spotsChanged && n >= 4)\n    emit optimizeColorRequested(true);",
+                  "  if (geometryReady && isAutoEnabled() && spotsChanged && n >= 4)\n    emit optimizeColorRequested(true);")
+
+          replace("src/qtgui/TilePreviewPanel.cpp",
+                  "      if (scan) {\n        req.scanWidth = scan->width;\n        req.scanHeight = scan->height;\n        scr_to_img scrToImgObj;\n        scrToImgObj.set_parameters(state.scrToImg, scan->width, scan->height);\n        req.pixelSize = scrToImgObj.pixel_size({0,0,scan->width, scan->height});\n      } else {",
+                  "      if (scan) {\n        req.scanWidth = scan->width;\n        req.scanHeight = scan->height;\n        req.pixelSize = 1.0;\n        if (screen_geometry_configured_p(state.scrToImg)) {\n          scr_to_img scrToImgObj;\n          if (scrToImgObj.set_parameters(state.scrToImg, scan->width, scan->height))\n            req.pixelSize = scrToImgObj.pixel_size({0,0,scan->width, scan->height});\n        }\n      } else {")
+
+          path = "src/qtgui/MainWindow.cpp"
+          replace(path,
+                  "colorscreen::screen_has_regular_geometry_p(\n                     m_scrToImgParams.type)",
+                  "colorscreen::screen_geometry_configured_p(m_scrToImgParams)", 1)
+          replace(path,
+                  "!colorscreen::screen_has_regular_geometry_p(\n                                  m_scrToImgParams.type)",
+                  "!colorscreen::screen_geometry_configured_p(m_scrToImgParams)")
+          replace(path,
+                  "if (colorscreen::screen_has_regular_geometry_p(\n                    m_scrToImgParams.type)) {\n              m_renderTypeParams.type = colorscreen::render_type_interpolated;",
+                  "if (colorscreen::screen_geometry_configured_p(m_scrToImgParams)) {\n              m_renderTypeParams.type = colorscreen::render_type_interpolated;")
+          replace(path,
+                  "  const bool regularScreen = colorscreen::screen_has_regular_geometry_p(type);\n  const bool stochasticScreen",
+                  "  const bool regularScreen = colorscreen::screen_has_regular_geometry_p(type);\n  const bool geometryConfigured =\n      colorscreen::screen_geometry_configured_p(m_scrToImgParams);\n  const bool stochasticScreen")
+          replace(path,
+                  "    if (pointCount == 0) {\n      registration = tr(\"%1 — no points; detect or add at least %2\")\n                         .arg(prefix)\n                         .arg(minimumPoints);",
+                  "    if (!geometryConfigured) {\n      registration = pointCount >= minimumPoints\n          ? tr(\"%1 — geometry not configured; fit from the existing %2 points\")\n                .arg(prefix)\n                .arg(pointCount)\n          : tr(\"%1 — geometry not configured; detect screen coordinates\")\n                .arg(prefix);\n    } else if (pointCount == 0) {\n      registration = tr(\"%1 — no points; detect or add at least %2\")\n                         .arg(prefix)\n                         .arg(minimumPoints);")
+          replace(path,
+                  "  bool hasSelection = image && !image->selectedPoints().empty();\n",
+                  "  bool hasSelection = image && !image->selectedPoints().empty();\n  const bool geometryConfigured = m_scan &&\n      colorscreen::screen_geometry_configured_p(m_scrToImgParams);\n")
+          replace(path,
+                  "    m_pruneMisplacedAction->setEnabled(hasSelection);",
+                  "    m_pruneMisplacedAction->setEnabled(hasSelection && geometryConfigured);")
+          replace(path,
+                  "    bool canAddPoints = m_scan && colorscreen::screen_has_regular_geometry_p(\n                                     m_scrToImgParams.type);",
+                  "    bool canAddPoints = geometryConfigured;", 1)
+          replace(path,
+                  "    bool canSetCenter = m_scan && colorscreen::screen_has_regular_geometry_p(\n                                     m_scrToImgParams.type);",
+                  "    bool canSetCenter = geometryConfigured;", 1)
+          replace(path,
+                  "  if (m_optimizeGeometryAction) {\n    m_optimizeGeometryAction->setEnabled(count >= (size_t)min_points);\n  }",
+                  "  if (m_optimizeGeometryAction) {\n    m_optimizeGeometryAction->setEnabled(count >= (size_t)min_points);\n  }\n  if (m_optimizeCoordinatesAction)\n    m_optimizeCoordinatesAction->setEnabled(geometryConfigured);")
+          replace(path,
+                  "  colorscreen::scr_to_img map;\n  map.set_parameters(m_scrToImgParams, *m_scan);",
+                  "  colorscreen::scr_to_img map;\n  if (!map.set_parameters(m_scrToImgParams, *m_scan))\n    return;", 1)
+          replace(path,
+                  "    colorscreen::scr_to_img map;\n    map.set_parameters(m_scrToImgParams, *m_scan);\n    colorscreen::point_t screen = map.to_scr(imgPos);",
+                  "    colorscreen::scr_to_img map;\n    if (!map.set_parameters(m_scrToImgParams, *m_scan)) {\n      statusBar()->showMessage(tr(\"Fit screen geometry before adding profile spots.\"), 3000);\n      return;\n    }\n    colorscreen::point_t screen = map.to_scr(imgPos);")
+          replace(path,
+                  "void MainWindow::onOptimizeCoordinates() {\n  if (!m_scan || !m_coordOptimizationWorker)\n    return;\n\n  m_coordOptimizationWorker->setScan(m_scan);",
+                  "void MainWindow::onOptimizeCoordinates() {\n  if (!m_scan || !m_coordOptimizationWorker)\n    return;\n  if (!colorscreen::screen_geometry_configured_p(m_scrToImgParams)) {\n    statusBar()->showMessage(tr(\"Detect screen coordinates before refining them.\"), 3000);\n    return;\n  }\n\n  m_coordOptimizationWorker->setScan(m_scan);")
+          replace(path,
+                  "void MainWindow::onAutomaticallyAddPointsRequested(const colorscreen::finetune_area_parameters &params) {\n  if (!m_scan) {\n    return;\n  }",
+                  "void MainWindow::onAutomaticallyAddPointsRequested(const colorscreen::finetune_area_parameters &params) {\n  if (!m_scan) {\n    return;\n  }\n  if (!colorscreen::screen_geometry_configured_p(m_scrToImgParams)) {\n    statusBar()->showMessage(tr(\"Detect screen coordinates before adding registration points.\"), 3000);\n    return;\n  }")
+          replace(path,
+                  "void MainWindow::onAutomaticallyAddPointsInAreaRequested(\n    const colorscreen::finetune_area_parameters &params) {\n  if (!m_scan)\n    return;\n\n  startAreaSelection(",
+                  "void MainWindow::onAutomaticallyAddPointsInAreaRequested(\n    const colorscreen::finetune_area_parameters &params) {\n  if (!m_scan)\n    return;\n  if (!colorscreen::screen_geometry_configured_p(m_scrToImgParams)) {\n    statusBar()->showMessage(tr(\"Detect screen coordinates before adding registration points.\"), 3000);\n    return;\n  }\n\n  startAreaSelection(")
+          replace(path,
+                  "  ParameterState state = getCurrentState();\n  if (state.profileSpots.size() < 4)\n    return;",
+                  "  ParameterState state = getCurrentState();\n  if (!colorscreen::screen_geometry_configured_p(state.scrToImg)) {\n    statusBar()->showMessage(tr(\"Fit screen geometry before optimizing the color profile.\"), 3000);\n    return;\n  }\n  if (state.profileSpots.size() < 4)\n    return;", 1)
+
+          path = ".agents/qtgui.md"
+          replace(path,
+                  "Preserve explicit sentinel values such as `0 = not configured/process default`: when a sentinel lies below the ordinary numeric interval, pass it as the helper's separate special minimum instead of clamping it to the first explicit value.",
+                  "Preserve explicit sentinel values such as `0 = not configured/process default`: when a sentinel lies below the ordinary numeric interval, pass it as the helper's separate special minimum instead of clamping it to the first explicit value. Screen geometry follows the same rule: fresh `scr_to_img_parameters` have zero coordinate vectors, meaning geometry has not been established. `screen_has_regular_geometry_p(type)` says only that the selected process has a regular lattice; code that consumes screen/final coordinates must use `screen_geometry_configured_p(params)` (and still handle `scr_to_img::set_parameters()` failure). Detection/discovery code is the intentional exception because it establishes the mapping.")
+          PY
+
+          git diff --check
+          expected=".agents/qtgui.md
+          src/qtgui/CapturePanel.cpp
+          src/qtgui/CoordinateTransformer.cpp
+          src/qtgui/GeometryPanel.cpp
+          src/qtgui/ImageViewWindow.cpp
+          src/qtgui/MainWindow.cpp
+          src/qtgui/NavigationView.cpp
+          src/qtgui/ProfilePanel.cpp
+          src/qtgui/RenderDialog.cpp
+          src/qtgui/SharpnessPanel.cpp
+          src/qtgui/TilePreviewPanel.cpp
+          src/qtgui/main.cpp"
+          actual="$(git diff --name-only | sort)"
+          test "$actual" = "$expected"
+
+          git config user.name "OpenAI Agent"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- $actual
+          git commit -F - <<'EOF'
+          qtgui: require configured geometry for mapped operations
+
+          Distinguish a regular screen process from a screen-to-image mapping that has
+          actually been established. Keep process selection and coordinate discovery
+          available from the new zero-vector sentinel, but hide or disable final
+          coordinates, mapped render modes, screen-derived resolution, registration
+          refinement, focus analysis, profile spots, and color-profile optimization
+          until geometry is configured.
+
+          Check scr_to_img setup at direct GUI call sites rather than assuming the map
+          exists. Synthetic process previews remain available because they need only a
+          screen type, not document geometry. Geometry itself remains visible so the
+          user can run detection or fit from existing solver points.
+
+          Document the capability-versus-state distinction for future QtGUI work.
+          EOF
+          git push origin HEAD:agent/geometry-unconfigured-sentinel
