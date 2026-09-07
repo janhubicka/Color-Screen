@@ -107,13 +107,24 @@ void ProfilePanel::onParametersRefreshed(const ParameterState &state)
 {
   // (m_showProfileSpotsCheck is kept in sync via MainWindow → setShowProfileSpots)
 
+  const bool geometryReady =
+      colorscreen::screen_geometry_configured_p(state.scrToImg);
+  const bool hasImage = m_imageGetter() != nullptr;
+  if (m_addSpotBtn) {
+    if (!geometryReady && m_addSpotBtn->isChecked())
+      m_addSpotBtn->setChecked(false);
+    m_addSpotBtn->setEnabled(geometryReady && hasImage);
+  }
+  if (m_autoCheck)
+    m_autoCheck->setEnabled(geometryReady);
+
   // Update spot count label
   int n = (int)state.profileSpots.size();
   m_spotCountLabel->setText(n == 0 ? tr("No spots") :
                             n == 1 ? tr("1 spot")    :
                             tr("%1 spots").arg(n));
   if (m_optimizeBtn)
-    m_optimizeBtn->setEnabled(n >= 4 && m_imageGetter() != nullptr);
+    m_optimizeBtn->setEnabled(geometryReady && n >= 4 && hasImage);
 
   // Auto-trigger only when the profile-spot set itself changed.  Parameter
   // refreshes also happen when an optimization result is applied; treating
@@ -130,7 +141,7 @@ void ProfilePanel::onParametersRefreshed(const ParameterState &state)
     }
   }
   m_lastAutoSpots = state.profileSpots;
-  if (isAutoEnabled() && spotsChanged && n >= 4)
+  if (geometryReady && isAutoEnabled() && spotsChanged && n >= 4)
     emit optimizeColorRequested(true);
 }
 

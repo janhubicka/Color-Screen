@@ -86,7 +86,7 @@ RenderDialog::RenderDialog(
     const bool supportsScreenDetection =
         render_parameters::capture_supports_screen_detection_p(capture);
     if ((prop.flags & render_type_property::NEEDS_SCR_TO_IMG) &&
-        (!hasScreenCapture || !screen_has_regular_geometry_p(scrParams.type)))
+        (!hasScreenCapture || !screen_geometry_configured_p(scrParams)))
       show = false;
     if ((prop.flags & render_type_property::USES_SCR_DETECT) &&
         (!supportsScreenDetection || !screen_present_p(scrParams.type)))
@@ -131,7 +131,7 @@ RenderDialog::RenderDialog(
   connect(m_depthCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
           this, &RenderDialog::updateSizePreview);
 
-  if (colorscreen::screen_has_regular_geometry_p(scrParams.type)) {
+  if (colorscreen::screen_geometry_configured_p(scrParams)) {
     m_geometryCombo = new QComboBox(m_nonDngWidget);
     for (int i = 0; i < (int)render_to_file_params::max_geometry; ++i)
       m_geometryCombo->addItem(render_to_file_params::geometry_names[i].name, i);

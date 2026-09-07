@@ -1039,7 +1039,9 @@ void SharpnessPanel::setupUi() {
 
   m_analyzeAreaBtn = addToggleButtonParameter("", tr("Analyze area"), [this](bool checked) {
     emit focusAnalysisRequested(checked, m_finetuneFlags);
-  }, nullptr, nullptr, "Experimental tool that attempts to find the best Focus/Sigma by analyzing the local contrast and sharpness of the selected area.");
+  }, nullptr, [](const ParameterState &s) {
+    return colorscreen::screen_geometry_configured_p(s.scrToImg);
+  }, "Experimental tool that attempts to find the best Focus/Sigma by analyzing the local contrast and sharpness of the selected area.");
 
   m_findFocusAreasBtn = new QPushButton(tr("Find focus analysis areas"), this);
   m_findFocusAreasBtn->setToolTip(
@@ -1156,8 +1158,7 @@ void SharpnessPanel::updateMTFChart() {
         && chartParameters.can_simulate_diffraction_p();
   // Calculate screen frequency if applicable
   double screenFreq = -1;
-  if (img && colorscreen::screen_has_regular_geometry_p(
-                 state.scrToImg.type)) {
+  if (img && colorscreen::screen_geometry_configured_p(state.scrToImg)) {
       colorscreen::scr_to_img scrToImgObj;
       scrToImgObj.set_parameters(state.scrToImg, *img);
       double pixel_size = scrToImgObj.pixel_size({0, 0, img->width, img->height});
@@ -1867,12 +1868,17 @@ void SharpnessPanel::setFocusAnalysisChecked(bool checked) {
 /** Update controls for the document-local automatic focus-area workflow. */
 void SharpnessPanel::setFocusAreaAnalysisState(int candidateCount, bool running,
                                                const QString &summary) {
+    const bool geometryReady = colorscreen::screen_geometry_configured_p(
+        m_stateGetter().scrToImg);
     if (m_findFocusAreasBtn)
-        m_findFocusAreasBtn->setEnabled(!running);
+        m_findFocusAreasBtn->setEnabled(!running && geometryReady);
     if (m_analyzeFocusAreasBtn)
-        m_analyzeFocusAreasBtn->setEnabled(!running && candidateCount >= 3);
+        m_analyzeFocusAreasBtn->setEnabled(!running && geometryReady && candidateCount >= 3);
     if (m_focusAreaStatusLabel) {
-        if (!summary.isEmpty())
+        if (!geometryReady)
+            m_focusAreaStatusLabel->setText(
+                tr("Fit screen geometry before focus analysis."));
+        else if (!summary.isEmpty())
             m_focusAreaStatusLabel->setText(summary);
         else if (running)
             m_focusAreaStatusLabel->setText(tr("Focus-area analysis running…"));

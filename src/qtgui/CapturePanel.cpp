@@ -213,9 +213,11 @@ void CapturePanel::setupUi()
     addValueWithUseButton("Resolution from screen", &m_screenResolutionValue, &m_useScreenResBtn, [this, onUseRes]() {
         ParameterState state = m_stateGetter();
         auto img = m_imageGetter();
-        if (img && img->width > 0 && img->height > 0) {
+        if (img && img->width > 0 && img->height > 0
+            && colorscreen::screen_geometry_configured_p(state.scrToImg)) {
             colorscreen::scr_to_img map;
-            map.set_parameters(state.scrToImg, *img);
+            if (!map.set_parameters(state.scrToImg, *img))
+                return;
             double pixel_size = map.pixel_size({0, 0, img->width, img->height});
             double estimated_dpi = state.scrToImg.estimate_dpi(pixel_size);
             onUseRes(estimated_dpi);
@@ -563,16 +565,17 @@ void CapturePanel::setupUi()
 
         // 5. Screen Resolution
         bool showScreenRes = false;
-        if (colorscreen::screen_has_regular_geometry_p(state.scrToImg.type)) {
+        if (colorscreen::screen_geometry_configured_p(state.scrToImg)) {
             if (img && img->width > 0 && img->height > 0) {
                 colorscreen::scr_to_img map;
-                map.set_parameters(state.scrToImg, *img);
-                double pixel_size = map.pixel_size({0, 0, img->width, img->height});
-                double estimated_dpi = state.scrToImg.estimate_dpi(pixel_size);
-                if (estimated_dpi > 0) {
-                    showScreenRes = true;
-                    m_screenResolutionValue->setText(QString("%1 PPI").arg(estimated_dpi, 0, 'f', 1));
-                    m_useScreenResBtn->setVisible(std::abs(estimated_dpi - state.rparams.sharpen.scanner_mtf.scan_dpi) > 0.1);
+                if (map.set_parameters(state.scrToImg, *img)) {
+                    double pixel_size = map.pixel_size({0, 0, img->width, img->height});
+                    double estimated_dpi = state.scrToImg.estimate_dpi(pixel_size);
+                    if (estimated_dpi > 0) {
+                        showScreenRes = true;
+                        m_screenResolutionValue->setText(QString("%1 PPI").arg(estimated_dpi, 0, 'f', 1));
+                        m_useScreenResBtn->setVisible(std::abs(estimated_dpi - state.rparams.sharpen.scanner_mtf.scan_dpi) > 0.1);
+                    }
                 }
             }
         }

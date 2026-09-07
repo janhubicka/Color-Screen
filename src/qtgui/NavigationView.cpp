@@ -59,8 +59,7 @@ void NavigationView::setImage(std::shared_ptr<colorscreen::image_data> scan,
   }
 
   // Determine render type
-  if (m_scrToImg && colorscreen::screen_has_regular_geometry_p(
-                         m_scrToImg->type)) {
+  if (m_scrToImg && colorscreen::screen_geometry_configured_p(*m_scrToImg)) {
     // Find fast
     m_renderType.type = colorscreen::render_type_fast;
   } else {
@@ -194,8 +193,7 @@ void NavigationView::updateParameters(
   m_scrToImg = scrToImg;
   m_scrDetect = scrDetect;
 
-  if (m_scrToImg && colorscreen::screen_has_regular_geometry_p(
-                         m_scrToImg->type)) {
+  if (m_scrToImg && colorscreen::screen_geometry_configured_p(*m_scrToImg)) {
     m_renderType.type = colorscreen::render_type_fast;
   } else {
     m_renderType.type = colorscreen::render_type_original;

@@ -72,25 +72,29 @@ void GeometryPanel::setupUi() {
 
   addSeparator("Automatic registration");
 
+  auto hasConfiguredGeometry = [](const ParameterState &s) {
+      return colorscreen::screen_geometry_configured_p(s.scrToImg);
+  };
+
   addButtonParameter("Step 1", "Detect screen coordinates", [this]() {
       emit autodetectCoordinatesRequested();
   }, nullptr, "Detect the regular screen pattern and establish its coordinate system (center, axes, and screen type).");
   
   addButtonParameter("Correction", "Swap screen colors", [this]() {
       emit alternateColorsRequested();
-  }, nullptr, "Swap the symmetric screen-color assignment if the reconstructed colors are implausible.");
+  }, hasConfiguredGeometry, "Swap the symmetric screen-color assignment if the reconstructed colors are implausible.");
 
   addButtonParameter("Step 2", "Optimize coordinates", [this]() {
       emit optimizeCoordinatesRequested();
-  }, nullptr, "Refine the detected screen coordinate system using the image data.");
+  }, hasConfiguredGeometry, "Refine the detected screen coordinate system using the image data.");
 
   addButtonParameter("Step 3", "Add registration points", [this]() {
       emit automaticallyAddPointsRequested(m_finetuneAreaParams);
-  }, nullptr, "Automatically identify and add registration points within the current crop area.");
+  }, hasConfiguredGeometry, "Automatically identify and add registration points within the current crop area.");
   
   addButtonParameter("", "Add points in selected area", [this]() {
       emit automaticallyAddPointsInAreaRequested(m_finetuneAreaParams);
-  }, nullptr, "Select an area and automatically identify and add registration points within it.");
+  }, hasConfiguredGeometry, "Select an area and automatically identify and add registration points within it.");
 
   auto setupFinetuneSlider = [this](const QString &label, double min, double max, double scale, int decimals, double initial, auto member, double gamma = 1.0, bool logarithmic = false, const QString &tooltip = QString()) {
       QWidget *container = addSlider(label, min, max, scale, decimals, "", "", initial, [this, member](double v) {
@@ -198,7 +202,7 @@ void GeometryPanel::setupUi() {
 
   addSeparator("Final image orientation");
   auto hasFinalGeometry = [](const ParameterState &s) {
-      return colorscreen::screen_has_regular_geometry_p(s.scrToImg.type);
+      return colorscreen::screen_geometry_configured_p(s.scrToImg);
   };
   addSliderParameter(
       "Final rotation", -180.0, 180.0, 100.0, 2, "°", "",
@@ -387,11 +391,12 @@ void GeometryPanel::updateDeformationChart() {
   bool hasScan = (scan && scan->width > 0 && scan->height > 0);
 
   // Update visibility based on content
-  bool showLens = hasScan && !state.scrToImg.lens_correction.is_noop();
-  bool showPerspective = hasScan && (std::abs(state.scrToImg.tilt_x) > 1e-6 || std::abs(state.scrToImg.tilt_y) > 1e-6);
-  bool showNonlinear = hasScan && (state.scrToImg.mesh_trans != nullptr);
-  bool showFinal = hasScan && colorscreen::screen_has_regular_geometry_p(
-                                  state.scrToImg.type);
+  const bool hasGeometry = hasScan &&
+      colorscreen::screen_geometry_configured_p(state.scrToImg);
+  bool showLens = hasGeometry && !state.scrToImg.lens_correction.is_noop();
+  bool showPerspective = hasGeometry && (std::abs(state.scrToImg.tilt_x) > 1e-6 || std::abs(state.scrToImg.tilt_y) > 1e-6);
+  bool showNonlinear = hasGeometry && (state.scrToImg.mesh_trans != nullptr);
+  bool showFinal = hasGeometry;
 
   // Using parentWidget() of the layout to get the container widget added to the form
   if (m_lensChartContainer && m_lensChartContainer->parentWidget())
@@ -406,7 +411,7 @@ void GeometryPanel::updateDeformationChart() {
   if (m_chartContainer && m_chartContainer->parentWidget())
       m_chartContainer->parentWidget()->setVisible(showFinal);
   
-  if (!hasScan) {
+  if (!hasGeometry) {
     if(m_deformationChart) m_deformationChart->clear();
     if(m_lensChart) m_lensChart->clear();
     if(m_perspectiveChart) m_perspectiveChart->clear();
