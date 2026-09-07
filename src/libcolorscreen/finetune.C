@@ -5695,7 +5695,18 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
         {
           if (!tileid)
             {
-              if (!map.set_parameters (param, *imgp[tileid]))
+              /* Coordinate discovery historically started from the default
+       one-pixel identity basis.  Document defaults are now the zero
+       sentinel, so keep that bootstrap local to discovery rather
+       than pretending the document already has geometry.  */
+    scr_to_img_parameters map_param = param;
+    if ((fparams.flags & finetune_guess_coordinates)
+        && !map_param.geometry_configured_p ())
+      {
+        map_param.coordinate1 = { 1, 0 };
+        map_param.coordinate2 = { 0, 1 };
+      }
+    if (!map.set_parameters (map_param, *imgp[tileid]))
                 {
                   ret.err = "failed to convert screen to image coordinates";
                   return finish ();
