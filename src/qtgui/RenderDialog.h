@@ -24,7 +24,7 @@ public:
       bool isDng,
       QWidget *parent = nullptr);
 
-  // Results filled after exec() == Accepted
+  // Results are read after the dialog is accepted.
   colorscreen::render_type_parameters renderTypeParams() const;
   colorscreen::render_parameters::output_profile_t outputProfile() const;
   bool hdr() const;

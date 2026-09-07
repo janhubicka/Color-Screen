@@ -197,8 +197,12 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   hidden.
 - Ensure every one-shot worker completion is request/generation checked before
   applying state.
-- Audit modal dialogs for parent destruction and avoid stack-owned child QObjects
-  entering nested event loops.
+- Keep application-owned modal objects parent-owned and asynchronous.  The
+  explicit dialog/message-box/context-menu `exec()` sites have been converted
+  to `open()`/`popup()` with receiver-bound continuations, and the deterministic
+  Qt GUI source/build-metadata audit rejects new secondary event loops in CI.
+  The top-level `QApplication::exec()` and `QDrag::exec()` remain intentional
+  exceptions.
 
 ### P1 — early beta
 

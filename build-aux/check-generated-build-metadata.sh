@@ -107,6 +107,23 @@ if test -n "$generated_dist_missing"; then
   exit 1
 fi
 
+# Application-owned dialogs, message boxes and popup menus must not enter
+# secondary event loops. A stack QObject parented to a document/window can be
+# destroyed by its parent while exec() is still unwinding. Keep continuations
+# asynchronous and receiver-bound instead. QApplication's top-level loop and
+# QDrag's platform drag loop are the two intentional exceptions.
+secondary_loops=$(
+  grep -nHE '([.]|->)exec[[:space:]]*[(]' src/qtgui/*.cpp \
+    | grep -Ev 'drag->exec[[:space:]]*[(]|app[.]exec[[:space:]]*[(]' \
+    || true
+)
+if test -n "$secondary_loops"; then
+  echo "error: unexpected secondary event loop in Qt GUI source:" >&2
+  echo "$secondary_loops" >&2
+  echo "Use open()/popup() with receiver-bound continuations instead." >&2
+  exit 1
+fi
+
 source_count=$(printf '%s\n' "$sources" | wc -l | tr -d ' ')
 dist_count=$(printf '%s\n' "$extra_dist" | wc -l | tr -d ' ')
 echo "Qt GUI build metadata is current ($source_count sources; $dist_count distributed inputs)."

@@ -888,7 +888,7 @@ void ImageViewWindow::onMeasureMtfRequested(bool checked) {
   }
 
   const ParameterState currentState = m_document->documentStateSnapshot();
-  const colorscreen::mtf_parameters &currentMtf =
+  const colorscreen::mtf_parameters currentMtf =
       currentState.rparams.sharpen.scanner_mtf;
   colorscreen::slanted_edge_parameters defaults = m_slantedEdgeParameters;
   const bool hasRgb = m_scan->has_rgb();
@@ -904,45 +904,49 @@ void ImageViewWindow::onMeasureMtfRequested(bool checked) {
       defaults.wavelength = currentMtf.wavelength;
   }
 
-  SlantedEdgeDialog dialog(defaults, !currentMtf.measurements.empty(), hasRgb,
-                           hasInfrared, this);
-  if (dialog.exec() != QDialog::Accepted) {
-    m_sharpnessPanel->setMeasureMtfChecked(false);
-    return;
-  }
-
-  const colorscreen::slanted_edge_parameters baseParameters =
-      dialog.parameters();
-  m_slantedEdgeParameters = baseParameters;
-  m_pendingMtfParameters.clear();
-  if (dialog.measureNativeChannels()) {
-    static const char *const channelNames[4] = {"Red", "Green", "Blue",
-                                                "Infrared"};
-    const int channelCount = hasInfrared ? 4 : 3;
-    for (int channel = 0; channel < channelCount; ++channel) {
+  auto *dialog = new SlantedEdgeDialog(
+      defaults, !currentMtf.measurements.empty(), hasRgb, hasInfrared, this);
+  dialog->setAttribute(Qt::WA_DeleteOnClose);
+  connect(dialog, &QDialog::rejected, this, [this]() {
+    if (m_sharpnessPanel)
+      m_sharpnessPanel->setMeasureMtfChecked(false);
+  });
+  connect(dialog, &QDialog::accepted, this,
+          [this, dialog, currentMtf, hasInfrared]() {
+    const colorscreen::slanted_edge_parameters baseParameters =
+        dialog->parameters();
+    m_slantedEdgeParameters = baseParameters;
+    m_pendingMtfParameters.clear();
+    if (dialog->measureNativeChannels()) {
+      static const char *const channelNames[4] = {"Red", "Green", "Blue",
+                                                  "Infrared"};
+      const int channelCount = hasInfrared ? 4 : 3;
+      for (int channel = 0; channel < channelCount; ++channel) {
+        colorscreen::slanted_edge_parameters p = baseParameters;
+        p.channel = channel;
+        p.name = baseParameters.name + " " + channelNames[channel];
+        p.same_capture = channel == 0 ? baseParameters.same_capture : true;
+        p.source_filename = m_referenceFile.toUtf8().toStdString();
+        double wavelength = currentMtf.wavelengths[channel];
+        if (!(colorscreen::my_isfinite(wavelength) && wavelength > 0))
+          wavelength = m_scan->wavelengths[channel];
+        p.wavelength = colorscreen::my_isfinite(wavelength) && wavelength > 0
+                           ? wavelength
+                           : 0;
+        m_pendingMtfParameters.push_back(std::move(p));
+      }
+    } else {
       colorscreen::slanted_edge_parameters p = baseParameters;
-      p.channel = channel;
-      p.name = baseParameters.name + " " + channelNames[channel];
-      p.same_capture = channel == 0 ? baseParameters.same_capture : true;
+      p.channel = -1;
       p.source_filename = m_referenceFile.toUtf8().toStdString();
-      double wavelength = currentMtf.wavelengths[channel];
-      if (!(colorscreen::my_isfinite(wavelength) && wavelength > 0))
-        wavelength = m_scan->wavelengths[channel];
-      p.wavelength = colorscreen::my_isfinite(wavelength) && wavelength > 0
-                         ? wavelength
-                         : 0;
       m_pendingMtfParameters.push_back(std::move(p));
     }
-  } else {
-    colorscreen::slanted_edge_parameters p = baseParameters;
-    p.channel = -1;
-    p.source_filename = m_referenceFile.toUtf8().toStdString();
-    m_pendingMtfParameters.push_back(std::move(p));
-  }
 
-  m_imageWidget->setInteractionMode(ImageWidget::GenericAreaMode);
-  statusBar()->showMessage(
-      tr("Select an area containing a slanted edge to compute its MTF"));
+    m_imageWidget->setInteractionMode(ImageWidget::GenericAreaMode);
+    statusBar()->showMessage(
+        tr("Select an area containing a slanted edge to compute its MTF"));
+  });
+  dialog->open();
 }
 
 /** Show/locate a selected stored MTF measurement when it belongs to this
