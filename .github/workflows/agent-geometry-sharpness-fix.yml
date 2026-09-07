@@ -1,0 +1,55 @@
+name: Agent remaining geometry guards
+
+on:
+  push:
+    branches:
+      - agent/geometry-unconfigured-publisher2
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/geometry-unconfigured-sentinel
+          fetch-depth: 0
+      - name: Gate scale-dependent sharpness operations
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+
+          def replace(path, old, new, count=1):
+              p = Path(path)
+              text = p.read_text()
+              actual = text.count(old)
+              if actual != count:
+                  raise SystemExit(f"{path}: expected {count} occurrences, found {actual}: {old[:120]!r}")
+              p.write_text(text.replace(old, new, count))
+
+          replace("src/qtgui/SharpnessPanel.cpp",
+                  "  bool isTileRenderingEnabled(const ParameterState &state) const override {\n      // Always enabled regardless of scrToImg setting\n      return true;\n  }",
+                  "  bool isTileRenderingEnabled(const ParameterState &state) const override {\n      /* Blurred and sharpened screen tiles convert capture MTF dimensions to\n         screen units, so an arbitrary fallback scale would be misleading. */\n      return colorscreen::screen_geometry_configured_p(state.scrToImg);\n  }")
+
+          replace("src/qtgui/SharpnessPanel.cpp",
+                  "  QPushButton *analyzeDisplacementsBtn = new QPushButton(tr(\"Analyze displacements\"));\n  analyzeDisplacementsBtn->setToolTip(tr(\"Run adaptive sharpening analysis\"));\n  connect(analyzeDisplacementsBtn, &QPushButton::clicked, this, &SharpnessPanel::onAnalyzeDisplacements);\n  \n  if (m_currentGroupForm)\n    m_currentGroupForm->addRow(analyzeDisplacementsBtn);\n  else\n    m_form->addRow(analyzeDisplacementsBtn);",
+                  "  addButtonParameter(\"\", tr(\"Analyze displacements\"),\n      [this]() { onAnalyzeDisplacements(); },\n      [](const ParameterState &s) {\n        return colorscreen::screen_geometry_configured_p(s.scrToImg);\n      },\n      tr(\"Run adaptive sharpening analysis after screen geometry has been established.\"));")
+
+          replace("src/qtgui/MainWindow.cpp",
+                  "void MainWindow::onAdaptiveSharpeningRequested(\n    const AdaptiveSharpeningParameters &parameters) {\n  if (!m_scan)\n    return;\n\n  // Create progress info",
+                  "void MainWindow::onAdaptiveSharpeningRequested(\n    const AdaptiveSharpeningParameters &parameters) {\n  if (!m_scan)\n    return;\n  if (!colorscreen::screen_geometry_configured_p(m_scrToImgParams)) {\n    statusBar()->showMessage(\n        tr(\"Fit screen geometry before adaptive sharpening analysis.\"), 3000);\n    return;\n  }\n\n  // Create progress info")
+          PY
+          git diff --check
+          expected="src/qtgui/MainWindow.cpp
+          src/qtgui/SharpnessPanel.cpp"
+          actual="$(git diff --name-only | sort)"
+          test "$actual" = "$expected"
+          git config user.name "OpenAI Agent"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add $actual
+          git commit -m "qtgui: gate scale-dependent sharpness analysis" -m "The sharpness screen preview and adaptive correction worker both consume screen-to-image scale. Disable them until real screen geometry is configured instead of rendering or fitting with an arbitrary fallback pixel size. Capture-only sharpening configuration remains available, and MainWindow keeps a hard guard behind the disabled adaptive-analysis action."
+          git push origin HEAD:agent/geometry-unconfigured-sentinel
