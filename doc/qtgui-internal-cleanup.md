@@ -245,10 +245,13 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
 - Keep sanitizer GUI smoke coverage for document/view/dock lifetime churn.
 - Keep pointer-gesture interruption probes in the ordinary Qt smoke path;
   no drag may depend on receiving an ideal release sequence.
-- Add a focused test for undo merge identity (same-control drag merges;
-  different controls do not).
-- Add a focused test for `MultiLineTabWidget` visibility while an ancestor is
-  hidden.
+- Keep the ordinary Qt smoke regression for undo merge identity: repeated
+  updates with one stable parameter key merge, while a different key remains a
+  separate action even when the human-readable Undo text is identical. The probe
+  also verifies the resulting Undo/Redo state sequence.
+- Keep the ordinary Qt smoke regression for `MultiLineTabWidget` logical
+  visibility while an ancestor is hidden: fallback and programmatic selection
+  must use explicit per-tab hidden state rather than effective onscreen visibility.
 - Ensure every one-shot worker completion is request/generation checked before
   applying state.
 - Keep application-owned modal objects parent-owned and asynchronous.  The
