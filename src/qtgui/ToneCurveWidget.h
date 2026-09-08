@@ -26,6 +26,7 @@ protected:
     void mousePressEvent(QMouseEvent *event) override;
     void mouseMoveEvent(QMouseEvent *event) override;
     void mouseReleaseEvent(QMouseEvent *event) override;
+    void cancelPointerInteraction() override;
 
 private:
     double logicToPlotX(double x) const;

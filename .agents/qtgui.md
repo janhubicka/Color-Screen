@@ -405,7 +405,28 @@ Mouse interaction logic is delegated based on `InteractionMode`. This ensures th
 **Implementation Rules:**
 - Keep the main event handler (`mousePressEvent`) as a simple switch/if-else block.
 - Always accept or ignore events appropriately in the handlers to maintain event propagation.
-- Grab/Release the mouse explicitly in handlers that require persistent dragging (e.g., coordinate axis manipulation).
+- A press-started gesture is owned by the button that started it. Before any
+  move mutates state, verify that button is still present in
+  `QMouseEvent::buttons()`; a release for another button must not finish it.
+- Qt automatically grabs the mouse from press until the final matching release,
+  including while the pointer is outside the widget. Do not add selective
+  `grabMouse()`/`releaseMouse()` calls for ordinary press-started drags. Explicit
+  grabs are reserved for interactions that genuinely begin without a button
+  press.
+- Treat `QEvent::UngrabMouse`, widget hiding/window deactivation, tool changes,
+  image replacement, and coordinate-space changes as gesture boundaries. Clear
+  all transient flags together. Never use `leaveEvent` as that boundary: a
+  normal drag is allowed to leave the widget under Qt's automatic mouse grab.
+- Interrupted live edits (registration-point and coordinate-system drags) keep
+  movement already applied and emit their normal completion signal exactly once
+  so undo bookkeeping closes. A point press that never moved is not an edit and
+  must not trigger solver/undo work merely because the gesture was interrupted.
+  Interrupted rubber bands and measurements have no
+  committed result until release and must be discarded without synthesizing a
+  click, area selection, or measurement.
+- Keep mouse tracking enabled in normal canvas modes when hover feedback is
+  implemented; entering and leaving a special navigation mode must not silently
+  disable later hover behavior.
 
 ---
 

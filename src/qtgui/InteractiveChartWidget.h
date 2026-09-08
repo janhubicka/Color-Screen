@@ -21,6 +21,7 @@ public:
     double maxY() const { return m_maxY; }
 
 protected:
+    bool event(QEvent *event) override;
     void paintEvent(QPaintEvent *event) override;
     void mousePressEvent(QMouseEvent *event) override;
     void mouseMoveEvent(QMouseEvent *event) override;
@@ -38,6 +39,8 @@ protected:
                           std::function<QColor(double)> colorMap);
 
     virtual void onViewChanged() {}
+    /** Settle right-button panning and any derived point drag. */
+    virtual void cancelPointerInteraction();
 
     virtual QRectF getChartRect() const;
     QPointF plotToWidget(double plotX, double plotY) const;

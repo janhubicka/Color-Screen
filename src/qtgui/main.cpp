@@ -3,6 +3,7 @@
 #include "ImageViewWindow.h"
 #include "ImageWidget.h"
 #include "SharpnessPanel.h"
+#include "ToneCurveWidget.h"
 #include "CoordinateTransformer.h"
 #include "DocumentLifecycleSmoke.h"
 #include "WorkspaceChurnSmoke.h"
@@ -41,6 +42,193 @@
 #include <functional>
 #include <memory>
 #include <vector>
+
+namespace {
+
+/** Tone-curve wrapper exposing the protected plot mapping to the smoke probe. */
+class PointerSmokeToneCurve final : public ToneCurveWidget {
+public:
+  using ToneCurveWidget::ToneCurveWidget;
+  QPointF plotPoint(double x, double y) const { return plotToWidget(x, y); }
+};
+
+/** Deliver one synthetic mouse event using Qt6's local/global constructor. */
+void sendPointerSmokeEvent(QWidget &target, QEvent::Type type, QPointF pos,
+                           Qt::MouseButton button, Qt::MouseButtons buttons,
+                           Qt::KeyboardModifiers modifiers = Qt::NoModifier) {
+  QMouseEvent event(type, pos, target.mapToGlobal(pos.toPoint()), button,
+                    buttons, modifiers);
+  QCoreApplication::sendEvent(&target, &event);
+}
+
+/** Exercise gesture interruption invariants without loading or rendering an image. */
+bool runPointerInteractionSmoke() {
+  auto fail = [](const char *reason) {
+    qCritical() << "Pointer interaction smoke failed:" << reason;
+    return false;
+  };
+  auto samePoint = [](const colorscreen::point_t &a,
+                      const colorscreen::point_t &b) {
+    return a.x == b.x && a.y == b.y;
+  };
+
+  ImageWidget image;
+  image.resize(320, 240);
+  colorscreen::render_parameters rparams;
+  colorscreen::scr_to_img_parameters scrToImg;
+  colorscreen::scr_detect_parameters detect;
+  colorscreen::render_type_parameters renderType;
+  colorscreen::solver_parameters solver;
+  scrToImg.center = {100, 100};
+  scrToImg.coordinate1 = {20, 0};
+  scrToImg.coordinate2 = {0, 20};
+  solver.add_point({100, 100}, {0, 0}, colorscreen::solver_parameters::red);
+  image.setImage({}, &rparams, &scrToImg, &detect, &renderType, &solver);
+  image.setShowRegistrationPoints(true);
+
+  // A stale pan flag must not mutate the viewport after Qt reports no button.
+  int viewChanges = 0;
+  QObject::connect(&image, &ImageWidget::viewStateChanged, &image,
+                   [&viewChanges](QRectF, double) { ++viewChanges; });
+  image.setInteractionMode(ImageWidget::PanMode);
+  sendPointerSmokeEvent(image, QEvent::MouseButtonPress, {40, 40},
+                        Qt::LeftButton, Qt::LeftButton);
+  const int beforeLostPan = viewChanges;
+  sendPointerSmokeEvent(image, QEvent::MouseMove, {80, 40}, Qt::NoButton,
+                        Qt::NoButton);
+  if (viewChanges != beforeLostPan)
+    return fail("lost left release continued panning");
+
+  // Registration points are live-edited during a drag; a button-less move must
+  // close the transaction before changing the point.
+  int pointStarts = 0;
+  int pointCompletions = 0;
+  QObject::connect(&image, &ImageWidget::pointManipulationStarted, &image,
+                   [&pointStarts]() { ++pointStarts; });
+  QObject::connect(&image, &ImageWidget::pointsChanged, &image,
+                   [&pointCompletions]() { ++pointCompletions; });
+  image.setInteractionMode(ImageWidget::SelectMode);
+  const colorscreen::point_t originalPoint = solver.points[0].img;
+  const QPointF pointWidget = image.imageToWidget(originalPoint);
+  sendPointerSmokeEvent(image, QEvent::MouseButtonPress, pointWidget,
+                        Qt::LeftButton, Qt::LeftButton);
+  sendPointerSmokeEvent(image, QEvent::MouseMove, pointWidget + QPointF(40, 40),
+                        Qt::NoButton, Qt::NoButton);
+  if (pointStarts != 1 || !samePoint(solver.points[0].img, originalPoint) ||
+      pointCompletions != 0)
+    return fail("registration drag survived a lost left release");
+
+  // Switching tools discards an unfinished measurement; returning to Measure
+  // must not let a later release commit the old gesture.
+  int measurements = 0;
+  QObject::connect(&image, &ImageWidget::distanceMeasured, &image,
+                   [&measurements](colorscreen::point_t, colorscreen::point_t) {
+                     ++measurements;
+                   });
+  image.setInteractionMode(ImageWidget::MeasureMode);
+  sendPointerSmokeEvent(image, QEvent::MouseButtonPress, {20, 20},
+                        Qt::LeftButton, Qt::LeftButton);
+  image.setInteractionMode(ImageWidget::PanMode);
+  image.setInteractionMode(ImageWidget::MeasureMode);
+  sendPointerSmokeEvent(image, QEvent::MouseButtonRelease, {60, 60},
+                        Qt::LeftButton, Qt::NoButton);
+  if (measurements != 0)
+    return fail("measurement leaked across a tool switch");
+
+  // Coordinate-system editing has a begin/end undo transaction. Lost releases
+  // and tool switches must close it exactly once without applying a phantom
+  // move; a normal right-button drag must still work.
+  int coordinateStarts = 0;
+  int coordinateFinishes = 0;
+  QObject::connect(&image, &ImageWidget::coordinateSystemManipulationStarted,
+                   &image, [&coordinateStarts]() { ++coordinateStarts; });
+  QObject::connect(&image, &ImageWidget::coordinateSystemManipulationFinished,
+                   &image, [&coordinateFinishes]() { ++coordinateFinishes; });
+  image.setInteractionMode(ImageWidget::SetCenterMode);
+  const colorscreen::point_t originalAxis = scrToImg.coordinate1;
+  sendPointerSmokeEvent(image, QEvent::MouseButtonPress, {120, 100},
+                        Qt::RightButton, Qt::RightButton);
+  sendPointerSmokeEvent(image, QEvent::MouseMove, {140, 100}, Qt::NoButton,
+                        Qt::NoButton);
+  if (!samePoint(scrToImg.coordinate1, originalAxis) ||
+      coordinateStarts != 1 || coordinateFinishes != 1)
+    return fail("coordinate drag did not settle after a lost release");
+
+  sendPointerSmokeEvent(image, QEvent::MouseButtonPress, {120, 100},
+                        Qt::RightButton, Qt::RightButton);
+  image.setInteractionMode(ImageWidget::PanMode);
+  if (coordinateStarts != 2 || coordinateFinishes != 2)
+    return fail("tool switch left a coordinate transaction open");
+
+  image.setInteractionMode(ImageWidget::SetCenterMode);
+  sendPointerSmokeEvent(image, QEvent::MouseButtonPress, {120, 100},
+                        Qt::RightButton, Qt::RightButton);
+  sendPointerSmokeEvent(image, QEvent::MouseMove, {140, 100}, Qt::NoButton,
+                        Qt::RightButton);
+  sendPointerSmokeEvent(image, QEvent::MouseButtonRelease, {140, 100},
+                        Qt::RightButton, Qt::NoButton);
+  if (samePoint(scrToImg.coordinate1, originalAxis) ||
+      coordinateStarts != 3 || coordinateFinishes != 3)
+    return fail("normal coordinate drag was broken by gesture hardening");
+
+  PointerSmokeToneCurve chart;
+  chart.resize(320, 240);
+  const double oldMinX = chart.minX();
+  const double oldMaxX = chart.maxX();
+  const QPointF chartCenter = chart.plotPoint(0, 0);
+  sendPointerSmokeEvent(chart, QEvent::MouseButtonPress, chartCenter,
+                        Qt::RightButton, Qt::RightButton);
+  sendPointerSmokeEvent(chart, QEvent::MouseMove, chartCenter + QPointF(30, 0),
+                        Qt::NoButton, Qt::NoButton);
+  if (chart.minX() != oldMinX || chart.maxX() != oldMaxX)
+    return fail("chart panning survived a lost right release");
+
+  // Right-button panning is a plot gesture, not a margin gesture.
+  sendPointerSmokeEvent(chart, QEvent::MouseButtonPress, {5, 5},
+                        Qt::RightButton, Qt::RightButton);
+  sendPointerSmokeEvent(chart, QEvent::MouseMove, {50, 50}, Qt::NoButton,
+                        Qt::RightButton);
+  sendPointerSmokeEvent(chart, QEvent::MouseButtonRelease, {50, 50},
+                        Qt::RightButton, Qt::NoButton);
+  if (chart.minX() != oldMinX || chart.maxX() != oldMaxX)
+    return fail("chart margin started a pan gesture");
+
+  chart.setCoordinateType(ToneCurveWidget::CoordinateType::Linear);
+  chart.setToneCurve(colorscreen::tone_curve::tone_curve_custom,
+                     {{0, 0}, {0.5, 0.5}, {1, 1}});
+  int curveChanges = 0;
+  QObject::connect(&chart, &ToneCurveWidget::controlPointsChanged, &chart,
+                   [&curveChanges](const auto &) { ++curveChanges; });
+  const QPointF middlePoint = chart.plotPoint(0.5, 0.5);
+  sendPointerSmokeEvent(chart, QEvent::MouseButtonPress, middlePoint,
+                        Qt::LeftButton, Qt::LeftButton);
+  sendPointerSmokeEvent(chart, QEvent::MouseButtonRelease, middlePoint,
+                        Qt::RightButton, Qt::LeftButton);
+  sendPointerSmokeEvent(chart, QEvent::MouseMove,
+                        middlePoint + QPointF(15, -15), Qt::NoButton,
+                        Qt::LeftButton);
+  if (curveChanges != 1)
+    return fail("secondary release ended a left tone-curve drag");
+  sendPointerSmokeEvent(chart, QEvent::MouseButtonRelease,
+                        middlePoint + QPointF(15, -15), Qt::LeftButton,
+                        Qt::NoButton);
+
+  chart.setToneCurve(colorscreen::tone_curve::tone_curve_custom,
+                     {{0, 0}, {0.5, 0.5}, {1, 1}});
+  curveChanges = 0;
+  const QPointF resetMiddlePoint = chart.plotPoint(0.5, 0.5);
+  sendPointerSmokeEvent(chart, QEvent::MouseButtonPress, resetMiddlePoint,
+                        Qt::LeftButton, Qt::LeftButton);
+  sendPointerSmokeEvent(chart, QEvent::MouseMove,
+                        resetMiddlePoint + QPointF(25, -25), Qt::NoButton,
+                        Qt::NoButton);
+  if (curveChanges != 0)
+    return fail("tone-curve point drag survived a lost left release");
+
+  return true;
+}
+
+} // namespace
 
 /** Start the Qt GUI, restore any crashed document session, and open every
     positional image argument in an independent MainWindow.  */
@@ -176,6 +364,11 @@ int main(int argc, char *argv[]) {
 
   parser.addPositionalArgument("image", "Image file(s) to open.", "[image...]");
   parser.process(app);
+
+  // Every Qt smoke invocation first checks low-level pointer gesture
+  // interruption semantics. It needs no image fixture or worker thread.
+  if (parser.isSet(smokeTestOption) && !runPointerInteractionSmoke())
+    return 20;
 
   if (parser.isSet(workspaceChurnOption) &&
       (parser.isSet(documentLifecycleOption) ||

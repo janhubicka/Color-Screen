@@ -201,6 +201,10 @@ void ToneCurveWidget::drawControlPoints(QPainter &painter, const QRectF &rect) {
 }
 
 void ToneCurveWidget::mousePressEvent(QMouseEvent *event) {
+    if (m_dragPointIndex != -1 || m_isPanning) {
+        event->accept();
+        return;
+    }
     if (m_type == colorscreen::tone_curve::tone_curve_custom && event->button() == Qt::LeftButton) {
         m_dragPointIndex = -1;
         for (size_t i = 0; i < m_controlPoints.size(); i++) {
@@ -212,6 +216,7 @@ void ToneCurveWidget::mousePressEvent(QMouseEvent *event) {
         }
         if (m_dragPointIndex != -1) {
             update();
+            event->accept();
             return;
         }
     }
@@ -219,6 +224,12 @@ void ToneCurveWidget::mousePressEvent(QMouseEvent *event) {
 }
 
 void ToneCurveWidget::mouseMoveEvent(QMouseEvent *event) {
+    if (m_dragPointIndex != -1 &&
+        !event->buttons().testFlag(Qt::LeftButton)) {
+        cancelPointerInteraction();
+        event->accept();
+        return;
+    }
     if (m_dragPointIndex == -1) {
         bool found = false;
         for (size_t i = 0; i < m_controlPoints.size(); i++) {
@@ -259,10 +270,21 @@ void ToneCurveWidget::mouseMoveEvent(QMouseEvent *event) {
     }
 }
 
-void ToneCurveWidget::mouseReleaseEvent(QMouseEvent *event) {
+/** Clear a control-point drag after a lost release or window transition. */
+void ToneCurveWidget::cancelPointerInteraction() {
     if (m_dragPointIndex != -1) {
         m_dragPointIndex = -1;
         update();
+    }
+    InteractiveChartWidget::cancelPointerInteraction();
+}
+
+void ToneCurveWidget::mouseReleaseEvent(QMouseEvent *event) {
+    if (event->button() == Qt::LeftButton && m_dragPointIndex != -1) {
+        m_dragPointIndex = -1;
+        update();
+        event->accept();
+        return;
     }
     InteractiveChartWidget::mouseReleaseEvent(event);
 }

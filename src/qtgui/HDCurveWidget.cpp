@@ -299,6 +299,10 @@ void HDCurveWidget::drawControlPoints(QPainter &painter, const QRectF &rect) {
 
 
 void HDCurveWidget::mousePressEvent(QMouseEvent *event) {
+    if (m_dragPointIndex != -1 || m_isPanning) {
+        event->accept();
+        return;
+    }
     if (event->button() == Qt::LeftButton) {
         // 1. Check points (highest priority)
         QPointF p_min = mapToWidget(m_params.minx, m_params.miny);
@@ -338,6 +342,7 @@ void HDCurveWidget::mousePressEvent(QMouseEvent *event) {
             m_lastLogicX = lx;
             m_lastLogicY = ly;
             update();
+            event->accept();
             return;
         }
     }
@@ -345,6 +350,12 @@ void HDCurveWidget::mousePressEvent(QMouseEvent *event) {
 }
 
 void HDCurveWidget::mouseMoveEvent(QMouseEvent *event) {
+    if (m_dragPointIndex != -1 &&
+        !event->buttons().testFlag(Qt::LeftButton)) {
+        cancelPointerInteraction();
+        event->accept();
+        return;
+    }
     auto [logicX, logicY] = mapFromWidget(event->position());
     QPointF pos = event->position();
 
@@ -470,10 +481,21 @@ void HDCurveWidget::mouseMoveEvent(QMouseEvent *event) {
     }
 }
 
+/** Clear an HD-curve point/limit drag after an interrupted gesture. */
+void HDCurveWidget::cancelPointerInteraction() {
+    if (m_dragPointIndex != -1) {
+        m_dragPointIndex = -1;
+        update();
+    }
+    InteractiveChartWidget::cancelPointerInteraction();
+}
+
 void HDCurveWidget::mouseReleaseEvent(QMouseEvent *event) {
     if (event->button() == Qt::LeftButton && m_dragPointIndex != -1) {
         m_dragPointIndex = -1;
         update();
+        event->accept();
+        return;
     }
     InteractiveChartWidget::mouseReleaseEvent(event);
 }

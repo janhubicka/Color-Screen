@@ -1,5 +1,6 @@
 #include "InteractiveChartWidget.h"
 #include <QPainter>
+#include <QEvent>
 #include <QMouseEvent>
 #include <QWheelEvent>
 #include <cmath>
@@ -72,36 +73,73 @@ void InteractiveChartWidget::drawBackground(QPainter &painter, const QRectF &rec
     painter.fillRect(rect, QColor(40, 40, 40));
 }
 
-void InteractiveChartWidget::mousePressEvent(QMouseEvent *event) {
-    m_lastMousePos = event->position();
-    if (event->button() == Qt::RightButton) {
-        m_isPanning = true;
+/** Clear chart drag state when Qt interrupts the automatic mouse grab. */
+bool InteractiveChartWidget::event(QEvent *event) {
+    switch (event->type()) {
+    case QEvent::UngrabMouse:
+    case QEvent::Hide:
+    case QEvent::WindowDeactivate:
+        cancelPointerInteraction();
+        break;
+    default:
+        break;
     }
+    return QWidget::event(event);
+}
+
+/** Clear the base chart's right-button pan gesture. */
+void InteractiveChartWidget::cancelPointerInteraction() {
+    m_isPanning = false;
+    setCursor(Qt::ArrowCursor);
+}
+
+void InteractiveChartWidget::mousePressEvent(QMouseEvent *event) {
+    const QRectF rect = getChartRect();
+    if (event->button() == Qt::RightButton && rect.width() > 0 &&
+        rect.height() > 0 && rect.contains(event->position())) {
+        m_lastMousePos = event->position();
+        m_isPanning = true;
+        event->accept();
+        return;
+    }
+    QWidget::mousePressEvent(event);
 }
 
 void InteractiveChartWidget::mouseMoveEvent(QMouseEvent *event) {
-    if (m_isPanning) {
-        QPointF delta = event->position() - m_lastMousePos;
-        QRectF rect = getChartRect();
-        
-        double dx = (delta.x() / rect.width()) * (m_maxX - m_minX);
-        double dy = (delta.y() / rect.height()) * (m_maxY - m_minY);
-        
-        m_minX -= dx;
-        m_maxX -= dx;
-        m_minY += dy;
-        m_maxY += dy;
-        
-        onViewChanged();
-        update();
+    if (!m_isPanning) {
+        QWidget::mouseMoveEvent(event);
+        return;
     }
+    const QRectF rect = getChartRect();
+    if (!event->buttons().testFlag(Qt::RightButton) || rect.width() <= 0 ||
+        rect.height() <= 0) {
+        cancelPointerInteraction();
+        event->accept();
+        return;
+    }
+
+    const QPointF delta = event->position() - m_lastMousePos;
+    const double dx = (delta.x() / rect.width()) * (m_maxX - m_minX);
+    const double dy = (delta.y() / rect.height()) * (m_maxY - m_minY);
+
+    m_minX -= dx;
+    m_maxX -= dx;
+    m_minY += dy;
+    m_maxY += dy;
     m_lastMousePos = event->position();
+
+    onViewChanged();
+    update();
+    event->accept();
 }
 
 void InteractiveChartWidget::mouseReleaseEvent(QMouseEvent *event) {
-    if (event->button() == Qt::RightButton) {
-        m_isPanning = false;
+    if (event->button() == Qt::RightButton && m_isPanning) {
+        cancelPointerInteraction();
+        event->accept();
+        return;
     }
+    QWidget::mouseReleaseEvent(event);
 }
 
 void InteractiveChartWidget::mouseDoubleClickEvent(QMouseEvent *event) {
@@ -110,35 +148,39 @@ void InteractiveChartWidget::mouseDoubleClickEvent(QMouseEvent *event) {
 }
 
 void InteractiveChartWidget::wheelEvent(QWheelEvent *event) {
-    double angle = event->angleDelta().y();
-    double factor = std::pow(0.9, angle / 120.0);
-    
-    QRectF rect = getChartRect();
-    double nx = (event->position().x() - rect.left()) / rect.width();
-    double ny = (rect.bottom() - event->position().y()) / rect.height();
-    
-    double zoomX = m_minX + nx * (m_maxX - m_minX);
-    double zoomY = m_minY + ny * (m_maxY - m_minY);
-    
+    const QRectF rect = getChartRect();
+    if (rect.width() <= 0 || rect.height() <= 0 ||
+        !rect.contains(event->position()) || event->angleDelta().y() == 0) {
+        QWidget::wheelEvent(event);
+        return;
+    }
+
+    const double angle = event->angleDelta().y();
+    const double factor = std::pow(0.9, angle / 120.0);
+    const double nx = (event->position().x() - rect.left()) / rect.width();
+    const double ny = (rect.bottom() - event->position().y()) / rect.height();
+    const double zoomX = m_minX + nx * (m_maxX - m_minX);
+    const double zoomY = m_minY + ny * (m_maxY - m_minY);
+
     m_minX = zoomX - (zoomX - m_minX) * factor;
     m_maxX = zoomX + (m_maxX - zoomX) * factor;
     m_minY = zoomY - (zoomY - m_minY) * factor;
     m_maxY = zoomY + (m_maxY - zoomY) * factor;
-    
-    // Clamp zoom levels
+
     if (m_maxX - m_minX < 0.001) {
-        double mid = (m_minX + m_maxX) / 2.0;
+        const double mid = (m_minX + m_maxX) / 2.0;
         m_minX = mid - 0.0005;
         m_maxX = mid + 0.0005;
     }
     if (m_maxY - m_minY < 0.001) {
-        double mid = (m_minY + m_maxY) / 2.0;
+        const double mid = (m_minY + m_maxY) / 2.0;
         m_minY = mid - 0.0005;
         m_maxY = mid + 0.0005;
     }
-    
+
     onViewChanged();
     update();
+    event->accept();
 }
 
 void InteractiveChartWidget::resizeEvent(QResizeEvent *event) {

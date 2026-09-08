@@ -171,6 +171,23 @@ The general lesson is to distinguish **logical availability** from **effective
 onscreen visibility**.  The former should not depend on whether an ancestor is
 currently mapped.
 
+### Pointer gestures had implicit lifetime
+
+Canvas, navigator and curve interactions historically used independent booleans
+or drag indices and assumed that every press would be followed by the expected
+release. A lost release, tool switch, hidden/deactivated view, or mismatched
+button could therefore leave panning, measurement, rubber-band selection,
+registration-point movement, coordinate editing or chart panning logically
+active. The navigator also accepted any mouse button as the start of a drag.
+
+Pointer gestures now record their initiating button, refuse to mutate after that
+button disappears, and settle all transient state at tool/window/grab
+boundaries. Qt's automatic press-to-release mouse grab is used consistently
+instead of selectively calling `grabMouse()`. Live edits close their undo
+transaction on interruption; uncommitted area/measurement gestures are simply
+discarded. The ordinary Qt smoke path contains synthetic lost-release and
+tool-switch probes for the primary canvas and interactive curves.
+
 ### Profile auto-optimization retriggered on every state refresh
 
 `ProfilePanel::onParametersRefreshed()` said it auto-triggered when profile spots
@@ -191,6 +208,8 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
 
 - Keep `EXTRA_DIST` and generated build metadata checked automatically.
 - Keep sanitizer GUI smoke coverage for document/view/dock lifetime churn.
+- Keep pointer-gesture interruption probes in the ordinary Qt smoke path;
+  no drag may depend on receiving an ideal release sequence.
 - Add a focused test for undo merge identity (same-control drag merges;
   different controls do not).
 - Add a focused test for `MultiLineTabWidget` visibility while an ancestor is

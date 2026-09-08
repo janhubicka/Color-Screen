@@ -56,6 +56,7 @@ signals:
     void progressFinished(std::shared_ptr<colorscreen::progress_info> progress);
 
 protected:
+    bool event(QEvent *event) override;
     void paintEvent(QPaintEvent *event) override;
     void resizeEvent(QResizeEvent *event) override;
     void mousePressEvent(QMouseEvent *event) override;
@@ -69,6 +70,8 @@ private slots:
     void onTriggerRender(int reqId, std::shared_ptr<colorscreen::progress_info> progress, const QVariant &userData);
 
 private:
+    /** Cancel a viewport drag without emitting another pan target. */
+    void cancelPointerInteraction();
     void updateSliderRange();
 
     QSlider *m_zoomSlider;
