@@ -638,8 +638,10 @@ private slots:
   // Helper to update color checkbox state and visibility
   void updateColorCheckBoxState();
   
-  // Helper to update registration group visibility
+  // Helpers for registration/tool availability.
   void updateRegistrationGroupVisibility();
+  bool screenCoordinateToolAvailable() const;
+  void updateScreenCoordinateToolPresentation();
 
 private:
   // Status Bar Widgets

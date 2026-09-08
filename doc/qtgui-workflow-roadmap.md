@@ -141,6 +141,17 @@ action strip is enough:
 Each step should show prerequisites and outcome.  Automatic commands are verbs;
 parameters controlling them are nouns/settings.  Do not mix the two visually.
 
+The expected registration path is **autodetect first**. If coordinate detection
+fails on an otherwise regular screen, `Screen coordinates` is the explicit
+manual fallback: click the green origin dot, click its neighboring green dot in
+the +X direction (the pair is committed as one undoable setup step), optionally
+fine-tune/optimize that linear basis, then begin
+adding registration points. Once an accepted geometry fit (or nonlinear mesh)
+is based on those control points, the base-coordinate tool disappears rather
+than offering two competing ways to edit the same geometry. Its axis-lock and
+coordinate-finetune controls are contextual and appear only while that tool is
+active. Stochastic/no-screen processes never expose the tool.
+
 ### Stage 5 — Reconstruction/detail
 
 Screen demosaicing, pre/post-screen denoising and any reconstruction-specific

@@ -188,6 +188,23 @@ transaction on interruption; uncommitted area/measurement gestures are simply
 discarded. The ordinary Qt smoke path contains synthetic lost-release and
 tool-switch probes for the primary canvas and interactive curves.
 
+### Screen-coordinate editing required geometry it was supposed to create
+
+The toolbar previously enabled `Screen coordinates` only after
+`screen_geometry_configured_p()` was already true. That inverted the manual
+fallback workflow: a failed autodetect left no GUI path for entering the initial
+linear lattice. The tool now distinguishes screen capability from mapping state.
+For a regular screen with the zero-vector geometry sentinel it accepts a center
+click followed by a neighboring +X green-dot click. The first click remains
+transient; the second atomically creates the center and non-degenerate initial
+basis, after which the existing drag/button editing gestures take over.
+
+Manual base-coordinate editing is deliberately hidden after an accepted
+control-point geometry fit or nonlinear mesh takes ownership of the mapping. The
+axis lock and coordinate-finetune actions are similarly scoped to the active
+manual tool. This keeps the normal path — autodetect, inspect/refine, add control
+points, fit/autosolve — visually linear while retaining a usable fallback.
+
 ### Profile auto-optimization retriggered on every state refresh
 
 `ProfilePanel::onParametersRefreshed()` said it auto-triggered when profile spots
