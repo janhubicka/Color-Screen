@@ -5677,7 +5677,8 @@ void MainWindow::onCropRequested() {
 
   saveInteractionMode();
   inspectorImageWidget()->setInteractionMode(ImageWidget::CropMode);
-  statusBar()->showMessage("Select crop");
+  inspectorImageWidget()->setAreaSelectionInstruction(tr("Select crop"));
+  statusBar()->showMessage(tr("Select crop"));
 }
 
 /** Enter generic area selection mode with a callback.
@@ -5703,6 +5704,7 @@ void MainWindow::startAreaSelection(const QString &message,
   m_areaSelectionCallback = callback;
   saveInteractionMode();
   inspectorImageWidget()->setInteractionMode(ImageWidget::GenericAreaMode);
+  inspectorImageWidget()->setAreaSelectionInstruction(message);
   statusBar()->showMessage(message);
 }
 

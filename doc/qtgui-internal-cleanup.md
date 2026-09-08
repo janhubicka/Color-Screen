@@ -210,6 +210,13 @@ anchors) as well as the older drag shortcut; Escape or a tool switch discards th
 transient first anchor. Add Point and registration Select retain their established
 single-click meanings.
 
+Canvas navigation now follows the Capture One-style temporary Hand convention: hold
+Space to pan with the left mouse button without changing tools or losing a pending
+anchor. The permanent Pan tool uses the same open/closed hand cursor language.
+Temporary area prompts carry the operation-specific text supplied by MainWindow, and
+right-click shares Escape's pending-anchor cancellation path where right-click has no
+active tool meaning.
+
 Manual base-coordinate editing is deliberately hidden after an accepted
 control-point geometry fit or nonlinear mesh takes ownership of the mapping. The
 axis lock and coordinate-finetune actions are similarly scoped to the active

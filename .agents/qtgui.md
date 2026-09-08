@@ -454,6 +454,16 @@ it without publishing a partial result. Persistent Add Point and registration-po
 Select retain single-click/drag meanings and are therefore not converted to this
 convention.
 
+For photo-editor familiarity, holding **Space** temporarily activates a Hand/Pan
+cursor without changing the selected tool or discarding a pending first anchor.
+Left-drag pans while Space is held; releasing Space returns to the original tool.
+Pending spatial anchors and previews are stored in image coordinates so zoom/pan does
+not move them relative to the photograph. A live second-endpoint preview resumes at
+the current pointer as soon as a temporary Hand drag finishes. Right-click and Escape both cancel a
+pending click-click anchor. Temporary area
+operations should pass their operation-specific instruction into the canvas rather
+than falling back to a generic "Select area" message.
+
 The manual tool is an initializer/editor for the base linear coordinate system,
 not a competing editor for a control-point model. Hide it when the screen has no
 regular lattice, while nonlinear geometry is selected/materialized, or while the
