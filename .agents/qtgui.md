@@ -514,7 +514,7 @@ Most state modifications should go through `ParameterPanel::applyChange`. This m
 4. `MainWindow` then creates a `SetParametersCommand` and pushes it to the undo stack.
 
 ### 2. Command Merging
-To prevent the undo stack from becoming bloated by slider movements, the `SetParametersCommand` supports merging. Rapid successive changes with the same description (e.g., "Adjust Gamma") are merged into a single undo step.
+To prevent the undo stack from becoming bloated by slider movements, parameter commands support merging. Keyed controls merge only with adjacent updates carrying the same stable machine-readable parameter key; the human-visible Undo description is not merge identity. The ordinary Qt smoke path verifies that same-key updates coalesce, different keys stay separate even with identical labels, and Undo/Redo restores the expected snapshots.
 
 ---
 

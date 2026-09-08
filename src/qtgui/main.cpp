@@ -1,5 +1,6 @@
 #include "ColorScreenApplication.h"
 #include "MainWindow.h"
+#include "MultiLineTabWidget.h"
 #include "ImageViewWindow.h"
 #include "ImageWidget.h"
 #include "SharpnessPanel.h"
@@ -37,7 +38,9 @@
 #include <QThreadPool>
 #include <QTimer>
 #include <QToolBar>
+#include <QTemporaryDir>
 #include <QTransform>
+#include <QUndoStack>
 
 #include <cstring>
 #include <functional>
@@ -66,6 +69,89 @@ void sendPointerSmokeEvent(QWidget &target, QEvent::Type type, QPointF pos,
 void sendKeySmokeEvent(QWidget &target, QEvent::Type type, int key) {
   QKeyEvent event(type, key, Qt::NoModifier);
   QCoreApplication::sendEvent(&target, &event);
+}
+
+/** Exercise beta-critical non-rendering UI/document invariants. */
+bool runBetaInvariantSmoke() {
+  auto fail = [](const char *reason) {
+    qCritical() << "Beta invariant smoke failed:" << reason;
+    return false;
+  };
+
+  // Logical tab availability must not depend on whether an ancestor is
+  // currently mapped. The host deliberately remains hidden for the whole
+  // probe, reproducing inspector reparent/detach transitions.
+  QWidget hiddenHost;
+  MultiLineTabWidget tabs(&hiddenHost);
+  const int firstTab = tabs.addTab(new QWidget, QStringLiteral("First"));
+  const int secondTab = tabs.addTab(new QWidget, QStringLiteral("Second"));
+  const int thirdTab = tabs.addTab(new QWidget, QStringLiteral("Third"));
+  hiddenHost.hide();
+
+  tabs.setCurrentIndex(secondTab);
+  if (tabs.currentIndex() != secondTab)
+    return fail("hidden ancestor blocked logical tab selection");
+
+  tabs.setTabVisible(firstTab, false);
+  tabs.setTabVisible(secondTab, false);
+  if (tabs.currentIndex() != thirdTab)
+    return fail("hidden current tab did not fall back while ancestor was hidden");
+
+  tabs.setCurrentIndex(firstTab);
+  if (tabs.currentIndex() != thirdTab)
+    return fail("programmatic selection entered an explicitly hidden tab");
+
+  tabs.setTabVisible(secondTab, true);
+  tabs.setCurrentIndex(secondTab);
+  if (tabs.currentIndex() != secondTab)
+    return fail("logically visible tab stayed unavailable under hidden ancestor");
+
+  // Exercise the real MainWindow -> ChangeParametersCommand -> QUndoStack
+  // path. Two updates from one stable parameter key must coalesce, while an
+  // adjacent update from a different key must remain a separate user action
+  // even when the human-visible Undo description is deliberately identical.
+  QTemporaryDir recovery;
+  if (!recovery.isValid())
+    return fail("could not create temporary recovery directory");
+
+  MainWindow window(recovery.path());
+  QUndoStack *undoStack = window.findChild<QUndoStack *>();
+  if (!undoStack)
+    return fail("document undo stack was not found");
+  undoStack->clear();
+
+  const ParameterState baseline = window.documentStateSnapshot();
+  ParameterState gamma1 = baseline;
+  gamma1.rparams.gamma = baseline.rparams.gamma + 0.1;
+  window.applySharedDocumentState(gamma1, QStringLiteral("Smoke adjustment"),
+                                  QStringLiteral("smoke.capture.gamma"));
+
+  ParameterState gamma2 = gamma1;
+  gamma2.rparams.gamma = gamma1.rparams.gamma + 0.1;
+  window.applySharedDocumentState(gamma2, QStringLiteral("Smoke adjustment"),
+                                  QStringLiteral("smoke.capture.gamma"));
+  if (undoStack->count() != 1 || window.documentStateSnapshot() != gamma2)
+    return fail("same-key parameter updates did not merge into one undo step");
+
+  ParameterState rotated = gamma2;
+  rotated.scrToImg.final_rotation = gamma2.scrToImg.final_rotation + 1.0;
+  window.applySharedDocumentState(rotated, QStringLiteral("Smoke adjustment"),
+                                  QStringLiteral("smoke.output.rotation"));
+  if (undoStack->count() != 2 || window.documentStateSnapshot() != rotated)
+    return fail("different parameter keys merged despite identical Undo text");
+
+  undoStack->undo();
+  if (window.documentStateSnapshot() != gamma2)
+    return fail("first undo did not restore the second merged gamma state");
+  undoStack->undo();
+  if (window.documentStateSnapshot() != baseline)
+    return fail("merged gamma undo did not restore the original state");
+  undoStack->redo();
+  undoStack->redo();
+  if (window.documentStateSnapshot() != rotated)
+    return fail("redo did not restore both independent user actions");
+
+  return true;
 }
 
 /** Exercise gesture interruption invariants without loading or rendering an image. */
@@ -533,6 +619,10 @@ int main(int argc, char *argv[]) {
   // interruption semantics. It needs no image fixture or worker thread.
   if (parser.isSet(smokeTestOption) && !runPointerInteractionSmoke())
     return 20;
+  // Keep beta-critical undo and logical-tab invariants in the same ordinary
+  // smoke lane so every supported Qt platform exercises them.
+  if (parser.isSet(smokeTestOption) && !runBetaInvariantSmoke())
+    return 21;
 
   if (parser.isSet(workspaceChurnOption) &&
       (parser.isSet(documentLifecycleOption) ||
