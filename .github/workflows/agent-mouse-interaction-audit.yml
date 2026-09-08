@@ -18,304 +18,62 @@ jobs:
       - name: Apply mouse interaction audit
         shell: bash
         run: |
-          python3 - <<'PY'
-          from pathlib import Path
+          echo 'ZnJvbSBwYXRobGliIGltcG9ydCBQYXRoCmltcG9ydCBzdWJwcm9jZXNzCmltcG9ydCBiYXNlNjQKCmRlZiByZXBsYWNlX29uY2UocGF0aCwgb2xkLCBuZXcpOgogICAgcCA9IFBhdGgocGF0aCkKICAgIHRleHQgPSBwLnJlYWRfdGV4dCgpCiAgICBjb3VudCA9IHRleHQuY291bnQob2xkKQogICAgaWYgY291bnQgIT0gMToKICAgICAgICByYWlzZSBTeXN0ZW1FeGl0KGYie3BhdGh9OiBleHBlY3RlZCBvbmUgbWF0Y2gsIGZvdW5kIHtjb3VudH06IHtvbGRbOjEwMF0hcn0iKQogICAgcC53cml0ZV90ZXh0KHRleHQucmVwbGFjZShvbGQsIG5ldywgMSkpCgpyZXBsYWNlX29uY2UoCiAgICAnc3JjL3F0Z3VpL0ltYWdlV2lkZ2V0LmNwcCcsCiAgICAiIiIgIG1fcG9pbnRzT3ZlcmxheURpcnR5ID0gdHJ1ZTsKICBpZiAobV9ycGFyYW1zKSB7CiAgICAgIG1fbGFzdFNjYW5Dcm9wID0gbV9ycGFyYW1zLT5zY2FuX2Nyb3A7CiIiIiwKICAgICIiIiAgbV9wb2ludHNPdmVybGF5RGlydHkgPSB0cnVlOwogIGlmIChzb2x2ZXIpCiAgICBtX2xhc3RTb2x2ZXJQb2ludHMgPSBzb2x2ZXItPnBvaW50czsKICBlbHNlCiAgICBtX2xhc3RTb2x2ZXJQb2ludHMuY2xlYXIoKTsKICBpZiAobV9ycGFyYW1zKSB7CiAgICAgIG1fbGFzdFNjYW5Dcm9wID0gbV9ycGFyYW1zLT5zY2FuX2Nyb3A7CiIiIikKCnJlcGxhY2Vfb25jZSgKICAgICdzcmMvcXRndWkvSW1hZ2VXaWRnZXQuY3BwJywKICAgICIiIiAgY29uc3QgYm9vbCBtYXBwaW5nQ2hhbmdlZCA9IHNjclRvSW1nICYmICpzY3JUb0ltZyAhPSBtX2xhc3RTY3JUb0ltZzsKICBpZiAobWFwcGluZ0NoYW5nZWQpIHsKICAgIG1fcG9pbnRzT3ZlcmxheURpcnR5ID0gdHJ1ZTsKICAgIG1fbGFzdFNjclRvSW1nID0gKnNjclRvSW1nOwogIH0KCiAgLy8gU2NhbiBwcmVzZW50YXRpb24gY2hhbmdlcyBhbHRlciBvbmx5IHNjYW4tY29vcmRpbmF0ZSB2aWV3cy4gIEZpbmFsIHZpZXdzCiIiIiwKICAgICIiIiAgY29uc3QgYm9vbCBtYXBwaW5nQ2hhbmdlZCA9IHNjclRvSW1nICYmICpzY3JUb0ltZyAhPSBtX2xhc3RTY3JUb0ltZzsKICBpZiAobWFwcGluZ0NoYW5nZWQpIHsKICAgIG1fcG9pbnRzT3ZlcmxheURpcnR5ID0gdHJ1ZTsKICAgIG1fbGFzdFNjclRvSW1nID0gKnNjclRvSW1nOwogIH0KCiAgLy8gVGhlIHJlZ2lzdHJhdGlvbiBvdmVybGF5IGFsc28gZGVwZW5kcyBvbiB0aGUgcG9pbnQgc2V0IGl0c2VsZi4gIEtlZXAgYQogIC8vIGNoZWFwIGNvcHktb24td3JpdGUgc25hcHNob3Qgc28gcG9pbnQgYmF0Y2hlcyBhZGRlZCBvdXRzaWRlIEltYWdlV2lkZ2V0IGRvCiAgLy8gbm90IGxlYXZlIGFuIG9sZCBvdmVybGF5IG9uIHNjcmVlbiB1bnRpbCBzb21lIHVucmVsYXRlZCBtYXBwaW5nIGNoYW5nZS4KICBjb25zdCBib29sIHNvbHZlclBvaW50c0NoYW5nZWQgPQogICAgICBzb2x2ZXIgPyBzb2x2ZXItPnBvaW50cyAhPSBtX2xhc3RTb2x2ZXJQb2ludHMgOiAhbV9sYXN0U29sdmVyUG9pbnRzLmVtcHR5KCk7CiAgaWYgKHNvbHZlclBvaW50c0NoYW5nZWQpIHsKICAgIG1fcG9pbnRzT3ZlcmxheURpcnR5ID0gdHJ1ZTsKICAgIGlmIChzb2x2ZXIpCiAgICAgIG1fbGFzdFNvbHZlclBvaW50cyA9IHNvbHZlci0+cG9pbnRzOwogICAgZWxzZQogICAgICBtX2xhc3RTb2x2ZXJQb2ludHMuY2xlYXIoKTsKICB9CgogIC8vIFNjYW4gcHJlc2VudGF0aW9uIGNoYW5nZXMgYWx0ZXIgb25seSBzY2FuLWNvb3JkaW5hdGUgdmlld3MuICBGaW5hbCB2aWV3cwoiIiIpCgpyZXBsYWNlX29uY2UoCiAgICAnc3JjL3F0Z3VpL0ltYWdlV2lkZ2V0LmNwcCcsCiAgICAiIiIgICAgY29uc3QgYm9vbCBzY2FuUHJlc2VudGF0aW9uQ2hhbmdlZCA9CiAgICAgICAgIShycGFyYW1zLT5zY2FuX2Nyb3AgPT0gbV9sYXN0U2NhbkNyb3ApIHx8CiAgICAgICAgcnBhcmFtcy0+c2Nhbl9yb3RhdGlvbiAhPSBtX2xhc3RSb3RhdGlvbiB8fAogICAgICAgIHJwYXJhbXMtPnNjYW5fbWlycm9yICE9IG1fbGFzdE1pcnJvcjsKICAgIG1fbGFzdFNjYW5Dcm9wID0gcnBhcmFtcy0+c2Nhbl9jcm9wOwoiIiIsCiAgICAiIiIgICAgY29uc3QgYm9vbCBzY2FuUHJlc2VudGF0aW9uQ2hhbmdlZCA9CiAgICAgICAgIShycGFyYW1zLT5zY2FuX2Nyb3AgPT0gbV9sYXN0U2NhbkNyb3ApIHx8CiAgICAgICAgcnBhcmFtcy0+c2Nhbl9yb3RhdGlvbiAhPSBtX2xhc3RSb3RhdGlvbiB8fAogICAgICAgIHJwYXJhbXMtPnNjYW5fbWlycm9yICE9IG1fbGFzdE1pcnJvcjsKICAgIC8vIE1vdXNlIGhpdC10ZXN0aW5nIHVzZXMgdGhlIG5ldyBwcmVzZW50YXRpb24gdHJhbnNmb3JtIGltbWVkaWF0ZWx5LiAgVGhlCiAgICAvLyBjYWNoZWQgcmVnaXN0cmF0aW9uIG92ZXJsYXkgbXVzdCB1c2UgdGhhdCBzYW1lIHRyYW5zZm9ybSBvciBTZWxlY3QgY2FuCiAgICAvLyBhcHBlYXIgZGlzcGxhY2VkIGV2ZW4gdGhvdWdoIHdpZGdldFRvSW1hZ2UoKS9pbWFnZVRvV2lkZ2V0KCkgYXJlIGNvcnJlY3QuCiAgICBpZiAobV9jb29yZGluYXRlU3BhY2UgPT0gY29sb3JzY3JlZW46OnJlbmRlcl9zY2FuX2Nvb3JkaW5hdGVzICYmCiAgICAgICAgc2NhblByZXNlbnRhdGlvbkNoYW5nZWQpCiAgICAgIG1fcG9pbnRzT3ZlcmxheURpcnR5ID0gdHJ1ZTsKICAgIG1fbGFzdFNjYW5Dcm9wID0gcnBhcmFtcy0+c2Nhbl9jcm9wOwoiIiIpCgpyZXBsYWNlX29uY2UoCiAgICAnc3JjL3F0Z3VpL0ltYWdlV2lkZ2V0LmgnLAogICAgIiIiICBib29sICAgIG1fcG9pbnRzT3ZlcmxheURpcnR5ID0gdHJ1ZTsKICBjb2xvcnNjcmVlbjo6c2NyX3RvX2ltZ19wYXJhbWV0ZXJzIG1fbGFzdFNjclRvSW1nOwoKICBjb2xvcnNjcmVlbjo6aW50X29wdGlvbmFsX2ltYWdlX2FyZWEgbV9sYXN0U2NhbkNyb3A7CiIiIiwKICAgICIiIiAgYm9vbCAgICBtX3BvaW50c092ZXJsYXlEaXJ0eSA9IHRydWU7CiAgY29sb3JzY3JlZW46OnNjcl90b19pbWdfcGFyYW1ldGVycyBtX2xhc3RTY3JUb0ltZzsKICBjb2xvcnNjcmVlbjo6Y293X3ZlY3Rvcjxjb2xvcnNjcmVlbjo6c29sdmVyX3BhcmFtZXRlcnM6OnNvbHZlcl9wb2ludF90PgogICAgICBtX2xhc3RTb2x2ZXJQb2ludHM7CgogIGNvbG9yc2NyZWVuOjppbnRfb3B0aW9uYWxfaW1hZ2VfYXJlYSBtX2xhc3RTY2FuQ3JvcDsKIiIiKQoKUGF0aCgnc3JjL3F0Z3VpL01vdXNlSW50ZXJhY3Rpb25TbW9rZS5oJykud3JpdGVfYnl0ZXMoYmFzZTY0LmI2NGRlY29kZSgnSTJSeVptRnBibVFnYjI1alpRb2tJRk5oZFhSekFXUjFaMlYwSUcxdmRYTmxMWFJ2TFhOallXNGdZMjl2Y21ScGJtRjBaU0JvWVc1a2JHbHVaeTVkQ2lKaWIyOXNJSEoxYmsxdmRYTmxTVzUwWlhKaFkzUnBiMjVEYjI5eVpHbHVZWFJsVTIxdmEyVW9LVHNLJykpClBhdGgoJ3NyYy9xdGd1aS9Nb3VzZUludGVyYWN0aW9uU21va2UuY3BwJykud3JpdGVfYnl0ZXMoYmFzZTY0LmI2NGRlY29kZSgnSTJsdVkyeDFaR1VnSWsxdmRYTmxTVzUwWlhKaFkzUnBiMjVEYjI5clpTNW9JZ29LSTJsdVkyeDFaR1VnSWtsaFlXZGxWMmxrWjJWMExpSUtJMmhsZG1sdVkyVjJaV1J2TG14cFltTnZiRzl5YzJOeVpXVnVMMmx1WTJ4MVpHVXZjMk55TFhSdkxXbHRaeTVvSWdvS0kybHVZMngxWkdVZ1BGREJiM0psUVhCd2JHbGpZWFJwYjI0K0NreHBibU5zZFdSbElGQkZaV0oxWnk1b0lHbHVZMngxWkdVZ1BGREJiM0psUTI5d1pUcEtTMDF2ZFhObFFYWmxiblErQ2dwcGJtTnNkV1JsSUR4amJXRjBhRDVqYldGMGFENEtJMmx1WTJ4MVpHVWdjM1J5WldGdGMyVmhiblErQ2dwNFlXMWxjM0JoWTJVZ2V3b0tZMjl1YzNRZ1pHOTFZbXhsSUdOdmIzSmthVzVoZEdWVWIzUmxiR0Z1WTJVZ1BTQXhaUzAzT3dvS1ltOXZiQ0J6WVcxbFVHOXBiblFvWTI5c2IzSnpZM0psWlc0Nk9uQnZhVzUwWDNRZ1lTd2dZMjlzYjNKelkzSmxaVzQ2T25CdmFXNTBYM1FnWWlrZ2V3b2dJSEpsZEhWeWJpQnpkR1E2T21GaWN5aGhMbmdnTFNCaUxuZ3BJRHc5SUdOdmIzSmthVzVoZEdWVWIzUmxiR0Z1WTJVZ0ppa0tJQ0FnSUNBZ0lITjBaRHA2T21GaWN5aGhMbmtpTFRCaFpHbGtZWFJsVkc5c1pYSmhibU5sSUQwOVltOXZiQ0J6WVcxbFVHOXBiblFvWTI5c2IzSnpZM0psWlc0Nk9uQnZhVzUwWDNRZ1lTd2dZMjlzYjNKelkzSmxaVzQ2T25CdmFXNTBYM1FnWWlrN0NuMEtDblp2YVdRZ2MyVnVaRTF2ZFhObEtFbHRZV2RsVjJsa1oyVjBJQ1ozYVdSblpYUXNJRkZGZG1WdWREbzZWSGx3WlNCMGVYQmxMQ0JqYjI1emRDQlFVbTlwYm5SR0lDWnNiMk5oYkN3S0lDQWdJQ0FnSUNBZ1EzUTZPa3Q1Y21WQ2RYUjBiMjRnWW5WMGRHOXVMQ0JSSFhSdlpHRnlaVWh2WkdsemRDQmlkWFIwYjI1ekxBb2dJQ0FnSUNBZ0lDQkZiaTFyWlhrdGIyUnBabWxsY2lCdGIyUnBabWxsY25NZ1BTQlJkRG82VG05TGIyUnBabWxsY2lrZ2V3b2dJR052Ym5OMElGQlZhVzUwSUdkc2IySmhiRTl5YVdkcGJpQTlJSGRwWkdkbGRDNXRZWEJVYjBkc2IySmhiQ2hSUVzNpYm5Rb01Dd2dNQ2twS3RzS0lDQWdJR052Ym5OMElGQlZhVzUwUmlCbmJHOWlZV3dvWjJ4dlltRnNUM0pwWjJsdUxuZ29LU0FySUd4dlkyRnNMbmdvS1N3S0lDQWdJQ0FnSUNBZ0lDQWdJQ0FnSUNBZ0lDQWdJR2RzYjJKaGJFOXlhV2RwYmk1NUtDa2dLeUJzYjJOaGJDOTVLQ2twS3RzS0lDQlJUVzkxYzJWVmRtVnVkQ0JsZG1WdWRDaDBlWEJsTENCc2IyTmhiQ3dnWjJ4dlltRnNMQ0JpZFhSMGIyNHNJR0oxZEhSdmJuTXNJRzF2WkdsbWFXVnljeWs3Q2lBZ1VVTnZjbVZCY0hCc2FXTmhkR2x2YmpvNmMyVnVaRVYyWlc1MEtDWjNhV1JuWlhRc0lDWmxkbVZ1ZENrN0NuMEtDbVp2YVdRZ1kyeHBZMnNvU1cxaFoyVlhhV1JuWlhRZ0puZHBaR2RsZEN3Z1kyOXVjM1FnVVZCdmFXNTBSaUFtYkc5allXd3NJRkYwT2sxdmRYTmxRblYwZEc5dUlHSjFkSFJ2Yml3S0lDQWdJQ0FnUTNRNlIwdGxlVTF2WkdsbWFXVnljeUJ0YjJScFptbGxjbk1nUFNCUmREbzZUbTlNYjJOaGJXOWthV1pwWlhJcElIc0tJQ0J6Wlc1a1RXOTFjMlVvZDJsa1oyVjBMQ0JSUlhabGJuUTZPazF2ZFhObFFuVjBkRzl1VUhKbGMzTXNJR3h2WTJGc0xDQmlkWFIwYjI0c0lHSjFkSFJ2Yml3Z2JXOWthV1pwWlhKektUc0tJQ0J6Wlc1a1RXOTFjMlVvZDJsMFoyVjBMQ0JSUlhabGJuUTZPazF2ZFhObFFuVjBkRzl1VW1Wc1pXRnpaU3dnYkc5allXd3NJR0oxZEhSdmJpd2dVWFJ2T2s1dlFuVjBkRzl1TEFvZ0lDQWdJQ0FnSUcxdmW...'}))
 
-          def replace_once(path, old, new):
-              p = Path(path)
-              text = p.read_text()
-              count = text.count(old)
-              if count != 1:
-                  raise SystemExit(f"{path}: expected one match, found {count}: {old[:100]!r}")
-              p.write_text(text.replace(old, new, 1))
+replace_once(
+    'src/qtgui/Makefile.am',
+    """    DocumentLifecycleSmoke.cpp \\
+    WorkspaceChurnSmoke.cpp \\
+    ColorScreenApplication.cpp \\
+""",
+    """    DocumentLifecycleSmoke.cpp \\
+    WorkspaceChurnSmoke.cpp \\
+    MouseInteractionSmoke.cpp \\
+    ColorScreenApplication.cpp \\
+""")
+replace_once(
+    'src/qtgui/Makefile.am',
+    'EXTRA_DIST = ColorScreenApplication.h DocumentLifecycleSmoke.h WorkspaceChurnSmoke.h ',
+    'EXTRA_DIST = ColorScreenApplication.h DocumentLifecycleSmoke.h WorkspaceChurnSmoke.h MouseInteractionSmoke.h ')
 
-          replace_once(
-              'src/qtgui/ImageWidget.cpp',
-              '''  m_pointsOverlayDirty = true;\n  if (m_rparams) {\n      m_lastScanCrop = m_rparams->scan_crop;\n''',
-              '''  m_pointsOverlayDirty = true;\n  if (solver)\n    m_lastSolverPoints = solver->points;\n  else\n    m_lastSolverPoints.clear();\n  if (m_rparams) {\n      m_lastScanCrop = m_rparams->scan_crop;\n''')
-
-          replace_once(
-              'src/qtgui/ImageWidget.cpp',
-              '''  const bool mappingChanged = scrToImg && *scrToImg != m_lastScrToImg;\n  if (mappingChanged) {\n    m_pointsOverlayDirty = true;\n    m_lastScrToImg = *scrToImg;\n  }\n\n  // Scan presentation changes alter only scan-coordinate views.  Final views\n''',
-              '''  const bool mappingChanged = scrToImg && *scrToImg != m_lastScrToImg;\n  if (mappingChanged) {\n    m_pointsOverlayDirty = true;\n    m_lastScrToImg = *scrToImg;\n  }\n\n  // The registration overlay also depends on the point set itself.  Keep a\n  // cheap copy-on-write snapshot so point batches added outside ImageWidget do\n  // not leave an old overlay on screen until some unrelated mapping change.\n  const bool solverPointsChanged =\n      solver ? solver->points != m_lastSolverPoints : !m_lastSolverPoints.empty();\n  if (solverPointsChanged) {\n    m_pointsOverlayDirty = true;\n    if (solver)\n      m_lastSolverPoints = solver->points;\n    else\n      m_lastSolverPoints.clear();\n  }\n\n  // Scan presentation changes alter only scan-coordinate views.  Final views\n''')
-
-          replace_once(
-              'src/qtgui/ImageWidget.cpp',
-              '''    const bool scanPresentationChanged =\n        !(rparams->scan_crop == m_lastScanCrop) ||\n        rparams->scan_rotation != m_lastRotation ||\n        rparams->scan_mirror != m_lastMirror;\n    m_lastScanCrop = rparams->scan_crop;\n''',
-              '''    const bool scanPresentationChanged =\n        !(rparams->scan_crop == m_lastScanCrop) ||\n        rparams->scan_rotation != m_lastRotation ||\n        rparams->scan_mirror != m_lastMirror;\n    // Mouse hit-testing uses the new presentation transform immediately.  The\n    // cached registration overlay must use that same transform or Select can\n    // appear displaced even though widgetToImage()/imageToWidget() are correct.\n    if (m_coordinateSpace == colorscreen::render_scan_coordinates &&\n        scanPresentationChanged)\n      m_pointsOverlayDirty = true;\n    m_lastScanCrop = rparams->scan_crop;\n''')
-
-          replace_once(
-              'src/qtgui/ImageWidget.h',
-              '''  bool    m_pointsOverlayDirty = true;\n  colorscreen::scr_to_img_parameters m_lastScrToImg;\n\n  colorscreen::int_optional_image_area m_lastScanCrop;\n''',
-              '''  bool    m_pointsOverlayDirty = true;\n  colorscreen::scr_to_img_parameters m_lastScrToImg;\n  colorscreen::cow_vector<colorscreen::solver_parameters::solver_point_t>\n      m_lastSolverPoints;\n\n  colorscreen::int_optional_image_area m_lastScanCrop;\n''')
-
-          Path('src/qtgui/MouseInteractionSmoke.h').write_text(r'''#pragma once
-
-/** Exercise ImageWidget mouse-to-scan coordinate handling. */
-bool runMouseInteractionCoordinateSmoke();
-''')
-
-          Path('src/qtgui/MouseInteractionSmoke.cpp').write_text(r'''#include "MouseInteractionSmoke.h"
-
-#include "ImageWidget.h"
-#include "../libcolorscreen/include/scr-to-img.h"
-
-#include <QCoreApplication>
-#include <QDebug>
-#include <QMouseEvent>
-
-#include <cmath>
-#include <memory>
-#include <vector>
-
-namespace {
-
-constexpr double coordinateTolerance = 1e-7;
-
-bool samePoint(colorscreen::point_t a, colorscreen::point_t b) {
-  return std::abs(a.x - b.x) <= coordinateTolerance &&
-         std::abs(a.y - b.y) <= coordinateTolerance;
-}
-
-void sendMouse(ImageWidget &widget, QEvent::Type type, const QPointF &local,
-               Qt::MouseButton button, Qt::MouseButtons buttons,
-               Qt::KeyboardModifiers modifiers = Qt::NoModifier) {
-  const QPoint globalOrigin = widget.mapToGlobal(QPoint(0, 0));
-  const QPointF global(globalOrigin.x() + local.x(),
-                       globalOrigin.y() + local.y());
-  QMouseEvent event(type, local, global, button, buttons, modifiers);
-  QCoreApplication::sendEvent(&widget, &event);
-}
-
-void click(ImageWidget &widget, const QPointF &local, Qt::MouseButton button,
-           Qt::KeyboardModifiers modifiers = Qt::NoModifier) {
-  sendMouse(widget, QEvent::MouseButtonPress, local, button, button, modifiers);
-  sendMouse(widget, QEvent::MouseButtonRelease, local, button, Qt::NoButton,
-            modifiers);
-}
-
-bool reportPointFailure(const char *tool, int rotation, bool mirror,
-                        colorscreen::point_t expected,
-                        colorscreen::point_t actual) {
-  qCritical() << "Mouse interaction coordinate smoke failed" << tool
-              << "rotation" << rotation << "mirror" << mirror << "expected"
-              << expected.x << expected.y << "actual" << actual.x << actual.y;
-  return false;
-}
-
-} // namespace
-
-/** Drive the actual ImageWidget mouse handlers through a transformed scan.
-    The synthetic crop is deliberately viewed at high zoom so a one-pixel
-    presentation mismatch cannot hide inside hit-test tolerances. */
-bool runMouseInteractionCoordinateSmoke() {
-  auto scan = std::make_shared<colorscreen::image_data>();
-  if (!scan->set_dimensions(9, 7, true, false)) {
-    qCritical() << "Mouse interaction smoke could not allocate its scan";
-    return false;
-  }
-
-  colorscreen::render_parameters rparams;
-  rparams.scan_crop.set = true;
-  rparams.scan_crop.x = 1;
-  rparams.scan_crop.y = 1;
-  rparams.scan_crop.width = 7;
-  rparams.scan_crop.height = 5;
-
-  colorscreen::scr_to_img_parameters scr;
-  scr.type = colorscreen::Paget;
-  scr.center = {4, 2};
-  scr.coordinate1 = {3, 0};
-  scr.coordinate2 = {0, 3};
-  const colorscreen::scr_to_img_parameters baselineScr = scr;
-
-  colorscreen::scr_detect_parameters detect;
-  colorscreen::render_type_parameters renderType;
-  renderType.type = colorscreen::render_type_original;
-  renderType.color = true;
-  colorscreen::solver_parameters solver;
-
-  ImageWidget widget;
-  widget.resize(700, 500);
-  widget.setImage(scan, &rparams, &scr, &detect, &renderType, &solver);
-  widget.setCoordinateSpace(colorscreen::render_scan_coordinates);
-  widget.show();
-  QCoreApplication::processEvents();
-
-  const colorscreen::point_t probe = {2, 3};
-  const colorscreen::point_t measureEnd = {6, 4};
-  const colorscreen::point_t centerPoint = {4, 2};
-  const colorscreen::point_t axis1End = {7, 2};
-  const colorscreen::point_t axis2End = {4, 5};
-
-  for (int rotation = 0; rotation < 4; ++rotation) {
-    for (bool mirror : {false, true}) {
-      rparams.scan_rotation = rotation;
-      rparams.scan_mirror = mirror;
-      scr = baselineScr;
-      solver = colorscreen::solver_parameters();
-      widget.updateParameters(&rparams, &scr, &detect, &renderType, &solver);
-      widget.fitToView();
-
-      const QPointF probeWidget = widget.imageToWidget(probe);
-      const colorscreen::point_t roundTrip = widget.widgetToImage(probeWidget);
-      if (!samePoint(roundTrip, probe))
-        return reportPointFailure("point round trip", rotation, mirror, probe,
-                                  roundTrip);
-
-      // Add Point and profile/focus spot placement share pointAdded().
-      bool pointAdded = false;
-      colorscreen::point_t addedPoint = {0, 0};
-      const QMetaObject::Connection pointConnection = QObject::connect(
-          &widget, &ImageWidget::pointAdded, &widget,
-          [&](colorscreen::point_t img, colorscreen::point_t,
-              colorscreen::point_t) {
-            pointAdded = true;
-            addedPoint = img;
-          });
-      widget.setInteractionMode(ImageWidget::AddPointMode);
-      click(widget, probeWidget, Qt::LeftButton);
-      QObject::disconnect(pointConnection);
-      if (!pointAdded || !samePoint(addedPoint, probe))
-        return reportPointFailure("Add Point", rotation, mirror, probe,
-                                  addedPoint);
-
-      // Measure uses the same conversion on press, move and release.
-      bool measured = false;
-      colorscreen::point_t measuredStart = {0, 0};
-      colorscreen::point_t measuredEnd = {0, 0};
-      const QMetaObject::Connection measureConnection = QObject::connect(
-          &widget, &ImageWidget::distanceMeasured, &widget,
-          [&](colorscreen::point_t start, colorscreen::point_t end) {
-            measured = true;
-            measuredStart = start;
-            measuredEnd = end;
-          });
-      const QPointF measureEndWidget = widget.imageToWidget(measureEnd);
-      widget.setInteractionMode(ImageWidget::MeasureMode);
-      sendMouse(widget, QEvent::MouseButtonPress, probeWidget, Qt::LeftButton,
-                Qt::LeftButton);
-      sendMouse(widget, QEvent::MouseMove, measureEndWidget, Qt::NoButton,
-                Qt::LeftButton);
-      sendMouse(widget, QEvent::MouseButtonRelease, measureEndWidget,
-                Qt::LeftButton, Qt::NoButton);
-      QObject::disconnect(measureConnection);
-      if (!measured || !samePoint(measuredStart, probe))
-        return reportPointFailure("Measure start", rotation, mirror, probe,
-                                  measuredStart);
-      if (!samePoint(measuredEnd, measureEnd))
-        return reportPointFailure("Measure end", rotation, mirror, measureEnd,
-                                  measuredEnd);
-
-      // Set Screen Coordinates exercises center plus both axis endpoint clicks.
-      scr = baselineScr;
-      widget.updateParameters(&rparams, &scr, &detect, &renderType, &solver);
-      widget.setLockRelativeCoordinates(false);
-      widget.setInteractionMode(ImageWidget::SetCenterMode);
-      click(widget, widget.imageToWidget(centerPoint), Qt::LeftButton);
-      if (!samePoint(scr.center, centerPoint))
-        return reportPointFailure("Screen center", rotation, mirror,
-                                  centerPoint, scr.center);
-      click(widget, widget.imageToWidget(axis1End), Qt::RightButton);
-      colorscreen::point_t actualAxis1 = scr.center + scr.coordinate1;
-      if (!samePoint(actualAxis1, axis1End))
-        return reportPointFailure("Screen axis 1", rotation, mirror, axis1End,
-                                  actualAxis1);
-      click(widget, widget.imageToWidget(axis2End), Qt::MiddleButton);
-      colorscreen::point_t actualAxis2 = scr.center + scr.coordinate2;
-      if (!samePoint(actualAxis2, axis2End))
-        return reportPointFailure("Screen axis 2", rotation, mirror, axis2End,
-                                  actualAxis2);
-
-      // Select hit-testing and point dragging use imageToWidget/widgetToImage.
-      scr = baselineScr;
-      solver = colorscreen::solver_parameters();
-      solver.add_point(probe, {0, 0}, colorscreen::solver_parameters::red);
-      widget.updateParameters(&rparams, &scr, &detect, &renderType, &solver);
-      widget.clearSelection();
-      widget.setShowRegistrationPoints(true);
-      widget.setInteractionMode(ImageWidget::SelectMode);
-      click(widget, widget.imageToWidget(probe), Qt::LeftButton);
-      if (widget.selectedPoints().size() != 1 ||
-          widget.selectedPoints().begin()->index != 0 ||
-          !samePoint(solver.points[0].img, probe)) {
-        qCritical() << "Mouse interaction coordinate smoke failed Select"
-                    << "rotation" << rotation << "mirror" << mirror;
-        return false;
+replace_once(
+    'src/qtgui/main.cpp',
+    """#include "WorkspaceChurnSmoke.h"
+#include "WorkspaceWindow.h"
+""",
+    """#include "WorkspaceChurnSmoke.h"
+#include "MouseInteractionSmoke.h"
+#include "WorkspaceWindow.h"
+""")
+replace_once(
+    'src/qtgui/main.cpp',
+    """      // Mouse tools and overlays use CoordinateTransformer, while the rendered
+""",
+    """      if (!runMouseInteractionCoordinateSmoke()) {
+        qCritical() << "ImageWidget mouse interaction coordinate smoke failed";
+        app.exit(14);
+        return;
       }
 
-      // Profile-spot right-click hit-testing is another imageToWidget consumer.
-      colorscreen::scr_to_img map;
-      if (!map.set_parameters(scr, *scan)) {
-        qCritical() << "Mouse interaction smoke could not build profile map";
-        return false;
-      }
-      std::vector<colorscreen::point_t> profileSpots = {map.to_scr(probe)};
-      widget.setProfileSpots(&profileSpots, nullptr);
-      bool removed = false;
-      int removedIndex = -1;
-      const QMetaObject::Connection profileConnection = QObject::connect(
-          &widget, &ImageWidget::profileSpotRemoveRequested, &widget,
-          [&](int index) {
-            removed = true;
-            removedIndex = index;
-          });
-      widget.setInteractionMode(ImageWidget::AddPointMode);
-      click(widget, widget.imageToWidget(probe), Qt::RightButton);
-      QObject::disconnect(profileConnection);
-      widget.setProfileSpots(nullptr, nullptr);
-      if (!removed || removedIndex != 0) {
-        qCritical() << "Mouse interaction coordinate smoke failed profile hit"
-                    << "rotation" << rotation << "mirror" << mirror;
-        return false;
-      }
-    }
-  }
+      // Mouse tools and overlays use CoordinateTransformer, while the rendered
+""")
 
-  widget.hide();
-  return true;
+expected = {
+    'src/qtgui/ImageWidget.cpp',
+    'src/qtgui/ImageWidget.h',
+    'src/qtgui/MouseInteractionSmoke.cpp',
+    'src/qtgui/MouseInteractionSmoke.h',
+    'src/qtgui/Makefile.am',
+    'src/qtgui/main.cpp',
 }
-''')
-
-          replace_once(
-              'src/qtgui/Makefile.am',
-              '''    DocumentLifecycleSmoke.cpp \\\n    WorkspaceChurnSmoke.cpp \\\n    ColorScreenApplication.cpp \\\n''',
-              '''    DocumentLifecycleSmoke.cpp \\\n    WorkspaceChurnSmoke.cpp \\\n    MouseInteractionSmoke.cpp \\\n    ColorScreenApplication.cpp \\\n''')
-          replace_once(
-              'src/qtgui/Makefile.am',
-              'EXTRA_DIST = ColorScreenApplication.h DocumentLifecycleSmoke.h WorkspaceChurnSmoke.h ',
-              'EXTRA_DIST = ColorScreenApplication.h DocumentLifecycleSmoke.h WorkspaceChurnSmoke.h MouseInteractionSmoke.h ')
-
-          replace_once(
-              'src/qtgui/main.cpp',
-              '''#include "WorkspaceChurnSmoke.h"\n#include "WorkspaceWindow.h"\n''',
-              '''#include "WorkspaceChurnSmoke.h"\n#include "MouseInteractionSmoke.h"\n#include "WorkspaceWindow.h"\n''')
-          replace_once(
-              'src/qtgui/main.cpp',
-              '''      // Mouse tools and overlays use CoordinateTransformer, while the rendered\n''',
-              '''      if (!runMouseInteractionCoordinateSmoke()) {\n        qCritical() << "ImageWidget mouse interaction coordinate smoke failed";\n        app.exit(14);\n        return;\n      }\n\n      // Mouse tools and overlays use CoordinateTransformer, while the rendered\n''')
-
-          expected = {
-              'src/qtgui/ImageWidget.cpp',
-              'src/qtgui/ImageWidget.h',
-              'src/qtgui/MouseInteractionSmoke.cpp',
-              'src/qtgui/MouseInteractionSmoke.h',
-              'src/qtgui/Makefile.am',
-              'src/qtgui/main.cpp',
-          }
-          import subprocess
-          changed = set(subprocess.check_output(
-              ['git', 'diff', '--name-only'], text=True).splitlines())
-          if changed != expected:
-              raise SystemExit(f'unexpected changed files: {sorted(changed)}')
-          subprocess.run(['git', 'diff', '--check'], check=True)
-          PY
-
+changed = set(subprocess.check_output(['git', 'diff', '--name-only'], text=True).splitlines())
+if changed != expected:
+    raise SystemExit(f'unexpected changed files: {sorted(changed)}')
+subprocess.run(['git', 'diff', '--check'], check=True)
+' | base64 -d > /tmp/apply_mouse_audit.py
+          python3 /tmp/apply_mouse_audit.py
           git config user.name "OpenAI Agent"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/qtgui/ImageWidget.cpp src/qtgui/ImageWidget.h \
-                  src/qtgui/MouseInteractionSmoke.cpp src/qtgui/MouseInteractionSmoke.h \
-                  src/qtgui/Makefile.am src/qtgui/main.cpp
-          git commit -m "qtgui: finish mouse interaction coordinate audit" \
-            -m "Keep the cached registration overlay in step with scan presentation and solver-point changes, and exercise actual ImageWidget mouse handlers across crop, quarter-turn rotation and mirroring."
+          git add src/qtgui/ImageWidget.cpp src/qtgui/ImageWidget.h src/qtgui/MouseInteractionSmoke.cpp src/qtgui/MouseInteractionSmoke.h src/qtgui/Makefile.am src/qtgui/main.cpp
+          git commit -m "qtgui: finish mouse interaction coordinate audit" -m "Keep the cached registration overlay in step with scan presentation and solver-point changes, and exercise actual ImageWidget mouse handlers across crop, quarter-turn rotation and mirroring."
           git push origin HEAD:agent/qtgui-mouse-interaction-audit
