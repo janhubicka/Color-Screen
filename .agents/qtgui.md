@@ -440,6 +440,20 @@ same-length perpendicular `coordinate2` as one document edit. Leaving the tool
 before the second click discards the pending center. Ordinary center/axis dragging
 then takes over, and Undo/Redo never has to serialize a half-configured stage.
 
+After the center click, the provisional X/Y basis follows the pointer before the
+second click; this preview is widget-local and must not mutate document state. Axis
+dash rendering is anchored to screen periods: one black/white cycle per lattice
+period, with widget-space extension so exactly horizontal/vertical axes remain
+finite.
+
+Temporary two-endpoint tools follow the same interaction convention. Measure and
+area-selection tools accept click-move-click so the operator may use wheel zoom
+between anchors, while preserving drag-to-complete as a fast shortcut. The pending
+anchor is transient, gets an in-canvas instruction, and Escape/tool switches cancel
+it without publishing a partial result. Persistent Add Point and registration-point
+Select retain single-click/drag meanings and are therefore not converted to this
+convention.
+
 The manual tool is an initializer/editor for the base linear coordinate system,
 not a competing editor for a control-point model. Hide it when the screen has no
 regular lattice, while nonlinear geometry is selected/materialized, or while the

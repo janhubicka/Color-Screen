@@ -199,6 +199,17 @@ click followed by a neighboring +X green-dot click. The first click remains
 transient; the second atomically creates the center and non-degenerate initial
 basis, after which the existing drag/button editing gestures take over.
 
+The coordinate bootstrap now previews its provisional X/Y axes immediately after
+the center click. Axis strokes use one black/white cycle per screen period and are
+extended in widget space, avoiding the old divide-by-zero failure for perfectly
+horizontal or vertical axes.
+
+Measure, Crop and temporary Generic Area tools also expose the pending interaction
+directly on the canvas. They accept click-move-click (including wheel zoom between
+anchors) as well as the older drag shortcut; Escape or a tool switch discards the
+transient first anchor. Add Point and registration Select retain their established
+single-click meanings.
+
 Manual base-coordinate editing is deliberately hidden after an accepted
 control-point geometry fit or nonlinear mesh takes ownership of the mapping. The
 axis lock and coordinate-finetune actions are similarly scoped to the active

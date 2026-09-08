@@ -466,6 +466,7 @@ void ImageWidget::paintEvent(QPaintEvent *event) {
     drawFocusAreas(p);
     drawMtfMeasurementOverlay(p);
     drawScreenCoordinateSystem(p);
+    drawAreaSelection(p);
     drawMeasurement(p);
 
     // Hide animations when we have an image
@@ -846,227 +847,123 @@ void ImageWidget::drawMtfMeasurementOverlay(QPainter &p) {
  * @param p The QPainter to use.
  */
 void ImageWidget::drawScreenCoordinateSystem(QPainter &p) {
-  // Draw screen coordinate system when SetCenterMode is active
-  if (m_interactionMode != SetCenterMode || !m_scrToImg) return;
+  if (m_interactionMode != SetCenterMode || !m_scrToImg)
+    return;
 
   p.save();
   p.setRenderHint(QPainter::Antialiasing);
 
-  // scr_to_img defines the origin and both unit-axis endpoints as green dots.
   const QColor dotColor = Qt::green;
-  const colorscreen::point_t displayedCenter =
-      m_coordinateSetupStage == ScreenCoordinateSetupStage::NeedXAxis
-          ? m_pendingCoordinateCenter
-          : m_scrToImg->center;
-  QPointF centerWidget = imageToWidget(displayedCenter);
-
-  auto drawSetupHint = [this, &p](const QString &message) {
-    QFont font = p.font();
-    font.setBold(true);
-    p.setFont(font);
-    p.setPen(QPen(Qt::black, 3));
-    const QRectF hintRect = rect().adjusted(12, 12, -12, -12);
-    p.drawText(hintRect.translated(1, 1), Qt::AlignTop | Qt::AlignHCenter,
-               message);
-    p.setPen(Qt::yellow);
-    p.drawText(hintRect, Qt::AlignTop | Qt::AlignHCenter, message);
-  };
+  const bool choosingXAxis =
+      m_coordinateSetupStage == ScreenCoordinateSetupStage::NeedXAxis;
+  const colorscreen::point_t center =
+      choosingXAxis ? m_pendingCoordinateCenter : m_scrToImg->center;
+  const QPointF centerWidget = imageToWidget(center);
 
   if (m_coordinateSetupStage == ScreenCoordinateSetupStage::NeedCenter) {
-    drawSetupHint(tr("Click a green screen dot to set the center"));
+    drawInteractionHint(p, tr("Screen coordinates: click a green dot for the center"));
     p.restore();
     return;
   }
-  if (m_coordinateSetupStage == ScreenCoordinateSetupStage::NeedXAxis) {
-    p.setPen(QPen(Qt::black, 2));
-    p.setBrush(dotColor);
-    p.drawEllipse(centerWidget, 6, 6);
-    drawSetupHint(tr("Now click the neighboring green dot along +X"));
-    p.restore();
-    return;
+
+  colorscreen::point_t coordinate1 = m_scrToImg->coordinate1;
+  colorscreen::point_t coordinate2 = m_scrToImg->coordinate2;
+  bool haveAxes = m_coordinateSetupStage == ScreenCoordinateSetupStage::Editing;
+  if (choosingXAxis) {
+    coordinate1 = {m_pendingCoordinateXAxis.x - center.x,
+                   m_pendingCoordinateXAxis.y - center.y};
+    coordinate2 = {-coordinate1.y, coordinate1.x};
+    const QPointF previewEnd = imageToWidget(m_pendingCoordinateXAxis);
+    haveAxes = QLineF(centerWidget, previewEnd).length() > 2.0;
   }
-  
-  // Calculate viewport bounds in image coordinates
-  colorscreen::point_t topLeft = widgetToImage(QPointF(0, 0));
-  colorscreen::point_t bottomRight = widgetToImage(QPointF(width(), height()));
-  double minX = qMin(topLeft.x, bottomRight.x);
-  double maxX = qMax(topLeft.x, bottomRight.x);
-  double minY = qMin(topLeft.y, bottomRight.y);
-  double maxY = qMax(topLeft.y, bottomRight.y);
-  
-  // Draw X axis (coordinate1) - extend to viewport edges
-  colorscreen::point_t xDir = {m_scrToImg->coordinate1.x, m_scrToImg->coordinate1.y};
-  double xLen = sqrt(xDir.x * xDir.x + xDir.y * xDir.y);
-  if (xLen > 0) {
-    xDir.x /= xLen;
-    xDir.y /= xLen;
-    
-    // Find intersection with viewport
-    double tMax = qMax(qMax((maxX - m_scrToImg->center.x) / xDir.x,
-                             (minX - m_scrToImg->center.x) / xDir.x),
-                       qMax((maxY - m_scrToImg->center.y) / xDir.y,
-                             (minY - m_scrToImg->center.y) / xDir.y));
-    double tMin = qMin(qMin((maxX - m_scrToImg->center.x) / xDir.x,
-                             (minX - m_scrToImg->center.x) / xDir.x),
-                       qMin((maxY - m_scrToImg->center.y) / xDir.y,
-                             (minY - m_scrToImg->center.y) / xDir.y));
-    
-    colorscreen::point_t xStart = {m_scrToImg->center.x + xDir.x * tMin,
-                                    m_scrToImg->center.y + xDir.y * tMin};
-    colorscreen::point_t xEnd = {m_scrToImg->center.x + xDir.x * tMax,
-                                  m_scrToImg->center.y + xDir.y * tMax};
-    
-    QPointF xStartWidget = imageToWidget(xStart);
-    QPointF xEndWidget = imageToWidget(xEnd);
-    
-    // Calculate dash length based on coordinate1 vector length (not whole axis)
-    colorscreen::point_t coord1End = {
-      m_scrToImg->center.x + m_scrToImg->coordinate1.x,
-      m_scrToImg->center.y + m_scrToImg->coordinate1.y
-    };
-    QPointF coord1Widget = imageToWidget(coord1End);
-    double coord1LengthWidget = QLineF(centerWidget, coord1Widget).length();
-    double dashLengthPixels = qMax(9.0, coord1LengthWidget / 3.0);
-    double penWidth = 3.0;
-    double dashLength = dashLengthPixels / penWidth;  // Dash pattern is in pen-width units
-    
-    // Calculate offset using coordinate1 (X-axis vector)
-    // Correct phase math: anchor pattern to center point
-    double distToCenter = QLineF(xStartWidget, centerWidget).length();
-    double distInPenWidths = distToCenter / penWidth;
-    double period = dashLength * 2.0;
-    double centerOffset = period - fmod(distInPenWidths, period);
-    
-    // Draw axis with alternating black/white dashed pattern
-    QPen dashedPen(Qt::white, penWidth);
-    dashedPen.setStyle(Qt::CustomDashLine);
+
+  auto drawAxis = [&](const colorscreen::point_t &axis) {
+    const colorscreen::point_t axisEnd = {center.x + axis.x, center.y + axis.y};
+    const QPointF axisEndWidget = imageToWidget(axisEnd);
+    QPointF delta = axisEndWidget - centerWidget;
+    const double periodPixels = std::hypot(delta.x(), delta.y());
+    if (periodPixels <= 1e-9)
+      return axisEndWidget;
+
+    // Extend in widget space instead of dividing by the image-space X/Y
+    // components. Besides being simpler, this remains finite for perfectly
+    // horizontal or vertical screen axes.
+    delta /= periodPixels;
+    const double extent = std::hypot((double)width(), (double)height())
+                        + periodPixels;
+    const QPointF lineStart = centerWidget - delta * extent;
+    const QPointF lineEnd = centerWidget + delta * extent;
+
+    // One complete black/white cycle is exactly one screen period. QPen dash
+    // lengths are measured in pen-width units, hence each colour occupies half
+    // of the center-to-neighbouring-green-dot distance.
+    const double penWidth = 3.0;
+    const double halfPeriodPixels = qMax(1.0, periodPixels / 2.0);
+    const double dashLength = halfPeriodPixels / penWidth;
+    const double cycle = 2.0 * dashLength;
+    const double distanceToCenter = QLineF(lineStart, centerWidget).length()
+                                  / penWidth;
+    const double remainder = std::fmod(distanceToCenter, cycle);
+    const double centerOffset = remainder == 0.0 ? 0.0 : cycle - remainder;
+
+    QPen dashedPen(Qt::white, penWidth, Qt::CustomDashLine, Qt::FlatCap);
     dashedPen.setDashPattern({dashLength, dashLength});
     dashedPen.setDashOffset(centerOffset);
     p.setPen(dashedPen);
-    p.drawLine(xStartWidget, xEndWidget);
-    
+    p.drawLine(lineStart, lineEnd);
+
     dashedPen.setColor(Qt::black);
-    dashedPen.setDashOffset(centerOffset - dashLength);  // Offset for alternating
+    dashedPen.setDashOffset(centerOffset - dashLength);
     p.setPen(dashedPen);
-    p.drawLine(xStartWidget, xEndWidget);
-  }
-  
-  // Draw Y axis (coordinate2) - extend to viewport edges
-  colorscreen::point_t yDir = {m_scrToImg->coordinate2.x, m_scrToImg->coordinate2.y};
-  double yLen = sqrt(yDir.x * yDir.x + yDir.y * yDir.y);
-  if (yLen > 0) {
-    yDir.x /= yLen;
-    yDir.y /= yLen;
-    
-    // Find intersection with viewport
-    double tMax = qMax(qMax((maxX - m_scrToImg->center.x) / yDir.x,
-                             (minX - m_scrToImg->center.x) / yDir.x),
-                       qMax((maxY - m_scrToImg->center.y) / yDir.y,
-                             (minY - m_scrToImg->center.y) / yDir.y));
-    double tMin = qMin(qMin((maxX - m_scrToImg->center.x) / yDir.x,
-                             (minX - m_scrToImg->center.x) / yDir.x),
-                       qMin((maxY - m_scrToImg->center.y) / yDir.y,
-                             (minY - m_scrToImg->center.y) / yDir.y));
-    
-    colorscreen::point_t yStart = {m_scrToImg->center.x + yDir.x * tMin,
-                                    m_scrToImg->center.y + yDir.y * tMin};
-    colorscreen::point_t yEnd = {m_scrToImg->center.x + yDir.x * tMax,
-                                  m_scrToImg->center.y + yDir.y * tMax};
-    
-    QPointF yStartWidget = imageToWidget(yStart);
-    QPointF yEndWidget = imageToWidget(yEnd);
-    
-    // Calculate dash length based on coordinate2 vector length (not whole axis)
-    colorscreen::point_t coord2End = {
-      m_scrToImg->center.x + m_scrToImg->coordinate2.x,
-      m_scrToImg->center.y + m_scrToImg->coordinate2.y
-    };
-    QPointF coord2Widget = imageToWidget(coord2End);
-    double coord2LengthWidget = QLineF(centerWidget, coord2Widget).length();
-    double dashLengthPixels = qMax(9.0, coord2LengthWidget / 3.0);
-    double penWidth = 3.0;
-    double dashLength = dashLengthPixels / penWidth;  // Dash pattern is in pen-width units
-    
-    // Calculate offset using coordinate2 (Y-axis vector)
-    // Correct phase math: anchor pattern to center point
-    double distToCenter = QLineF(yStartWidget, centerWidget).length();
-    double distInPenWidths = distToCenter / penWidth;
-    double period = dashLength * 2.0;
-    double centerOffset = period - fmod(distInPenWidths, period);
-    
-    // Draw axis with alternating black/white dashed pattern
-    QPen dashedPen(Qt::white, penWidth);
-    dashedPen.setStyle(Qt::CustomDashLine);
-    dashedPen.setDashPattern({dashLength, dashLength});
-    dashedPen.setDashOffset(centerOffset);
-    p.setPen(dashedPen);
-    p.drawLine(yStartWidget, yEndWidget);
-    
-    dashedPen.setColor(Qt::black);
-    dashedPen.setDashOffset(centerOffset - dashLength);  // Offset for alternating
-    p.setPen(dashedPen);
-    p.drawLine(yStartWidget, yEndWidget);
-  }
-  
-  // Draw dots at center and axis endpoints (all same color)
-  colorscreen::point_t xAxisEnd = {
-    m_scrToImg->center.x + m_scrToImg->coordinate1.x,
-    m_scrToImg->center.y + m_scrToImg->coordinate1.y
+    p.drawLine(lineStart, lineEnd);
+    return axisEndWidget;
   };
-  colorscreen::point_t yAxisEnd = {
-    m_scrToImg->center.x + m_scrToImg->coordinate2.x,
-    m_scrToImg->center.y + m_scrToImg->coordinate2.y
-  };
-  
-  QPointF xWidget = imageToWidget(xAxisEnd);
-  QPointF yWidget = imageToWidget(yAxisEnd);
-  
-  // Draw center point
+
+  QPointF xWidget = centerWidget;
+  QPointF yWidget = centerWidget;
+  if (haveAxes) {
+    xWidget = drawAxis(coordinate1);
+    yWidget = drawAxis(coordinate2);
+  }
+
   p.setPen(QPen(Qt::black, 2));
   p.setBrush(dotColor);
   p.drawEllipse(centerWidget, 6, 6);
-  
-  // Draw X axis endpoint
-  p.drawEllipse(xWidget, 6, 6);
-  
-  // Draw Y axis endpoint  
-  p.drawEllipse(yWidget, 6, 6);
+  if (haveAxes) {
+    p.drawEllipse(xWidget, 6, 6);
+    p.drawEllipse(yWidget, 6, 6);
+  }
 
-  // Draw labels with outline and orthogonal placement
-  auto drawLabel = [&](QPointF endPos, QPointF center, QString text) {
-      QPointF dir = endPos - center;
-      double len = sqrt(dir.x()*dir.x() + dir.y()*dir.y());
-      if (len > 0) {
-          // Rotate 90 degrees (orthogonal)
-          // (x, y) -> (-y, x)
-          QPointF perp(-dir.y() / len, dir.x() / len);
-          
-          // Offset by 25 pixels orthogonal, plus a bit forward along axis to clear dot
-          QPointF labelPos = endPos + perp * 25.0 + (dir / len) * 10.0;
-          
-          QRectF r(labelPos.x() - 15, labelPos.y() - 15, 30, 30);
-          
-          // Draw black outline
-          p.setPen(Qt::black);
-          for (int dx = -1; dx <= 1; ++dx) {
-              for (int dy = -1; dy <= 1; ++dy) {
-                  if (dx != 0 || dy != 0)
-                      p.drawText(r.translated(dx, dy), Qt::AlignCenter, text);
-              }
-          }
-          // Draw yellow fill
-          p.setPen(Qt::yellow);
-          p.drawText(r, Qt::AlignCenter, text);
-      }
+  auto drawLabel = [&](QPointF endPos, const QString &text) {
+    QPointF dir = endPos - centerWidget;
+    const double len = std::hypot(dir.x(), dir.y());
+    if (len <= 0)
+      return;
+    QPointF perp(-dir.y() / len, dir.x() / len);
+    QPointF labelPos = endPos + perp * 25.0 + (dir / len) * 10.0;
+    QRectF r(labelPos.x() - 15, labelPos.y() - 15, 30, 30);
+    p.setPen(Qt::black);
+    for (int dx = -1; dx <= 1; ++dx)
+      for (int dy = -1; dy <= 1; ++dy)
+        if (dx != 0 || dy != 0)
+          p.drawText(r.translated(dx, dy), Qt::AlignCenter, text);
+    p.setPen(Qt::yellow);
+    p.drawText(r, Qt::AlignCenter, text);
   };
 
-  QFont f = p.font();
-  f.setBold(true);
-  f.setPointSize(14);
-  p.setFont(f);
+  if (haveAxes) {
+    QFont f = p.font();
+    f.setBold(true);
+    f.setPointSize(14);
+    p.setFont(f);
+    drawLabel(xWidget, QStringLiteral("X"));
+    drawLabel(yWidget, QStringLiteral("Y"));
+  }
 
-  drawLabel(xWidget, centerWidget, "X");
-  drawLabel(yWidget, centerWidget, "Y");
+  if (choosingXAxis)
+    drawInteractionHint(
+        p, tr("Screen coordinates: move to the neighboring +X green dot, then click"));
+
   p.restore();
 }
 
@@ -1075,36 +972,87 @@ void ImageWidget::drawScreenCoordinateSystem(QPainter &p) {
  * 
  * @param p The QPainter to use.
  */
-void ImageWidget::drawMeasurement(QPainter &p) {
-  if (m_interactionMode == MeasureMode && m_isMeasuring) {
-    QPointF p1 = imageToWidget(m_measureStart);
-    QPointF p2 = imageToWidget(m_measureEnd);
-    
-    p.save();
-    p.setRenderHint(QPainter::Antialiasing);
-    p.setPen(QPen(Qt::yellow, 2, Qt::SolidLine, Qt::RoundCap));
-    p.drawLine(p1, p2);
-    
-    QLineF line(p1, p2);
-    if (line.length() > 1e-9) {
-      QLineF norm = line.normalVector().unitVector();
-      norm.setLength(10);
-      
-      QPointF offset = norm.p2() - norm.p1();
-      p.drawLine(p1 + offset, p1 - offset);
-      p.drawLine(p2 + offset, p2 - offset);
-    }
-    
-    // Draw distance in pixels as well
-    double distPixels = sqrt(pow(m_measureEnd.x - m_measureStart.x, 2) + 
-                             pow(m_measureEnd.y - m_measureStart.y, 2));
-    if (line.length() > 20) {
-        p.setPen(Qt::white);
-        p.drawText(QRectF(p1.x(), p1.y(), p2.x() - p1.x(), p2.y() - p1.y()).normalized(), 
-                  Qt::AlignCenter, QString("%1 px").arg(qRound(distPixels)));
-    }
-    p.restore();
+void ImageWidget::drawInteractionHint(QPainter &p,
+                                      const QString &message) {
+  if (message.isEmpty())
+    return;
+  p.save();
+  QFont font = p.font();
+  font.setBold(true);
+  p.setFont(font);
+  const QRectF hintRect = rect().adjusted(12, 12, -12, -12);
+  p.setPen(QPen(Qt::black, 3));
+  p.drawText(hintRect.translated(1, 1), Qt::AlignTop | Qt::AlignHCenter,
+             message);
+  p.setPen(Qt::yellow);
+  p.drawText(hintRect, Qt::AlignTop | Qt::AlignHCenter, message);
+  p.restore();
+}
+
+/** Draw the live two-click selection rectangle for temporary area tools. */
+void ImageWidget::drawAreaSelection(QPainter &p) {
+  if (m_interactionMode != CropMode && m_interactionMode != GenericAreaMode)
+    return;
+
+  if (!m_areaSelectionPending) {
+    drawInteractionHint(
+        p, m_interactionMode == CropMode
+               ? tr("Crop: click the first corner, or drag to select immediately")
+               : tr("Select area: click the first corner, or drag to select immediately"));
+    return;
   }
+
+  const QPointF first = imageToWidget(m_areaStartImage);
+  const QRectF selection(first, m_areaPreviewWidget);
+  p.save();
+  p.setRenderHint(QPainter::Antialiasing);
+  QPen pen(palette().highlight().color(), 2.0, Qt::DashLine);
+  p.setPen(pen);
+  p.setBrush(Qt::NoBrush);
+  p.drawRect(selection.normalized());
+  p.restore();
+  drawInteractionHint(p, tr("Click the opposite corner (wheel to zoom; Esc cancels)"));
+}
+
+/** Draw a live distance preview and instructions for the measurement tool. */
+void ImageWidget::drawMeasurement(QPainter &p) {
+  if (m_interactionMode != MeasureMode)
+    return;
+
+  if (!m_isMeasuring) {
+    drawInteractionHint(p, tr("Measure: click the first point, or drag to measure immediately"));
+    return;
+  }
+
+  QPointF p1 = imageToWidget(m_measureStart);
+  QPointF p2 = imageToWidget(m_measureEnd);
+  p.save();
+  p.setRenderHint(QPainter::Antialiasing);
+  p.setPen(QPen(Qt::yellow, 2, Qt::SolidLine, Qt::RoundCap));
+  p.drawLine(p1, p2);
+
+  QLineF line(p1, p2);
+  if (line.length() > 1e-9) {
+    QLineF norm = line.normalVector().unitVector();
+    norm.setLength(10);
+    QPointF offset = norm.p2() - norm.p1();
+    p.drawLine(p1 + offset, p1 - offset);
+    p.drawLine(p2 + offset, p2 - offset);
+  }
+
+  const double distPixels = std::hypot(m_measureEnd.x - m_measureStart.x,
+                                       m_measureEnd.y - m_measureStart.y);
+  if (line.length() > 20) {
+    p.setPen(Qt::white);
+    p.drawText(QRectF(p1, p2).normalized(), Qt::AlignCenter,
+               QString("%1 px").arg(qRound(distPixels)));
+  }
+  p.restore();
+
+  drawInteractionHint(
+      p, m_measureStartPlaced
+             ? tr("Measure: click the second point (wheel to zoom; Esc cancels)")
+             : tr("Release to place the first point, or keep dragging to finish"));
 }
 
 /**
@@ -1173,8 +1121,10 @@ void ImageWidget::syncScreenCoordinateSetupStage(bool resetIncomplete) {
   if (resetIncomplete ||
       m_coordinateSetupStage == ScreenCoordinateSetupStage::Editing) {
     m_coordinateSetupStage = ScreenCoordinateSetupStage::NeedCenter;
-    if (m_scrToImg)
+    if (m_scrToImg) {
       m_pendingCoordinateCenter = m_scrToImg->center;
+      m_pendingCoordinateXAxis = m_pendingCoordinateCenter;
+    }
   }
 }
 
@@ -1213,11 +1163,16 @@ void ImageWidget::cancelPointerInteraction() {
   const bool coordinateEditActive = m_dragTarget != DragTarget::None;
   const bool pointEditChanged =
       m_draggedPointIndex != -1 && m_pointDragChanged;
-  const bool repaint = m_isMeasuring || coordinateEditActive ||
+  const bool repaint = m_isMeasuring || m_areaSelectionPending ||
+                       coordinateEditActive ||
                        (m_rubberBand && !m_rubberBand->isHidden());
 
   m_isDragging = false;
   m_isMeasuring = false;
+  m_measureStartPlaced = false;
+  m_measurePressStartsNew = false;
+  m_areaSelectionPending = false;
+  m_areaPressStartsNew = false;
   if (m_rubberBand)
     m_rubberBand->hide();
   m_dragTarget = DragTarget::None;
@@ -1424,10 +1379,22 @@ void ImageWidget::handleSelectPress(QMouseEvent *event) {
  * @brief Handles mouse press for area selection (Crop, AddPoint, Generic).
  */
 void ImageWidget::handleAreaPress(QMouseEvent *event) {
-  m_rubberBandOrigin = event->pos();
-  if (!m_rubberBand) {
-    m_rubberBand = new QRubberBand(QRubberBand::Rectangle, this);
+  const bool twoClickArea =
+      m_interactionMode == CropMode || m_interactionMode == GenericAreaMode;
+  m_areaPressStartsNew = !m_areaSelectionPending;
+  m_dragStartWidget = event->position();
+  m_areaPreviewWidget = event->position();
+
+  if (twoClickArea && m_areaSelectionPending) {
+    update();
+    return;
   }
+
+  m_rubberBandOrigin = event->pos();
+  if (twoClickArea)
+    m_areaStartImage = widgetToImage(event->position());
+  if (!m_rubberBand)
+    m_rubberBand = new QRubberBand(QRubberBand::Rectangle, this);
   m_rubberBand->setGeometry(QRect(m_rubberBandOrigin, QSize()));
   m_rubberBand->show();
 }
@@ -1436,9 +1403,15 @@ void ImageWidget::handleAreaPress(QMouseEvent *event) {
  * @brief Handles mouse press in MeasureMode.
  */
 void ImageWidget::handleMeasurePress(QMouseEvent *event) {
-  m_isMeasuring = true;
-  m_measureStart = widgetToImage(event->position());
-  m_measureEnd = m_measureStart;
+  m_dragStartWidget = event->position();
+  m_measurePressStartsNew = !m_measureStartPlaced;
+  if (m_measurePressStartsNew) {
+    m_isMeasuring = true;
+    m_measureStart = widgetToImage(event->position());
+    m_measureEnd = m_measureStart;
+  } else {
+    m_measureEnd = widgetToImage(event->position());
+  }
   update();
 }
 
@@ -1476,7 +1449,13 @@ void ImageWidget::mouseMoveEvent(QMouseEvent *event) {
   }
 
   if (m_interactionMode == SetCenterMode) {
-    handleSetCenterMove(event);
+    if (m_coordinateSetupStage == ScreenCoordinateSetupStage::NeedXAxis &&
+        m_activePointerButton == Qt::NoButton) {
+      m_pendingCoordinateXAxis = widgetToImage(event->position());
+      update();
+    } else {
+      handleSetCenterMove(event);
+    }
   } else if (m_interactionMode == ExploreMode) {
     handleExploreMove(event);
   } else if (m_interactionMode == PanMode && m_isDragging) {
@@ -1492,11 +1471,20 @@ void ImageWidget::mouseMoveEvent(QMouseEvent *event) {
     emit viewStateChanged(
         QRectF(m_viewX, m_viewY, width() / m_scale, height() / m_scale),
         m_scale);
-  } else if (m_interactionMode == SelectMode || m_interactionMode == AddPointMode || m_interactionMode == CropMode || m_interactionMode == GenericAreaMode) {
+  } else if (m_interactionMode == SelectMode ||
+             m_interactionMode == AddPointMode ||
+             m_interactionMode == CropMode ||
+             m_interactionMode == GenericAreaMode) {
     if (m_interactionMode == SelectMode && m_draggedPointIndex != -1) {
       handleSelectMove(event);
+    } else if ((m_interactionMode == CropMode ||
+                m_interactionMode == GenericAreaMode) &&
+               m_areaSelectionPending) {
+      m_areaPreviewWidget = event->position();
+      update();
     } else if (m_rubberBand && m_rubberBand->isVisible()) {
-      m_rubberBand->setGeometry(QRect(m_rubberBandOrigin, event->pos()).normalized());
+      m_rubberBand->setGeometry(
+          QRect(m_rubberBandOrigin, event->pos()).normalized());
     }
   } else if (m_interactionMode == MeasureMode) {
     handleMeasureMove(event);
@@ -1645,10 +1633,10 @@ void ImageWidget::handleExploreMove(QMouseEvent *event) {
  * @brief Handles mouse move in MeasureMode (updating end point).
  */
 void ImageWidget::handleMeasureMove(QMouseEvent *event) {
-  if (m_isMeasuring) {
-    m_measureEnd = widgetToImage(event->position());
-    update();
-  }
+  if (!m_isMeasuring)
+    return;
+  m_measureEnd = widgetToImage(event->position());
+  update();
 }
 
 
@@ -1700,6 +1688,7 @@ void ImageWidget::handleSetCenterRelease(QMouseEvent *event) {
      // non-degenerate basis atomically, so Undo/Redo never has to serialize a
      // half-configured interaction stage.
      m_pendingCoordinateCenter = widgetToImage(event->position());
+     m_pendingCoordinateXAxis = m_pendingCoordinateCenter;
      m_coordinateSetupStage = ScreenCoordinateSetupStage::NeedXAxis;
      update();
   } else if (m_dragTarget == DragTarget::BootstrapXAxis && isClick && m_scrToImg) {
@@ -1864,38 +1853,86 @@ void ImageWidget::handleSelectRelease(QMouseEvent *event) {
  * @brief Handles mouse release for area selection (Crop, AddPoint, Generic).
  */
 void ImageWidget::handleAreaRelease(QMouseEvent *event) {
-  if (m_rubberBand && m_rubberBand->isVisible()) {
-    QRect rect = m_rubberBand->geometry();
-    m_rubberBand->hide();
-    
-    QPoint dragDistance = event->pos() - m_rubberBandOrigin;
-    bool isClick = dragDistance.manhattanLength() < 5;
-    
-    if (m_interactionMode == AddPointMode) {
-      if (isClick) {
-        // Single point click - emit pointAdded signal
-        colorscreen::point_t imgPos = widgetToImage(event->position());
-        emit pointAdded(imgPos, colorscreen::point_t{0, 0}, colorscreen::point_t{0, 0});
-      } else {
-        // Area selection - emit areaSelected signal
-        emit areaSelected(rect);
+  const bool twoClickArea =
+      m_interactionMode == CropMode || m_interactionMode == GenericAreaMode;
+
+  if (!twoClickArea) {
+    if (m_rubberBand && m_rubberBand->isVisible()) {
+      QRect rect = m_rubberBand->geometry();
+      m_rubberBand->hide();
+      QPoint dragDistance = event->pos() - m_rubberBandOrigin;
+      bool isClick = dragDistance.manhattanLength() < 5;
+      if (m_interactionMode == AddPointMode) {
+        if (isClick) {
+          colorscreen::point_t imgPos = widgetToImage(event->position());
+          emit pointAdded(imgPos, colorscreen::point_t{0, 0},
+                          colorscreen::point_t{0, 0});
+        } else {
+          emit areaSelected(rect);
+        }
       }
-    } else if (m_interactionMode == CropMode || m_interactionMode == GenericAreaMode) {
-      emit areaSelected(rect);
     }
+    return;
   }
+
+  const QPointF dragDistance = event->position() - m_dragStartWidget;
+  if (m_areaPressStartsNew && dragDistance.manhattanLength() < 5) {
+    if (m_rubberBand)
+      m_rubberBand->hide();
+    m_areaSelectionPending = true;
+    m_areaPreviewWidget = event->position();
+    update();
+    return;
+  }
+
+  QRect rect;
+  if (m_areaSelectionPending) {
+    rect = QRect(imageToWidget(m_areaStartImage).toPoint(), event->pos())
+               .normalized();
+  } else if (m_rubberBand && m_rubberBand->isVisible()) {
+    rect = m_rubberBand->geometry();
+  }
+  if (m_rubberBand)
+    m_rubberBand->hide();
+  if (rect.isEmpty()) {
+    // A second click on the first corner is most likely an aiming miss. Keep
+    // the anchor live instead of silently abandoning the temporary tool.
+    m_areaSelectionPending = true;
+    m_areaPreviewWidget = event->position();
+    update();
+    return;
+  }
+  m_areaSelectionPending = false;
+  m_areaPressStartsNew = false;
+  emit areaSelected(rect);
+  update();
 }
 
 /**
  * @brief Handles mouse release in MeasureMode (finishing measurement).
  */
 void ImageWidget::handleMeasureRelease(QMouseEvent *event) {
-  if (m_isMeasuring) {
-    m_isMeasuring = false;
-    m_measureEnd = widgetToImage(event->position());
-    emit distanceMeasured(m_measureStart, m_measureEnd);
+  if (!m_isMeasuring)
+    return;
+
+  m_measureEnd = widgetToImage(event->position());
+  const QPointF dragDistance = event->position() - m_dragStartWidget;
+  if (m_measurePressStartsNew && dragDistance.manhattanLength() < 5) {
+    // The first click places only the start anchor. Keeping it widget-local
+    // lets the operator zoom before choosing the end without publishing a
+    // partial measurement.
+    m_measureStartPlaced = true;
+    m_measureEnd = m_measureStart;
+    m_measurePressStartsNew = false;
     update();
+    return;
   }
+
+  emit distanceMeasured(m_measureStart, m_measureEnd);
+  m_isMeasuring = false;
+  m_measureStartPlaced = false;
+  m_measurePressStartsNew = false;
+  update();
 }
 
 /**
@@ -1954,6 +1991,37 @@ void ImageWidget::keyPressEvent(QKeyEvent *event) {
           event->accept();
           return;
       }
+  }
+
+  // Escape clears an unfinished multi-click anchor without publishing a
+  // partial area, measurement, or screen-coordinate setup.
+  if (event->key() == Qt::Key_Escape) {
+    bool cancelled = false;
+    if (m_interactionMode == MeasureMode && m_isMeasuring) {
+      m_isMeasuring = false;
+      m_measureStartPlaced = false;
+      m_measurePressStartsNew = false;
+      cancelled = true;
+    }
+    if ((m_interactionMode == CropMode ||
+         m_interactionMode == GenericAreaMode) &&
+        m_areaSelectionPending) {
+      m_areaSelectionPending = false;
+      m_areaPressStartsNew = false;
+      if (m_rubberBand)
+        m_rubberBand->hide();
+      cancelled = true;
+    }
+    if (m_interactionMode == SetCenterMode &&
+        m_coordinateSetupStage == ScreenCoordinateSetupStage::NeedXAxis) {
+      syncScreenCoordinateSetupStage(true);
+      cancelled = true;
+    }
+    if (cancelled) {
+      update();
+      event->accept();
+      return;
+    }
   }
 
   // Handle fullscreen exit keys
