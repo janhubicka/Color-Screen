@@ -186,6 +186,12 @@ public:
    */
   void setInteractionMode(InteractionMode mode);
 
+  /** Set the operation-specific instruction shown by temporary area tools. */
+  void setAreaSelectionInstruction(const QString &instruction) {
+    m_areaSelectionInstruction = instruction;
+    update();
+  }
+
   /** Return the scan currently displayed by this widget. */
   std::shared_ptr<colorscreen::image_data> sharedImageData() const {
     return m_scan;
@@ -420,6 +426,14 @@ private:
   bool pointerButtonHeld(const QMouseEvent *event) const;
   /** Settle an interrupted gesture without synthesizing a click/selection. */
   void cancelPointerInteraction();
+  /** Cancel a pending first anchor of a two-click precision tool. */
+  bool cancelPendingAnchor();
+  /** Finish a temporary Space-hand pan without changing the selected tool. */
+  void finishTemporaryPan();
+  /** Pan the current view by a widget-space mouse delta. */
+  void panViewByWidgetDelta(const QPoint &delta);
+  /** Restore the cursor implied by the selected tool and temporary hand state. */
+  void updateInteractionCursor();
   /** Recompute bootstrap state after entering the tool or replacing geometry. */
   void syncScreenCoordinateSetupStage(bool resetIncomplete);
   void requestRender();
@@ -495,6 +509,9 @@ private:
   QPoint m_lastMousePos;
   QPoint m_exploreAnchorGlobal;
   bool m_isDragging = false;
+  bool m_spacePanHeld = false;
+  bool m_spacePanDragging = false;
+  QPoint m_spacePanLastPos;
   Qt::MouseButton m_activePointerButton = Qt::NoButton;
   InteractionMode m_interactionMode = PanMode;
   std::set<SelectedPoint> m_selectedPoints;
@@ -515,7 +532,8 @@ private:
   bool m_areaSelectionPending = false;
   bool m_areaPressStartsNew = false;
   colorscreen::point_t m_areaStartImage {0, 0};
-  QPointF m_areaPreviewWidget;
+  colorscreen::point_t m_areaPreviewImage {0, 0};
+  QString m_areaSelectionInstruction;
   int m_draggedPointIndex = -1;
   bool m_pointDragChanged = false;
   colorscreen::point_t m_measureStart {0, 0};

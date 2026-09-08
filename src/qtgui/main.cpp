@@ -21,6 +21,7 @@
 #include <QFileInfo>
 #include <QIcon>
 #include <QImage>
+#include <QKeyEvent>
 #include <QMdiArea>
 #include <QMdiSubWindow>
 #include <QMenu>
@@ -58,6 +59,12 @@ void sendPointerSmokeEvent(QWidget &target, QEvent::Type type, QPointF pos,
                            Qt::KeyboardModifiers modifiers = Qt::NoModifier) {
   QMouseEvent event(type, pos, target.mapToGlobal(pos.toPoint()), button,
                     buttons, modifiers);
+  QCoreApplication::sendEvent(&target, &event);
+}
+
+/** Deliver one synthetic key event to the focused canvas smoke widget. */
+void sendKeySmokeEvent(QWidget &target, QEvent::Type type, int key) {
+  QKeyEvent event(type, key, Qt::NoModifier);
   QCoreApplication::sendEvent(&target, &event);
 }
 
@@ -168,6 +175,44 @@ bool runPointerInteractionSmoke() {
       !samePoint(measuredEnd, {90, 70}))
     return fail("two-click measurement did not commit both anchors");
 
+  // Capture One-style temporary Hand: holding Space must pan without
+  // switching tools or discarding the first click of a precision operation.
+  measurements = 0;
+  image.setInteractionMode(ImageWidget::PanMode);
+  image.setInteractionMode(ImageWidget::MeasureMode);
+  sendPointerSmokeEvent(image, QEvent::MouseButtonPress, {30, 40},
+                        Qt::LeftButton, Qt::LeftButton);
+  sendPointerSmokeEvent(image, QEvent::MouseButtonRelease, {30, 40},
+                        Qt::LeftButton, Qt::NoButton);
+  sendKeySmokeEvent(image, QEvent::KeyPress, Qt::Key_Space);
+  const int beforeTemporaryPan = viewChanges;
+  sendPointerSmokeEvent(image, QEvent::MouseButtonPress, {80, 80},
+                        Qt::LeftButton, Qt::LeftButton);
+  sendPointerSmokeEvent(image, QEvent::MouseMove, {110, 95}, Qt::NoButton,
+                        Qt::LeftButton);
+  sendPointerSmokeEvent(image, QEvent::MouseButtonRelease, {110, 95},
+                        Qt::LeftButton, Qt::NoButton);
+  sendKeySmokeEvent(image, QEvent::KeyRelease, Qt::Key_Space);
+  if (viewChanges <= beforeTemporaryPan || measurements != 0 ||
+      image.interactionMode() != ImageWidget::MeasureMode)
+    return fail("Space-hand pan changed or committed the active measure tool");
+
+  // Right-click is a quick cancellation path for a pending first anchor.
+  sendPointerSmokeEvent(image, QEvent::MouseButtonPress, {110, 95},
+                        Qt::RightButton, Qt::RightButton);
+  sendPointerSmokeEvent(image, QEvent::MouseButtonRelease, {110, 95},
+                        Qt::RightButton, Qt::NoButton);
+  sendPointerSmokeEvent(image, QEvent::MouseButtonPress, {50, 60},
+                        Qt::LeftButton, Qt::LeftButton);
+  sendPointerSmokeEvent(image, QEvent::MouseButtonRelease, {50, 60},
+                        Qt::LeftButton, Qt::NoButton);
+  if (measurements != 0)
+    return fail("right-click did not cancel the pending measurement anchor");
+  sendPointerSmokeEvent(image, QEvent::MouseButtonPress, {50, 60},
+                        Qt::RightButton, Qt::RightButton);
+  sendPointerSmokeEvent(image, QEvent::MouseButtonRelease, {50, 60},
+                        Qt::RightButton, Qt::NoButton);
+
   // Temporary area tools accept the same click-move-click interaction while
   // preserving the existing drag-to-select shortcut.
   int areas = 0;
@@ -215,6 +260,17 @@ bool runPointerInteractionSmoke() {
       bootstrapImage.screenCoordinateSetupStage() !=
           ImageWidget::ScreenCoordinateSetupStage::NeedXAxis)
     return fail("first screen-coordinate click was not kept pending");
+  sendPointerSmokeEvent(bootstrapImage, QEvent::MouseButtonPress, {80, 90},
+                        Qt::RightButton, Qt::RightButton);
+  sendPointerSmokeEvent(bootstrapImage, QEvent::MouseButtonRelease, {80, 90},
+                        Qt::RightButton, Qt::NoButton);
+  if (bootstrapImage.screenCoordinateSetupStage() !=
+      ImageWidget::ScreenCoordinateSetupStage::NeedCenter)
+    return fail("right-click did not cancel screen-coordinate bootstrap");
+  sendPointerSmokeEvent(bootstrapImage, QEvent::MouseButtonPress, {80, 90},
+                        Qt::LeftButton, Qt::LeftButton);
+  sendPointerSmokeEvent(bootstrapImage, QEvent::MouseButtonRelease, {80, 90},
+                        Qt::LeftButton, Qt::NoButton);
   sendPointerSmokeEvent(bootstrapImage, QEvent::MouseMove, {104, 96},
                         Qt::NoButton, Qt::NoButton);
   if (!samePoint(bootstrapGeometry.center, {0, 0}) ||

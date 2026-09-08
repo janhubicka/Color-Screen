@@ -149,6 +149,13 @@ let Escape cancel it. This convention is used by screen-coordinate bootstrap,
 measurement, Crop and temporary area selection; it should not replace single-click
 semantics in Add Point or registration Select.
 
+The primary interaction reference is a professional photo editor rather than CAD.
+Follow Capture One's temporary Hand convention: while another canvas tool is active,
+holding Space and left-dragging pans the zoomed image, and releasing Space restores
+the original tool with its pending anchor intact. Wheel zoom remains available.
+Right-click may additionally cancel an unfinished anchor where it has no competing
+tool meaning; Escape remains the universal cancellation key.
+
 The expected registration path is **autodetect first**. If coordinate detection
 fails on an otherwise regular screen, `Screen coordinates` is the explicit
 manual fallback: click the green origin dot, click its neighboring green dot in

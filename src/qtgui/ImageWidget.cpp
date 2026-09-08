@@ -962,7 +962,7 @@ void ImageWidget::drawScreenCoordinateSystem(QPainter &p) {
 
   if (choosingXAxis)
     drawInteractionHint(
-        p, tr("Screen coordinates: move to the neighboring +X green dot, then click"));
+        p, tr("Screen coordinates: move to the neighboring +X green dot, then click (wheel to zoom; hold Space to pan; Esc/right-click cancels)"));
 
   p.restore();
 }
@@ -981,11 +981,11 @@ void ImageWidget::drawInteractionHint(QPainter &p,
   font.setBold(true);
   p.setFont(font);
   const QRectF hintRect = rect().adjusted(12, 12, -12, -12);
+  const int flags = Qt::AlignTop | Qt::AlignHCenter | Qt::TextWordWrap;
   p.setPen(QPen(Qt::black, 3));
-  p.drawText(hintRect.translated(1, 1), Qt::AlignTop | Qt::AlignHCenter,
-             message);
+  p.drawText(hintRect.translated(1, 1), flags, message);
   p.setPen(Qt::yellow);
-  p.drawText(hintRect, Qt::AlignTop | Qt::AlignHCenter, message);
+  p.drawText(hintRect, flags, message);
   p.restore();
 }
 
@@ -994,16 +994,20 @@ void ImageWidget::drawAreaSelection(QPainter &p) {
   if (m_interactionMode != CropMode && m_interactionMode != GenericAreaMode)
     return;
 
+  const QString operation =
+      !m_areaSelectionInstruction.isEmpty()
+          ? m_areaSelectionInstruction
+          : (m_interactionMode == CropMode ? tr("Select crop") : tr("Select area"));
   if (!m_areaSelectionPending) {
     drawInteractionHint(
-        p, m_interactionMode == CropMode
-               ? tr("Crop: click the first corner, or drag to select immediately")
-               : tr("Select area: click the first corner, or drag to select immediately"));
+        p, tr("%1 — click the first corner, or drag to select immediately")
+               .arg(operation));
     return;
   }
 
   const QPointF first = imageToWidget(m_areaStartImage);
-  const QRectF selection(first, m_areaPreviewWidget);
+  const QPointF preview = imageToWidget(m_areaPreviewImage);
+  const QRectF selection(first, preview);
   p.save();
   p.setRenderHint(QPainter::Antialiasing);
   QPen pen(palette().highlight().color(), 2.0, Qt::DashLine);
@@ -1011,7 +1015,9 @@ void ImageWidget::drawAreaSelection(QPainter &p) {
   p.setBrush(Qt::NoBrush);
   p.drawRect(selection.normalized());
   p.restore();
-  drawInteractionHint(p, tr("Click the opposite corner (wheel to zoom; Esc cancels)"));
+  drawInteractionHint(
+      p, tr("%1 — click the opposite corner (wheel to zoom; hold Space to pan; Esc/right-click cancels)")
+             .arg(operation));
 }
 
 /** Draw a live distance preview and instructions for the measurement tool. */
@@ -1051,7 +1057,7 @@ void ImageWidget::drawMeasurement(QPainter &p) {
 
   drawInteractionHint(
       p, m_measureStartPlaced
-             ? tr("Measure: click the second point (wheel to zoom; Esc cancels)")
+             ? tr("Measure: click the second point (wheel to zoom; hold Space to pan; Esc/right-click cancels)")
              : tr("Release to place the first point, or keep dragging to finish"));
 }
 
@@ -1128,6 +1134,93 @@ void ImageWidget::syncScreenCoordinateSetupStage(bool resetIncomplete) {
   }
 }
 
+/** Cancel a pending click-click tool without publishing a partial result. */
+bool ImageWidget::cancelPendingAnchor() {
+  bool cancelled = false;
+  if (m_interactionMode == MeasureMode && m_isMeasuring) {
+    m_isMeasuring = false;
+    m_measureStartPlaced = false;
+    m_measurePressStartsNew = false;
+    cancelled = true;
+  }
+  if ((m_interactionMode == CropMode ||
+       m_interactionMode == GenericAreaMode) &&
+      m_areaSelectionPending) {
+    m_areaSelectionPending = false;
+    m_areaPressStartsNew = false;
+    if (m_rubberBand)
+      m_rubberBand->hide();
+    cancelled = true;
+  }
+  if (m_interactionMode == SetCenterMode &&
+      m_coordinateSetupStage == ScreenCoordinateSetupStage::NeedXAxis) {
+    syncScreenCoordinateSetupStage(true);
+    cancelled = true;
+  }
+  if (cancelled)
+    update();
+  return cancelled;
+}
+
+/** Finish a Space-hand drag while preserving the selected tool and pending anchor. */
+void ImageWidget::finishTemporaryPan() {
+  m_spacePanDragging = false;
+  m_activePointerButton = Qt::NoButton;
+
+  // While the Hand is dragging, pending precision previews stay attached to
+  // their image coordinates rather than chasing the cursor. As soon as the
+  // pan ends, resume the ordinary live preview at the current pointer.
+  const colorscreen::point_t pointerImage = widgetToImage(m_spacePanLastPos);
+  if (m_interactionMode == MeasureMode && m_isMeasuring)
+    m_measureEnd = pointerImage;
+  else if ((m_interactionMode == CropMode ||
+            m_interactionMode == GenericAreaMode) &&
+           m_areaSelectionPending)
+    m_areaPreviewImage = pointerImage;
+  else if (m_interactionMode == SetCenterMode &&
+           m_coordinateSetupStage == ScreenCoordinateSetupStage::NeedXAxis)
+    m_pendingCoordinateXAxis = pointerImage;
+
+  updateInteractionCursor();
+  update();
+}
+
+/** Apply a mouse drag to the viewport without changing the selected tool. */
+void ImageWidget::panViewByWidgetDelta(const QPoint &delta) {
+  if (delta.isNull() || m_scale <= 1e-9)
+    return;
+  m_panAnimationActive = false;
+  m_viewX -= delta.x() / m_scale;
+  m_viewY -= delta.y() / m_scale;
+  m_exploreTargetX = m_viewX;
+  m_exploreTargetY = m_viewY;
+  requestRender();
+  emit viewStateChanged(
+      QRectF(m_viewX, m_viewY, width() / m_scale, height() / m_scale),
+      m_scale);
+}
+
+/** Select the familiar photo-editor cursor for the current interaction state. */
+void ImageWidget::updateInteractionCursor() {
+  if (m_spacePanDragging || (m_interactionMode == PanMode && m_isDragging)) {
+    setCursor(Qt::ClosedHandCursor);
+    return;
+  }
+  if (m_spacePanHeld || m_interactionMode == PanMode) {
+    setCursor(Qt::OpenHandCursor);
+    return;
+  }
+  if (m_interactionMode == SetCenterMode ||
+      m_interactionMode == MeasureMode ||
+      m_interactionMode == CropMode ||
+      m_interactionMode == GenericAreaMode) {
+    setCursor(Qt::CrossCursor);
+    return;
+  }
+  if (m_interactionMode != ExploreMode)
+    unsetCursor();
+}
+
 /** Settle pointer state when Qt interrupts a press-started gesture.
 
     Qt automatically grabs the mouse for a widget after a button press.  A
@@ -1168,6 +1261,8 @@ void ImageWidget::cancelPointerInteraction() {
                        (m_rubberBand && !m_rubberBand->isHidden());
 
   m_isDragging = false;
+  m_spacePanHeld = false;
+  m_spacePanDragging = false;
   m_isMeasuring = false;
   m_measureStartPlaced = false;
   m_measurePressStartsNew = false;
@@ -1179,6 +1274,7 @@ void ImageWidget::cancelPointerInteraction() {
   m_draggedPointIndex = -1;
   m_pointDragChanged = false;
   m_activePointerButton = Qt::NoButton;
+  updateInteractionCursor();
 
   if (pointEditChanged)
     emit pointsChanged();
@@ -1203,11 +1299,28 @@ void ImageWidget::mousePressEvent(QMouseEvent *event) {
     // genuinely secondary button press remains part of the existing gesture.
     if (event->button() == m_activePointerButton ||
         !event->buttons().testFlag(m_activePointerButton)) {
-      cancelPointerInteraction();
+      if (m_spacePanDragging)
+        finishTemporaryPan();
+      else
+        cancelPointerInteraction();
     } else {
       event->accept();
       return;
     }
+  }
+
+  if (event->button() == Qt::RightButton && cancelPendingAnchor()) {
+    event->accept();
+    return;
+  }
+
+  if (m_spacePanHeld && event->button() == Qt::LeftButton) {
+    m_spacePanDragging = true;
+    m_activePointerButton = Qt::LeftButton;
+    m_spacePanLastPos = event->pos();
+    updateInteractionCursor();
+    event->accept();
+    return;
   }
 
   if (m_interactionMode == SetCenterMode) {
@@ -1225,6 +1338,7 @@ void ImageWidget::mousePressEvent(QMouseEvent *event) {
     if (m_interactionMode == PanMode) {
       m_isDragging = true;
       m_lastMousePos = event->pos();
+      updateInteractionCursor();
     } else if (m_interactionMode == SelectMode) {
       handleSelectPress(event);
     } else if (m_interactionMode == AddPointMode ||
@@ -1383,7 +1497,7 @@ void ImageWidget::handleAreaPress(QMouseEvent *event) {
       m_interactionMode == CropMode || m_interactionMode == GenericAreaMode;
   m_areaPressStartsNew = !m_areaSelectionPending;
   m_dragStartWidget = event->position();
-  m_areaPreviewWidget = event->position();
+  m_areaPreviewImage = widgetToImage(event->position());
 
   if (twoClickArea && m_areaSelectionPending) {
     update();
@@ -1423,7 +1537,22 @@ void ImageWidget::handleMeasurePress(QMouseEvent *event) {
  */
 void ImageWidget::mouseMoveEvent(QMouseEvent *event) {
   if (m_activePointerButton != Qt::NoButton && !pointerButtonHeld(event)) {
-    cancelPointerInteraction();
+    if (m_spacePanDragging)
+      finishTemporaryPan();
+    else
+      cancelPointerInteraction();
+    event->accept();
+    return;
+  }
+
+  if (m_spacePanDragging) {
+    const QPoint delta = event->pos() - m_spacePanLastPos;
+    m_spacePanLastPos = event->pos();
+    panViewByWidgetDelta(delta);
+    event->accept();
+    return;
+  }
+  if (m_spacePanHeld) {
     event->accept();
     return;
   }
@@ -1459,18 +1588,9 @@ void ImageWidget::mouseMoveEvent(QMouseEvent *event) {
   } else if (m_interactionMode == ExploreMode) {
     handleExploreMove(event);
   } else if (m_interactionMode == PanMode && m_isDragging) {
-    QPoint delta = event->pos() - m_lastMousePos;
+    const QPoint delta = event->pos() - m_lastMousePos;
     m_lastMousePos = event->pos();
-
-    m_viewX -= delta.x() / m_scale;
-    m_viewY -= delta.y() / m_scale;
-    m_exploreTargetX = m_viewX;
-    m_exploreTargetY = m_viewY;
-
-    requestRender();
-    emit viewStateChanged(
-        QRectF(m_viewX, m_viewY, width() / m_scale, height() / m_scale),
-        m_scale);
+    panViewByWidgetDelta(delta);
   } else if (m_interactionMode == SelectMode ||
              m_interactionMode == AddPointMode ||
              m_interactionMode == CropMode ||
@@ -1480,7 +1600,7 @@ void ImageWidget::mouseMoveEvent(QMouseEvent *event) {
     } else if ((m_interactionMode == CropMode ||
                 m_interactionMode == GenericAreaMode) &&
                m_areaSelectionPending) {
-      m_areaPreviewWidget = event->position();
+      m_areaPreviewImage = widgetToImage(event->position());
       update();
     } else if (m_rubberBand && m_rubberBand->isVisible()) {
       m_rubberBand->setGeometry(
@@ -1655,11 +1775,19 @@ void ImageWidget::mouseReleaseEvent(QMouseEvent *event) {
     return;
   }
 
+  if (m_spacePanDragging) {
+    m_spacePanLastPos = event->pos();
+    finishTemporaryPan();
+    event->accept();
+    return;
+  }
+
   if (m_interactionMode == SetCenterMode) {
     handleSetCenterRelease(event);
   } else if (event->button() == Qt::LeftButton) {
     if (m_interactionMode == PanMode && m_isDragging) {
       m_isDragging = false;
+      updateInteractionCursor();
     } else if (m_interactionMode == SelectMode) {
       handleSelectRelease(event);
     } else if (m_interactionMode == AddPointMode ||
@@ -1672,6 +1800,7 @@ void ImageWidget::mouseReleaseEvent(QMouseEvent *event) {
   }
 
   m_activePointerButton = Qt::NoButton;
+  updateInteractionCursor();
   event->accept();
 }
 
@@ -1880,7 +2009,7 @@ void ImageWidget::handleAreaRelease(QMouseEvent *event) {
     if (m_rubberBand)
       m_rubberBand->hide();
     m_areaSelectionPending = true;
-    m_areaPreviewWidget = event->position();
+    m_areaPreviewImage = widgetToImage(event->position());
     update();
     return;
   }
@@ -1898,7 +2027,7 @@ void ImageWidget::handleAreaRelease(QMouseEvent *event) {
     // A second click on the first corner is most likely an aiming miss. Keep
     // the anchor live instead of silently abandoning the temporary tool.
     m_areaSelectionPending = true;
-    m_areaPreviewWidget = event->position();
+    m_areaPreviewImage = widgetToImage(event->position());
     update();
     return;
   }
@@ -1969,6 +2098,15 @@ void ImageWidget::wheelEvent(QWheelEvent *event) {
  * @param event The key event.
  */
 void ImageWidget::keyPressEvent(QKeyEvent *event) {
+  if (event->key() == Qt::Key_Space) {
+    if (!event->isAutoRepeat() && m_activePointerButton == Qt::NoButton) {
+      m_spacePanHeld = true;
+      updateInteractionCursor();
+    }
+    event->accept();
+    return;
+  }
+
   if (m_interactionMode == ExploreMode) {
       if (event->key() == Qt::Key_Plus || event->key() == Qt::Key_Equal || 
          (event->modifiers() & Qt::ControlModifier && event->key() == Qt::Key_Plus)) {
@@ -1993,35 +2131,10 @@ void ImageWidget::keyPressEvent(QKeyEvent *event) {
       }
   }
 
-  // Escape clears an unfinished multi-click anchor without publishing a
-  // partial area, measurement, or screen-coordinate setup.
-  if (event->key() == Qt::Key_Escape) {
-    bool cancelled = false;
-    if (m_interactionMode == MeasureMode && m_isMeasuring) {
-      m_isMeasuring = false;
-      m_measureStartPlaced = false;
-      m_measurePressStartsNew = false;
-      cancelled = true;
-    }
-    if ((m_interactionMode == CropMode ||
-         m_interactionMode == GenericAreaMode) &&
-        m_areaSelectionPending) {
-      m_areaSelectionPending = false;
-      m_areaPressStartsNew = false;
-      if (m_rubberBand)
-        m_rubberBand->hide();
-      cancelled = true;
-    }
-    if (m_interactionMode == SetCenterMode &&
-        m_coordinateSetupStage == ScreenCoordinateSetupStage::NeedXAxis) {
-      syncScreenCoordinateSetupStage(true);
-      cancelled = true;
-    }
-    if (cancelled) {
-      update();
-      event->accept();
-      return;
-    }
+  // Escape and right-click share the same pending-anchor cancellation.
+  if (event->key() == Qt::Key_Escape && cancelPendingAnchor()) {
+    event->accept();
+    return;
   }
 
   // Handle fullscreen exit keys
@@ -2067,6 +2180,16 @@ void ImageWidget::keyPressEvent(QKeyEvent *event) {
  * @param event The key event.
  */
 void ImageWidget::keyReleaseEvent(QKeyEvent *event) {
+  if (event->key() == Qt::Key_Space) {
+    if (!event->isAutoRepeat()) {
+      m_spacePanHeld = false;
+      updateInteractionCursor();
+      update();
+    }
+    event->accept();
+    return;
+  }
+
   if (event->isAutoRepeat()) {
       QWidget::keyReleaseEvent(event);
       return;
@@ -2413,8 +2536,10 @@ void ImageWidget::deleteSelectedPoints() {
  * @param mode The new interaction mode.
  */
 void ImageWidget::setInteractionMode(InteractionMode mode) {
-  if (m_interactionMode == mode)
+  if (m_interactionMode == mode) {
+    updateInteractionCursor();
     return;
+  }
 
   // Tool changes are a hard gesture boundary. Live edits already applied by a
   // drag are retained and their undo transaction is closed, while unfinished
@@ -2425,10 +2550,8 @@ void ImageWidget::setInteractionMode(InteractionMode mode) {
     syncScreenCoordinateSetupStage(true);
   if (m_rubberBand)
     m_rubberBand->hide();
-  if (mode == SetCenterMode)
-    setCursor(Qt::CrossCursor);
-  else if (mode != ExploreMode)
-    unsetCursor();
+  m_areaSelectionInstruction.clear();
+  updateInteractionCursor();
   emit interactionModeChanged(mode);
   update();
 }
