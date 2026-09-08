@@ -2,6 +2,7 @@
 #include "CIEChartWidget.h"
 #include "SpectraChartWidget.h"
 #include "ToneCurveWidget.h"
+#include <QSignalBlocker>
 #include <QDoubleSpinBox>
 #include <QFormLayout>
 #include <QHBoxLayout>
@@ -713,9 +714,9 @@ void ColorPanel::reattachGamutGroup(GamutChartGroup &group, QWidget *widget,
 
 void ColorPanel::setNeutralAreaChecked(bool checked) {
   if (m_setNeutralAreaBtn) {
-    m_setNeutralAreaBtn->blockSignals(true);
+    QSignalBlocker signalBlocker1(m_setNeutralAreaBtn);
     m_setNeutralAreaBtn->setChecked(checked);
-    m_setNeutralAreaBtn->blockSignals(false);
+    signalBlocker1.unblock();
   }
 }
 
@@ -727,9 +728,9 @@ void ColorPanel::setNeutralAreaEnabled(bool enabled) {
 
 void ColorPanel::setAutoLevelsChecked(bool checked) {
   if (m_setAutoLevelsBtn) {
-    m_setAutoLevelsBtn->blockSignals(true);
+    QSignalBlocker signalBlocker2(m_setAutoLevelsBtn);
     m_setAutoLevelsBtn->setChecked(checked);
-    m_setAutoLevelsBtn->blockSignals(false);
+    signalBlocker2.unblock();
   }
 }
 

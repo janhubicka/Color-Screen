@@ -1,3 +1,4 @@
+#include <QSignalBlocker>
 #include <QShowEvent>
 #include "ContactCopyPanel.h"
 #include "HDCurveWidget.h"
@@ -337,9 +338,9 @@ void ContactCopyPanel::setupUi() {
       m_maxYSpin->setEnabled(sim);
 
       if (!(s.rparams.contact_copy.emulsion_characteristic_curve == m_hdCurveWidget->getParameters())) {
-          m_hdCurveWidget->blockSignals(true);
+          QSignalBlocker signalBlocker1(m_hdCurveWidget);
           m_hdCurveWidget->setParameters(s.rparams.contact_copy.emulsion_characteristic_curve);
-          m_hdCurveWidget->blockSignals(false);
+          signalBlocker1.unblock();
           updateSpinBoxes();
       }
 
@@ -360,9 +361,9 @@ void ContactCopyPanel::setupUi() {
                   break;
               }
           }
-          m_presetCombo->blockSignals(true);
+          QSignalBlocker signalBlocker2(m_presetCombo);
           m_presetCombo->setCurrentIndex(foundIdx);
-          m_presetCombo->blockSignals(false);
+          signalBlocker2.unblock();
       }
 
       double minY = m_hdCurveWidget->minY();

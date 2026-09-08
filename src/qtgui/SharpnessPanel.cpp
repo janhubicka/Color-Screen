@@ -1859,9 +1859,9 @@ void SharpnessPanel::showAdaptiveChart() {
 
 void SharpnessPanel::setFocusAnalysisChecked(bool checked) {
     if (m_analyzeAreaBtn) {
-        m_analyzeAreaBtn->blockSignals(true);
+        QSignalBlocker signalBlocker1(m_analyzeAreaBtn);
         m_analyzeAreaBtn->setChecked(checked);
-        m_analyzeAreaBtn->blockSignals(false);
+        signalBlocker1.unblock();
     }
 }
 
@@ -1890,9 +1890,9 @@ void SharpnessPanel::setFocusAreaAnalysisState(int candidateCount, bool running,
 
 void SharpnessPanel::setMeasureMtfChecked(bool checked) {
     if (m_measureMtfBtn) {
-        m_measureMtfBtn->blockSignals(true);
+        QSignalBlocker signalBlocker2(m_measureMtfBtn);
         m_measureMtfBtn->setChecked(checked);
-        m_measureMtfBtn->blockSignals(false);
+        signalBlocker2.unblock();
     }
 }
 

@@ -280,8 +280,11 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   wavelengths and process strip widths exercise this rule. Values whose
   sentinel is already inside the ordinary range (for example Geometry's
   `0 = Auto`) need no special range handling.
-- Replace ad-hoc `blockSignals(true/false)` pairs with `QSignalBlocker`, reducing
-  paths that accidentally leave a widget blocked after an early return.
+- Prefer `QSignalBlocker` for temporary signal suppression. The first P1 cleanup
+  converts the central `ParameterPanel` synchronization helpers and the simple
+  refresh/update pairs in Capture, Screen, Geometry, Image Layer, Tiles, Color,
+  Contact Copy and Sharpness. Keep lifetime/destruction-specific signal handling
+  separate, and migrate any remaining ordinary pairs incrementally.
 - Make group visibility semantics explicit.  A collapsed group should not force
   a child visible when that child is logically unavailable for the current
   process or image type.

@@ -1,5 +1,6 @@
 #include "ImageLayerPanel.h"
 #include "../libcolorscreen/include/imagedata.h"
+#include <QSignalBlocker>
 #include <QFormLayout>
 
 ImageLayerPanel::ImageLayerPanel(StateGetter stateGetter, StateSetter stateSetter,
@@ -153,9 +154,9 @@ void ImageLayerPanel::setupUi() {
 
 void ImageLayerPanel::onParametersRefreshed(const ParameterState &state) {
   if (m_ignoreInfraredCheck) {
-    m_ignoreInfraredCheck->blockSignals(true);
+    QSignalBlocker signalBlocker1(m_ignoreInfraredCheck);
     m_ignoreInfraredCheck->setChecked(state.rparams.ignore_infrared);
-    m_ignoreInfraredCheck->blockSignals(false);
+    signalBlocker1.unblock();
 
     auto img = m_imageGetter();
     bool enable = img && img->has_rgb() && img->has_grayscale_or_ir();
@@ -183,9 +184,9 @@ void ImageLayerPanel::onParametersRefreshed(const ParameterState &state) {
 
 void ImageLayerPanel::setNeutralAreaChecked(bool checked) {
   if (m_setNeutralAreaBtn) {
-    m_setNeutralAreaBtn->blockSignals(true);
+    QSignalBlocker signalBlocker2(m_setNeutralAreaBtn);
     m_setNeutralAreaBtn->setChecked(checked);
-    m_setNeutralAreaBtn->blockSignals(false);
+    signalBlocker2.unblock();
   }
 }
 
@@ -197,9 +198,9 @@ void ImageLayerPanel::setNeutralAreaEnabled(bool enabled) {
 
 void ImageLayerPanel::setInfraredAreaChecked(bool checked) {
   if (m_setInfraredAreaBtn) {
-    m_setInfraredAreaBtn->blockSignals(true);
+    QSignalBlocker signalBlocker3(m_setInfraredAreaBtn);
     m_setInfraredAreaBtn->setChecked(checked);
-    m_setInfraredAreaBtn->blockSignals(false);
+    signalBlocker3.unblock();
   }
 }
 
@@ -211,9 +212,9 @@ void ImageLayerPanel::setInfraredAreaEnabled(bool enabled) {
 
 void ImageLayerPanel::setDarkAreaChecked(bool checked) {
   if (m_setDarkAreaBtn) {
-    m_setDarkAreaBtn->blockSignals(true);
+    QSignalBlocker signalBlocker4(m_setDarkAreaBtn);
     m_setDarkAreaBtn->setChecked(checked);
-    m_setDarkAreaBtn->blockSignals(false);
+    signalBlocker4.unblock();
   }
 }
 
