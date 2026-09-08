@@ -5414,6 +5414,10 @@ void MainWindow::onPointManipulationStarted() {
    Creates an undo command if the state changed, then triggers
    the auto-solver if enabled and enough points exist.  */
 void MainWindow::maybeTriggerAutoSolver() {
+  ImageWidget *image = qobject_cast<ImageWidget *>(sender());
+  if (!acceptsInspectorImageWidget(image))
+    image = inspectorImageWidget();
+
   ParameterState newState = getCurrentState();
   if (newState != m_undoSnapshot) {
     m_undoStack->push(new ChangeParametersCommand(
@@ -5422,7 +5426,7 @@ void MainWindow::maybeTriggerAutoSolver() {
   }
 
   if (m_geometryPanel && m_geometryPanel->isAutoEnabled()) {
-    size_t count = m_imageWidget->registrationPointCount();
+    size_t count = image ? image->registrationPointCount() : 0;
     if (count >= (size_t)colorscreen::solver_parameters::min_points(m_scrToImgParams.type)) {
       onOptimizeGeometry(true); // Trigger solver (auto=true)
     }
@@ -5445,6 +5449,10 @@ void MainWindow::onPointAdded(colorscreen::point_t imgPos,
                               colorscreen::point_t color) {
   if (!m_scan)
     return;
+
+  ImageWidget *image = qobject_cast<ImageWidget *>(sender());
+  if (!acceptsInspectorImageWidget(image))
+    image = inspectorImageWidget();
 
   // Profile spot mode: convert img coords → screen coords and store
   if (m_addingProfileSpot) {
@@ -5534,11 +5542,13 @@ void MainWindow::onPointAdded(colorscreen::point_t imgPos,
                              res.solver_point_screen_location,
                              res.solver_point_color);
 
-    // Update the image widget
-    m_imageWidget->updateParameters(&m_rparams, &m_scrToImgParams,
-                                    &m_detectParams, &m_renderTypeParams,
-                                    &m_solverParams);
-    m_imageWidget->update();
+    // Refresh the canvas that produced the click.
+    if (image) {
+      image->updateParameters(&m_rparams, &m_scrToImgParams,
+                              &m_detectParams, &m_renderTypeParams,
+                              &m_solverParams);
+      image->update();
+    }
 
     // Create undo command with correct description
     ParameterState newState = getCurrentState();
@@ -5552,7 +5562,7 @@ void MainWindow::onPointAdded(colorscreen::point_t imgPos,
 
     // Trigger auto solver if enabled
     if (m_geometryPanel && m_geometryPanel->isAutoEnabled()) {
-      size_t count = m_imageWidget->registrationPointCount();
+      size_t count = image ? image->registrationPointCount() : 0;
       if (count >= (size_t)colorscreen::solver_parameters::min_points(m_scrToImgParams.type)) {
         onOptimizeGeometry(true);
       }
@@ -6599,6 +6609,10 @@ void MainWindow::onCoordinateSystemChanged() {
   if (!m_scan)
     return;
 
+  ImageWidget *image = qobject_cast<ImageWidget *>(sender());
+  if (!acceptsInspectorImageWidget(image))
+    image = inspectorImageWidget();
+
   // Navigation View always needs update because it uses FAST mode (which relies
   // on ScrToImg)
   m_navigationView->updateParameters(&m_rparams, &m_scrToImgParams,
@@ -6609,10 +6623,11 @@ void MainWindow::onCoordinateSystemChanged() {
   if (m_renderTypeParams.type < colorscreen::render_type_max) {
     const auto &prop =
         colorscreen::render_type_properties[m_renderTypeParams.type];
-    if (prop.flags & colorscreen::render_type_property::NEEDS_SCR_TO_IMG) {
-      m_imageWidget->updateParameters(&m_rparams, &m_scrToImgParams,
-                                      &m_detectParams, &m_renderTypeParams,
-                                      &m_solverParams);
+    if (image &&
+        (prop.flags & colorscreen::render_type_property::NEEDS_SCR_TO_IMG)) {
+      image->updateParameters(&m_rparams, &m_scrToImgParams,
+                              &m_detectParams, &m_renderTypeParams,
+                              &m_solverParams);
     }
   }
 

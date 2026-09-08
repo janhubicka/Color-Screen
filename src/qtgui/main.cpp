@@ -19,6 +19,7 @@
 #include <QDockWidget>
 #include <QFileInfo>
 #include <QIcon>
+#include <QImage>
 #include <QMdiArea>
 #include <QMdiSubWindow>
 #include <QMenu>
@@ -34,6 +35,7 @@
 #include <QThreadPool>
 #include <QTimer>
 #include <QToolBar>
+#include <QTransform>
 
 #include <cstring>
 #include <functional>
@@ -991,6 +993,74 @@ int main(int argc, char *argv[]) {
         qCritical() << "Scan presentation leaked into final coordinates";
         app.exit(14);
         return;
+      }
+
+      // Mouse tools and overlays use CoordinateTransformer, while the rendered
+      // scan uses QImage::transformed for quarter-turn/mirror presentation.
+      // Compare a real marker pixel so the two paths cannot drift by one pixel
+      // (the old edge-coordinate math mapped 270-degree rotation one pixel
+      // below the rendered pixel at high zoom).
+      {
+        constexpr int probeWidth = 7;
+        constexpr int probeHeight = 5;
+        constexpr int probeX = 1;
+        constexpr int probeY = 2;
+        colorscreen::image_data probeScan;
+        if (!probeScan.set_dimensions(probeWidth, probeHeight, true, false)) {
+          qCritical() << "Could not allocate coordinate-transform probe image";
+          app.exit(14);
+          return;
+        }
+
+        for (int rotation = 0; rotation < 4; ++rotation) {
+          for (bool mirror : {false, true}) {
+            QImage markerImage(probeWidth, probeHeight, QImage::Format_RGB32);
+            markerImage.fill(Qt::black);
+            markerImage.setPixelColor(probeX, probeY, Qt::red);
+            QTransform imageTransform;
+            if (rotation)
+              imageTransform.rotate(rotation * 90.0);
+            if (mirror)
+              imageTransform.scale(-1, 1);
+            const QImage transformed = markerImage.transformed(imageTransform);
+
+            QPoint expected(-1, -1);
+            for (int y = 0; y < transformed.height(); ++y)
+              for (int x = 0; x < transformed.width(); ++x)
+                if (transformed.pixelColor(x, y) == QColor(Qt::red))
+                  expected = QPoint(x, y);
+            if (expected.x() < 0) {
+              qCritical() << "QImage marker disappeared during coordinate smoke";
+              app.exit(14);
+              return;
+            }
+
+            colorscreen::render_parameters presentation;
+            presentation.scan_rotation = rotation;
+            presentation.scan_mirror = mirror;
+            CoordinateTransformer transformer(
+                &probeScan, presentation, nullptr,
+                colorscreen::render_scan_coordinates);
+            const colorscreen::point_t scanPoint = {probeX, probeY};
+            const colorscreen::point_t mapped =
+                transformer.scanToTransformedCrop(scanPoint);
+            const colorscreen::point_t roundTrip =
+                transformer.transformedToScanCrop(
+                    {(colorscreen::coord_t)expected.x(),
+                     (colorscreen::coord_t)expected.y()});
+            if (qAbs(mapped.x - expected.x()) > 1e-9 ||
+                qAbs(mapped.y - expected.y()) > 1e-9 ||
+                qAbs(roundTrip.x - probeX) > 1e-9 ||
+                qAbs(roundTrip.y - probeY) > 1e-9) {
+              qCritical() << "Mouse/render pixel-center transform mismatch"
+                          << "rotation" << rotation << "mirror" << mirror
+                          << "mapped" << mapped.x << mapped.y
+                          << "rendered" << expected;
+              app.exit(14);
+              return;
+            }
+          }
+        }
       }
 
       auto renderModeAvailable = [](const ParameterState &state,
