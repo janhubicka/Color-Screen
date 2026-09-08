@@ -1,0 +1,321 @@
+name: Agent mouse interaction audit helper
+
+on:
+  push:
+    branches: [agent/qtgui-mouse-interaction-audit-helper]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/qtgui-mouse-interaction-audit
+          fetch-depth: 0
+      - name: Apply mouse interaction audit
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected one match, found {count}: {old[:100]!r}")
+              p.write_text(text.replace(old, new, 1))
+
+          replace_once(
+              'src/qtgui/ImageWidget.cpp',
+              '''  m_pointsOverlayDirty = true;\n  if (m_rparams) {\n      m_lastScanCrop = m_rparams->scan_crop;\n''',
+              '''  m_pointsOverlayDirty = true;\n  if (solver)\n    m_lastSolverPoints = solver->points;\n  else\n    m_lastSolverPoints.clear();\n  if (m_rparams) {\n      m_lastScanCrop = m_rparams->scan_crop;\n''')
+
+          replace_once(
+              'src/qtgui/ImageWidget.cpp',
+              '''  const bool mappingChanged = scrToImg && *scrToImg != m_lastScrToImg;\n  if (mappingChanged) {\n    m_pointsOverlayDirty = true;\n    m_lastScrToImg = *scrToImg;\n  }\n\n  // Scan presentation changes alter only scan-coordinate views.  Final views\n''',
+              '''  const bool mappingChanged = scrToImg && *scrToImg != m_lastScrToImg;\n  if (mappingChanged) {\n    m_pointsOverlayDirty = true;\n    m_lastScrToImg = *scrToImg;\n  }\n\n  // The registration overlay also depends on the point set itself.  Keep a\n  // cheap copy-on-write snapshot so point batches added outside ImageWidget do\n  // not leave an old overlay on screen until some unrelated mapping change.\n  const bool solverPointsChanged =\n      solver ? solver->points != m_lastSolverPoints : !m_lastSolverPoints.empty();\n  if (solverPointsChanged) {\n    m_pointsOverlayDirty = true;\n    if (solver)\n      m_lastSolverPoints = solver->points;\n    else\n      m_lastSolverPoints.clear();\n  }\n\n  // Scan presentation changes alter only scan-coordinate views.  Final views\n''')
+
+          replace_once(
+              'src/qtgui/ImageWidget.cpp',
+              '''    const bool scanPresentationChanged =\n        !(rparams->scan_crop == m_lastScanCrop) ||\n        rparams->scan_rotation != m_lastRotation ||\n        rparams->scan_mirror != m_lastMirror;\n    m_lastScanCrop = rparams->scan_crop;\n''',
+              '''    const bool scanPresentationChanged =\n        !(rparams->scan_crop == m_lastScanCrop) ||\n        rparams->scan_rotation != m_lastRotation ||\n        rparams->scan_mirror != m_lastMirror;\n    // Mouse hit-testing uses the new presentation transform immediately.  The\n    // cached registration overlay must use that same transform or Select can\n    // appear displaced even though widgetToImage()/imageToWidget() are correct.\n    if (m_coordinateSpace == colorscreen::render_scan_coordinates &&\n        scanPresentationChanged)\n      m_pointsOverlayDirty = true;\n    m_lastScanCrop = rparams->scan_crop;\n''')
+
+          replace_once(
+              'src/qtgui/ImageWidget.h',
+              '''  bool    m_pointsOverlayDirty = true;\n  colorscreen::scr_to_img_parameters m_lastScrToImg;\n\n  colorscreen::int_optional_image_area m_lastScanCrop;\n''',
+              '''  bool    m_pointsOverlayDirty = true;\n  colorscreen::scr_to_img_parameters m_lastScrToImg;\n  colorscreen::cow_vector<colorscreen::solver_parameters::solver_point_t>\n      m_lastSolverPoints;\n\n  colorscreen::int_optional_image_area m_lastScanCrop;\n''')
+
+          Path('src/qtgui/MouseInteractionSmoke.h').write_text(r'''#pragma once
+
+/** Exercise ImageWidget mouse-to-scan coordinate handling. */
+bool runMouseInteractionCoordinateSmoke();
+''')
+
+          Path('src/qtgui/MouseInteractionSmoke.cpp').write_text(r'''#include "MouseInteractionSmoke.h"
+
+#include "ImageWidget.h"
+#include "../libcolorscreen/include/scr-to-img.h"
+
+#include <QCoreApplication>
+#include <QDebug>
+#include <QMouseEvent>
+
+#include <cmath>
+#include <memory>
+#include <vector>
+
+namespace {
+
+constexpr double coordinateTolerance = 1e-7;
+
+bool samePoint(colorscreen::point_t a, colorscreen::point_t b) {
+  return std::abs(a.x - b.x) <= coordinateTolerance &&
+         std::abs(a.y - b.y) <= coordinateTolerance;
+}
+
+void sendMouse(ImageWidget &widget, QEvent::Type type, const QPointF &local,
+               Qt::MouseButton button, Qt::MouseButtons buttons,
+               Qt::KeyboardModifiers modifiers = Qt::NoModifier) {
+  const QPoint globalOrigin = widget.mapToGlobal(QPoint(0, 0));
+  const QPointF global(globalOrigin.x() + local.x(),
+                       globalOrigin.y() + local.y());
+  QMouseEvent event(type, local, global, button, buttons, modifiers);
+  QCoreApplication::sendEvent(&widget, &event);
+}
+
+void click(ImageWidget &widget, const QPointF &local, Qt::MouseButton button,
+           Qt::KeyboardModifiers modifiers = Qt::NoModifier) {
+  sendMouse(widget, QEvent::MouseButtonPress, local, button, button, modifiers);
+  sendMouse(widget, QEvent::MouseButtonRelease, local, button, Qt::NoButton,
+            modifiers);
+}
+
+bool reportPointFailure(const char *tool, int rotation, bool mirror,
+                        colorscreen::point_t expected,
+                        colorscreen::point_t actual) {
+  qCritical() << "Mouse interaction coordinate smoke failed" << tool
+              << "rotation" << rotation << "mirror" << mirror << "expected"
+              << expected.x << expected.y << "actual" << actual.x << actual.y;
+  return false;
+}
+
+} // namespace
+
+/** Drive the actual ImageWidget mouse handlers through a transformed scan.
+    The synthetic crop is deliberately viewed at high zoom so a one-pixel
+    presentation mismatch cannot hide inside hit-test tolerances. */
+bool runMouseInteractionCoordinateSmoke() {
+  auto scan = std::make_shared<colorscreen::image_data>();
+  if (!scan->set_dimensions(9, 7, true, false)) {
+    qCritical() << "Mouse interaction smoke could not allocate its scan";
+    return false;
+  }
+
+  colorscreen::render_parameters rparams;
+  rparams.scan_crop.set = true;
+  rparams.scan_crop.x = 1;
+  rparams.scan_crop.y = 1;
+  rparams.scan_crop.width = 7;
+  rparams.scan_crop.height = 5;
+
+  colorscreen::scr_to_img_parameters scr;
+  scr.type = colorscreen::Paget;
+  scr.center = {4, 2};
+  scr.coordinate1 = {3, 0};
+  scr.coordinate2 = {0, 3};
+  const colorscreen::scr_to_img_parameters baselineScr = scr;
+
+  colorscreen::scr_detect_parameters detect;
+  colorscreen::render_type_parameters renderType;
+  renderType.type = colorscreen::render_type_original;
+  renderType.color = true;
+  colorscreen::solver_parameters solver;
+
+  ImageWidget widget;
+  widget.resize(700, 500);
+  widget.setImage(scan, &rparams, &scr, &detect, &renderType, &solver);
+  widget.setCoordinateSpace(colorscreen::render_scan_coordinates);
+  widget.show();
+  QCoreApplication::processEvents();
+
+  const colorscreen::point_t probe = {2, 3};
+  const colorscreen::point_t measureEnd = {6, 4};
+  const colorscreen::point_t centerPoint = {4, 2};
+  const colorscreen::point_t axis1End = {7, 2};
+  const colorscreen::point_t axis2End = {4, 5};
+
+  for (int rotation = 0; rotation < 4; ++rotation) {
+    for (bool mirror : {false, true}) {
+      rparams.scan_rotation = rotation;
+      rparams.scan_mirror = mirror;
+      scr = baselineScr;
+      solver = colorscreen::solver_parameters();
+      widget.updateParameters(&rparams, &scr, &detect, &renderType, &solver);
+      widget.fitToView();
+
+      const QPointF probeWidget = widget.imageToWidget(probe);
+      const colorscreen::point_t roundTrip = widget.widgetToImage(probeWidget);
+      if (!samePoint(roundTrip, probe))
+        return reportPointFailure("point round trip", rotation, mirror, probe,
+                                  roundTrip);
+
+      // Add Point and profile/focus spot placement share pointAdded().
+      bool pointAdded = false;
+      colorscreen::point_t addedPoint = {0, 0};
+      const QMetaObject::Connection pointConnection = QObject::connect(
+          &widget, &ImageWidget::pointAdded, &widget,
+          [&](colorscreen::point_t img, colorscreen::point_t,
+              colorscreen::point_t) {
+            pointAdded = true;
+            addedPoint = img;
+          });
+      widget.setInteractionMode(ImageWidget::AddPointMode);
+      click(widget, probeWidget, Qt::LeftButton);
+      QObject::disconnect(pointConnection);
+      if (!pointAdded || !samePoint(addedPoint, probe))
+        return reportPointFailure("Add Point", rotation, mirror, probe,
+                                  addedPoint);
+
+      // Measure uses the same conversion on press, move and release.
+      bool measured = false;
+      colorscreen::point_t measuredStart = {0, 0};
+      colorscreen::point_t measuredEnd = {0, 0};
+      const QMetaObject::Connection measureConnection = QObject::connect(
+          &widget, &ImageWidget::distanceMeasured, &widget,
+          [&](colorscreen::point_t start, colorscreen::point_t end) {
+            measured = true;
+            measuredStart = start;
+            measuredEnd = end;
+          });
+      const QPointF measureEndWidget = widget.imageToWidget(measureEnd);
+      widget.setInteractionMode(ImageWidget::MeasureMode);
+      sendMouse(widget, QEvent::MouseButtonPress, probeWidget, Qt::LeftButton,
+                Qt::LeftButton);
+      sendMouse(widget, QEvent::MouseMove, measureEndWidget, Qt::NoButton,
+                Qt::LeftButton);
+      sendMouse(widget, QEvent::MouseButtonRelease, measureEndWidget,
+                Qt::LeftButton, Qt::NoButton);
+      QObject::disconnect(measureConnection);
+      if (!measured || !samePoint(measuredStart, probe))
+        return reportPointFailure("Measure start", rotation, mirror, probe,
+                                  measuredStart);
+      if (!samePoint(measuredEnd, measureEnd))
+        return reportPointFailure("Measure end", rotation, mirror, measureEnd,
+                                  measuredEnd);
+
+      // Set Screen Coordinates exercises center plus both axis endpoint clicks.
+      scr = baselineScr;
+      widget.updateParameters(&rparams, &scr, &detect, &renderType, &solver);
+      widget.setLockRelativeCoordinates(false);
+      widget.setInteractionMode(ImageWidget::SetCenterMode);
+      click(widget, widget.imageToWidget(centerPoint), Qt::LeftButton);
+      if (!samePoint(scr.center, centerPoint))
+        return reportPointFailure("Screen center", rotation, mirror,
+                                  centerPoint, scr.center);
+      click(widget, widget.imageToWidget(axis1End), Qt::RightButton);
+      colorscreen::point_t actualAxis1 = scr.center + scr.coordinate1;
+      if (!samePoint(actualAxis1, axis1End))
+        return reportPointFailure("Screen axis 1", rotation, mirror, axis1End,
+                                  actualAxis1);
+      click(widget, widget.imageToWidget(axis2End), Qt::MiddleButton);
+      colorscreen::point_t actualAxis2 = scr.center + scr.coordinate2;
+      if (!samePoint(actualAxis2, axis2End))
+        return reportPointFailure("Screen axis 2", rotation, mirror, axis2End,
+                                  actualAxis2);
+
+      // Select hit-testing and point dragging use imageToWidget/widgetToImage.
+      scr = baselineScr;
+      solver = colorscreen::solver_parameters();
+      solver.add_point(probe, {0, 0}, colorscreen::solver_parameters::red);
+      widget.updateParameters(&rparams, &scr, &detect, &renderType, &solver);
+      widget.clearSelection();
+      widget.setShowRegistrationPoints(true);
+      widget.setInteractionMode(ImageWidget::SelectMode);
+      click(widget, widget.imageToWidget(probe), Qt::LeftButton);
+      if (widget.selectedPoints().size() != 1 ||
+          widget.selectedPoints().begin()->index != 0 ||
+          !samePoint(solver.points[0].img, probe)) {
+        qCritical() << "Mouse interaction coordinate smoke failed Select"
+                    << "rotation" << rotation << "mirror" << mirror;
+        return false;
+      }
+
+      // Profile-spot right-click hit-testing is another imageToWidget consumer.
+      colorscreen::scr_to_img map;
+      if (!map.set_parameters(scr, *scan)) {
+        qCritical() << "Mouse interaction smoke could not build profile map";
+        return false;
+      }
+      std::vector<colorscreen::point_t> profileSpots = {map.to_scr(probe)};
+      widget.setProfileSpots(&profileSpots, nullptr);
+      bool removed = false;
+      int removedIndex = -1;
+      const QMetaObject::Connection profileConnection = QObject::connect(
+          &widget, &ImageWidget::profileSpotRemoveRequested, &widget,
+          [&](int index) {
+            removed = true;
+            removedIndex = index;
+          });
+      widget.setInteractionMode(ImageWidget::AddPointMode);
+      click(widget, widget.imageToWidget(probe), Qt::RightButton);
+      QObject::disconnect(profileConnection);
+      widget.setProfileSpots(nullptr, nullptr);
+      if (!removed || removedIndex != 0) {
+        qCritical() << "Mouse interaction coordinate smoke failed profile hit"
+                    << "rotation" << rotation << "mirror" << mirror;
+        return false;
+      }
+    }
+  }
+
+  widget.hide();
+  return true;
+}
+''')
+
+          replace_once(
+              'src/qtgui/Makefile.am',
+              '''    DocumentLifecycleSmoke.cpp \\\n    WorkspaceChurnSmoke.cpp \\\n    ColorScreenApplication.cpp \\\n''',
+              '''    DocumentLifecycleSmoke.cpp \\\n    WorkspaceChurnSmoke.cpp \\\n    MouseInteractionSmoke.cpp \\\n    ColorScreenApplication.cpp \\\n''')
+          replace_once(
+              'src/qtgui/Makefile.am',
+              'EXTRA_DIST = ColorScreenApplication.h DocumentLifecycleSmoke.h WorkspaceChurnSmoke.h ',
+              'EXTRA_DIST = ColorScreenApplication.h DocumentLifecycleSmoke.h WorkspaceChurnSmoke.h MouseInteractionSmoke.h ')
+
+          replace_once(
+              'src/qtgui/main.cpp',
+              '''#include "WorkspaceChurnSmoke.h"\n#include "WorkspaceWindow.h"\n''',
+              '''#include "WorkspaceChurnSmoke.h"\n#include "MouseInteractionSmoke.h"\n#include "WorkspaceWindow.h"\n''')
+          replace_once(
+              'src/qtgui/main.cpp',
+              '''      // Mouse tools and overlays use CoordinateTransformer, while the rendered\n''',
+              '''      if (!runMouseInteractionCoordinateSmoke()) {\n        qCritical() << "ImageWidget mouse interaction coordinate smoke failed";\n        app.exit(14);\n        return;\n      }\n\n      // Mouse tools and overlays use CoordinateTransformer, while the rendered\n''')
+
+          expected = {
+              'src/qtgui/ImageWidget.cpp',
+              'src/qtgui/ImageWidget.h',
+              'src/qtgui/MouseInteractionSmoke.cpp',
+              'src/qtgui/MouseInteractionSmoke.h',
+              'src/qtgui/Makefile.am',
+              'src/qtgui/main.cpp',
+          }
+          import subprocess
+          changed = set(subprocess.check_output(
+              ['git', 'diff', '--name-only'], text=True).splitlines())
+          if changed != expected:
+              raise SystemExit(f'unexpected changed files: {sorted(changed)}')
+          subprocess.run(['git', 'diff', '--check'], check=True)
+          PY
+
+          git config user.name "OpenAI Agent"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/qtgui/ImageWidget.cpp src/qtgui/ImageWidget.h \
+                  src/qtgui/MouseInteractionSmoke.cpp src/qtgui/MouseInteractionSmoke.h \
+                  src/qtgui/Makefile.am src/qtgui/main.cpp
+          git commit -m "qtgui: finish mouse interaction coordinate audit" \
+            -m "Keep the cached registration overlay in step with scan presentation and solver-point changes, and exercise actual ImageWidget mouse handlers across crop, quarter-turn rotation and mirroring."
+          git push origin HEAD:agent/qtgui-mouse-interaction-audit
