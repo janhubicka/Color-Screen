@@ -514,6 +514,9 @@ void GeometryPanel::setRegistrationPointsVisible(bool visible) {
     if (m_maxArrowLengthSliderContainer) m_maxArrowLengthSliderContainer->setEnabled(visible);
 }
 void GeometryPanel::setNonlinearChecked(bool checked) {
+    // Programmatic state refresh blocks the checkbox signal, so keep the
+    // panel-local mirror in sync explicitly as well.
+    m_nonlinearEnabled = checked;
     if (m_nlCb) {
         QSignalBlocker blocker(m_nlCb);
         m_nlCb->setChecked(checked);

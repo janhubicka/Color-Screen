@@ -199,6 +199,25 @@ bool geometryFitInputsDiffer(const ParameterState &before,
          a.mesh_trans_is_scr_to_img != b.mesh_trans_is_scr_to_img;
 }
 
+/** Return whether CURRENT still uses the geometry produced by BASELINE.
+
+    Solver-point edits intentionally do not count here: they make a fit stale,
+    but the displayed mapping is still the old control-point-derived mapping.
+    Final-plane orientation is appearance/output state and is likewise ignored. */
+bool screenGeometryMatchesFitBaseline(const ParameterState &baseline,
+                                      const ParameterState &current) {
+  const auto &a = baseline.scrToImg;
+  const auto &b = current.scrToImg;
+  return a.center == b.center && a.coordinate1 == b.coordinate1 &&
+         a.coordinate2 == b.coordinate2 &&
+         a.projection_distance == b.projection_distance &&
+         a.tilt_x == b.tilt_x && a.tilt_y == b.tilt_y &&
+         a.type == b.type && a.scanner_type == b.scanner_type &&
+         a.lens_correction == b.lens_correction &&
+         a.mesh_trans == b.mesh_trans &&
+         a.mesh_trans_is_scr_to_img == b.mesh_trans_is_scr_to_img;
+}
+
 /** Compare the inputs actually handed to optimize_color_model_colors().
     The fitted profiled_* values are outputs, not prerequisites. Final-plane
     orientation and output profile selection likewise do not change the sampled
@@ -1143,6 +1162,7 @@ void MainWindow::setupUi() {
               QSignalBlocker blocker(m_setCenterAction);
               m_setCenterAction->setChecked(mode == ImageWidget::SetCenterMode);
             }
+            updateScreenCoordinateToolPresentation();
 
             if (m_capturePanel) {
               m_capturePanel->setCropChecked(mode == ImageWidget::CropMode);
@@ -1767,8 +1787,7 @@ void MainWindow::createToolbar() {
     if (checked)
       if (ImageWidget *image = inspectorImageWidget())
         image->setInteractionMode(ImageWidget::SetCenterMode);
-    m_lockRelativeCoordinatesAction->setVisible(checked);
-    m_optimizeCoordinatesAction->setVisible(checked);
+    updateScreenCoordinateToolPresentation();
   });
 
   connect(m_imageWidget, &ImageWidget::selectionChanged, this,
@@ -2418,8 +2437,8 @@ void MainWindow::createMenus() {
   m_lockRelativeCoordinatesAction->setCheckable(true);
   m_lockRelativeCoordinatesAction->setChecked(true); // Default ON
   m_lockRelativeCoordinatesAction->setToolTip(
-      "Maintain relative positions of registration points when the grid size "
-      "changes.");
+      "Keep the X and Y screen axes at their current relative angle and scale "
+      "ratio while either axis is edited.");
   connect(m_lockRelativeCoordinatesAction, &QAction::toggled, this,
           [this](bool checked) {
             if (ImageWidget *image = inspectorImageWidget())
@@ -3321,10 +3340,7 @@ void MainWindow::syncInspectorInteractionActions(ImageWidget::InteractionMode mo
     const QSignalBlocker blocker(m_setCenterAction);
     m_setCenterAction->setChecked(mode == ImageWidget::SetCenterMode);
   }
-  if (m_lockRelativeCoordinatesAction)
-    m_lockRelativeCoordinatesAction->setVisible(mode == ImageWidget::SetCenterMode);
-  if (m_optimizeCoordinatesAction)
-    m_optimizeCoordinatesAction->setVisible(mode == ImageWidget::SetCenterMode);
+  updateScreenCoordinateToolPresentation();
   if (m_capturePanel)
     m_capturePanel->setCropChecked(mode == ImageWidget::CropMode);
 }
@@ -4847,6 +4863,7 @@ void MainWindow::onZoom100() {
    optimization to compute one.  When disabling: clears the mesh_trans
    pointer and pushes an undo command.  */
 void MainWindow::onNonlinearToggled(bool checked) {
+  updateScreenCoordinateToolPresentation();
   if (checked) {
     // If not already set, trigger optimization
     if (!m_scrToImgParams.mesh_trans) {
@@ -4969,6 +4986,7 @@ void MainWindow::onSolverFinished(int reqId,
     newState.scrToImg.merge_solver_solution(result);
     changeParameters(newState, "Optimize Geometry");
     m_geometryFitBaseline = getCurrentState();
+    updateScreenCoordinateToolPresentation();
     m_geometryFitFailureInputs.reset();
   } else {
     m_geometryFitFailureInputs = now;
@@ -5061,6 +5079,8 @@ void MainWindow::updateRegistrationGroupVisibility() {
     setPanelVisible(m_profilePanel,
                     hasScreenColorData && m_scan && m_scan->has_rgb());
   }
+
+  updateScreenCoordinateToolPresentation();
 
   if (!hasRegularGeometry &&
       (m_selectAction->isChecked() || m_addPointAction->isChecked() ||
@@ -5340,11 +5360,71 @@ void MainWindow::onPruneMisplaced() {
   updateRegistrationActions();
 }
 
+/** Return whether manual linear screen-coordinate editing belongs in the UI. */
+bool MainWindow::screenCoordinateToolAvailable() const {
+  if (!m_scan)
+    return false;
+  const auto capture = m_rparams.get_capture_type(m_scan.get());
+  if (!colorscreen::render_parameters::capture_has_screen_p(capture) ||
+      !colorscreen::screen_has_regular_geometry_p(m_scrToImgParams.type))
+    return false;
+  if (m_scrToImgParams.mesh_trans ||
+      (m_geometryPanel && m_geometryPanel->isNonlinearEnabled()))
+    return false;
+  return !(m_geometryFitBaseline &&
+           screenGeometryMatchesFitBaseline(*m_geometryFitBaseline,
+                                            getCurrentState()));
+}
+
+/** Keep manual coordinate controls scoped to the Screen coordinates tool. */
+void MainWindow::updateScreenCoordinateToolPresentation() {
+  ImageWidget *image = inspectorImageWidget();
+  const bool available = screenCoordinateToolAvailable();
+  const bool active = available && image &&
+      image->interactionMode() == ImageWidget::SetCenterMode;
+  const bool configured = m_scan &&
+      colorscreen::screen_geometry_configured_p(m_scrToImgParams);
+
+  if (m_setCenterAction) {
+    m_setCenterAction->setVisible(available);
+    m_setCenterAction->setEnabled(available);
+    if (available && image) {
+      switch (image->screenCoordinateSetupStage()) {
+      case ImageWidget::ScreenCoordinateSetupStage::NeedCenter:
+        m_setCenterAction->setToolTip(
+            tr("Screen coordinates: click a green dot for the center (C)"));
+        break;
+      case ImageWidget::ScreenCoordinateSetupStage::NeedXAxis:
+        m_setCenterAction->setToolTip(tr(
+            "Screen coordinates: click the neighboring green dot along +X"));
+        break;
+      case ImageWidget::ScreenCoordinateSetupStage::Editing:
+        m_setCenterAction->setToolTip(tr(
+            "Screen coordinates (C): drag center; right/Ctrl-drag X; middle/Alt-drag Y"));
+        break;
+      }
+    }
+  }
+  if (m_lockRelativeCoordinatesAction) {
+    m_lockRelativeCoordinatesAction->setVisible(active);
+    m_lockRelativeCoordinatesAction->setEnabled(active && configured);
+  }
+  if (m_optimizeCoordinatesAction) {
+    m_optimizeCoordinatesAction->setVisible(active);
+    m_optimizeCoordinatesAction->setEnabled(active && configured);
+  }
+
+  if (!available && image &&
+      image->interactionMode() == ImageWidget::SetCenterMode && m_panAction &&
+      !m_panAction->isChecked())
+    m_panAction->setChecked(true);
+}
+
 /** Update enabled state of all registration-related menu actions.
    Enables select/delete/prune based on current selection, enables
    optimize based on minimum point count for the current screen type,
    and calls GeometryPanel::updateRegistrationPointInfo() to refresh
-   the panel's status display.  */
+   the panel's status display. */
 void MainWindow::updateRegistrationActions() {
   ImageWidget *image = inspectorImageWidget();
   bool hasPoints = image && image->registrationPointsVisible() &&
@@ -5376,14 +5456,8 @@ void MainWindow::updateRegistrationActions() {
       m_panAction->setChecked(true);
     }
   }
-  if (m_setCenterAction) {
-    bool canSetCenter = geometryConfigured;
-    m_setCenterAction->setEnabled(canSetCenter);
-    // If tool is active but we can't set center, switch to Pan mode
-    if (!canSetCenter && m_setCenterAction->isChecked()) {
-      m_panAction->setChecked(true);
-    }
-  }
+  if (m_setCenterAction)
+    m_setCenterAction->setEnabled(screenCoordinateToolAvailable());
 
   // Disable/enable optimize geometry and select all based on point count
   size_t count = image ? image->registrationPointCount() : 0;
@@ -5395,7 +5469,10 @@ void MainWindow::updateRegistrationActions() {
     m_optimizeGeometryAction->setEnabled(count >= (size_t)min_points);
   }
   if (m_optimizeCoordinatesAction)
-    m_optimizeCoordinatesAction->setEnabled(geometryConfigured);
+    m_optimizeCoordinatesAction->setEnabled(
+        geometryConfigured && screenCoordinateToolAvailable());
+
+  updateScreenCoordinateToolPresentation();
 
   // Update buttons in GeometryPanel is now handled by the panel itself
   if (m_geometryPanel) {
@@ -5967,6 +6044,7 @@ void MainWindow::onAutomaticallyAddPointsInAreaRequested(
                       newState,
                       "Automatically add points to area (Geometry update)");
                   m_geometryFitBaseline = getCurrentState();
+                  updateScreenCoordinateToolPresentation();
                   m_geometryFitFailureInputs.reset();
                   updateWorkflowSummary();
                 });
@@ -6073,6 +6151,7 @@ void MainWindow::onAutomaticallyAddPointsRequested(const colorscreen::finetune_a
             changeParameters(newState,
                              "Automatically add points (Geometry update)");
             m_geometryFitBaseline = getCurrentState();
+            updateScreenCoordinateToolPresentation();
             m_geometryFitFailureInputs.reset();
             updateWorkflowSummary();
           });
@@ -6650,10 +6729,10 @@ void MainWindow::onCoordinateSystemManipulationStarted() {
 /** Create an undo command after a grid drag operation completes.  */
 void MainWindow::onCoordinateSystemManipulationFinished() {
   ParameterState newState = getCurrentState();
-  if (newState == m_gridManipulationOldState)
-    return;
-  m_undoStack->push(new ChangeParametersCommand(
-      this, m_gridManipulationOldState, newState, "Modify coordinate system"));
+  if (newState != m_gridManipulationOldState)
+    m_undoStack->push(new ChangeParametersCommand(
+        this, m_gridManipulationOldState, newState, "Modify coordinate system"));
+  updateRegistrationActions();
 }
 
 /** Open file dialogs for white and optional black reference images,

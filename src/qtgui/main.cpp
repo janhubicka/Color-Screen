@@ -135,6 +135,51 @@ bool runPointerInteractionSmoke() {
   if (measurements != 0)
     return fail("measurement leaked across a tool switch");
 
+  // A regular screen with zero-vector sentinels must still allow manual
+  // bootstrap: center click, neighboring +X green-dot click, then ordinary edit.
+  ImageWidget bootstrapImage;
+  bootstrapImage.resize(320, 240);
+  colorscreen::scr_to_img_parameters bootstrapGeometry;
+  bootstrapGeometry.type = colorscreen::Paget;
+  colorscreen::solver_parameters bootstrapSolver;
+  bootstrapImage.setImage({}, &rparams, &bootstrapGeometry, &detect, &renderType,
+                          &bootstrapSolver);
+  bootstrapImage.setInteractionMode(ImageWidget::SetCenterMode);
+  if (bootstrapImage.screenCoordinateSetupStage() !=
+      ImageWidget::ScreenCoordinateSetupStage::NeedCenter)
+    return fail("unconfigured regular screen did not enter center bootstrap");
+
+  sendPointerSmokeEvent(bootstrapImage, QEvent::MouseButtonPress, {80, 90},
+                        Qt::LeftButton, Qt::LeftButton);
+  sendPointerSmokeEvent(bootstrapImage, QEvent::MouseButtonRelease, {80, 90},
+                        Qt::LeftButton, Qt::NoButton);
+  if (!samePoint(bootstrapGeometry.center, {0, 0}) ||
+      bootstrapImage.screenCoordinateSetupStage() !=
+          ImageWidget::ScreenCoordinateSetupStage::NeedXAxis)
+    return fail("first screen-coordinate click was not kept pending");
+
+  sendPointerSmokeEvent(bootstrapImage, QEvent::MouseButtonPress, {104, 96},
+                        Qt::LeftButton, Qt::LeftButton);
+  sendPointerSmokeEvent(bootstrapImage, QEvent::MouseButtonRelease, {104, 96},
+                        Qt::LeftButton, Qt::NoButton);
+  if (!colorscreen::screen_geometry_configured_p(bootstrapGeometry) ||
+      !samePoint(bootstrapGeometry.center, {80, 90}) ||
+      !samePoint(bootstrapGeometry.coordinate1, {24, 6}) ||
+      !samePoint(bootstrapGeometry.coordinate2, {-6, 24}) ||
+      bootstrapImage.screenCoordinateSetupStage() !=
+          ImageWidget::ScreenCoordinateSetupStage::Editing)
+    return fail("second screen-coordinate click did not create a valid basis");
+
+  const colorscreen::point_t bootstrapCenter = bootstrapGeometry.center;
+  sendPointerSmokeEvent(bootstrapImage, QEvent::MouseButtonPress, {80, 90},
+                        Qt::LeftButton, Qt::LeftButton);
+  sendPointerSmokeEvent(bootstrapImage, QEvent::MouseMove, {90, 95},
+                        Qt::NoButton, Qt::LeftButton);
+  sendPointerSmokeEvent(bootstrapImage, QEvent::MouseButtonRelease, {90, 95},
+                        Qt::LeftButton, Qt::NoButton);
+  if (samePoint(bootstrapGeometry.center, bootstrapCenter))
+    return fail("manual bootstrap did not transition to normal center dragging");
+
   // Coordinate-system editing has a begin/end undo transaction. Lost releases
   // and tool switches must close it exactly once without applying a phantom
   // move; a normal right-button drag must still work.

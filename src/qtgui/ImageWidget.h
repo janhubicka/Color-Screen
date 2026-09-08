@@ -166,12 +166,19 @@ public:
     PanMode,         ///< Panning and zooming
     SelectMode,      ///< Selecting and moving registration points
     AddPointMode,    ///< Adding new registration points or selecting areas
-    SetCenterMode,   ///< Adjusting the screen coordinate system center and axes
+    SetCenterMode,   ///< Bootstrapping/editing the screen coordinate system
     CropMode,        ///< Selecting crop area
     GenericAreaMode, ///< Generic area selection
     ExploreMode,     ///< Precision navigation mode with auto-centering
     MeasureMode      ///< Distance measurement tool
   };
+
+  /** Two-click fallback used when a regular screen has no usable geometry. */
+  enum class ScreenCoordinateSetupStage { Editing, NeedCenter, NeedXAxis };
+  Q_ENUM(ScreenCoordinateSetupStage)
+  ScreenCoordinateSetupStage screenCoordinateSetupStage() const {
+    return m_coordinateSetupStage;
+  }
 
   /**
    * @brief Sets the current interaction mode.
@@ -411,6 +418,8 @@ private:
   bool pointerButtonHeld(const QMouseEvent *event) const;
   /** Settle an interrupted gesture without synthesizing a click/selection. */
   void cancelPointerInteraction();
+  /** Recompute bootstrap state after entering the tool or replacing geometry. */
+  void syncScreenCoordinateSetupStage(bool resetIncomplete);
   void requestRender();
 
   std::shared_ptr<colorscreen::image_data> m_scan;
@@ -429,12 +438,22 @@ private:
   colorscreen::point_t m_mtfMeasurementEdgeP2 {0, 0};
   
   // Coordinate system editing state
-  enum class DragTarget { None, Center, Axis1, Axis2 };
+  enum class DragTarget {
+    None,
+    BootstrapCenter,
+    BootstrapXAxis,
+    Center,
+    Axis1,
+    Axis2
+  };
   DragTarget m_dragTarget = DragTarget::None;
   QPointF m_dragStartWidget;
   colorscreen::point_t m_dragStartImg;
   colorscreen::scr_to_img_parameters m_pressParams;
   bool m_lockRelativeCoordinates = true;
+  ScreenCoordinateSetupStage m_coordinateSetupStage =
+      ScreenCoordinateSetupStage::NeedCenter;
+  colorscreen::point_t m_pendingCoordinateCenter {0, 0};
 
   bool m_showRegistrationPoints = false;
   bool m_showDetectedPatchCenters = false;

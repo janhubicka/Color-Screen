@@ -265,6 +265,7 @@ void ImageWidget::setImage(std::shared_ptr<colorscreen::image_data> scan,
   m_scrDetect = scrDetect;
   m_renderType = renderType;
   m_solver = solver;
+  syncScreenCoordinateSetupStage(true);
 
   if (m_scan != scan) {
     m_pixmap = QImage(); // Clear if new image loaded
@@ -362,7 +363,7 @@ void ImageWidget::updateParameters(
   m_scrDetect = scrDetect;
   m_renderType = renderType;
   m_solver = solver;
-
+  syncScreenCoordinateSetupStage(false);
 
   // Selective invalidation: only dirty if scrToImg parameters changed.
   const bool mappingChanged = scrToImg && *scrToImg != m_lastScrToImg;
@@ -851,30 +852,39 @@ void ImageWidget::drawScreenCoordinateSystem(QPainter &p) {
   p.save();
   p.setRenderHint(QPainter::Antialiasing);
 
-  // Get color from first point location
-  int npoints = 0;
-  colorscreen::solver_parameters::point_location *points = 
-    colorscreen::solver_parameters::get_point_locations(m_scrToImg->type, &npoints);
-  
-  QColor dotColor = Qt::blue; // Default
-  if (points && npoints > 0) {
-    switch (points[0].color) {
-      case colorscreen::solver_parameters::red:
-        dotColor = Qt::red;
-        break;
-      case colorscreen::solver_parameters::green:
-        dotColor = Qt::green;
-        break;
-      case colorscreen::solver_parameters::blue:
-        dotColor = Qt::blue;
-        break;
-      default:
-        dotColor = Qt::blue;
-        break;
-    }
+  // scr_to_img defines the origin and both unit-axis endpoints as green dots.
+  const QColor dotColor = Qt::green;
+  const colorscreen::point_t displayedCenter =
+      m_coordinateSetupStage == ScreenCoordinateSetupStage::NeedXAxis
+          ? m_pendingCoordinateCenter
+          : m_scrToImg->center;
+  QPointF centerWidget = imageToWidget(displayedCenter);
+
+  auto drawSetupHint = [this, &p](const QString &message) {
+    QFont font = p.font();
+    font.setBold(true);
+    p.setFont(font);
+    p.setPen(QPen(Qt::black, 3));
+    const QRectF hintRect = rect().adjusted(12, 12, -12, -12);
+    p.drawText(hintRect.translated(1, 1), Qt::AlignTop | Qt::AlignHCenter,
+               message);
+    p.setPen(Qt::yellow);
+    p.drawText(hintRect, Qt::AlignTop | Qt::AlignHCenter, message);
+  };
+
+  if (m_coordinateSetupStage == ScreenCoordinateSetupStage::NeedCenter) {
+    drawSetupHint(tr("Click a green screen dot to set the center"));
+    p.restore();
+    return;
   }
-  
-  QPointF centerWidget = imageToWidget(m_scrToImg->center);
+  if (m_coordinateSetupStage == ScreenCoordinateSetupStage::NeedXAxis) {
+    p.setPen(QPen(Qt::black, 2));
+    p.setBrush(dotColor);
+    p.drawEllipse(centerWidget, 6, 6);
+    drawSetupHint(tr("Now click the neighboring green dot along +X"));
+    p.restore();
+    return;
+  }
   
   // Calculate viewport bounds in image coordinates
   colorscreen::point_t topLeft = widgetToImage(QPointF(0, 0));
@@ -1150,6 +1160,24 @@ void ImageWidget::resizeEvent(QResizeEvent *event) {
       QRectF(m_viewX, m_viewY, width() / m_scale, height() / m_scale), m_scale);
 }
 
+/** Reconcile the manual two-click screen-coordinate bootstrap state.
+
+    RESETINCOMPLETE is true when a new image/tool session begins, where a
+    half-entered center must not leak across contexts. Ordinary parameter
+    refreshes preserve NeedXAxis so the first click survives a repaint. */
+void ImageWidget::syncScreenCoordinateSetupStage(bool resetIncomplete) {
+  if (m_scrToImg && m_scrToImg->geometry_configured_p()) {
+    m_coordinateSetupStage = ScreenCoordinateSetupStage::Editing;
+    return;
+  }
+  if (resetIncomplete ||
+      m_coordinateSetupStage == ScreenCoordinateSetupStage::Editing) {
+    m_coordinateSetupStage = ScreenCoordinateSetupStage::NeedCenter;
+    if (m_scrToImg)
+      m_pendingCoordinateCenter = m_scrToImg->center;
+  }
+}
+
 /** Settle pointer state when Qt interrupts a press-started gesture.
 
     Qt automatically grabs the mouse for a widget after a button press.  A
@@ -1310,7 +1338,13 @@ void ImageWidget::handleSetCenterPress(QMouseEvent *event) {
   const bool alt = event->modifiers() & Qt::AltModifier;
   DragTarget target = DragTarget::None;
 
-  if (event->button() == Qt::LeftButton && !ctrl && !alt) {
+  if (m_coordinateSetupStage != ScreenCoordinateSetupStage::Editing) {
+    if (event->button() != Qt::LeftButton || ctrl || alt)
+      return;
+    target = m_coordinateSetupStage == ScreenCoordinateSetupStage::NeedCenter
+                 ? DragTarget::BootstrapCenter
+                 : DragTarget::BootstrapXAxis;
+  } else if (event->button() == Qt::LeftButton && !ctrl && !alt) {
     target = DragTarget::Center;
   } else if (event->button() == Qt::RightButton ||
              (event->button() == Qt::LeftButton && ctrl)) {
@@ -1322,9 +1356,6 @@ void ImageWidget::handleSetCenterPress(QMouseEvent *event) {
     return;
   }
 
-  // Qt automatically grabs the mouse after a button press.  Recording the
-  // owning button is enough to keep the gesture alive outside this widget and
-  // lets us detect an exceptional lost release without an explicit mouse grab.
   m_dragTarget = target;
   m_activePointerButton = event->button();
   m_dragStartWidget = event->position();
@@ -1476,7 +1507,11 @@ void ImageWidget::mouseMoveEvent(QMouseEvent *event) {
  * @brief Handles mouse move in SetCenterMode (dragging center or axes).
  */
 void ImageWidget::handleSetCenterMove(QMouseEvent *event) {
-  if (m_dragTarget == DragTarget::None || !m_scrToImg) return;
+  if (m_dragTarget == DragTarget::None || !m_scrToImg)
+    return;
+  if (m_dragTarget == DragTarget::BootstrapCenter ||
+      m_dragTarget == DragTarget::BootstrapXAxis)
+    return;
 
   if (m_dragTarget == DragTarget::Center) {
     // Drag center: translate by offset
@@ -1660,7 +1695,28 @@ void ImageWidget::handleSetCenterRelease(QMouseEvent *event) {
   QPointF dragDistance = event->position() - m_dragStartWidget;
   bool isClick = dragDistance.manhattanLength() < 5;
 
-  if (m_dragTarget == DragTarget::Center && isClick && m_scrToImg) {
+  if (m_dragTarget == DragTarget::BootstrapCenter && isClick && m_scrToImg) {
+     // Keep the first click transient. The second click commits the complete
+     // non-degenerate basis atomically, so Undo/Redo never has to serialize a
+     // half-configured interaction stage.
+     m_pendingCoordinateCenter = widgetToImage(event->position());
+     m_coordinateSetupStage = ScreenCoordinateSetupStage::NeedXAxis;
+     update();
+  } else if (m_dragTarget == DragTarget::BootstrapXAxis && isClick && m_scrToImg) {
+     const colorscreen::point_t clickImg = widgetToImage(event->position());
+     const colorscreen::point_t center = m_pendingCoordinateCenter;
+     const double newC1x = clickImg.x - center.x;
+     const double newC1y = clickImg.y - center.y;
+     const double newLenSq = newC1x * newC1x + newC1y * newC1y;
+     if (newLenSq > 4.0) {
+       m_scrToImg->center = center;
+       m_scrToImg->coordinate1 = {newC1x, newC1y};
+       m_scrToImg->coordinate2 = {-newC1y, newC1x};
+       m_coordinateSetupStage = ScreenCoordinateSetupStage::Editing;
+       emit coordinateSystemChanged();
+       update();
+     }
+  } else if (m_dragTarget == DragTarget::Center && isClick && m_scrToImg) {
      // Set center to this specific point.
      m_scrToImg->center = widgetToImage(event->position());
      emit coordinateSystemChanged();
@@ -2292,14 +2348,18 @@ void ImageWidget::setInteractionMode(InteractionMode mode) {
   if (m_interactionMode == mode)
     return;
 
-  // Tool changes are a hard gesture boundary.  Live edits already applied by a
+  // Tool changes are a hard gesture boundary. Live edits already applied by a
   // drag are retained and their undo transaction is closed, while unfinished
-  // area/measurement gestures are simply discarded.
+  // area/measurement gestures are discarded.
   cancelPointerInteraction();
   m_interactionMode = mode;
+  if (mode == SetCenterMode)
+    syncScreenCoordinateSetupStage(true);
   if (m_rubberBand)
     m_rubberBand->hide();
-  if (mode != ExploreMode)
+  if (mode == SetCenterMode)
+    setCursor(Qt::CrossCursor);
+  else if (mode != ExploreMode)
     unsetCursor();
   emit interactionModeChanged(mode);
   update();

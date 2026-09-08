@@ -428,6 +428,27 @@ Mouse interaction logic is delegated based on `InteractionMode`. This ensures th
   implemented; entering and leaving a special navigation mode must not silently
   disable later hover behavior.
 
+#### Screen-coordinate bootstrap and ownership
+
+`Screen coordinates` is the manual fallback for a **regular** screen when
+autodetection cannot establish geometry. It must not require configured geometry
+to become selectable. With the zero-vector sentinel it enters a two-click
+bootstrap: click the green screen dot used as `(0,0)`, then the neighboring green
+dot in the `+X` direction. The first click is pending widget state only; the
+second click atomically commits the center, `coordinate1`, and an initial
+same-length perpendicular `coordinate2` as one document edit. Leaving the tool
+before the second click discards the pending center. Ordinary center/axis dragging
+then takes over, and Undo/Redo never has to serialize a half-configured stage.
+
+The manual tool is an initializer/editor for the base linear coordinate system,
+not a competing editor for a control-point model. Hide it when the screen has no
+regular lattice, while nonlinear geometry is selected/materialized, or while the
+current mapping is still the output of an accepted control-point geometry fit.
+`Lock axes` and coordinate finetuning actions are contextual: they are visible
+only while `Screen coordinates` is active, and are enabled only after the two-click
+bootstrap has produced a valid basis. Registration-point Select/Add tools remain
+available for the later point-based workflow.
+
 ---
 
 ## Smooth Transitions
