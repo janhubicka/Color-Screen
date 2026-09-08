@@ -26,6 +26,7 @@
 #include <QAction>
 #include <QActionGroup>
 #include <QApplication>
+#include <QAbstractButton>
 #include <QCheckBox>
 #include <QCloseEvent>
 #include <QColorDialog>
@@ -6236,97 +6237,102 @@ void MainWindow::onDetectScreenFinished(
   // Store detected mesh for later restoration
   m_detectedMesh = result.mesh_trans;
 
-  // Ask user about color model
-  bool updateColorModel = false;
-
-  // Determine what the auto color model would be
+  // Determine what the automatic colour model would be before presenting
+  // the result. The actual document mutation is deferred until the window-modal
+  // message box closes.
   colorscreen::render_parameters tempParams = m_rparams;
   tempParams.auto_color_model(result.param.type);
 
-  // Always ask if detected dye differs from current
-  QString currentDye = QString::fromUtf8(
+  const QString currentDye = QString::fromUtf8(
       colorscreen::render_parameters::color_model_properties[m_rparams
                                                                  .color_model]
           .pretty_name);
-  QString detectedDye = QString::fromUtf8(
+  const QString detectedDye = QString::fromUtf8(
       colorscreen::render_parameters::color_model_properties[tempParams
                                                                  .color_model]
           .pretty_name);
-  QString detectedScreen = QString::fromUtf8(
+  const QString detectedScreen = QString::fromUtf8(
       colorscreen::scr_names[(int)result.param.type].pretty_name);
 
-  QMessageBox msgBox(this);
-  msgBox.setWindowTitle("Screen Detection");
-  msgBox.setIconPixmap(renderScreenIcon(result.param.type).pixmap(128, 128));
+  const colorscreen::scr_to_img_parameters detectedParam = result.param;
+  const std::shared_ptr<colorscreen::mesh> detectedMesh = result.mesh_trans;
+  const auto solverPoints = solverParams.points;
+  auto applyDetectedScreen =
+      [this, detectedParam, detectedMesh, solverPoints,
+       detectedScreenMap = std::move(detectedScreenMap)](
+          bool updateColorModel) mutable {
+        // The prompt is window-modal, so this snapshot has the same semantics
+        // as the old code immediately following QMessageBox::exec().
+        ParameterState oldState = getCurrentState();
 
-  if (currentDye != detectedDye) {
-    msgBox.setText(QString("Detected Screen: <b>%1</b>").arg(detectedScreen));
-    msgBox.setInformativeText(
-        QString("Change color model (Dyes) from %1 to %2?")
+        m_scrToImgParams.type = detectedParam.type;
+        if (detectedMesh) {
+          m_scrToImgParams.merge_solver_solution(detectedParam);
+          m_scrToImgParams.mesh_trans = detectedMesh;
+          m_scrToImgParams.mesh_trans_is_scr_to_img = true;
+        }
+
+        if (updateColorModel)
+          m_rparams.auto_color_model(detectedParam.type);
+
+        m_solverParams.points = solverPoints;
+
+        m_detectedScreenMap = std::move(detectedScreenMap);
+        m_imageWidget->setDetectedScreenMap(m_detectedScreenMap);
+        if (ImageWidget *image = inspectorImageWidget();
+            image && image != m_imageWidget)
+          image->setDetectedScreenMap(m_detectedScreenMap);
+        if (m_detectedPatchCentersAction)
+          m_detectedPatchCentersAction->setEnabled(
+              static_cast<bool>(m_detectedScreenMap));
+
+        m_renderTypeParams.type = colorscreen::render_type_interpolated;
+
+        m_imageWidget->updateParameters(&m_rparams, &m_scrToImgParams,
+                                        &m_detectParams, &m_renderTypeParams,
+                                        &m_solverParams);
+        m_navigationView->updateParameters(&m_rparams, &m_scrToImgParams,
+                                           &m_detectParams);
+        updateUIFromState(getCurrentState());
+        updateRegistrationActions();
+        updateModeMenu();
+
+        // Preserve the detected mesh while refining the remaining geometry.
+        m_solverQueue.requestRender(false);
+
+        ParameterState newState = getCurrentState();
+        m_undoStack->push(new ChangeParametersCommand(
+            this, oldState, newState, "Autodetect screen"));
+      };
+
+  const bool askColorModel = currentDye != detectedDye;
+  auto *msgBox = new QMessageBox(this);
+  msgBox->setAttribute(Qt::WA_DeleteOnClose);
+  msgBox->setWindowTitle(tr("Screen Detection"));
+  msgBox->setIconPixmap(renderScreenIcon(result.param.type).pixmap(128, 128));
+  if (askColorModel) {
+    msgBox->setText(tr("Detected Screen: <b>%1</b>").arg(detectedScreen));
+    msgBox->setInformativeText(
+        tr("Change color model (Dyes) from %1 to %2?")
             .arg(currentDye)
             .arg(detectedDye));
-    msgBox.setStandardButtons(QMessageBox::Yes | QMessageBox::No);
-    msgBox.setDefaultButton(QMessageBox::Yes);
-    updateColorModel = (msgBox.exec() == QMessageBox::Yes);
+    msgBox->setStandardButtons(QMessageBox::Yes | QMessageBox::No);
+    msgBox->setDefaultButton(QMessageBox::Yes);
   } else {
-    msgBox.setText(QString("Detected Screen: <b>%1</b> successfully.")
-                       .arg(detectedScreen));
-    msgBox.setStandardButtons(QMessageBox::Ok);
-    msgBox.exec();
+    msgBox->setText(
+        tr("Detected Screen: <b>%1</b> successfully.").arg(detectedScreen));
+    msgBox->setStandardButtons(QMessageBox::Ok);
   }
-
-  // Create undo snapshot before making changes
-  ParameterState oldState = getCurrentState();
-
-  // Update parameters
-  m_scrToImgParams.type = result.param.type;
-  if (result.mesh_trans)
-    {
-      m_scrToImgParams.merge_solver_solution (result.param);
-      m_scrToImgParams.mesh_trans = result.mesh_trans;
-      m_scrToImgParams.mesh_trans_is_scr_to_img = true;
-    }
-
-  // Update color model if requested
-  if (updateColorModel) {
-    m_rparams.auto_color_model(result.param.type);
-  }
-
-  // Copy the modified solver points from the worker's local copy
-  m_solverParams.points = solverParams.points;
-
-  m_detectedScreenMap = std::move(detectedScreenMap);
-  m_imageWidget->setDetectedScreenMap(m_detectedScreenMap);
-  if (ImageWidget *image = inspectorImageWidget();
-      image && image != m_imageWidget)
-    image->setDetectedScreenMap(m_detectedScreenMap);
-  if (m_detectedPatchCentersAction)
-    m_detectedPatchCentersAction->setEnabled(
-        static_cast<bool>(m_detectedScreenMap));
-
-  // Change render type to interpolated after successful autodetection
-  m_renderTypeParams.type = colorscreen::render_type_interpolated;
-
-  // Update UI
-  m_imageWidget->updateParameters(&m_rparams, &m_scrToImgParams,
-                                  &m_detectParams, &m_renderTypeParams,
-                                  &m_solverParams);
-  m_navigationView->updateParameters(&m_rparams, &m_scrToImgParams,
-                                     &m_detectParams);
-  updateUIFromState(getCurrentState());
-  updateRegistrationActions();
-  updateModeMenu();
-
-  // Always trigger geometry solver with computeMesh=false to preserve detected
-  // mesh The solver will update center, coordinates, lens parameters, etc.
-  // Request solver with explicit mesh computation disabled to preserve detected
-  // pattern
-  m_solverQueue.requestRender(false);
-
-  // Create undo command
-  ParameterState newState = getCurrentState();
-  m_undoStack->push(new ChangeParametersCommand(this, oldState, newState,
-                                                "Autodetect screen"));
+  connect(msgBox, &QMessageBox::finished, this,
+          [msgBox, askColorModel,
+           applyDetectedScreen = std::move(applyDetectedScreen)](int) mutable {
+            const bool updateColorModel =
+                askColorModel &&
+                msgBox->standardButton(msgBox->clickedButton()) ==
+                    QMessageBox::Yes;
+            applyDetectedScreen(updateColorModel);
+          });
+  msgBox->open();
 }
 
 /** Launch adaptive sharpening analysis with PARAMETERS selected by the user.
@@ -7009,7 +7015,7 @@ void MainWindow::onAnalyzeFocusAreasRequested(uint64_t flags) {
               return;
             }
 
-            const auto &analysis = m_focusAreaAnalysisResult;
+            const auto analysis = m_focusAreaAnalysisResult;
             QStringList details;
             details << tr("Selected %1 of %2 verified candidates.")
                            .arg(static_cast<int>(analysis.selected.size()))
@@ -7050,39 +7056,46 @@ void MainWindow::onAnalyzeFocusAreasRequested(uint64_t flags) {
                   static_cast<int>(m_focusAreaCandidates.size()), false,
                   summary);
 
-            QMessageBox box(this);
-            box.setWindowTitle(tr("Focus analysis areas"));
-            box.setIcon(QMessageBox::Information);
-            box.setText(summary);
-            box.setInformativeText(
+            auto *box = new QMessageBox(this);
+            box->setAttribute(Qt::WA_DeleteOnClose);
+            box->setWindowTitle(tr("Focus analysis areas"));
+            box->setIcon(QMessageBox::Information);
+            box->setText(summary);
+            box->setInformativeText(
                 tr("The value is not applied automatically. Inspect the "
                    "selected rectangles and validation diagnostics before "
                    "accepting it."));
-            QPushButton *applyButton
-                = box.addButton(tr("Apply focus"), QMessageBox::AcceptRole);
-            box.addButton(QMessageBox::Close);
-            box.exec();
-            if (box.clickedButton() != applyButton)
-              return;
+            QPushButton *applyButton =
+                box->addButton(tr("Apply focus"), QMessageBox::AcceptRole);
+            box->addButton(QMessageBox::Close);
+            connect(box, &QMessageBox::buttonClicked, this,
+                    [this, analysis, flags, applyButton](
+                        QAbstractButton *button) {
+                      if (button != applyButton)
+                        return;
 
-            ParameterState state = getCurrentState();
-            if ((flags & colorscreen::finetune_screen_blur)
-                && analysis.joint_fit.screen_blur_radius >= 0)
-              state.rparams.screen_blur_radius
-                  = analysis.joint_fit.screen_blur_radius;
-            if ((flags & colorscreen::finetune_scanner_mtf_sigma)
-                && analysis.joint_fit.scanner_mtf_sigma >= 0)
-              state.rparams.sharpen.scanner_mtf.sigma
-                  = analysis.joint_fit.scanner_mtf_sigma;
-            if (flags & colorscreen::finetune_scanner_mtf_defocus) {
-              if (state.rparams.sharpen.scanner_mtf.simulate_diffraction_p())
-                state.rparams.sharpen.scanner_mtf.defocus
-                    = analysis.joint_fit.scanner_mtf_defocus;
-              else
-                state.rparams.sharpen.scanner_mtf.blur_diameter
-                    = analysis.joint_fit.scanner_mtf_blur_diameter;
-            }
-            changeParameters(state, tr("Apply multi-area focus analysis"));
+                      ParameterState state = getCurrentState();
+                      if ((flags & colorscreen::finetune_screen_blur) &&
+                          analysis.joint_fit.screen_blur_radius >= 0)
+                        state.rparams.screen_blur_radius =
+                            analysis.joint_fit.screen_blur_radius;
+                      if ((flags & colorscreen::finetune_scanner_mtf_sigma) &&
+                          analysis.joint_fit.scanner_mtf_sigma >= 0)
+                        state.rparams.sharpen.scanner_mtf.sigma =
+                            analysis.joint_fit.scanner_mtf_sigma;
+                      if (flags & colorscreen::finetune_scanner_mtf_defocus) {
+                        if (state.rparams.sharpen.scanner_mtf
+                                .simulate_diffraction_p())
+                          state.rparams.sharpen.scanner_mtf.defocus =
+                              analysis.joint_fit.scanner_mtf_defocus;
+                        else
+                          state.rparams.sharpen.scanner_mtf.blur_diameter =
+                              analysis.joint_fit.scanner_mtf_blur_diameter;
+                      }
+                      changeParameters(
+                          state, tr("Apply multi-area focus analysis"));
+                    });
+            box->open();
           });
 
   watcher->setFuture(QtConcurrent::run(
@@ -7171,92 +7184,98 @@ void MainWindow::onRender() {
   QTimer::singleShot(0, this, [this, outputPath]() {
     bool isDng = outputPath.endsWith(".dng", Qt::CaseInsensitive);
 
-    // Show render settings dialog
-    RenderDialog dlg(m_renderTypeParams, m_rparams, m_scrToImgParams,
-                     m_scan.get(), isDng, this);
-    if (dlg.exec() != QDialog::Accepted)
-      return;
+    // Keep the dialog parent-owned and asynchronous: a nested event loop can
+    // otherwise let this document be destroyed while a stack child still exists.
+    auto *dialog = new RenderDialog(m_renderTypeParams, m_rparams,
+                                    m_scrToImgParams, m_scan.get(), isDng,
+                                    this);
+    dialog->setAttribute(Qt::WA_DeleteOnClose);
+    connect(dialog, &QDialog::accepted, this,
+            [this, dialog, outputPath, isDng]() {
+      // Snapshot current parameters (render runs in background).
+      auto scan = m_scan;
+      if (!scan)
+        return;
+      colorscreen::scr_to_img_parameters scrParams = m_scrToImgParams;
+      colorscreen::scr_detect_parameters detectParams = m_detectParams;
+      colorscreen::render_parameters rparams = m_rparams;
+      colorscreen::render_type_parameters rtparams = dialog->renderTypeParams();
+      rparams.output_profile = dialog->outputProfile();
+      std::string outputPathStd = outputPath.toStdString();
 
-    // Snapshot current parameters (render runs in background)
-    auto scan = m_scan;
-    colorscreen::scr_to_img_parameters scrParams = m_scrToImgParams;
-    colorscreen::scr_detect_parameters detectParams = m_detectParams;
-    colorscreen::render_parameters rparams = m_rparams;
-    colorscreen::render_type_parameters rtparams = dlg.renderTypeParams();
-    rparams.output_profile = dlg.outputProfile();
-    std::string outputPathStd = outputPath.toStdString();
+      auto progress = std::make_shared<colorscreen::progress_info>();
+      m_renderProgress =
+          progress; // track so close/cancel can ask for confirmation
+      addUserVisibleProgress(
+          progress, tr("Rendering %1").arg(QFileInfo(outputPath).fileName()));
 
-    auto progress = std::make_shared<colorscreen::progress_info>();
-    m_renderProgress =
-        progress; // track so close/cancel can ask for confirmation
-    addUserVisibleProgress(
-        progress, tr("Rendering %1").arg(QFileInfo(outputPath).fileName()));
+      // Run render in background thread
+      auto *watcher = new QFutureWatcher<bool>(this);
+      connect(watcher, &QFutureWatcher<bool>::finished, this,
+              [this, watcher, progress, outputPath]() {
+                bool success = watcher->result();
+                bool cancelled = progress->pool_cancel();
+                m_renderProgress.reset(); // no longer active
+                if (!m_closing)
+                  removeProgress(progress);
+                watcher->deleteLater();
+                if (cancelled || !success) {
+                  // Remove the incomplete output file
+                  if (QFile::exists(outputPath))
+                    QFile::remove(outputPath);
+                }
+                if (m_closing)
+                  return;
+                if (cancelled) {
+                  statusBar()->showMessage(tr("Render cancelled"), 3000);
+                } else if (success) {
+                  statusBar()->showMessage(tr("Rendered to %1").arg(outputPath),
+                                           5000);
+                } else {
+                  QMessageBox::critical(
+                      this, tr("Render Failed"),
+                      tr("Failed to render to:\n%1").arg(outputPath));
+                }
+              });
 
-    // Run render in background thread
-    auto *watcher = new QFutureWatcher<bool>(this);
-    connect(watcher, &QFutureWatcher<bool>::finished, this,
-            [this, watcher, progress, outputPath]() {
-              bool success = watcher->result();
-              bool cancelled = progress->pool_cancel();
-              m_renderProgress.reset(); // no longer active
-              if (!m_closing)
-                removeProgress(progress);
-              watcher->deleteLater();
-              if (cancelled || !success) {
-                // Remove the incomplete output file
-                if (QFile::exists(outputPath))
-                  QFile::remove(outputPath);
-              }
-              if (m_closing)
-                return;
-              if (cancelled) {
-                statusBar()->showMessage(tr("Render cancelled"), 3000);
-              } else if (success) {
-                statusBar()->showMessage(tr("Rendered to %1").arg(outputPath),
-                                         5000);
-              } else {
-                QMessageBox::critical(
-                    this, tr("Render Failed"),
-                    tr("Failed to render to:\n%1").arg(outputPath));
-              }
-            });
+      // Extract all dialog results before the delete-on-close dialog disappears
+      // and before spawning the background thread.
+      bool renderHdr = dialog->hdr();
+      int renderDepth = dialog->depth();
+      auto renderGeometry = dialog->geometry();
+      int renderAntialias = dialog->antialias();
+      double renderScale = dialog->scale();
+      double renderScreenScale = dialog->screenScale();
+      int renderWidth = dialog->outputWidth();
+      int renderHeight = dialog->outputHeight();
 
-    // Extract all dialog results before spawning the background thread
-    // (QDialog is stack-allocated; capturing it by reference would be unsafe)
-    bool renderHdr = dlg.hdr();
-    int renderDepth = dlg.depth();
-    auto renderGeometry = dlg.geometry();
-    int renderAntialias = dlg.antialias();
-    double renderScale = dlg.scale();
-    double renderScreenScale = dlg.screenScale();
-    int renderWidth = dlg.outputWidth();
-    int renderHeight = dlg.outputHeight();
+      QFuture<bool> future = QtConcurrent::run(
+          [scan, scrParams, detectParams, rparams, rtparams, outputPathStd, isDng,
+           progress, renderHdr, renderDepth, renderGeometry, renderAntialias,
+           renderScale, renderScreenScale, renderWidth,
+           renderHeight]() mutable -> bool {
+            colorscreen::render_to_file_params rfparams;
+            rfparams.filename = outputPathStd.c_str();
+            rfparams.verbose = false;
+            rfparams.dng = isDng;
+            rfparams.hdr = renderHdr;
+            rfparams.depth = renderDepth;
+            rfparams.geometry = renderGeometry;
+            rfparams.antialias = renderAntialias;
+            rfparams.scale = renderScale;
+            rfparams.screen_scale = renderScreenScale;
+            rfparams.width = renderWidth;
+            rfparams.height = renderHeight;
 
-    QFuture<bool> future = QtConcurrent::run(
-        [scan, scrParams, detectParams, rparams, rtparams, outputPathStd, isDng,
-         progress, renderHdr, renderDepth, renderGeometry, renderAntialias,
-         renderScale, renderScreenScale, renderWidth,
-         renderHeight]() mutable -> bool {
-          colorscreen::render_to_file_params rfparams;
-          rfparams.filename = outputPathStd.c_str();
-          rfparams.verbose = false;
-          rfparams.dng = isDng;
-          rfparams.hdr = renderHdr;
-          rfparams.depth = renderDepth;
-          rfparams.geometry = renderGeometry;
-          rfparams.antialias = renderAntialias;
-          rfparams.scale = renderScale;
-          rfparams.screen_scale = renderScreenScale;
-          rfparams.width = renderWidth;
-          rfparams.height = renderHeight;
+            const char *error = nullptr;
+            return colorscreen::render_to_file(*scan, scrParams, detectParams,
+                                               rparams, rfparams, rtparams,
+                                               progress.get(), &error);
+          });
 
-          const char *error = nullptr;
-          return colorscreen::render_to_file(*scan, scrParams, detectParams,
-                                             rparams, rfparams, rtparams,
-                                             progress.get(), &error);
-        });
-
-    watcher->setFuture(future);
+      watcher->setFuture(future);
+    });
+    dialog->open();
   });
 }
 
@@ -7413,13 +7432,16 @@ void MainWindow::onDistanceMeasured(colorscreen::point_t p1, colorscreen::point_
   if (distPixels < 1.0)
     return;
 
-  MeasureDialog dlg(distPixels, m_rparams.sharpen.scanner_mtf.scan_dpi, this);
-  if (dlg.exec() == QDialog::Accepted) {
-    double newDpi = dlg.getResultDpi();
+  auto *dialog = new MeasureDialog(
+      distPixels, m_rparams.sharpen.scanner_mtf.scan_dpi, this);
+  dialog->setAttribute(Qt::WA_DeleteOnClose);
+  connect(dialog, &QDialog::accepted, this, [this, dialog]() {
+    const double newDpi = dialog->getResultDpi();
     ParameterState state = getCurrentState();
     state.rparams.sharpen.scanner_mtf.scan_dpi = newDpi;
     changeParameters(state, tr("Set DPI by measurement"));
-  }
+  });
+  dialog->open();
 }
 
 /** Configure a slanted-edge measurement and, when CHECKED, ask the user for
@@ -7429,7 +7451,7 @@ void MainWindow::onDistanceMeasured(colorscreen::point_t p1, colorscreen::point_
 void MainWindow::onMeasureMtfRequested(bool checked) {
   if (checked) {
     ParameterState currentState = getCurrentState();
-    const colorscreen::mtf_parameters &currentMtf =
+    const colorscreen::mtf_parameters currentMtf =
         currentState.rparams.sharpen.scanner_mtf;
     colorscreen::slanted_edge_parameters defaults = m_slantedEdgeParameters;
     const bool hasRgb = m_scan && m_scan->has_rgb();
@@ -7445,99 +7467,104 @@ void MainWindow::onMeasureMtfRequested(bool checked) {
         defaults.wavelength = currentMtf.wavelength;
     }
 
-    SlantedEdgeDialog dialog(defaults, !currentMtf.measurements.empty(),
-                             hasRgb, hasInfrared, this);
-    if (dialog.exec() != QDialog::Accepted) {
-      m_sharpnessPanel->setMeasureMtfChecked(false);
-      return;
-    }
-    const colorscreen::slanted_edge_parameters baseParameters =
-        dialog.parameters();
-    m_slantedEdgeParameters = baseParameters;
+    auto *dialog = new SlantedEdgeDialog(
+        defaults, !currentMtf.measurements.empty(), hasRgb, hasInfrared, this);
+    dialog->setAttribute(Qt::WA_DeleteOnClose);
+    connect(dialog, &QDialog::rejected, this, [this]() {
+      if (m_sharpnessPanel)
+        m_sharpnessPanel->setMeasureMtfChecked(false);
+    });
+    connect(dialog, &QDialog::accepted, this,
+            [this, dialog, currentMtf, hasInfrared]() {
+      const colorscreen::slanted_edge_parameters baseParameters =
+          dialog->parameters();
+      m_slantedEdgeParameters = baseParameters;
 
-    std::vector<colorscreen::slanted_edge_parameters> measurementParameters;
-    if (dialog.measureNativeChannels()) {
-      static const char *const channelNames[4] =
-          {"Red", "Green", "Blue", "Infrared"};
-      const int channelCount = hasInfrared ? 4 : 3;
-      measurementParameters.reserve(channelCount);
-      for (int channel = 0; channel < channelCount; ++channel) {
-        colorscreen::slanted_edge_parameters p = baseParameters;
-        p.channel = channel;
-        p.name = baseParameters.name + " " + channelNames[channel];
-        p.same_capture = channel == 0 ? baseParameters.same_capture : true;
-        p.source_filename = m_currentImageFile.toUtf8().toStdString();
+      std::vector<colorscreen::slanted_edge_parameters> measurementParameters;
+      if (dialog->measureNativeChannels()) {
+        static const char *const channelNames[4] =
+            {"Red", "Green", "Blue", "Infrared"};
+        const int channelCount = hasInfrared ? 4 : 3;
+        measurementParameters.reserve(channelCount);
+        for (int channel = 0; channel < channelCount; ++channel) {
+          colorscreen::slanted_edge_parameters p = baseParameters;
+          p.channel = channel;
+          p.name = baseParameters.name + " " + channelNames[channel];
+          p.same_capture = channel == 0 ? baseParameters.same_capture : true;
+          p.source_filename = m_currentImageFile.toUtf8().toStdString();
 
-        double wavelength = currentMtf.wavelengths[channel];
-        if (!(colorscreen::my_isfinite(wavelength) && wavelength > 0)
-            && m_scan) {
-          wavelength = m_scan->wavelengths[channel];
+          double wavelength = currentMtf.wavelengths[channel];
+          if (!(colorscreen::my_isfinite(wavelength) && wavelength > 0)
+              && m_scan) {
+            wavelength = m_scan->wavelengths[channel];
+          }
+          p.wavelength =
+              colorscreen::my_isfinite(wavelength) && wavelength > 0
+                  ? wavelength
+                  : 0;
+          measurementParameters.push_back(std::move(p));
         }
-        p.wavelength =
-            colorscreen::my_isfinite(wavelength) && wavelength > 0
-                ? wavelength
-                : 0;
+      } else {
+        colorscreen::slanted_edge_parameters p = baseParameters;
+        p.channel = -1;
+        p.source_filename = m_currentImageFile.toUtf8().toStdString();
         measurementParameters.push_back(std::move(p));
       }
-    } else {
-      colorscreen::slanted_edge_parameters p = baseParameters;
-      p.channel = -1;
-      p.source_filename = m_currentImageFile.toUtf8().toStdString();
-      measurementParameters.push_back(std::move(p));
-    }
 
-    auto results =
-        std::make_shared<std::vector<colorscreen::slanted_edge_results>>();
-    auto batchError = std::make_shared<std::string>();
-    runAreaComputation(
-        tr("Select an area containing a slanted edge to compute its MTF"),
-        measurementParameters.size() > 1
-            ? tr("Measure per-channel MTF of a slanted edge")
-            : tr("Measure MTF of a slanted edge"),
-        [this]() { m_sharpnessPanel->setMeasureMtfEnabled(false); },
-        [this, batchError]() {
-          if (!batchError->empty()) {
-            QString reason = QString::fromStdString(*batchError);
-            QMessageBox::warning(
-                this, tr("MTF Measurement Failed"),
-                tr("%1\n\nSelect one straight, isolated edge with clear "
-                   "plateaus on both sides. Avoid dust, texture, multiple "
-                   "edges, and edges parallel to the pixel grid.")
-                    .arg(reason));
-          }
-          m_sharpnessPanel->setMeasureMtfChecked(false);
-          m_sharpnessPanel->setMeasureMtfEnabled(true);
-        },
-        [results, batchError, measurementParameters](
-            ParameterState &s, colorscreen::image_data &scan,
-            const colorscreen::int_image_area &area,
-            colorscreen::progress_info *progress) {
-          results->clear();
-          batchError->clear();
-          results->reserve(measurementParameters.size());
-
-          for (const auto &parameters : measurementParameters) {
-            colorscreen::slanted_edge_results result =
-                colorscreen::slanted_edge_mtf(
-                    s.rparams, scan, area, parameters, progress);
-            if (!result.success) {
-              *batchError =
-                  parameters.name + ": "
-                  + (result.error.empty()
-                         ? std::string("no usable single slanted edge was found")
-                         : result.error);
-              results->push_back(std::move(result));
-              return;
+      auto results =
+          std::make_shared<std::vector<colorscreen::slanted_edge_results>>();
+      auto batchError = std::make_shared<std::string>();
+      runAreaComputation(
+          tr("Select an area containing a slanted edge to compute its MTF"),
+          measurementParameters.size() > 1
+              ? tr("Measure per-channel MTF of a slanted edge")
+              : tr("Measure MTF of a slanted edge"),
+          [this]() { m_sharpnessPanel->setMeasureMtfEnabled(false); },
+          [this, batchError]() {
+            if (!batchError->empty()) {
+              QString reason = QString::fromStdString(*batchError);
+              QMessageBox::warning(
+                  this, tr("MTF Measurement Failed"),
+                  tr("%1\n\nSelect one straight, isolated edge with clear "
+                     "plateaus on both sides. Avoid dust, texture, multiple "
+                     "edges, and edges parallel to the pixel grid.")
+                      .arg(reason));
             }
-            results->push_back(std::move(result));
-          }
+            m_sharpnessPanel->setMeasureMtfChecked(false);
+            m_sharpnessPanel->setMeasureMtfEnabled(true);
+          },
+          [results, batchError, measurementParameters](
+              ParameterState &s, colorscreen::image_data &scan,
+              const colorscreen::int_image_area &area,
+              colorscreen::progress_info *progress) {
+            results->clear();
+            batchError->clear();
+            results->reserve(measurementParameters.size());
 
-          /* Commit the set only after every requested native channel passed
-             qualification.  This prevents partial RGB measurement groups.  */
-          for (auto &result : *results)
-            s.rparams.sharpen.scanner_mtf.measurements.push_back(
-                std::move(result.measurement));
-        });
+            for (const auto &parameters : measurementParameters) {
+              colorscreen::slanted_edge_results result =
+                  colorscreen::slanted_edge_mtf(
+                      s.rparams, scan, area, parameters, progress);
+              if (!result.success) {
+                *batchError =
+                    parameters.name + ": "
+                    + (result.error.empty()
+                           ? std::string("no usable single slanted edge was found")
+                           : result.error);
+                results->push_back(std::move(result));
+                return;
+              }
+              results->push_back(std::move(result));
+            }
+
+            /* Commit the set only after every requested native channel passed
+               qualification.  This prevents partial RGB measurement groups.  */
+            for (auto &result : *results)
+              s.rparams.sharpen.scanner_mtf.measurements.push_back(
+                  std::move(result.measurement));
+          });
+    });
+    dialog->open();
   } else {
     if (inspectorImageWidget()->interactionMode() == ImageWidget::GenericAreaMode) {
       restoreInteractionMode();

@@ -682,25 +682,36 @@ void WorkspaceWindow::configureTabBar() {
               if (!document && !view)
                 return;
 
-              QMenu menu(this);
-              QAction *detach = menu.addAction(
+              auto *menu = new QMenu(this);
+              // QMenu::popup() hides the menu after activation rather than
+              // promising a close event. Delete it after the hide turn so
+              // repeated context-menu use cannot accumulate hidden children.
+              connect(menu, &QMenu::aboutToHide, menu, &QObject::deleteLater);
+              QAction *detach = menu->addAction(
                   view ? tr("Detach View") : tr("Detach Image"));
-              menu.addSeparator();
-              QAction *tabbed = menu.addAction(tr("Tabbed Documents"));
-              QAction *tile = menu.addAction(tr("Tile Documents"));
-              QAction *cascade = menu.addAction(tr("Cascade Documents"));
-              QAction *selected = menu.exec(tabBar->mapToGlobal(position));
-              if (selected == detach) {
-                if (view)
-                  detachView(view);
-                else
-                  detachDocument(document);
-              } else if (selected == tabbed)
-                showTabbedDocuments();
-              else if (selected == tile)
-                tileDocuments();
-              else if (selected == cascade)
-                cascadeDocuments();
+              menu->addSeparator();
+              QAction *tabbed = menu->addAction(tr("Tabbed Documents"));
+              QAction *tile = menu->addAction(tr("Tile Documents"));
+              QAction *cascade = menu->addAction(tr("Cascade Documents"));
+              const QPointer<MainWindow> guardedDocument(document);
+              const QPointer<ImageViewWindow> guardedView(view);
+              connect(menu, &QMenu::triggered, this,
+                      [this, detach, tabbed, tile, cascade, guardedDocument,
+                       guardedView](QAction *selected) {
+                        if (selected == detach) {
+                          if (guardedView)
+                            detachView(guardedView);
+                          else if (guardedDocument)
+                            detachDocument(guardedDocument);
+                        } else if (selected == tabbed) {
+                          showTabbedDocuments();
+                        } else if (selected == tile) {
+                          tileDocuments();
+                        } else if (selected == cascade) {
+                          cascadeDocuments();
+                        }
+                      });
+              menu->popup(tabBar->mapToGlobal(position));
             });
 
     connect(tabBar, &QTabBar::tabBarDoubleClicked, this, [this](int index) {

@@ -1310,16 +1310,16 @@ void SharpnessPanel::onAnalyzeDisplacements() {
     m_adaptiveSharpeningParameters.interpolateFocus
         = focusInterpolationAvailable;
 
-  AdaptiveSharpeningDialog dialog(m_adaptiveSharpeningParameters,
-                                   physicalFocusAvailable,
-                                   focusInterpolationAvailable,
-                                   varyingStripWidths, hasRgb, this);
-  if (dialog.exec() != QDialog::Accepted)
-    return;
-
-  m_adaptiveSharpeningParameters = dialog.parameters();
-  m_adaptiveSharpeningParametersInitialized = true;
-  emit adaptiveSharpeningRequested(m_adaptiveSharpeningParameters);
+  auto *dialog = new AdaptiveSharpeningDialog(
+      m_adaptiveSharpeningParameters, physicalFocusAvailable,
+      focusInterpolationAvailable, varyingStripWidths, hasRgb, this);
+  dialog->setAttribute(Qt::WA_DeleteOnClose);
+  connect(dialog, &QDialog::accepted, this, [this, dialog]() {
+    m_adaptiveSharpeningParameters = dialog->parameters();
+    m_adaptiveSharpeningParametersInitialized = true;
+    emit adaptiveSharpeningRequested(m_adaptiveSharpeningParameters);
+  });
+  dialog->open();
 }
 
 // reattachTiles removed (in base)
@@ -1328,145 +1328,146 @@ void SharpnessPanel::onAnalyzeDisplacements() {
     result is committed as one undoable parameter-state change.  */
 void SharpnessPanel::fitMeasuredMtf() {
   const ParameterState state = m_stateGetter();
-  const colorscreen::mtf_parameters &current =
+  const colorscreen::mtf_parameters current =
       state.rparams.sharpen.scanner_mtf;
-  MTFFitDialog dialog(current, this);
-  if (dialog.exec() != QDialog::Accepted)
-    return;
+  auto *dialog = new MTFFitDialog(current, this);
+  dialog->setAttribute(Qt::WA_DeleteOnClose);
+  connect(dialog, &QDialog::accepted, this, [this, dialog, current]() {
+    const colorscreen::mtf_parameters input = dialog->parameters();
+    const colorscreen::mtf_estimation_options options = dialog->options();
+    const int flags = dialog->estimationFlags();
+    auto result = std::make_shared<MtfFitResult>();
+    result->baseline = current;
+    result->input = input;
+    result->fitted = input;
+    if (m_mtfCalibration.fitStarted &&
+        !m_mtfCalibration.fitStarted(result->baseline)) {
+      QMessageBox::information(
+          this, tr("MTF model fit"),
+          tr("Another MTF model fit is already running for this document."));
+      updateUI();
+      return;
+    }
+    m_mtfFitRunning = true;
+    if (m_fitMtfBtn)
+      m_fitMtfBtn->setEnabled(false);
+    updateMtfCalibrationStatus();
 
-  const colorscreen::mtf_parameters input = dialog.parameters();
-  const colorscreen::mtf_estimation_options options = dialog.options();
-  const int flags = dialog.estimationFlags();
-  auto result = std::make_shared<MtfFitResult>();
-  result->baseline = current;
-  result->input = input;
-  result->fitted = input;
-  if (m_mtfCalibration.fitStarted &&
-      !m_mtfCalibration.fitStarted(result->baseline)) {
-    QMessageBox::information(
-        this, tr("MTF model fit"),
-        tr("Another MTF model fit is already running for this document."));
-    updateUI();
-    return;
-  }
-  m_mtfFitRunning = true;
-  if (m_fitMtfBtn)
-    m_fitMtfBtn->setEnabled(false);
-  updateMtfCalibrationStatus();
-
-  m_mtfFitQueue.runAsync(
-      [result, options, flags](colorscreen::progress_info *progress) {
-        for (size_t measurement = 0;
-             measurement < result->input.measurements.size(); measurement++) {
-          if (!options.include_measurement_p(measurement))
-            continue;
-          const colorscreen::mtf_measurement &curve =
-              result->input.measurements[measurement];
-          for (size_t sample = 0; sample < curve.size(); sample++)
-            if (curve.get_freq(static_cast<int>(sample)) <= 0.5)
-              result->observations++;
-        }
-
-        try {
-          const char *error = nullptr;
-          result->objective = result->fitted.estimate_parameters(
-              result->input, options, nullptr, progress, &error, flags);
-          result->cancelled = progress
-                              && (progress->cancelled()
-                                  || progress->pool_cancel());
-          if (error)
-            result->error = error;
-        } catch (const std::exception &exception) {
-          result->error = exception.what();
-        } catch (...) {
-          result->error = "unexpected exception during MTF fitting";
-        }
-      },
-      [this, result](bool publishResult) {
-        m_mtfFitRunning = false;
-        /* Re-run all panel availability predicates instead of unconditionally
-           enabling the button. Measurements or the containing section may
-           have changed while the background fit was running. */
-        updateUI();
-        if (!publishResult || result->cancelled) {
-          if (m_mtfCalibration.fitFinishedWithoutResult)
-            m_mtfCalibration.fitFinishedWithoutResult();
-          updateMtfCalibrationStatus();
-          return;
-        }
-        if (result->objective < 0 || !result->error.empty()) {
-          if (m_mtfCalibration.fitFailed)
-            m_mtfCalibration.fitFailed(result->baseline);
-          updateMtfCalibrationStatus();
-          QMessageBox::warning(
-              this, tr("MTF model fit"),
-              tr("The MTF model could not be fitted: %1")
-                  .arg(QString::fromStdString(
-                      result->error.empty() ? "unknown fitting error"
-                                            : result->error)));
-          return;
-        }
-
-        /* Do not silently overwrite measurements or model metadata edited
-           while a long-running fit was in progress.  The dialog values are
-           applied only when the underlying scanner-MTF state is still the
-           snapshot from which the fit was started.  */
-        const ParameterState currentState = m_stateGetter();
-        const colorscreen::mtf_parameters &currentMtf =
-            currentState.rparams.sharpen.scanner_mtf;
-        if (!currentMtf.equal_p(result->baseline)) {
-          if (m_mtfCalibration.fitFinishedWithoutResult)
-            m_mtfCalibration.fitFinishedWithoutResult();
-          updateMtfCalibrationStatus();
-          QMessageBox::warning(
-              this, tr("MTF model fit"),
-              tr("The MTF measurements or model parameters changed while the "
-                 "fit was running. The completed result was not applied; "
-                 "start the fit again from the current values."));
-          return;
-        }
-
-        const colorscreen::mtf_parameters fitted = result->fitted;
-        const double rms = result->observations
-                               ? std::sqrt(result->objective
-                                           / result->observations)
-                               : 0.0;
-        /* Establish document-owned provenance before applying the undoable
-           state so every Sharpness panel and the workflow guide agree. */
-        if (m_mtfCalibration.fitAccepted)
-          m_mtfCalibration.fitAccepted(fitted, rms);
-        applyChange(
-            [fitted](ParameterState &updated) {
-              updated.rparams.sharpen.scanner_mtf = fitted;
-            },
-            tr("Fit measured MTF model"));
-
-        updateMtfCalibrationStatus();
-        QString details =
-            tr("The selected model was fitted successfully.\n\n"
-               "RMS residual: %1 percentage points\n"
-               "Gaussian sigma: %2 px")
-                .arg(rms, 0, 'g', 6)
-                .arg(fitted.sigma, 0, 'g', 8);
-        if (fitted.model == colorscreen::mtf_model::physical_diffraction)
-          {
-            details += tr("\nDefocus: %1 mm\nMarked f-number: %2"
-                          "\nSensor fill factor: %3\nHalo fraction: %4")
-                         .arg(fitted.defocus, 0, 'g', 8)
-                         .arg(fitted.f_stop, 0, 'g', 8)
-                         .arg(fitted.sensor_fill_factor, 0, 'g', 8)
-                         .arg(fitted.halo_fraction, 0, 'g', 8);
-            if (fitted.halo_fraction > 0)
-              details += tr("\nHalo radius: %1 px")
-                             .arg(fitted.halo_sigma, 0, 'g', 8);
-            else
-              details += tr("\nHalo radius: inactive");
+    m_mtfFitQueue.runAsync(
+        [result, options, flags](colorscreen::progress_info *progress) {
+          for (size_t measurement = 0;
+               measurement < result->input.measurements.size(); measurement++) {
+            if (!options.include_measurement_p(measurement))
+              continue;
+            const colorscreen::mtf_measurement &curve =
+                result->input.measurements[measurement];
+            for (size_t sample = 0; sample < curve.size(); sample++)
+              if (curve.get_freq(static_cast<int>(sample)) <= 0.5)
+                result->observations++;
           }
-        else
-          details += tr("\nFallback blur diameter: %1 px")
-                         .arg(fitted.blur_diameter, 0, 'g', 8);
-        QMessageBox::information(this, tr("MTF model fit"), details);
-      });
+
+          try {
+            const char *error = nullptr;
+            result->objective = result->fitted.estimate_parameters(
+                result->input, options, nullptr, progress, &error, flags);
+            result->cancelled = progress
+                                && (progress->cancelled()
+                                    || progress->pool_cancel());
+            if (error)
+              result->error = error;
+          } catch (const std::exception &exception) {
+            result->error = exception.what();
+          } catch (...) {
+            result->error = "unexpected exception during MTF fitting";
+          }
+        },
+        [this, result](bool publishResult) {
+          m_mtfFitRunning = false;
+          /* Re-run all panel availability predicates instead of unconditionally
+             enabling the button. Measurements or the containing section may
+             have changed while the background fit was running. */
+          updateUI();
+          if (!publishResult || result->cancelled) {
+            if (m_mtfCalibration.fitFinishedWithoutResult)
+              m_mtfCalibration.fitFinishedWithoutResult();
+            updateMtfCalibrationStatus();
+            return;
+          }
+          if (result->objective < 0 || !result->error.empty()) {
+            if (m_mtfCalibration.fitFailed)
+              m_mtfCalibration.fitFailed(result->baseline);
+            updateMtfCalibrationStatus();
+            QMessageBox::warning(
+                this, tr("MTF model fit"),
+                tr("The MTF model could not be fitted: %1")
+                    .arg(QString::fromStdString(
+                        result->error.empty() ? "unknown fitting error"
+                                              : result->error)));
+            return;
+          }
+
+          /* Do not silently overwrite measurements or model metadata edited
+             while a long-running fit was in progress.  The dialog values are
+             applied only when the underlying scanner-MTF state is still the
+             snapshot from which the fit was started.  */
+          const ParameterState currentState = m_stateGetter();
+          const colorscreen::mtf_parameters &currentMtf =
+              currentState.rparams.sharpen.scanner_mtf;
+          if (!currentMtf.equal_p(result->baseline)) {
+            if (m_mtfCalibration.fitFinishedWithoutResult)
+              m_mtfCalibration.fitFinishedWithoutResult();
+            updateMtfCalibrationStatus();
+            QMessageBox::warning(
+                this, tr("MTF model fit"),
+                tr("The MTF measurements or model parameters changed while the "
+                   "fit was running. The completed result was not applied; "
+                   "start the fit again from the current values."));
+            return;
+          }
+
+          const colorscreen::mtf_parameters fitted = result->fitted;
+          const double rms = result->observations
+                                 ? std::sqrt(result->objective
+                                             / result->observations)
+                                 : 0.0;
+          /* Establish document-owned provenance before applying the undoable
+             state so every Sharpness panel and the workflow guide agree. */
+          if (m_mtfCalibration.fitAccepted)
+            m_mtfCalibration.fitAccepted(fitted, rms);
+          applyChange(
+              [fitted](ParameterState &updated) {
+                updated.rparams.sharpen.scanner_mtf = fitted;
+              },
+              tr("Fit measured MTF model"));
+
+          updateMtfCalibrationStatus();
+          QString details =
+              tr("The selected model was fitted successfully.\n\n"
+                 "RMS residual: %1 percentage points\n"
+                 "Gaussian sigma: %2 px")
+                  .arg(rms, 0, 'g', 6)
+                  .arg(fitted.sigma, 0, 'g', 8);
+          if (fitted.model == colorscreen::mtf_model::physical_diffraction)
+            {
+              details += tr("\nDefocus: %1 mm\nMarked f-number: %2"
+                            "\nSensor fill factor: %3\nHalo fraction: %4")
+                           .arg(fitted.defocus, 0, 'g', 8)
+                           .arg(fitted.f_stop, 0, 'g', 8)
+                           .arg(fitted.sensor_fill_factor, 0, 'g', 8)
+                           .arg(fitted.halo_fraction, 0, 'g', 8);
+              if (fitted.halo_fraction > 0)
+                details += tr("\nHalo radius: %1 px")
+                               .arg(fitted.halo_sigma, 0, 'g', 8);
+              else
+                details += tr("\nHalo radius: inactive");
+            }
+          else
+            details += tr("\nFallback blur diameter: %1 px")
+                           .arg(fitted.blur_diameter, 0, 'g', 8);
+          QMessageBox::information(this, tr("MTF model fit"), details);
+        });
+  });
+  dialog->open();
 }
 
 void SharpnessPanel::loadMTF() {
