@@ -6650,6 +6650,8 @@ void MainWindow::onCoordinateSystemManipulationStarted() {
 /** Create an undo command after a grid drag operation completes.  */
 void MainWindow::onCoordinateSystemManipulationFinished() {
   ParameterState newState = getCurrentState();
+  if (newState == m_gridManipulationOldState)
+    return;
   m_undoStack->push(new ChangeParametersCommand(
       this, m_gridManipulationOldState, newState, "Modify coordinate system"));
 }

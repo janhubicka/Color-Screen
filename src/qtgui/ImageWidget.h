@@ -283,6 +283,7 @@ public slots:
   void setMaxArrowLength(double len);
 
 protected:
+  bool event(QEvent *event) override;
   void paintEvent(QPaintEvent *event) override;
   void resizeEvent(QResizeEvent *event) override;
   void mousePressEvent(QMouseEvent *event) override;
@@ -406,6 +407,10 @@ private slots:
   void exploreTick();
 
 private:
+  /** Return true while the button that started the current gesture is held. */
+  bool pointerButtonHeld(const QMouseEvent *event) const;
+  /** Settle an interrupted gesture without synthesizing a click/selection. */
+  void cancelPointerInteraction();
   void requestRender();
 
   std::shared_ptr<colorscreen::image_data> m_scan;
@@ -468,6 +473,7 @@ private:
   QPoint m_lastMousePos;
   QPoint m_exploreAnchorGlobal;
   bool m_isDragging = false;
+  Qt::MouseButton m_activePointerButton = Qt::NoButton;
   InteractionMode m_interactionMode = PanMode;
   std::set<SelectedPoint> m_selectedPoints;
   /* Pre-rendered points overlay image and the view state it was rendered at.
@@ -485,6 +491,7 @@ private:
   QRubberBand *m_rubberBand = nullptr;
   QPoint m_rubberBandOrigin;
   int m_draggedPointIndex = -1;
+  bool m_pointDragChanged = false;
   colorscreen::point_t m_measureStart;
   colorscreen::point_t m_measureEnd;
   bool m_isMeasuring = false;

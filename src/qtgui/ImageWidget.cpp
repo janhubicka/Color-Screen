@@ -9,6 +9,7 @@
 #include "../libcolorscreen/include/stitch.h" // Needed for stitch_project
 #include "Renderer.h"
 #include <QColor>
+#include <QEvent>
 #include <QDebug>
 #include "Logging.h"
 #include <QHash>
@@ -253,6 +254,11 @@ void ImageWidget::setImage(std::shared_ptr<colorscreen::image_data> scan,
                            colorscreen::scr_detect_parameters *scrDetect,
                            colorscreen::render_type_parameters *renderType,
                            colorscreen::solver_parameters *solver) {
+  // A new image invalidates every coordinate and hit-test captured by an
+  // in-flight gesture. Settle it while the old parameter pointers still
+  // describe the state that was being edited.
+  cancelPointerInteraction();
+
   // Store new parameters
   m_rparams = rparams;
   m_scrToImg = scrToImg;
@@ -1144,6 +1150,61 @@ void ImageWidget::resizeEvent(QResizeEvent *event) {
       QRectF(m_viewX, m_viewY, width() / m_scale, height() / m_scale), m_scale);
 }
 
+/** Settle pointer state when Qt interrupts a press-started gesture.
+
+    Qt automatically grabs the mouse for a widget after a button press.  A
+    normal release therefore arrives even when the pointer leaves the widget.
+    Ungrab/hide/deactivation are exceptional boundaries: keep any live direct
+    edit, close its undo transaction, and discard incomplete click/area tools. */
+bool ImageWidget::event(QEvent *event) {
+  switch (event->type()) {
+  case QEvent::UngrabMouse:
+  case QEvent::Hide:
+  case QEvent::WindowDeactivate:
+    cancelPointerInteraction();
+    break;
+  default:
+    break;
+  }
+  return QWidget::event(event);
+}
+
+/** Return whether the button that owns the current pointer gesture is held. */
+bool ImageWidget::pointerButtonHeld(const QMouseEvent *event) const {
+  return m_activePointerButton == Qt::NoButton ||
+         event->buttons().testFlag(m_activePointerButton);
+}
+
+/** Clear every press-started interaction after an abnormal interruption.
+
+    Coordinate and registration-point drags mutate document-owned data while
+    moving, so cancellation retains already applied movement and emits the
+    normal completion signal exactly once.  Rubber-band and measurement tools
+    have no committed result until release and are therefore discarded. */
+void ImageWidget::cancelPointerInteraction() {
+  const bool coordinateEditActive = m_dragTarget != DragTarget::None;
+  const bool pointEditChanged =
+      m_draggedPointIndex != -1 && m_pointDragChanged;
+  const bool repaint = m_isMeasuring || coordinateEditActive ||
+                       (m_rubberBand && !m_rubberBand->isHidden());
+
+  m_isDragging = false;
+  m_isMeasuring = false;
+  if (m_rubberBand)
+    m_rubberBand->hide();
+  m_dragTarget = DragTarget::None;
+  m_draggedPointIndex = -1;
+  m_pointDragChanged = false;
+  m_activePointerButton = Qt::NoButton;
+
+  if (pointEditChanged)
+    emit pointsChanged();
+  if (coordinateEditActive)
+    emit coordinateSystemManipulationFinished();
+  if (repaint)
+    update();
+}
+
 /**
  * @brief Handles mouse press events.
  * Manages dragging, point selection, and coordinate system manipulation based on current mode.
@@ -1151,91 +1212,131 @@ void ImageWidget::resizeEvent(QResizeEvent *event) {
  * @param event The mouse event.
  */
 void ImageWidget::mousePressEvent(QMouseEvent *event) {
+  // Do not overlap gestures. If an earlier release was lost, a new press whose
+  // button state no longer contains the old owner is a safe recovery boundary.
+  if (m_activePointerButton != Qt::NoButton) {
+    // A second press of the same physical button can only arrive after a
+    // release that this widget did not see. Treat it as recovery, while a
+    // genuinely secondary button press remains part of the existing gesture.
+    if (event->button() == m_activePointerButton ||
+        !event->buttons().testFlag(m_activePointerButton)) {
+      cancelPointerInteraction();
+    } else {
+      event->accept();
+      return;
+    }
+  }
+
   if (m_interactionMode == SetCenterMode) {
     handleSetCenterPress(event);
+    if (m_activePointerButton != Qt::NoButton) {
+      event->accept();
+      return;
+    }
   } else if (m_interactionMode == ExploreMode) {
-    // Ignore clicks in Explore mode
+    // Explore navigation follows pointer motion without a button-owned drag.
     event->accept();
+    return;
   } else if (event->button() == Qt::LeftButton) {
+    m_activePointerButton = Qt::LeftButton;
     if (m_interactionMode == PanMode) {
       m_isDragging = true;
       m_lastMousePos = event->pos();
     } else if (m_interactionMode == SelectMode) {
       handleSelectPress(event);
-    } else if (m_interactionMode == AddPointMode || m_interactionMode == CropMode || m_interactionMode == GenericAreaMode) {
+    } else if (m_interactionMode == AddPointMode ||
+               m_interactionMode == CropMode ||
+               m_interactionMode == GenericAreaMode) {
       handleAreaPress(event);
     } else if (m_interactionMode == MeasureMode) {
       handleMeasurePress(event);
+    } else {
+      m_activePointerButton = Qt::NoButton;
+      QWidget::mousePressEvent(event);
+      return;
     }
-  } else if (event->button() == Qt::RightButton && m_interactionMode == AddPointMode) {
-    // Right-click removal of profile spots
+    event->accept();
+    return;
+  } else if (event->button() == Qt::RightButton &&
+             m_interactionMode == AddPointMode) {
+    // Right-click removal of profile spots is an atomic click, not a drag.
     if (m_profileSpots && !m_profileSpots->empty() && m_scrToImg && m_scan) {
       colorscreen::scr_to_img map;
       (void)map.set_parameters(*m_scrToImg, *m_scan);
-      
+
       int bestIdx = -1;
       double bestDistSq = 1e9;
-      
+
       for (size_t i = 0; i < m_profileSpots->size(); ++i) {
         colorscreen::point_t scrPos = (*m_profileSpots)[i];
         colorscreen::point_t imgPos;
         if (!m_scan->stitch) {
-            imgPos = map.to_img(scrPos);
+          imgPos = map.to_img(scrPos);
         } else {
-            imgPos = m_scan->stitch->common_scr_to_img.scr_to_final(scrPos);
-            imgPos.x -= m_scan->xmin;
-            imgPos.y -= m_scan->ymin;
+          imgPos = m_scan->stitch->common_scr_to_img.scr_to_final(scrPos);
+          imgPos.x -= m_scan->xmin;
+          imgPos.y -= m_scan->ymin;
         }
-        
-        QPointF p_widget = imageToWidget(imgPos);
-        double dx = p_widget.x() - event->position().x();
-        double dy = p_widget.y() - event->position().y();
+
+        QPointF pWidget = imageToWidget(imgPos);
+        double dx = pWidget.x() - event->position().x();
+        double dy = pWidget.y() - event->position().y();
         double distSq = dx * dx + dy * dy;
-        
-        // 20 pixels hit radius squared = 400
+
         if (distSq < 400.0 && distSq < bestDistSq) {
           bestDistSq = distSq;
-          bestIdx = i;
+          bestIdx = static_cast<int>(i);
         }
       }
-      
-      if (bestIdx != -1) {
+
+      if (bestIdx != -1)
         emit profileSpotRemoveRequested(bestIdx);
-      }
     }
+    event->accept();
+    return;
   }
+
+  QWidget::mousePressEvent(event);
 }
 
 /**
  * @brief Handles mouse press in SetCenterMode (adjusting coordinate system).
  */
 void ImageWidget::handleSetCenterPress(QMouseEvent *event) {
-  bool ctrl = event->modifiers() & Qt::ControlModifier;
-  bool alt = event->modifiers() & Qt::AltModifier; 
+  if (!m_scrToImg)
+    return;
+
+  const bool ctrl = event->modifiers() & Qt::ControlModifier;
+  const bool alt = event->modifiers() & Qt::AltModifier;
+  DragTarget target = DragTarget::None;
 
   if (event->button() == Qt::LeftButton && !ctrl && !alt) {
-    m_dragTarget = DragTarget::Center;
-  } else if (event->button() == Qt::RightButton || (event->button() == Qt::LeftButton && ctrl)) {
-    m_dragTarget = DragTarget::Axis1;
-    grabMouse();
-  } else if (event->button() == Qt::MiddleButton || (event->button() == Qt::LeftButton && alt)) {
-    m_dragTarget = DragTarget::Axis2;
-    grabMouse();
+    target = DragTarget::Center;
+  } else if (event->button() == Qt::RightButton ||
+             (event->button() == Qt::LeftButton && ctrl)) {
+    target = DragTarget::Axis1;
+  } else if (event->button() == Qt::MiddleButton ||
+             (event->button() == Qt::LeftButton && alt)) {
+    target = DragTarget::Axis2;
   } else {
     return;
   }
 
+  // Qt automatically grabs the mouse after a button press.  Recording the
+  // owning button is enough to keep the gesture alive outside this widget and
+  // lets us detect an exceptional lost release without an explicit mouse grab.
+  m_dragTarget = target;
+  m_activePointerButton = event->button();
   m_dragStartWidget = event->position();
   m_dragStartImg = widgetToImage(event->position());
-  if (m_scrToImg) {
-    m_pressParams = *m_scrToImg;
-    emit coordinateSystemManipulationStarted();
-    if (m_dragTarget == DragTarget::Center) {
-      m_scrToImg->center = m_dragStartImg;
-      m_pressParams.center = m_dragStartImg;
-      emit coordinateSystemChanged();
-      update();
-    }
+  m_pressParams = *m_scrToImg;
+  emit coordinateSystemManipulationStarted();
+
+  if (m_dragTarget == DragTarget::Center) {
+    m_scrToImg->center = m_dragStartImg;
+    m_pressParams.center = m_dragStartImg;
+    emit coordinateSystemChanged();
+    update();
   }
   event->accept();
 }
@@ -1262,6 +1363,7 @@ void ImageWidget::handleSelectPress(QMouseEvent *event) {
   if (hitIndex != -1) {
     emit pointManipulationStarted();
     m_draggedPointIndex = hitIndex;
+    m_pointDragChanged = false;
     SelectedPoint sp = {(size_t)hitIndex, SelectedPoint::RegistrationPoint};
     if (ctrl) {
       if (m_selectedPoints.count(sp)) m_selectedPoints.erase(sp);
@@ -1316,8 +1418,17 @@ void ImageWidget::handleMeasurePress(QMouseEvent *event) {
  * @param event The mouse event.
  */
 void ImageWidget::mouseMoveEvent(QMouseEvent *event) {
-  // Check for hover over registration points
-  if (!m_isDragging && m_showRegistrationPoints && m_solver) {
+  if (m_activePointerButton != Qt::NoButton && !pointerButtonHeld(event)) {
+    cancelPointerInteraction();
+    event->accept();
+    return;
+  }
+
+  // Registration-point hover is meaningful only in the tool that can
+  // actually select/drag those points.
+  if (m_activePointerButton == Qt::NoButton &&
+      m_interactionMode == SelectMode && m_showRegistrationPoints &&
+      m_solver) {
     bool found = false;
     const auto &points = m_solver->points;
     for (size_t i = 0; i < points.size(); ++i) {
@@ -1460,9 +1571,13 @@ void ImageWidget::handleSelectMove(QMouseEvent *event) {
   if (m_draggedPointIndex != -1 && m_solver) {
     colorscreen::point_t imgPos = widgetToImage(event->position());
     if ((size_t)m_draggedPointIndex < m_solver->points.size()) {
-      m_solver->points[m_draggedPointIndex].img = imgPos;
-      m_pointsOverlayDirty = true;
-      update();
+      auto &point = m_solver->points[m_draggedPointIndex].img;
+      if (point.x != imgPos.x || point.y != imgPos.y) {
+        point = imgPos;
+        m_pointDragChanged = true;
+        m_pointsOverlayDirty = true;
+        update();
+      }
     }
   } else if (m_rubberBand && m_rubberBand->isVisible()) {
     m_rubberBand->setGeometry(QRect(m_rubberBandOrigin, event->pos()).normalized());
@@ -1509,6 +1624,14 @@ void ImageWidget::handleMeasureMove(QMouseEvent *event) {
  * @param event The mouse event.
  */
 void ImageWidget::mouseReleaseEvent(QMouseEvent *event) {
+  // Ignore releases for secondary buttons. Only the button that started the
+  // gesture may commit/cancel it.
+  if (m_activePointerButton == Qt::NoButton ||
+      event->button() != m_activePointerButton) {
+    QWidget::mouseReleaseEvent(event);
+    return;
+  }
+
   if (m_interactionMode == SetCenterMode) {
     handleSetCenterRelease(event);
   } else if (event->button() == Qt::LeftButton) {
@@ -1516,22 +1639,23 @@ void ImageWidget::mouseReleaseEvent(QMouseEvent *event) {
       m_isDragging = false;
     } else if (m_interactionMode == SelectMode) {
       handleSelectRelease(event);
-    } else if (m_interactionMode == AddPointMode || m_interactionMode == CropMode || m_interactionMode == GenericAreaMode) {
+    } else if (m_interactionMode == AddPointMode ||
+               m_interactionMode == CropMode ||
+               m_interactionMode == GenericAreaMode) {
       handleAreaRelease(event);
     } else if (m_interactionMode == MeasureMode) {
       handleMeasureRelease(event);
     }
   }
+
+  m_activePointerButton = Qt::NoButton;
+  event->accept();
 }
 
 /**
  * @brief Handles mouse release in SetCenterMode (finishing drag or setting coordinates).
  */
 void ImageWidget::handleSetCenterRelease(QMouseEvent *event) {
-  if (m_dragTarget == DragTarget::Axis1 || m_dragTarget == DragTarget::Axis2) {
-    releaseMouse(); // Release the grab
-  }
-
   // Handle click logic (only if it was a small movement)
   QPointF dragDistance = event->position() - m_dragStartWidget;
   bool isClick = dragDistance.manhattanLength() < 5;
@@ -1647,8 +1771,11 @@ void ImageWidget::handleSetCenterRelease(QMouseEvent *event) {
  */
 void ImageWidget::handleSelectRelease(QMouseEvent *event) {
   if (m_draggedPointIndex != -1) {
+    const bool changed = m_pointDragChanged;
     m_draggedPointIndex = -1;
-    emit pointsChanged();
+    m_pointDragChanged = false;
+    if (changed)
+      emit pointsChanged();
   } else if (m_rubberBand && m_rubberBand->isVisible()) {
     QRect rect = m_rubberBand->geometry();
     m_rubberBand->hide();
@@ -1722,6 +1849,10 @@ void ImageWidget::handleMeasureRelease(QMouseEvent *event) {
  * @param event The wheel event.
  */
 void ImageWidget::wheelEvent(QWheelEvent *event) {
+  if (event->angleDelta().y() == 0) {
+    QWidget::wheelEvent(event);
+    return;
+  }
   double numDegrees = event->angleDelta().y() / 8.0;
   double numSteps = numDegrees / 15.0;
   double factor = qPow(1.1, numSteps);
@@ -1735,6 +1866,7 @@ void ImageWidget::wheelEvent(QWheelEvent *event) {
   if (!m_exploreTimer->isActive()) {
       m_exploreTimer->start();
   }
+  event->accept();
 }
 
 /**
@@ -2025,6 +2157,8 @@ void ImageWidget::fitToView() {
  * @param show True to show points.
  */
 void ImageWidget::setShowRegistrationPoints(bool show) {
+  if (!show && m_draggedPointIndex != -1)
+    cancelPointerInteraction();
   m_showRegistrationPoints = show;
   if (!show) {
     clearSelection();
@@ -2074,6 +2208,9 @@ bool ImageWidget::setCoordinateSpace(
     return false;
   if (m_coordinateSpace == coordinates)
     return true;
+
+  // A coordinate-space switch invalidates the transform captured at press.
+  cancelPointerInteraction();
 
   const colorscreen::point_t centerScan =
       widgetToImage(QPointF(width() / 2.0, height() / 2.0));
@@ -2152,9 +2289,18 @@ void ImageWidget::deleteSelectedPoints() {
  * @param mode The new interaction mode.
  */
 void ImageWidget::setInteractionMode(InteractionMode mode) {
-  if (m_interactionMode == mode) return;
+  if (m_interactionMode == mode)
+    return;
+
+  // Tool changes are a hard gesture boundary.  Live edits already applied by a
+  // drag are retained and their undo transaction is closed, while unfinished
+  // area/measurement gestures are simply discarded.
+  cancelPointerInteraction();
   m_interactionMode = mode;
-  if (m_rubberBand) m_rubberBand->hide();
+  if (m_rubberBand)
+    m_rubberBand->hide();
+  if (mode != ExploreMode)
+    unsetCursor();
   emit interactionModeChanged(mode);
   update();
 }
@@ -2448,25 +2594,29 @@ void ImageWidget::updateSimulatedPoints() {
  */
 void ImageWidget::setExploreMode(bool enable) {
   if (enable && m_interactionMode != ExploreMode) {
-      m_interactionMode = ExploreMode;
-      setCursor(Qt::BlankCursor);
-      setMouseTracking(true);
-      m_exploreTargetX = m_viewX;
-      m_exploreTargetY = m_viewY;
-      m_exploreTargetScale = m_scale;
-      
-      m_exploreAnchorGlobal = QCursor::pos();
-      m_ignoreNextMouseMove = false; // We don't warp initially, so don't ignore
-      
-      m_exploreTimer->start();
-      setFocus();
-      emit interactionModeChanged(ExploreMode);
+    cancelPointerInteraction();
+    m_interactionMode = ExploreMode;
+    setCursor(Qt::BlankCursor);
+    // Mouse tracking is intentionally always enabled: ordinary modes use it
+    // for hover feedback even when no button is pressed.
+    setMouseTracking(true);
+    m_exploreTargetX = m_viewX;
+    m_exploreTargetY = m_viewY;
+    m_exploreTargetScale = m_scale;
+
+    m_exploreAnchorGlobal = QCursor::pos();
+    m_ignoreNextMouseMove = false;
+
+    m_exploreTimer->start();
+    setFocus();
+    emit interactionModeChanged(ExploreMode);
   } else if (!enable && m_interactionMode == ExploreMode) {
-      m_interactionMode = PanMode;
-      unsetCursor();
-      setMouseTracking(false);
-      // Let exploreTick() auto-stop the timer if no animation is active
-      emit interactionModeChanged(PanMode);
+    cancelPointerInteraction();
+    m_interactionMode = PanMode;
+    unsetCursor();
+    setMouseTracking(true);
+    // Let exploreTick() auto-stop the timer if no animation is active.
+    emit interactionModeChanged(PanMode);
   }
 }
 

@@ -2,6 +2,8 @@
 #include "Renderer.h"
 #include "CoordinateTransformer.h"
 #include <QDebug>
+#include <QEvent>
+#include <QSignalBlocker>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QSlider>
@@ -312,9 +314,8 @@ void NavigationView::onViewStateChanged(QRectF visibleRect, double scale) {
       t = 0;
     if (t > 1)
       t = 1;
-    m_zoomSlider->blockSignals(true);
+    const QSignalBlocker blocker(m_zoomSlider);
     m_zoomSlider->setValue((int)(t * 100));
-    m_zoomSlider->blockSignals(false);
   }
 
   update();
@@ -411,86 +412,105 @@ void NavigationView::paintEvent(QPaintEvent *event) {
   p.drawRect(rect);
 }
 
-void NavigationView::mousePressEvent(QMouseEvent *event) {
-  if (m_imageRect.contains(event->pos())) {
-    m_isDragging = true;
-
-    double clickX = event->pos().x() - m_imageRect.left();
-    double clickY = event->pos().y() - m_imageRect.top();
-    
-    // Local coordinate relative to cropped preview
-    double tx = clickX / m_previewScale;
-    double ty = clickY / m_previewScale;
-    
-    m_isDragging = true;
-    if (m_visibleRect.contains(tx, ty)) {
-        // Grab logic (relative to center)
-        m_dragOffset = QPointF(tx - m_visibleRect.center().x(), 
-                               ty - m_visibleRect.center().y());
-    } else {
-        // Jump logic (center on click)
-        m_dragOffset = QPointF(0, 0);
-        emit panChanged(tx - m_visibleRect.width() / 2.0, 
-                        ty - m_visibleRect.height() / 2.0);
-    }
+/** Cancel navigation dragging on exceptional mouse-grab/window changes. */
+bool NavigationView::event(QEvent *event) {
+  switch (event->type()) {
+  case QEvent::UngrabMouse:
+  case QEvent::Hide:
+  case QEvent::WindowDeactivate:
+    cancelPointerInteraction();
+    break;
+  default:
+    break;
   }
+  return QWidget::event(event);
+}
+
+/** Clear the navigator's only press-started gesture. */
+void NavigationView::cancelPointerInteraction() { m_isDragging = false; }
+
+void NavigationView::mousePressEvent(QMouseEvent *event) {
+  if (event->button() != Qt::LeftButton || m_previewScale <= 1e-12 ||
+      m_imageRect.isEmpty() || !m_imageRect.contains(event->pos())) {
+    QWidget::mousePressEvent(event);
+    return;
+  }
+
+  const double clickX = event->position().x() - m_imageRect.left();
+  const double clickY = event->position().y() - m_imageRect.top();
+  const double tx = clickX / m_previewScale;
+  const double ty = clickY / m_previewScale;
+
+  m_isDragging = true;
+  if (m_visibleRect.contains(tx, ty)) {
+    m_dragOffset = QPointF(tx - m_visibleRect.center().x(),
+                           ty - m_visibleRect.center().y());
+  } else {
+    m_dragOffset = QPointF(0, 0);
+    emit panChanged(tx - m_visibleRect.width() / 2.0,
+                    ty - m_visibleRect.height() / 2.0);
+  }
+  event->accept();
 }
 
 void NavigationView::mouseMoveEvent(QMouseEvent *event) {
-  if (m_isDragging) {
-    double clickX = event->pos().x() - m_imageRect.left();
-    double clickY = event->pos().y() - m_imageRect.top();
-
-    double tx = clickX / m_previewScale;
-    double ty = clickY / m_previewScale;
-
-    // Apply offset to find target center
-    double targetCenterX = tx - m_dragOffset.x();
-    double targetCenterY = ty - m_dragOffset.y();
-
-    emit panChanged(targetCenterX - m_visibleRect.width() / 2.0, 
-                    targetCenterY - m_visibleRect.height() / 2.0);
+  if (!m_isDragging) {
+    QWidget::mouseMoveEvent(event);
+    return;
   }
+  if (!event->buttons().testFlag(Qt::LeftButton) || m_previewScale <= 1e-12 ||
+      m_imageRect.isEmpty()) {
+    cancelPointerInteraction();
+    event->accept();
+    return;
+  }
+
+  const double clickX = event->position().x() - m_imageRect.left();
+  const double clickY = event->position().y() - m_imageRect.top();
+  const double tx = clickX / m_previewScale;
+  const double ty = clickY / m_previewScale;
+  const double targetCenterX = tx - m_dragOffset.x();
+  const double targetCenterY = ty - m_dragOffset.y();
+
+  emit panChanged(targetCenterX - m_visibleRect.width() / 2.0,
+                  targetCenterY - m_visibleRect.height() / 2.0);
+  event->accept();
 }
 
 void NavigationView::mouseReleaseEvent(QMouseEvent *event) {
-  m_isDragging = false;
+  if (event->button() == Qt::LeftButton && m_isDragging) {
+    cancelPointerInteraction();
+    event->accept();
+    return;
+  }
+  QWidget::mouseReleaseEvent(event);
 }
 
 void NavigationView::wheelEvent(QWheelEvent *event) {
-  if (m_previewScale <= 0) return;
+  if (m_previewScale <= 1e-12 || m_imageRect.isEmpty() ||
+      !m_imageRect.contains(event->position().toPoint()) ||
+      event->angleDelta().y() == 0) {
+    QWidget::wheelEvent(event);
+    return;
+  }
 
-  // Calculate zoom factor matching ImageWidget
-  double numDegrees = event->angleDelta().y() / 8.0;
-  double numSteps = numDegrees / 15.0;
-  double factor = qPow(1.1, numSteps);
+  const double numDegrees = event->angleDelta().y() / 8.0;
+  const double numSteps = numDegrees / 15.0;
+  const double factor = qPow(1.1, numSteps);
 
-  // Mouse position in transformed-crop coordinates (matching m_visibleRect)
-  double imageX = (event->position().x() - m_imageRect.left()) / m_previewScale;
-  double imageY = (event->position().y() - m_imageRect.top()) / m_previewScale;
+  const double imageX =
+      (event->position().x() - m_imageRect.left()) / m_previewScale;
+  const double imageY =
+      (event->position().y() - m_imageRect.top()) / m_previewScale;
+  const double newScale = m_mainScale * factor;
+  const double oldCx = m_visibleRect.center().x();
+  const double oldCy = m_visibleRect.center().y();
+  const double newCx = imageX + (oldCx - imageX) / factor;
+  const double newCy = imageY + (oldCy - imageY) / factor;
+  const double newW = m_visibleRect.width() / factor;
+  const double newH = m_visibleRect.height() / factor;
 
-  // Current main view state
-  double oldScale = m_mainScale;
-  double newScale = oldScale * factor;
-
-  // Calculate new center to keep imageX fixed relative to viewport
-  // Math: NewCenter = Mouse + (OldCenter - Mouse) / factor
-  double oldCx = m_visibleRect.center().x();
-  double oldCy = m_visibleRect.center().y();
-  
-  double newCx = imageX + (oldCx - imageX) / factor;
-  double newCy = imageY + (oldCy - imageY) / factor;
-  
-  // New dimensions
-  double newW = m_visibleRect.width() / factor;
-  double newH = m_visibleRect.height() / factor;
-  
-  double newX = newCx - newW / 2.0;
-  double newY = newCy - newH / 2.0;
-
-  // Apply changes
-  // Note: We emit zoomChanged first, which will reset the view to be centered on the *current* center.
-  // Then we emit panChanged to move it to our desired target.
   emit zoomChanged(newScale);
-  emit panChanged(newX, newY);
+  emit panChanged(newCx - newW / 2.0, newCy - newH / 2.0);
+  event->accept();
 }
