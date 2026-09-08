@@ -332,6 +332,8 @@ private:
   void drawMtfMeasurementOverlay(QPainter &p);
   void drawScreenCoordinateSystem(QPainter &p);
   void drawMeasurement(QPainter &p);
+  void drawAreaSelection(QPainter &p);
+  void drawInteractionHint(QPainter &p, const QString &message);
 
   // Interaction handlers
   void handleSetCenterPress(QMouseEvent *event);
@@ -454,6 +456,7 @@ private:
   ScreenCoordinateSetupStage m_coordinateSetupStage =
       ScreenCoordinateSetupStage::NeedCenter;
   colorscreen::point_t m_pendingCoordinateCenter {0, 0};
+  colorscreen::point_t m_pendingCoordinateXAxis {0, 0};
 
   bool m_showRegistrationPoints = false;
   bool m_showDetectedPatchCenters = false;
@@ -509,11 +512,17 @@ private:
   bool m_lastMirror = false;
   QRubberBand *m_rubberBand = nullptr;
   QPoint m_rubberBandOrigin;
+  bool m_areaSelectionPending = false;
+  bool m_areaPressStartsNew = false;
+  colorscreen::point_t m_areaStartImage {0, 0};
+  QPointF m_areaPreviewWidget;
   int m_draggedPointIndex = -1;
   bool m_pointDragChanged = false;
-  colorscreen::point_t m_measureStart;
-  colorscreen::point_t m_measureEnd;
+  colorscreen::point_t m_measureStart {0, 0};
+  colorscreen::point_t m_measureEnd {0, 0};
   bool m_isMeasuring = false;
+  bool m_measureStartPlaced = false;
+  bool m_measurePressStartsNew = false;
 
   QTimer *m_exploreTimer = nullptr;
   double m_exploreTargetX = 0.0;

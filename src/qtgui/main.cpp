@@ -121,10 +121,12 @@ bool runPointerInteractionSmoke() {
   // Switching tools discards an unfinished measurement; returning to Measure
   // must not let a later release commit the old gesture.
   int measurements = 0;
-  QObject::connect(&image, &ImageWidget::distanceMeasured, &image,
-                   [&measurements](colorscreen::point_t, colorscreen::point_t) {
-                     ++measurements;
-                   });
+  const QMetaObject::Connection measurementCountConnection =
+      QObject::connect(&image, &ImageWidget::distanceMeasured, &image,
+                       [&measurements](colorscreen::point_t,
+                                       colorscreen::point_t) {
+                         ++measurements;
+                       });
   image.setInteractionMode(ImageWidget::MeasureMode);
   sendPointerSmokeEvent(image, QEvent::MouseButtonPress, {20, 20},
                         Qt::LeftButton, Qt::LeftButton);
@@ -134,6 +136,62 @@ bool runPointerInteractionSmoke() {
                         Qt::LeftButton, Qt::NoButton);
   if (measurements != 0)
     return fail("measurement leaked across a tool switch");
+
+  // Measurement accepts two independent clicks, so the pointer may move (and
+  // the real UI may zoom) between anchors without holding a button.
+  colorscreen::point_t measuredStart {0, 0};
+  colorscreen::point_t measuredEnd {0, 0};
+  QObject::disconnect(measurementCountConnection);
+  QObject::connect(&image, &ImageWidget::distanceMeasured, &image,
+                   [&measurements, &measuredStart, &measuredEnd](
+                       colorscreen::point_t p1, colorscreen::point_t p2) {
+                     ++measurements;
+                     measuredStart = p1;
+                     measuredEnd = p2;
+                   });
+  measurements = 0;
+  image.setInteractionMode(ImageWidget::PanMode);
+  image.setInteractionMode(ImageWidget::MeasureMode);
+  sendPointerSmokeEvent(image, QEvent::MouseButtonPress, {20, 30},
+                        Qt::LeftButton, Qt::LeftButton);
+  sendPointerSmokeEvent(image, QEvent::MouseButtonRelease, {20, 30},
+                        Qt::LeftButton, Qt::NoButton);
+  sendPointerSmokeEvent(image, QEvent::MouseMove, {90, 70}, Qt::NoButton,
+                        Qt::NoButton);
+  if (measurements != 0)
+    return fail("first measurement click committed prematurely");
+  sendPointerSmokeEvent(image, QEvent::MouseButtonPress, {90, 70},
+                        Qt::LeftButton, Qt::LeftButton);
+  sendPointerSmokeEvent(image, QEvent::MouseButtonRelease, {90, 70},
+                        Qt::LeftButton, Qt::NoButton);
+  if (measurements != 1 || !samePoint(measuredStart, {20, 30}) ||
+      !samePoint(measuredEnd, {90, 70}))
+    return fail("two-click measurement did not commit both anchors");
+
+  // Temporary area tools accept the same click-move-click interaction while
+  // preserving the existing drag-to-select shortcut.
+  int areas = 0;
+  QRect selectedArea;
+  QObject::connect(&image, &ImageWidget::areaSelected, &image,
+                   [&areas, &selectedArea](QRect area) {
+                     ++areas;
+                     selectedArea = area;
+                   });
+  image.setInteractionMode(ImageWidget::GenericAreaMode);
+  sendPointerSmokeEvent(image, QEvent::MouseButtonPress, {25, 35},
+                        Qt::LeftButton, Qt::LeftButton);
+  sendPointerSmokeEvent(image, QEvent::MouseButtonRelease, {25, 35},
+                        Qt::LeftButton, Qt::NoButton);
+  sendPointerSmokeEvent(image, QEvent::MouseMove, {100, 85}, Qt::NoButton,
+                        Qt::NoButton);
+  if (areas != 0)
+    return fail("first area click committed prematurely");
+  sendPointerSmokeEvent(image, QEvent::MouseButtonPress, {100, 85},
+                        Qt::LeftButton, Qt::LeftButton);
+  sendPointerSmokeEvent(image, QEvent::MouseButtonRelease, {100, 85},
+                        Qt::LeftButton, Qt::NoButton);
+  if (areas != 1 || selectedArea != QRect(QPoint(25, 35), QPoint(100, 85)))
+    return fail("two-click area selection did not commit both corners");
 
   // A regular screen with zero-vector sentinels must still allow manual
   // bootstrap: center click, neighboring +X green-dot click, then ordinary edit.
@@ -157,6 +215,11 @@ bool runPointerInteractionSmoke() {
       bootstrapImage.screenCoordinateSetupStage() !=
           ImageWidget::ScreenCoordinateSetupStage::NeedXAxis)
     return fail("first screen-coordinate click was not kept pending");
+  sendPointerSmokeEvent(bootstrapImage, QEvent::MouseMove, {104, 96},
+                        Qt::NoButton, Qt::NoButton);
+  if (!samePoint(bootstrapGeometry.center, {0, 0}) ||
+      !samePoint(bootstrapGeometry.coordinate1, {0, 0}))
+    return fail("live screen-axis preview mutated document geometry");
 
   sendPointerSmokeEvent(bootstrapImage, QEvent::MouseButtonPress, {104, 96},
                         Qt::LeftButton, Qt::LeftButton);

@@ -141,6 +141,14 @@ action strip is enough:
 Each step should show prerequisites and outcome.  Automatic commands are verbs;
 parameters controlling them are nouns/settings.  Do not mix the two visually.
 
+For precision tools that need two spatial anchors, prefer a hybrid interaction:
+click the first anchor, allow navigation/zoom while a live preview follows the
+pointer, and click the second anchor; retain press-drag-release as a quick shortcut
+when both endpoints are already visible. Show the pending instruction in-canvas and
+let Escape cancel it. This convention is used by screen-coordinate bootstrap,
+measurement, Crop and temporary area selection; it should not replace single-click
+semantics in Add Point or registration Select.
+
 The expected registration path is **autodetect first**. If coordinate detection
 fails on an otherwise regular screen, `Screen coordinates` is the explicit
 manual fallback: click the green origin dot, click its neighboring green dot in

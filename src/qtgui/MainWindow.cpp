@@ -7491,7 +7491,9 @@ void MainWindow::onColorOptimizerFinished(
 void MainWindow::onMeasureRequested() {
   saveInteractionMode();
   inspectorImageWidget()->setInteractionMode(ImageWidget::MeasureMode);
-  statusBar()->showMessage(tr("Click and drag to measure distance for DPI calculation"), 5000);
+  statusBar()->showMessage(
+      tr("Click the first point, zoom as needed, then click the second point; dragging also works"),
+      7000);
 }
 
 /** Handle a completed distance measurement.
