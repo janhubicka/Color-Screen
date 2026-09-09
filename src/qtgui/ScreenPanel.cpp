@@ -3,6 +3,7 @@
 #include "../libcolorscreen/include/render-parameters.h"
 #include "../libcolorscreen/include/scr-to-img-parameters.h"
 #include "TilePreviewPanel.h"
+#include <QSignalBlocker>
 #include <QAbstractItemView>
 #include <QComboBox>
 #include <QFormLayout>
@@ -255,9 +256,9 @@ void ScreenPanel::setupUi() {
     int val = (int)state.scrToImg.type;
     int idx = screenCombo->findData(val);
     if (idx != -1) {
-      screenCombo->blockSignals(true);
+      QSignalBlocker signalBlocker1(screenCombo);
       screenCombo->setCurrentIndex(idx);
-      screenCombo->blockSignals(false);
+      signalBlocker1.unblock();
     }
   });
 

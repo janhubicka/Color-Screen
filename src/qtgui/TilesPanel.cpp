@@ -1,5 +1,6 @@
 #include "TilesPanel.h"
 #include "../libcolorscreen/include/stitch.h"
+#include <QSignalBlocker>
 #include <QButtonGroup>
 #include <QFormLayout>
 #include <QGridLayout>
@@ -208,10 +209,10 @@ void TilesPanel::refreshTileToggles(const ParameterState &state) {
   for (int gy = 0; gy < m_gridH; gy++) {
     for (int gx = 0; gx < m_gridW; gx++) {
       if (m_tileChecks[gy][gx]) {
-        m_tileChecks[gy][gx]->blockSignals(true);
+        QSignalBlocker signalBlocker1(m_tileChecks[gy][gx]);
         m_tileChecks[gy][gx]->setChecked(
             state.rparams.get_tile_adjustment(img->stitch, gx, gy).enabled);
-        m_tileChecks[gy][gx]->blockSignals(false);
+        signalBlocker1.unblock();
       }
     }
   }

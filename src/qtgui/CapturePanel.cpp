@@ -1,4 +1,5 @@
 #include "CapturePanel.h"
+#include <QSignalBlocker>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QPushButton>
@@ -437,7 +438,7 @@ void CapturePanel::setupUi()
         // selector from this scan's channel capabilities and display Unknown
         // when the stored choice is incompatible instead of inventing a
         // different physical capture type.
-        m_captureTypeCombo->blockSignals(true);
+        QSignalBlocker signalBlocker1(m_captureTypeCombo);
         m_captureTypeCombo->clear();
         for (int i = 0;
              i < (int)colorscreen::render_parameters::capture_max; ++i) {
@@ -466,7 +467,7 @@ void CapturePanel::setupUi()
               (int)colorscreen::render_parameters::capture_unknown);
         if (captureIndex >= 0)
           m_captureTypeCombo->setCurrentIndex(captureIndex);
-        m_captureTypeCombo->blockSignals(false);
+        signalBlocker1.unblock();
         
         auto setVisibleRow = [&](QWidget *field, bool visible) {
             field->setVisible(visible);
@@ -584,10 +585,10 @@ void CapturePanel::setupUi()
         // 0. Demosaic
         bool canDemosaic = img && img->demosaiced_by != colorscreen::image_data::demosaic_max;
         if (canDemosaic) {
-            m_demosaicCombo->blockSignals(true);
+            QSignalBlocker signalBlocker2(m_demosaicCombo);
             int idx = m_demosaicCombo->findData((int)state.rparams.demosaic);
             if (idx != -1) m_demosaicCombo->setCurrentIndex(idx);
-            m_demosaicCombo->blockSignals(false);
+            signalBlocker2.unblock();
             
             bool needsReload = (state.rparams.demosaic != img->demosaiced_by);
             m_reloadDemosaicBtn->setVisible(needsReload);
@@ -662,15 +663,15 @@ void CapturePanel::setupUi()
             QSlider *slider = sensorWidthSlider->findChild<QSlider*>();
             QDoubleSpinBox *spin = sensorWidthSlider->findChild<QDoubleSpinBox*>();
             if (slider && spin) {
-                slider->blockSignals(true);
-                spin->blockSignals(true);
+                QSignalBlocker signalBlocker3(slider);
+                QSignalBlocker signalBlocker4(spin);
                 // Value to slider mapping is internal to addSlider... 
                 // Re-calculating slider value:
                 // The scale was 10.0 in addSlider call for sensor width
                 spin->setValue(width_mm);
                 slider->setValue(qRound(width_mm * 10.0)); 
-                slider->blockSignals(false);
-                spin->blockSignals(false);
+                signalBlocker3.unblock();
+                signalBlocker4.unblock();
             }
         }
 
@@ -799,8 +800,8 @@ void CapturePanel::reattachBacklight(QWidget *w) {
 
 void CapturePanel::setCropChecked(bool checked) {
     if (m_cropBtn) {
-        m_cropBtn->blockSignals(true);
+        QSignalBlocker signalBlocker5(m_cropBtn);
         m_cropBtn->setChecked(checked);
-        m_cropBtn->blockSignals(false);
+        signalBlocker5.unblock();
     }
 }

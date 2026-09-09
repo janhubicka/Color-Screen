@@ -1,6 +1,7 @@
 #include "GeometryPanel.h"
 #include "DeformationChartWidget.h"
 #include "FinetuneImagesPanel.h"
+#include <QSignalBlocker>
 #include <QCheckBox>
 #include <QPushButton>
 #include <QHBoxLayout>
@@ -506,9 +507,9 @@ void GeometryPanel::reattachFinetuneImages(QWidget *widget) {
 
 void GeometryPanel::setRegistrationPointsVisible(bool visible) {
     if (m_showRegistrationPointsBox) {
-        m_showRegistrationPointsBox->blockSignals(true);
+        QSignalBlocker signalBlocker1(m_showRegistrationPointsBox);
         m_showRegistrationPointsBox->setChecked(visible);
-        m_showRegistrationPointsBox->blockSignals(false);
+        signalBlocker1.unblock();
     }
     if (m_exaggerateSliderContainer) m_exaggerateSliderContainer->setEnabled(visible);
     if (m_maxArrowLengthSliderContainer) m_maxArrowLengthSliderContainer->setEnabled(visible);

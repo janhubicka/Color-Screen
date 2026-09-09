@@ -1,6 +1,7 @@
 #include "ParameterPanel.h"
 #include "../libcolorscreen/include/base.h"
 #include "SmartSpinBox.h"
+#include <QSignalBlocker>
 #include <QCheckBox>
 #include <QDockWidget>
 #include <QEvent>
@@ -558,12 +559,12 @@ void ParameterPanel::addDoubleParameter(
   // Updater: State -> UI
   m_paramUpdaters.push_back([spin, combo, getter](const ParameterState &state) {
     double val = getter(state);
-    spin->blockSignals(true);
+    QSignalBlocker signalBlocker1(spin);
     spin->setValue(val);
-    spin->blockSignals(false);
+    signalBlocker1.unblock();
 
     if (combo) {
-      combo->blockSignals(true);
+      QSignalBlocker signalBlocker2(combo);
       int idx = combo->findData(val);
       if (idx != -1)
         combo->setCurrentIndex(idx);
@@ -580,7 +581,7 @@ void ParameterPanel::addDoubleParameter(
         if (!found)
           combo->setCurrentIndex(-1);
       }
-      combo->blockSignals(false);
+      signalBlocker2.unblock();
     }
   });
 
@@ -770,9 +771,9 @@ QWidget *ParameterPanel::addSliderParameter(
   connect(slider, &QSlider::valueChanged, this,
           [this, spin, sliderToValue, setter, label, parameterKey](int val) {
             double dVal = sliderToValue(val);
-            spin->blockSignals(true);
+            QSignalBlocker signalBlocker3(spin);
             spin->setValue(dVal);
-            spin->blockSignals(false);
+            signalBlocker3.unblock();
 
             // Trigger update
             applyChange([setter, dVal](ParameterState &s) { setter(s, dVal); },
@@ -781,9 +782,9 @@ QWidget *ParameterPanel::addSliderParameter(
 
   connect(spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
           [slider, valueToSlider](double val) {
-            slider->blockSignals(true);
+            QSignalBlocker signalBlocker4(slider);
             slider->setValue(valueToSlider(val));
-            slider->blockSignals(false);
+            signalBlocker4.unblock();
           });
 
   // Change
@@ -797,13 +798,13 @@ QWidget *ParameterPanel::addSliderParameter(
   m_paramUpdaters.push_back(
       [slider, spin, getter, valueToSlider](const ParameterState &state) {
         double val = getter(state);
-        spin->blockSignals(true);
+        QSignalBlocker signalBlocker5(spin);
         spin->setValue(val);
-        spin->blockSignals(false);
+        signalBlocker5.unblock();
 
-        slider->blockSignals(true);
+        QSignalBlocker signalBlocker6(slider);
         slider->setValue(valueToSlider(val));
-        slider->blockSignals(false);
+        signalBlocker6.unblock();
       });
 
   // Enable Update
@@ -932,9 +933,9 @@ QWidget* ParameterPanel::addSlider(
   connect(slider, &QSlider::valueChanged, this,
           [spin, sliderToValue, onChanged](int val) {
             double dVal = sliderToValue(val);
-            spin->blockSignals(true);
+            QSignalBlocker signalBlocker7(spin);
             spin->setValue(dVal);
-            spin->blockSignals(false);
+            signalBlocker7.unblock();
 
             if (onChanged)
               onChanged(dVal);
@@ -942,9 +943,9 @@ QWidget* ParameterPanel::addSlider(
 
   connect(spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
           [slider, valueToSlider, onChanged](double val) {
-            slider->blockSignals(true);
+            QSignalBlocker signalBlocker8(slider);
             slider->setValue(valueToSlider(val));
-            slider->blockSignals(false);
+            signalBlocker8.unblock();
 
             if (onChanged)
               onChanged(val);
@@ -991,11 +992,11 @@ QComboBox *ParameterPanel::addEnumParameter(
   // Updater: State -> UI
   m_paramUpdaters.push_back([combo, getter](const ParameterState &state) {
     int val = getter(state);
-    combo->blockSignals(true);
+    QSignalBlocker signalBlocker9(combo);
     int idx = combo->findData(val);
     if (idx != -1)
       combo->setCurrentIndex(idx);
-    combo->blockSignals(false);
+    signalBlocker9.unblock();
   });
 
   // Enable Update
@@ -1053,9 +1054,9 @@ QCheckBox *ParameterPanel::addCheckboxParameter(
   // Updater: State -> UI
   m_paramUpdaters.push_back([checkbox, getter](const ParameterState &state) {
     bool val = getter(state);
-    checkbox->blockSignals(true);
+    QSignalBlocker signalBlocker10(checkbox);
     checkbox->setChecked(val);
-    checkbox->blockSignals(false);
+    signalBlocker10.unblock();
   });
 
   // Enable/Visibility Update
@@ -1119,9 +1120,9 @@ QCheckBox *ParameterPanel::addCheckboxWithReset(
   // Updater: State -> UI
   m_paramUpdaters.push_back([checkbox, getter](const ParameterState &state) {
     bool val = getter(state);
-    checkbox->blockSignals(true);
+    QSignalBlocker signalBlocker11(checkbox);
     checkbox->setChecked(val);
-    checkbox->blockSignals(false);
+    signalBlocker11.unblock();
   });
 
   // Enable/Visibility Update
@@ -1194,9 +1195,9 @@ QPushButton *ParameterPanel::addToggleButtonParameter(
   if (getter) {
       m_paramUpdaters.push_back([button, getter](const ParameterState &state) {
         bool val = getter(state);
-        button->blockSignals(true);
+        QSignalBlocker signalBlocker12(button);
         button->setChecked(val);
-        button->blockSignals(false);
+        signalBlocker12.unblock();
       });
   }
 
@@ -1271,15 +1272,15 @@ void ParameterPanel::addCorrelatedRGBParameter(
 
     // Internal Sync for each channel
     connect(slider, &QSlider::valueChanged, this, [spin, scale](int val) {
-      spin->blockSignals(true);
+      QSignalBlocker signalBlocker13(spin);
       spin->setValue((double)val / scale);
-      spin->blockSignals(false);
+      signalBlocker13.unblock();
     });
     connect(spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
             [slider, scale](double val) {
-              slider->blockSignals(true);
+              QSignalBlocker signalBlocker14(slider);
               slider->setValue(qRound(val * scale));
-              slider->blockSignals(false);
+              signalBlocker14.unblock();
             });
   }
 
@@ -1316,13 +1317,13 @@ void ParameterPanel::addCorrelatedRGBParameter(
     if (linkCheck->isChecked()) {
       for (int i = 0; i < 3; ++i) {
         if (i != changedIdx) {
-          channels[i].spin->blockSignals(true);
+          QSignalBlocker signalBlocker15(channels[i].spin);
           channels[i].spin->setValue(next[i]);
-          channels[i].spin->blockSignals(false);
+          signalBlocker15.unblock();
 
-          channels[i].slider->blockSignals(true);
+          QSignalBlocker signalBlocker16(channels[i].slider);
           channels[i].slider->setValue(qRound(next[i] * scale));
-          channels[i].slider->blockSignals(false);
+          signalBlocker16.unblock();
         }
       }
     }
@@ -1345,13 +1346,13 @@ void ParameterPanel::addCorrelatedRGBParameter(
   m_paramUpdaters.push_back([channels, getter, scale](const ParameterState &s) {
     colorscreen::rgbdata v = getter(s);
     for (int i = 0; i < 3; ++i) {
-      channels[i].spin->blockSignals(true);
+      QSignalBlocker signalBlocker17(channels[i].spin);
       channels[i].spin->setValue(v[i]);
-      channels[i].spin->blockSignals(false);
+      signalBlocker17.unblock();
 
-      channels[i].slider->blockSignals(true);
+      QSignalBlocker signalBlocker18(channels[i].slider);
       channels[i].slider->setValue(qRound(v[i] * scale));
-      channels[i].slider->blockSignals(false);
+      signalBlocker18.unblock();
     }
   });
 
