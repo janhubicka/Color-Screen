@@ -7,6 +7,7 @@
 #include "ToneCurveWidget.h"
 #include "CoordinateTransformer.h"
 #include "DocumentLifecycleSmoke.h"
+#include "FlatFieldWorker.h"
 #include "WorkspaceChurnSmoke.h"
 #include "WorkspaceWindow.h"
 #include "progress-info.h"
@@ -113,6 +114,13 @@ bool runBetaInvariantSmoke() {
   QTemporaryDir recovery;
   if (!recovery.isValid())
     return fail("could not create temporary recovery directory");
+
+  const FlatFieldAnalysisResult missingFlatField = FlatFieldWorker::analyze(
+      recovery.filePath(QStringLiteral("missing-flat-field-reference.tif")),
+      QString(), 1.0, colorscreen::image_data::demosaic_none, nullptr);
+  if (missingFlatField.success || missingFlatField.cancelled ||
+      missingFlatField.error.isEmpty() || missingFlatField.correction)
+    return fail("flat-field helper did not report a missing reference cleanly");
 
   MainWindow window(recovery.path());
   QUndoStack *undoStack = window.findChild<QUndoStack *>();
