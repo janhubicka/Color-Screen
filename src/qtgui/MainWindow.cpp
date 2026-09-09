@@ -5974,7 +5974,7 @@ QRect MainWindow::getImageArea(QRect area, ImageWidget *imageWidget) {
    - GenericAreaMode: invokes the m_areaSelectionCallback and restores
      the previous tool.
    - CropMode: sets the crop rectangle in the parameter state.
-   - SelectMode/AddPointMode: launches a FinetuneWorker to find
+   - SelectMode/AddPointMode: runs a one-shot finetune to find
      registration points in the selected area.  */
 void MainWindow::onAreaSelected(QRect area) {
   ImageWidget *image = qobject_cast<ImageWidget *>(sender());
@@ -6021,44 +6021,60 @@ void MainWindow::onAreaSelected(QRect area) {
     return;
   }
 
-  // Create progress info
-  auto progress = std::make_shared<colorscreen::progress_info>();
-  progress->set_task("Finding registration points", 1);
-  colorscreen::sub_task task(progress.get()); /* Keep so tasks are nested.  */
-  addProgress(progress);
+  const auto scan = m_scan;
+  const ParameterState baseline = getCurrentState();
+  const colorscreen::int_image_area selectedArea = {
+      imgArea.x(), imgArea.y(), imgArea.width(), imgArea.height()};
+  const colorscreen::finetune_area_parameters finetuneParams =
+      m_geometryPanel->finetuneAreaParams();
+  auto result = std::make_shared<FinetuneAreaResult>();
 
-  // Create worker and thread
-  FinetuneWorker *worker = new FinetuneWorker(
-      m_solverParams, m_rparams, m_scrToImgParams, m_scan,
-      {imgArea.x(), imgArea.y(), imgArea.width(), imgArea.height()}, progress,
-      m_geometryPanel->finetuneAreaParams());
-  QThread *thread = new QThread(this);
-  worker->moveToThread(thread);
-  trackBackgroundThread(thread);
+  OneShotOperation operation;
+  operation.description = tr("Finding registration points");
+  operation.prerequisites =
+      [this, scan]() { return !m_closing && m_scan == scan; };
+  operation.resultValid =
+      [this, scan, baseline, finetuneParams, result]() {
+        if (m_scan != scan || getCurrentState() != baseline ||
+            result->cancelled || !m_geometryPanel)
+          return false;
+        const colorscreen::finetune_area_parameters currentParams =
+            m_geometryPanel->finetuneAreaParams();
+        return currentParams.grid_width == finetuneParams.grid_width &&
+               currentParams.grid_height == finetuneParams.grid_height &&
+               currentParams.min_contrast == finetuneParams.min_contrast &&
+               currentParams.uncertainty_ratio ==
+                   finetuneParams.uncertainty_ratio &&
+               currentParams.max_displacement ==
+                   finetuneParams.max_displacement;
+      };
+  operation.applyResult = [this, result]() {
+    if (!result->success || result->points.empty())
+      return;
 
-  // Connect signals
-  connect(thread, &QThread::started, worker, &FinetuneWorker::run);
-  connect(worker, &FinetuneWorker::finished, thread, &QThread::quit,
-          Qt::DirectConnection);
-  connect(thread, &QThread::finished, worker, &QObject::deleteLater);
-  connect(thread, &QThread::finished, thread, &QObject::deleteLater);
+    ParameterState state = getCurrentState();
+    for (const auto &point : result->points)
+      state.solver.add_or_modify_point(point.img, point.scr, point.color);
+    changeParameters(state, tr("Add registration points"));
 
-  // Connect to our slot to handle results
-  connect(
-      worker, &FinetuneWorker::pointsReady, this,
-      [this, thread, progress](
-          std::vector<colorscreen::solver_parameters::solver_point_t> points) {
-        onFinetuneFinished(true, points, thread, progress);
+    if (m_geometryPanel && m_geometryPanel->isAutoEnabled()) {
+      const std::size_t count = m_imageWidget->registrationPointCount();
+      if (count >= static_cast<std::size_t>(
+                       colorscreen::solver_parameters::min_points(
+                           m_scrToImgParams.type)))
+        onOptimizeGeometry(true);
+    }
+    updateRegistrationActions();
+  };
+
+  runOneShotOperation(
+      std::move(operation),
+      [scan, baseline, selectedArea, finetuneParams,
+       result](colorscreen::progress_info *progress) mutable {
+        *result = FinetuneWorker::findPoints(
+            baseline.solver, baseline.rparams, baseline.scrToImg, scan,
+            selectedArea, finetuneParams, progress);
       });
-  connect(worker, &FinetuneWorker::finished, this,
-          [this, thread, progress](bool success) {
-            if (!success) {
-              onFinetuneFinished(false, {}, thread, progress);
-            }
-          });
-
-  // Start thread
-  thread->start();
 }
 
 /** Swap the color assignments of registration points.
@@ -6282,56 +6298,6 @@ void MainWindow::onAutomaticallyAddPointsRequested(const colorscreen::finetune_a
 
   // Start thread
   thread->start();
-}
-
-/** Handle completion of a single-area finetune (rectangle selection).
-   Adds all discovered points using add_or_modify_point (which updates
-   existing points if they're close to a new detection), creates an
-   undo command, and triggers auto-solver if enabled.  */
-void MainWindow::onFinetuneFinished(
-    bool success,
-    std::vector<colorscreen::solver_parameters::solver_point_t> points,
-    QThread *thread, std::shared_ptr<colorscreen::progress_info> progress) {
-  Q_UNUSED(thread);
-
-  // Remove progress only while the document still owns live presentation UI.
-  if (!m_closing)
-    removeProgress(progress);
-
-  // A close or cancellation request makes any final batch stale even if the
-  // worker raced to completion before acknowledging cancellation.
-  if (m_closing || (progress && progress->pool_cancel()))
-    return;
-
-  // Add points if successful
-  if (success && !points.empty()) {
-    ParameterState oldState = getCurrentState();
-
-    // Add all points using add_or_modify_point
-    for (const auto &point : points) {
-      m_solverParams.add_or_modify_point(point.img, point.scr, point.color);
-    }
-
-    // Update UI
-    m_imageWidget->updateParameters(&m_rparams, &m_scrToImgParams,
-                                    &m_detectParams, &m_renderTypeParams,
-                                    &m_solverParams);
-    m_imageWidget->update();
-
-    // Create undo command
-    ParameterState newState = getCurrentState();
-    m_undoStack->push(new ChangeParametersCommand(this, oldState, newState,
-                                                  "Add registration points"));
-
-    // Trigger auto solver if enabled
-    if (m_geometryPanel && m_geometryPanel->isAutoEnabled()) {
-      size_t count = m_imageWidget->registrationPointCount();
-      if (count >= (size_t)colorscreen::solver_parameters::min_points(m_scrToImgParams.type)) {
-        onOptimizeGeometry(true);
-      }
-    }
-    updateRegistrationActions();
-  }
 }
 
 /** Launch the automatic screen type detection worker.

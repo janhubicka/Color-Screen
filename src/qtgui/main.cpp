@@ -8,6 +8,7 @@
 #include "CoordinateTransformer.h"
 #include "DocumentLifecycleSmoke.h"
 #include "FocusAnalysisWorker.h"
+#include "FinetuneWorker.h"
 #include "FlatFieldWorker.h"
 #include "WorkspaceChurnSmoke.h"
 #include "WorkspaceWindow.h"
@@ -116,6 +117,16 @@ bool runBetaInvariantSmoke() {
       std::shared_ptr<colorscreen::image_data>(), {0, 0}, focusParams, nullptr);
   if (missingFocus.success || missingFocus.cancelled)
     return fail("focus-analysis helper accepted a missing scan");
+
+  colorscreen::finetune_area_parameters finetuneAreaParams;
+  const FinetuneAreaResult missingFinetune = FinetuneWorker::findPoints(
+      colorscreen::solver_parameters(), colorscreen::render_parameters(),
+      colorscreen::scr_to_img_parameters(),
+      std::shared_ptr<colorscreen::image_data>(), {0, 0, 1, 1},
+      finetuneAreaParams, nullptr);
+  if (missingFinetune.success || missingFinetune.cancelled ||
+      !missingFinetune.points.empty())
+    return fail("finetune helper accepted a missing scan");
 
   // Exercise the real MainWindow -> ChangeParametersCommand -> QUndoStack
   // path. Two updates from one stable parameter key must coalesce, while an

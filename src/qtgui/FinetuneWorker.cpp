@@ -1,43 +1,37 @@
 #include "FinetuneWorker.h"
-#include "../libcolorscreen/include/finetune.h"
 
-FinetuneWorker::FinetuneWorker(
+#include "../libcolorscreen/include/imagedata.h"
+
+/** Find the registration points produced by one selected-area finetune. */
+FinetuneAreaResult FinetuneWorker::findPoints(
     colorscreen::solver_parameters solverParams,
     colorscreen::render_parameters rparams,
     colorscreen::scr_to_img_parameters scrToImg,
     std::shared_ptr<colorscreen::image_data> scan,
     colorscreen::int_image_area area,
-    std::shared_ptr<colorscreen::progress_info> progress,
-    colorscreen::finetune_area_parameters fparams)
-    : m_solverParams(solverParams), m_rparams(rparams), m_scrToImg(scrToImg),
-      m_scan(scan), m_area(area), m_progress(progress), m_fparams(fparams) {}
-
-void FinetuneWorker::run() {
-  // Create a local copy of solver parameters to work with
-  colorscreen::solver_parameters localSolver = m_solverParams;
-
-  // Store the initial point count
-  size_t initialPointCount = localSolver.points.size();
-
-  // Call finetune_area
-  bool success = colorscreen::finetune_area(&localSolver, m_rparams, m_scrToImg,
-                                            *m_scan, m_area, m_fparams, m_progress.get());
-
-  // Check if cancelled
-  if (m_progress && m_progress->cancelled()) {
-    emit finished(false);
-    return;
+    colorscreen::finetune_area_parameters fparams,
+    colorscreen::progress_info *progress) {
+  FinetuneAreaResult result;
+  if (!scan)
+    return result;
+  if (progress && progress->pool_cancel()) {
+    result.cancelled = true;
+    return result;
   }
 
-  // If successful, extract the new points that were added
-  if (success && localSolver.points.size() > initialPointCount) {
-    std::vector<colorscreen::solver_parameters::solver_point_t> newPoints;
-    const auto &points = localSolver.points;
-    for (size_t i = initialPointCount; i < points.size(); ++i) {
-      newPoints.push_back(points[i]);
-    }
-    emit pointsReady(newPoints);
-  }
+  const std::size_t initialPointCount = solverParams.points.size();
+  const bool success = colorscreen::finetune_area(
+      &solverParams, rparams, scrToImg, *scan, area, fparams, progress);
 
-  emit finished(success);
+  result.cancelled = progress &&
+      (progress->pool_cancel() || progress->cancelled());
+  if (result.cancelled)
+    return result;
+
+  result.success = success;
+  if (success && solverParams.points.size() > initialPointCount) {
+    const auto first = solverParams.points.begin() + initialPointCount;
+    result.points.assign(first, solverParams.points.end());
+  }
+  return result;
 }
