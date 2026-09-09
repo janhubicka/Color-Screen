@@ -79,7 +79,6 @@ MOC_SOURCES = \
     moc_ColorOptimizerWorker.cpp \
     moc_CoordinateOptimizationWorker.cpp \
     moc_DetectScreenWorker.cpp \
-    moc_FlatFieldWorker.cpp \
     moc_FinetuneWorker.cpp \
     moc_FinetuneMisregisteredWorker.cpp \
     moc_WorkerBase.cpp \
