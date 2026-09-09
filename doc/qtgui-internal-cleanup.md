@@ -290,9 +290,18 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   Image Layer's infrared-only calibration action now uses
   `setParameterApplicability()` rather than a direct-visibility repair callback,
   and workspace-churn smoke covers collapse/expand resurrection explicitly.
-- Introduce small helper objects for one-shot operations: prerequisites,
-  description, progress/cancel policy, result validation and apply callback.
-  Many current panel buttons repeat this lifecycle.
+- `MainWindow::OneShotOperation` now provides the first shared one-shot
+  lifecycle: prerequisites, progress description, start/cleanup UI callbacks,
+  replace-on-new-request cancellation plus TaskQueue publication ownership,
+  final result validation and an apply callback. Area-based parameter
+  computations (white balance, auto
+  levels, image-layer calibration and slanted-edge measurement) are the first
+  migrated users. They publish only while the captured image and complete
+  `ParameterState` snapshot are still current; any accepted document edit
+  cancels them immediately. Workspace-churn smoke verifies that a racing
+  cancelled completion performs cleanup but cannot publish. Keep migrating
+  custom one-shot `QThread` workers incrementally where their intermediate
+  signal requirements allow the same policy without obscuring the worker API.
 - Separate "enabled" from "applicable/visible" in helper APIs.  Greyed controls
   are useful when they teach a prerequisite; hidden controls are useful when a
   whole concept is meaningless for the current process.  A lambda called

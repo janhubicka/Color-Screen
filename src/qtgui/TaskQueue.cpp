@@ -191,9 +191,13 @@ bool TaskQueue::hasActiveTasks() const {
  */
 void TaskQueue::runAsync (std::function<void (colorscreen::progress_info *)> worker,
                           std::function<void (bool publishResult)> done,
-                          const QVariant &userData)
+                          const QVariant &userData,
+                          std::function<void ()> started)
 {
-  requestRender(userData, [this, worker = std::move(worker), done = std::move(done)](int reqId, std::shared_ptr<colorscreen::progress_info> progress) mutable {
+  requestRender(userData, [this, worker = std::move(worker), done = std::move(done),
+                           started = std::move(started)](int reqId, std::shared_ptr<colorscreen::progress_info> progress) mutable {
+    if (started)
+      started();
     /* Launch worker on Qt thread-pool; progress is read-only in worker.  */
     auto *watcher = new QFutureWatcher<void> (this);
     connect (watcher, &QFutureWatcher<void>::finished, this,

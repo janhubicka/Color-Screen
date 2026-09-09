@@ -83,6 +83,11 @@ class AdaptiveSharpeningWorker;
 class CoordinateOptimizationWorker;
 class AdaptiveSharpeningChart; // Added
 class QUndoStack; // Forward decl
+class ColorScreenApplication;
+
+/** Start the completion-driven workspace ownership/lifecycle smoke test. */
+void startWorkspaceChurnSmoke(ColorScreenApplication &app,
+                              std::function<void()> completed);
 
 namespace colorscreen {
 class screen_map;
@@ -420,13 +425,31 @@ private:
   void updateModeMenu(); // Updates combo box items
   QIcon renderScreenIcon(colorscreen::scr_type type);
 
+  /** Lifecycle callbacks for one final-result background operation.
+
+      PREREQUISITES run on the GUI thread before the request enters the queue.
+      ONSTART runs only when TaskQueue actually starts the request. RESULTVALID
+      is the final publication gate after newest-request/cancellation checks.
+      APPLYRESULT publishes accepted output, and ONDONE restores transient UI
+      state for every started request, including stale/cancelled completions. */
+  struct OneShotOperation {
+    QString description;
+    std::function<bool()> prerequisites;
+    std::function<void()> onStart;
+    std::function<bool()> resultValid;
+    std::function<void()> applyResult;
+    std::function<void()> onDone;
+  };
+
+  /** Run WORKER under the common one-shot progress/cancellation lifecycle. */
+  void runOneShotOperation(
+      OneShotOperation operation,
+      std::function<void(colorscreen::progress_info *)> worker);
+
   /** Launch an area-based parameter computation.
-      Shows MESSAGE in the status bar, enters area selection mode, and when
-      the user draws a rectangle, runs WORKER in a background thread.
-      WORKER modifies a ParameterState in-place; the result is pushed as an
-      undoable change with DESCRIPTION.
-      ON_START is called before launching (to disable UI), ON_DONE after
-      completion (to uncheck toggle buttons).  */
+      Shows MESSAGE, captures the current image/ParameterState snapshot, then
+      runs WORKER through runOneShotOperation(). The whole-state result is
+      published only if the same image and exact input state are still current. */
   void runAreaComputation(
       const QString &message,
       const QString &description,
@@ -783,6 +806,9 @@ private:
   // Solver Queue
   TaskQueue m_solverQueue;
 
+  // Final-result one-shot operations share newest-request publication rules.
+  TaskQueue m_oneShotOperationQueue;
+
   // Session-local provenance for geometry fitting. The baseline is captured
   // only after an accepted solver result, so loaded/manual geometry is never
   // incorrectly advertised as a current automatic fit. Pending input state is
@@ -811,6 +837,10 @@ private:
 
   void trackBackgroundThread(QThread *thread);
   void shutdownBackgroundThreads();
+
+  // The workspace smoke probe exercises private one-shot publication rules.
+  friend void startWorkspaceChurnSmoke(ColorScreenApplication &app,
+                                       std::function<void()> completed);
   
 private slots:
   void onTriggerSolve(int reqId, std::shared_ptr<colorscreen::progress_info> progress, const QVariant &userData);

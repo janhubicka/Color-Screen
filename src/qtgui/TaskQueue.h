@@ -74,12 +74,15 @@ public:
    *        boolean argument is true only when the result is still the newest
    *        publishable request; cleanup in DONE must run regardless.
    * @param userData Optional metadata.
+   * @param started Optional GUI-thread callback invoked only when the request
+   *        actually leaves the pending state and starts.
    *
    * The task is managed by the queue's concurrency and timeout rules.
    */
   void runAsync (std::function<void (colorscreen::progress_info *)> worker,
                  std::function<void (bool publishResult)> done,
-                 const QVariant &userData = {});
+                 const QVariant &userData = {},
+                 std::function<void ()> started = nullptr);
 
   /** @return True if there are any active or pending tasks in the queue. */
   bool hasActiveTasks() const;

@@ -621,6 +621,11 @@ MainWindow::MainWindow(const QString &recoveryDirectory, QWidget *parent)
   connect(&m_solverQueue, &TaskQueue::progressFinished, this,
           &MainWindow::removeProgress);
 
+  connect(&m_oneShotOperationQueue, &TaskQueue::progressStarted, this,
+          &MainWindow::addProgress);
+  connect(&m_oneShotOperationQueue, &TaskQueue::progressFinished, this,
+          &MainWindow::removeProgress);
+
   // Initialize Color Optimizer Worker
   m_colorOptimizerThread = new QThread(this);
   m_colorOptimizerWorker = new ColorOptimizerWorker(m_scan);
@@ -681,6 +686,7 @@ MainWindow::~MainWindow() {
   m_closing = true;
   m_solverQueue.cancelAll();
   m_colorOptimizerQueue.cancelAll();
+  m_oneShotOperationQueue.cancelAll();
   for (const auto &entry : m_activeProgresses)
     if (entry.info)
       entry.info->cancel();
@@ -3724,6 +3730,8 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
   if (fileName.isEmpty())
     return;
 
+  // A final-result one-shot is tied to the current image snapshot.
+  m_oneShotOperationQueue.cancelAll();
   m_imageLoadPending = true;
   bool parameterDataLoaded = false;
   if (!suppressParamPrompt)
@@ -3994,6 +4002,10 @@ void MainWindow::saveRecentFiles() {
    NavigationView, refreshes all panels, and rebuilds the mode menu.
    Called by undo/redo commands and by changeParameters().  */
 void MainWindow::applyState(const ParameterState &state) {
+  // Final-result one-shot operations consume an exact document snapshot. Any
+  // accepted parameter change (including Undo/Redo) makes that result stale.
+  m_oneShotOperationQueue.cancelAll();
+
   const bool invalidateFocusAreas
       = m_scrToImgParams != state.scrToImg
         || !(m_rparams.scan_crop == state.rparams.scan_crop);
@@ -5708,11 +5720,62 @@ void MainWindow::startAreaSelection(const QString &message,
   statusBar()->showMessage(message);
 }
 
+/** Run one final-result operation with shared lifecycle policy.
+
+    Prerequisites and publication validation execute on the GUI thread. The
+    TaskQueue owns progress, cancellation and newest-request identity; WORKER
+    runs on Qt's thread pool. APPLYRESULT is called only after both the queue
+    and RESULTVALID approve publication. ONDONE restores transient UI for every
+    request that actually started, including cancelled and stale completions. */
+void MainWindow::runOneShotOperation(
+    OneShotOperation operation,
+    std::function<void(colorscreen::progress_info *)> worker) {
+  if (m_closing || !worker)
+    return;
+  if (operation.prerequisites && !operation.prerequisites())
+    return;
+
+  auto lifecycle =
+      std::make_shared<OneShotOperation>(std::move(operation));
+  const QString description = lifecycle->description;
+
+  // Final-result operations are intentionally replaceable rather than
+  // concurrent. A newer user action should stop wasting work immediately;
+  // TaskQueue's publication verdict remains a second stale-result gate.
+  m_oneShotOperationQueue.cancelAll();
+  m_oneShotOperationQueue.runAsync(
+      [description, worker = std::move(worker)](
+          colorscreen::progress_info *progress) mutable {
+        if (progress) {
+          const QByteArray taskName = description.toUtf8();
+          progress->set_task(
+              std::string(taskName.constData(),
+                          static_cast<std::size_t>(taskName.size())),
+              1);
+        }
+        worker(progress);
+      },
+      [this, lifecycle](bool publishResult) {
+        const bool valid =
+            publishResult && !m_closing &&
+            (!lifecycle->resultValid || lifecycle->resultValid());
+        if (valid && lifecycle->applyResult)
+          lifecycle->applyResult();
+        if (!m_closing && lifecycle->onDone)
+          lifecycle->onDone();
+      },
+      QVariant(),
+      [lifecycle]() {
+        if (lifecycle->onStart)
+          lifecycle->onStart();
+      });
+}
+
 /** Launch an area-based parameter computation.
-   Enters area selection mode with MESSAGE in the status bar.  When the user
-   draws a rectangle, calls ON_START, creates a progress tracker, runs WORKER
-   in a background thread, then pushes the modified state as an undoable change
-   with DESCRIPTION.  Calls ON_DONE on completion regardless of success.  */
+   The image and complete ParameterState are snapshotted after the rectangle is
+   chosen. The worker edits a private copy. A newer one-shot request, explicit
+   cancellation, image replacement, or any intervening document edit vetoes
+   publication, so an old whole-state snapshot can never overwrite newer work. */
 void MainWindow::runAreaComputation(
     const QString &message,
     const QString &description,
@@ -5723,42 +5786,32 @@ void MainWindow::runAreaComputation(
                        colorscreen::progress_info *)> worker) {
   startAreaSelection(message, [this, description, onStart, onDone,
                                worker](QRect area) {
-    if (area.width() <= 0 || area.height() <= 0)
+    if (area.width() <= 0 || area.height() <= 0 || !m_scan)
       return;
 
-    auto progress = std::make_shared<colorscreen::progress_info>();
-    progress->set_task(description.toUtf8().constData(), 1);
-    colorscreen::sub_task task(progress.get());
-    addProgress(progress);
-    if (onStart)
-      onStart();
+    const auto scan = m_scan;
+    const ParameterState baseline = getCurrentState();
+    auto result = std::make_shared<ParameterState>(baseline);
 
-    auto scan = m_scan;
-    auto state = getCurrentState();
+    OneShotOperation operation;
+    operation.description = description;
+    operation.prerequisites =
+        [this, scan]() { return !m_closing && m_scan == scan; };
+    operation.onStart = std::move(onStart);
+    operation.resultValid = [this, scan, baseline]() {
+      return m_scan == scan && getCurrentState() == baseline;
+    };
+    operation.applyResult = [this, result, description]() {
+      changeParameters(*result, description);
+    };
+    operation.onDone = std::move(onDone);
 
-    QFutureWatcher<ParameterState> *watcher =
-        new QFutureWatcher<ParameterState>(this);
-    connect(watcher, &QFutureWatcher<ParameterState>::finished, this,
-            [this, watcher, progress, description, onDone]() {
-              ParameterState newState = watcher->result();
-              const bool cancelled = progress && progress->pool_cancel();
-              if (!m_closing && !cancelled)
-                changeParameters(newState, description);
-              if (!m_closing)
-                removeProgress(progress);
-              if (!m_closing && onDone)
-                onDone();
-              watcher->deleteLater();
-            });
-
-    QFuture<ParameterState> future = QtConcurrent::run(
-        [scan, state, area, progress, worker]() mutable -> ParameterState {
-          worker(state, *scan,
-                 {area.x(), area.y(), area.width(), area.height()},
-                 progress.get());
-          return state;
+    runOneShotOperation(
+        std::move(operation),
+        [scan, result, area, worker](colorscreen::progress_info *progress) {
+          worker(*result, *scan,
+                 {area.x(), area.y(), area.width(), area.height()}, progress);
         });
-    watcher->setFuture(future);
   });
 }
 
@@ -5767,6 +5820,8 @@ void MainWindow::runAreaComputation(
    existing values).  Updates ImageWidget, NavigationView, gamut warning,
    undo history, and all panels.  Returns true on success.  */
 bool MainWindow::loadParameterFile(const QString &fileName) {
+  // Loading external parameters invalidates every final-result state snapshot.
+  m_oneShotOperationQueue.cancelAll();
   FILE *f = fopen(fileName.toUtf8().constData(), "r");
   if (!f) {
     QMessageBox::critical(this, "Error", "Could not open file.");
