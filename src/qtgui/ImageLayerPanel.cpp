@@ -33,7 +33,6 @@ void ImageLayerPanel::setupUi() {
       addSeparator(tr("Simulated image layer from RGB"));
   simulatedSectionToggle->setObjectName(
       QStringLiteral("SimulatedImageLayerToggle"));
-  QFormLayout *simulatedForm = m_currentGroupForm;
   QWidget *simulatedSection = simulatedSectionToggle->parentWidget();
   if (simulatedSection)
     simulatedSection = simulatedSection->parentWidget();
@@ -111,24 +110,18 @@ void ImageLayerPanel::setupUi() {
       });
   m_setInfraredAreaBtn->setObjectName(
       QStringLiteral("ImageLayerSetByInfraredButton"));
-
-  auto setSimulatedRowVisible = [simulatedForm](QWidget *field,
-                                                 bool visible) {
-    if (!field)
-      return;
-    field->setVisible(visible);
-    if (simulatedForm) {
-      if (QWidget *label = simulatedForm->labelForField(field))
-        label->setVisible(visible);
-    }
-  };
+  setParameterApplicability(
+      m_setInfraredAreaBtn, [this](const ParameterState &s) {
+        auto img = m_imageGetter();
+        return img && img->has_rgb() && img->has_grayscale_or_ir() &&
+               s.rparams.ignore_infrared;
+      });
 
   // The checkbox exists only when there is a real source choice. Likewise, do
   // not show the RGB mixer when the active image layer comes from a native
   // grayscale/IR channel, or when no RGB data exists to synthesize one.
   m_widgetStateUpdaters.push_back(
-      [this, simulatedSection, simulatedSectionToggle, enableSimulated,
-       setSimulatedRowVisible]() {
+      [this, simulatedSection, enableSimulated]() {
         const auto img = m_imageGetter();
         const ParameterState state = m_stateGetter();
         const bool hasRgb = img && img->has_rgb();
@@ -139,17 +132,7 @@ void ImageLayerPanel::setupUi() {
           m_ignoreInfraredCheck->setVisible(hasSourceChoice);
         if (simulatedSection)
           simulatedSection->setVisible(simulatedActive);
-        setSimulatedRowVisible(
-            m_setInfraredAreaBtn,
-            simulatedActive && simulatedSectionToggle->isChecked() &&
-                hasNativeLayer);
       });
-
-  // The generic section toggle changes child visibility directly. Reapply the
-  // channel-specific row visibility afterwards so an RGB-only capture never
-  // exposes the infrared-only calibration action.
-  connect(simulatedSectionToggle, &QToolButton::toggled, this,
-          [this]() { updateUI(); });
 }
 
 void ImageLayerPanel::onParametersRefreshed(const ParameterState &state) {

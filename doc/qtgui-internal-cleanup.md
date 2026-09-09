@@ -285,9 +285,11 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   refresh/update pairs in Capture, Screen, Geometry, Image Layer, Tiles, Color,
   Contact Copy and Sharpness. Keep lifetime/destruction-specific signal handling
   separate, and migrate any remaining ordinary pairs incrementally.
-- Make group visibility semantics explicit.  A collapsed group should not force
-  a child visible when that child is logically unavailable for the current
-  process or image type.
+- Keep group folding as presentation state only: a collapsed/expanded section
+  must compose with each row's logical applicability instead of overwriting it.
+  Image Layer's infrared-only calibration action now uses
+  `setParameterApplicability()` rather than a direct-visibility repair callback,
+  and workspace-churn smoke covers collapse/expand resurrection explicitly.
 - Introduce small helper objects for one-shot operations: prerequisites,
   description, progress/cancel policy, result validation and apply callback.
   Many current panel buttons repeat this lifecycle.
