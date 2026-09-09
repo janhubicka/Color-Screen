@@ -309,8 +309,10 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   replace-on-new-request cancellation plus TaskQueue publication ownership,
   final result validation and an apply callback. Area-based parameter
   computations (white balance, auto
-  levels, image-layer calibration and slanted-edge measurement) are the first
-  migrated users. They publish only while the captured image and complete
+  levels, image-layer calibration and slanted-edge measurement) were the first
+  migrated users. Flat-field analysis now follows the same lifecycle and its
+  former QObject/QThread/generation wrapper has been reduced to a synchronous
+  background helper. They publish only while the captured image and complete
   `ParameterState` snapshot are still current; any accepted document edit
   cancels them immediately. Workspace-churn smoke verifies that a racing
   cancelled completion performs cleanup but cannot publish. Keep migrating

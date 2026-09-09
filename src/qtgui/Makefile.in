@@ -185,7 +185,6 @@ am__objects_1 = colorscreen_qt-moc_MainWindow.$(OBJEXT) \
 	colorscreen_qt-moc_ColorOptimizerWorker.$(OBJEXT) \
 	colorscreen_qt-moc_CoordinateOptimizationWorker.$(OBJEXT) \
 	colorscreen_qt-moc_DetectScreenWorker.$(OBJEXT) \
-	colorscreen_qt-moc_FlatFieldWorker.$(OBJEXT) \
 	colorscreen_qt-moc_FinetuneWorker.$(OBJEXT) \
 	colorscreen_qt-moc_FinetuneMisregisteredWorker.$(OBJEXT) \
 	colorscreen_qt-moc_WorkerBase.$(OBJEXT) \
@@ -320,7 +319,6 @@ am__depfiles_remade =  \
 	./$(DEPDIR)/colorscreen_qt-moc_FinetuneImagesPanel.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_FinetuneMisregisteredWorker.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_FinetuneWorker.Po \
-	./$(DEPDIR)/colorscreen_qt-moc_FlatFieldWorker.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_FocusAnalysisWorker.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_GeometryPanel.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_GeometrySolverWorker.Po \
@@ -624,7 +622,6 @@ MOC_SOURCES = \
     moc_ColorOptimizerWorker.cpp \
     moc_CoordinateOptimizationWorker.cpp \
     moc_DetectScreenWorker.cpp \
-    moc_FlatFieldWorker.cpp \
     moc_FinetuneWorker.cpp \
     moc_FinetuneMisregisteredWorker.cpp \
     moc_WorkerBase.cpp \
@@ -863,7 +860,6 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_FinetuneImagesPanel.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_FinetuneMisregisteredWorker.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_FinetuneWorker.Po@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_FlatFieldWorker.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_FocusAnalysisWorker.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_GeometryPanel.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_GeometrySolverWorker.Po@am__quote@ # am--include-marker
@@ -1964,19 +1960,9 @@ colorscreen_qt-moc_DetectScreenWorker.obj: moc_DetectScreenWorker.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-moc_DetectScreenWorker.obj `if test -f 'moc_DetectScreenWorker.cpp'; then $(CYGPATH_W) 'moc_DetectScreenWorker.cpp'; else $(CYGPATH_W) '$(srcdir)/moc_DetectScreenWorker.cpp'; fi`
 
-colorscreen_qt-moc_FlatFieldWorker.o: moc_FlatFieldWorker.cpp
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-moc_FlatFieldWorker.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-moc_FlatFieldWorker.Tpo -c -o colorscreen_qt-moc_FlatFieldWorker.o `test -f 'moc_FlatFieldWorker.cpp' || echo '$(srcdir)/'`moc_FlatFieldWorker.cpp
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-moc_FlatFieldWorker.Tpo $(DEPDIR)/colorscreen_qt-moc_FlatFieldWorker.Po
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='moc_FlatFieldWorker.cpp' object='colorscreen_qt-moc_FlatFieldWorker.o' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-moc_FlatFieldWorker.o `test -f 'moc_FlatFieldWorker.cpp' || echo '$(srcdir)/'`moc_FlatFieldWorker.cpp
 
-colorscreen_qt-moc_FlatFieldWorker.obj: moc_FlatFieldWorker.cpp
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-moc_FlatFieldWorker.obj -MD -MP -MF $(DEPDIR)/colorscreen_qt-moc_FlatFieldWorker.Tpo -c -o colorscreen_qt-moc_FlatFieldWorker.obj `if test -f 'moc_FlatFieldWorker.cpp'; then $(CYGPATH_W) 'moc_FlatFieldWorker.cpp'; else $(CYGPATH_W) '$(srcdir)/moc_FlatFieldWorker.cpp'; fi`
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-moc_FlatFieldWorker.Tpo $(DEPDIR)/colorscreen_qt-moc_FlatFieldWorker.Po
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='moc_FlatFieldWorker.cpp' object='colorscreen_qt-moc_FlatFieldWorker.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-moc_FlatFieldWorker.obj `if test -f 'moc_FlatFieldWorker.cpp'; then $(CYGPATH_W) 'moc_FlatFieldWorker.cpp'; else $(CYGPATH_W) '$(srcdir)/moc_FlatFieldWorker.cpp'; fi`
 
 colorscreen_qt-moc_FinetuneWorker.o: moc_FinetuneWorker.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-moc_FinetuneWorker.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-moc_FinetuneWorker.Tpo -c -o colorscreen_qt-moc_FinetuneWorker.o `test -f 'moc_FinetuneWorker.cpp' || echo '$(srcdir)/'`moc_FinetuneWorker.cpp
@@ -2617,7 +2603,6 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_FinetuneImagesPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_FinetuneMisregisteredWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_FinetuneWorker.Po
-	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_FlatFieldWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_FocusAnalysisWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_GeometryPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_GeometrySolverWorker.Po
@@ -2768,7 +2753,6 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_FinetuneImagesPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_FinetuneMisregisteredWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_FinetuneWorker.Po
-	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_FlatFieldWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_FocusAnalysisWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_GeometryPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_GeometrySolverWorker.Po

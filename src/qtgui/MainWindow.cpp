@@ -6867,16 +6867,16 @@ void MainWindow::onCoordinateSystemManipulationFinished() {
   updateRegistrationActions();
 }
 
-/** Open file dialogs for white and optional black reference images,
-   then launch a FlatFieldWorker to compute backlight correction
-   parameters.  The worker runs in a background thread; results
-   arrive at onFlatFieldFinished.  */
+/** Open white/optional black references and launch one flat-field analysis.
+   The computation uses the shared final-result OneShotOperation lifecycle, so
+   document edits, replacement requests, cancellation and close all veto stale
+   publication without a dedicated QThread or generation counter. */
 void MainWindow::onFlatFieldRequested() {
-  QString filters =
+  const QString filters =
       "Images (*.tif *.tiff *.jpg *.jpeg *.raw *.dng *.iiq *.nef *.NEF *.cr2 "
       "*.CR2 *.eip *.arw *.ARW *.raf *.RAF *.arq *.ARQ *.csprj);;All Files "
       "(*)";
-  QString whiteFile = QFileDialog::getOpenFileName(
+  const QString whiteFile = QFileDialog::getOpenFileName(
       this, "Choose White Reference", m_currentImageFile, filters);
   if (whiteFile.isEmpty())
     return;
@@ -6891,63 +6891,44 @@ void MainWindow::onFlatFieldRequested() {
                                                m_currentImageFile, filters);
     }
 
-    // Create progress info
-    auto progress = std::make_shared<colorscreen::progress_info>();
-    progress->set_task("Flat field analysis", 100);
-    this->addProgress(progress);
+    const colorscreen::luminosity_t gamma = m_rparams.gamma;
+    const colorscreen::image_data::demosaicing_t demosaic = m_rparams.demosaic;
+    auto result = std::make_shared<FlatFieldAnalysisResult>();
 
-    // Create worker and thread
-    const uint64_t generation = ++m_flatFieldGeneration;
-    FlatFieldWorker *worker = new FlatFieldWorker(
-        whiteFile, blackFile, m_rparams.gamma, m_rparams.demosaic, progress);
-    QThread *thread = new QThread(this);
-    worker->moveToThread(thread);
-    trackBackgroundThread(thread);
+    OneShotOperation operation;
+    operation.description = tr("Flat field analysis");
+    operation.resultValid = [this, gamma, demosaic]() {
+      return m_rparams.gamma == gamma && m_rparams.demosaic == demosaic;
+    };
+    operation.applyResult = [this, result]() {
+      if (!result->success || !result->correction) {
+        if (!result->cancelled) {
+          QMessageBox::warning(
+              this, tr("Flat Field"),
+              result->error.isEmpty()
+                  ? tr("Flat field analysis failed.")
+                  : tr("Flat field analysis failed: %1").arg(result->error));
+        }
+        return;
+      }
 
-    // Connect signals
-    connect(thread, &QThread::started, worker, &FlatFieldWorker::run);
-    connect(worker, &FlatFieldWorker::finished, thread, &QThread::quit,
-          Qt::DirectConnection);
-    connect(thread, &QThread::finished, worker, &QObject::deleteLater);
-    connect(thread, &QThread::finished, thread, &QObject::deleteLater);
+      ParameterState newState = getCurrentState();
+      newState.rparams.backlight_correction = result->correction;
+      changeParameters(newState, tr("Flat field"));
+      QMessageBox::information(this, tr("Flat Field"),
+                               tr("Flat field analysis successful."));
+    };
 
-    // Connect results
-    connect(worker, &FlatFieldWorker::finished, this,
-            [this, progress, generation](
-                bool success,
-                std::shared_ptr<colorscreen::backlight_correction_parameters>
-                    result) {
-              if (!m_closing && generation == m_flatFieldGeneration &&
-                  (!progress || !progress->pool_cancel()))
-                onFlatFieldFinished(success, result);
-              if (!m_closing)
-                removeProgress(progress);
-            });
-
-    thread->start();
+    runOneShotOperation(
+        std::move(operation),
+        [whiteFile, blackFile, gamma, demosaic, result](
+            colorscreen::progress_info *progress) {
+          *result = FlatFieldWorker::analyze(whiteFile, blackFile, gamma,
+                                             demosaic, progress);
+        });
   });
 }
 
-/** Handle completion of flat field analysis.
-   On success, stores the backlight_correction in the parameter state
-   with undo support and shows a success message.  */
-void MainWindow::onFlatFieldFinished(
-    bool success,
-    std::shared_ptr<colorscreen::backlight_correction_parameters> result) {
-  if (!success || !result) {
-    QMessageBox::warning(this, "Flat Field", "Flat field analysis failed.");
-    return;
-  }
-
-  // Update parameters with undo support
-  ParameterState newState = getCurrentState();
-  newState.rparams.backlight_correction = result;
-
-  changeParameters(newState, "Flat field");
-
-  QMessageBox::information(this, "Flat Field",
-                           "Flat field analysis successful.");
-}
 /** Toggle focus analysis mode.
    When CHECKED is true, saves the current tool, switches to AddPoint
    mode, and sets a flag so the next point-add triggers a focus analysis

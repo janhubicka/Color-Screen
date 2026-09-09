@@ -655,7 +655,6 @@ private slots:
   void onAutodetectScreen();
   void onFlatFieldRequested();
   void onDetectScreenFinished(bool success, colorscreen::detected_screen result, colorscreen::solver_parameters solverParams);
-  void onFlatFieldFinished(bool success, std::shared_ptr<colorscreen::backlight_correction_parameters> result);
   void onMirrorHorizontally(bool checked);
 
   // Helper to update color checkbox state and visibility
@@ -772,7 +771,6 @@ private:
   // Generations for replaceable background results. Starting a newer run makes
   // an older completion stale without conflating unrelated operation types.
   uint64_t m_detectScreenGeneration = 0;
-  uint64_t m_flatFieldGeneration = 0;
   uint64_t m_focusAnalysisGeneration = 0;
   uint64_t m_adaptiveSharpeningGeneration = 0;
   int m_coordinateAutodetectRequest = 0;
