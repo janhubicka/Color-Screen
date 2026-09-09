@@ -341,6 +341,10 @@ QPushButton *mtfFitButton = inspector->findChild<QPushButton *>(
     QStringLiteral("MtfFitButton"));
 QToolButton *scannerCameraToggle = inspector->findChild<QToolButton *>(
     QStringLiteral("ScannerCameraPropertiesToggle"));
+QPushButton *imageLayerInfraredButton = inspector->findChild<QPushButton *>(
+    QStringLiteral("ImageLayerSetByInfraredButton"));
+QToolButton *imageLayerToggle = inspector->findChild<QToolButton *>(
+    QStringLiteral("SimulatedImageLayerToggle"));
 QWidget *mtfUseMeasuredRow =
     mtfUseMeasured ? mtfUseMeasured->parentWidget() : nullptr;
 const bool hasMtfMeasurements =
@@ -456,6 +460,41 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
           return;
         }
         scannerCameraToggle->setChecked(scannerPropertiesWereExpanded);
+
+        // Image Layer used to repair this row with a section-toggle callback.
+        // It now follows the same applicability contract as measured-MTF rows:
+        // folding is presentation state and cannot override logical availability.
+        const ParameterState imageLayerState = first->documentStateSnapshot();
+        const auto imageLayerImage = first->sharedImageData();
+        const bool infraredActionApplicable =
+            imageLayerImage && imageLayerImage->has_rgb() &&
+            imageLayerImage->has_grayscale_or_ir() &&
+            imageLayerState.rparams.ignore_infrared;
+        const QVariant infraredApplicable =
+            imageLayerInfraredButton
+                ? imageLayerInfraredButton->property("parameterApplicable")
+                : QVariant();
+        if (!imageLayerInfraredButton || !imageLayerToggle ||
+            !infraredApplicable.isValid() ||
+            infraredApplicable.toBool() != infraredActionApplicable) {
+          fail(QStringLiteral(
+              "Workspace churn lost Image Layer applicability metadata"));
+          return;
+        }
+        const bool imageLayerWasExpanded = imageLayerToggle->isChecked();
+        imageLayerToggle->setChecked(false);
+        if (!imageLayerInfraredButton->isHidden()) {
+          fail(QStringLiteral(
+              "Collapsing Image Layer left the infrared-only action visible"));
+          return;
+        }
+        imageLayerToggle->setChecked(true);
+        if (imageLayerInfraredButton->isHidden() != !infraredActionApplicable) {
+          fail(QStringLiteral(
+              "Expanding Image Layer resurrected an inapplicable infrared action"));
+          return;
+        }
+        imageLayerToggle->setChecked(imageLayerWasExpanded);
 
         if (!redStripWidth || !greenStripWidth ||
             redStripWidth->property("parameterKey").toString() !=
