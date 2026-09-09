@@ -323,9 +323,16 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   avoids QtConcurrent's inline construct-and-submit path, which newer TSan runs
   reported as a vptr construction/execution race. Completion still uses a
   `QFutureWatcher` backed by `QPromise`, so destroying the owning queue safely
-  disconnects GUI publication while the cooperative worker winds down. Keep migrating
-  custom one-shot `QThread` workers incrementally where their intermediate
-  signal requirements allow the same policy without obscuring the worker API.
+  disconnects GUI publication while the cooperative worker winds down.
+  Single-area registration finetune now follows the same final-result lifecycle:
+  its helper returns only points produced from the captured solver/render/geometry
+  snapshot, and exact scan/`ParameterState` plus finetune-control validation
+  prevents those points from being appended after an intervening edit or a
+  change to the operation's spacing/tolerance controls. `FinetuneMisregisteredWorker` remains
+  a dedicated `QThread` because its point and geometry batches are intentionally
+  visible while it is still running. Keep migrating custom one-shot `QThread`
+  workers incrementally where their intermediate signal requirements allow the
+  same policy without obscuring the worker API.
 - Separate "enabled" from "applicable/visible" in helper APIs.  Greyed controls
   are useful when they teach a prerequisite; hidden controls are useful when a
   whole concept is meaningless for the current process.  A lambda called

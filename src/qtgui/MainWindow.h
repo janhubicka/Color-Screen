@@ -353,8 +353,6 @@ private slots:
                     colorscreen::point_t color);
   void onAreaSelected(QRect area);
   void startAreaSelection(const QString &message, std::function<void(QRect)> callback);
-  void onFinetuneFinished(bool success, std::vector<colorscreen::solver_parameters::solver_point_t> points,
-                          QThread *thread, std::shared_ptr<colorscreen::progress_info> progress);
   void onSetCenter(colorscreen::point_t imgPos);
   void onPointManipulationStarted();
   void onCoordinateSystemManipulationStarted();
