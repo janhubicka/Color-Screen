@@ -25,10 +25,12 @@
 #include <QStringList>
 #include <QTemporaryDir>
 #include <QTimer>
+#include <QThread>
 #include <QToolBar>
 #include <QToolButton>
 #include <QWidget>
 
+#include <atomic>
 #include <functional>
 #include <memory>
 #include <utility>
@@ -50,6 +52,10 @@ struct WorkspaceChurnState {
   bool expectedFirstScanMirror = false;
   bool expectedSecondScanMirror = false;
   bool expectedStatesSet = false;
+  bool oneShotStarted = false;
+  bool oneShotApplied = false;
+  bool oneShotDone = false;
+  std::atomic_bool oneShotSawCancellation{false};
   std::function<void()> completed;
 };
 
@@ -790,6 +796,33 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
           return;
         }
 
+        // A state-mutating one-shot must be cancelled as soon as the document
+        // accepts another parameter snapshot. Its racing completion must still
+        // execute cleanup but must never publish the stale result.
+        MainWindow::OneShotOperation oneShotSmoke;
+        oneShotSmoke.description = QStringLiteral("One-shot cancellation smoke");
+        oneShotSmoke.prerequisites = [first]() { return first != nullptr; };
+        oneShotSmoke.onStart = [state]() { state->oneShotStarted = true; };
+        oneShotSmoke.resultValid = []() { return true; };
+        oneShotSmoke.applyResult = [state]() { state->oneShotApplied = true; };
+        oneShotSmoke.onDone = [state]() { state->oneShotDone = true; };
+        first->runOneShotOperation(
+            std::move(oneShotSmoke),
+            [state](colorscreen::progress_info *progress) {
+              for (int i = 0; i < 100; ++i) {
+                if (progress && progress->pool_cancel()) {
+                  state->oneShotSawCancellation.store(true);
+                  return;
+                }
+                QThread::msleep(2);
+              }
+            });
+        if (!state->oneShotStarted) {
+          fail(QStringLiteral(
+              "Workspace churn one-shot request did not enter its start lifecycle"));
+          return;
+        }
+
         // Give the source a distinctive processing-state sentinel without
         // dirtying the document (applyState is the same path used by
         // undo/redo). Track only the value this smoke test changes: under
@@ -815,6 +848,19 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
       }
 
       case 1: {
+        if (!state->oneShotDone) {
+          if (retryOrFail(QStringLiteral(
+                  "Workspace churn one-shot cleanup did not finish after document-state cancellation")))
+            return;
+          return;
+        }
+        if (state->oneShotApplied ||
+            !state->oneShotSawCancellation.load()) {
+          fail(QStringLiteral(
+              "Workspace churn allowed a cancelled one-shot result to publish"));
+          return;
+        }
+
         if (!second || !view || workspace->isTabbedView() ||
             !hasExactWrappers()) {
           fail(QStringLiteral(
