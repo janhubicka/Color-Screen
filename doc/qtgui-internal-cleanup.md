@@ -188,6 +188,20 @@ transaction on interruption; uncommitted area/measurement gestures are simply
 discarded. The ordinary Qt smoke path contains synthetic lost-release and
 tool-switch probes for the primary canvas and interactive curves.
 
+### Dynamic inspector status text resized the canvas
+
+Registration updates change both the persistent Workflow recommendation and
+Geometry's threshold/status messages. Those labels used their text width as a
+horizontal size hint, so new point batches could make the right inspector ask
+the main splitter for more or less width and visibly resize the image canvas.
+Dynamic Workflow and Geometry status labels now wrap within the existing
+inspector allocation and ignore their horizontal size hint. The registration
+visibility checkbox also keeps a stable caption; its changing point count lives
+in the tooltip and Workflow summary instead of participating in layout.
+Point/solver progress may change text and row height, but it must not move the
+user-selected main image/inspector divider. Workspace-churn smoke checks this
+sizing policy.
+
 ### Screen-coordinate editing required geometry it was supposed to create
 
 The toolbar previously enabled `Screen coordinates` only after
