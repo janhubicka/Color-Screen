@@ -1,7 +1,36 @@
 #include "TaskQueue.h"
 #include <QDebug>
+#include <QFutureWatcher>
 #include <QMutexLocker>
+#include <QPromise>
+#include <QRunnable>
+#include <QThreadPool>
 #include "Logging.h"
+
+namespace {
+
+/** A fully constructed fire-and-forget runnable for TaskQueue workers.
+
+    QtConcurrent's helper constructs and submits its internal QRunnable inside
+    one call. ThreadSanitizer can observe a pool thread entering the virtual
+    run() while that internal object's vptr construction is still visible on
+    the submitting thread. Constructing this object first and only then calling
+    QThreadPool::start() gives the handoff an explicit synchronization point. */
+class TaskQueueRunnable final : public QRunnable {
+public:
+  explicit TaskQueueRunnable(std::function<void()> function)
+      : m_function(std::move(function)) {
+    setAutoDelete(true);
+  }
+
+  /** Execute the already-constructed worker closure on the pool thread. */
+  void run() override { m_function(); }
+
+private:
+  std::function<void()> m_function;
+};
+
+} // namespace
 
 TaskQueue::TaskQueue(QObject *parent) : QObject(parent)
 {
@@ -198,19 +227,27 @@ void TaskQueue::runAsync (std::function<void (colorscreen::progress_info *)> wor
                            started = std::move(started)](int reqId, std::shared_ptr<colorscreen::progress_info> progress) mutable {
     if (started)
       started();
-    /* Launch worker on Qt thread-pool; progress is read-only in worker.  */
-    auto *watcher = new QFutureWatcher<void> (this);
-    connect (watcher, &QFutureWatcher<void>::finished, this,
-             [this, reqId, watcher, done = std::move (done)] () mutable
-             {
-               watcher->deleteLater ();
-               const bool publishResult = reportFinished (reqId, true);
-               done (publishResult);
-             });
-    watcher->setFuture (
-        QtConcurrent::run (
-            [w = std::move (worker), progress] () mutable
-            { w (progress.get ()); }));
+    /* Keep completion on this object's GUI thread, but submit a runnable only
+       after its construction is complete. QPromise preserves QFutureWatcher
+       lifetime/disconnect behavior when TaskQueue is destroyed mid-operation. */
+    auto *watcher = new QFutureWatcher<void>(this);
+    auto promise = std::make_shared<QPromise<void>>();
+    const QFuture<void> future = promise->future();
+    promise->start();
+    connect(watcher, &QFutureWatcher<void>::finished, this,
+            [this, reqId, watcher, done = std::move(done)]() mutable {
+              watcher->deleteLater();
+              const bool publishResult = reportFinished(reqId, true);
+              done(publishResult);
+            });
+    watcher->setFuture(future);
+
+    auto *runnable = new TaskQueueRunnable(
+        [w = std::move(worker), progress, promise]() mutable {
+          w(progress.get());
+          promise->finish();
+        });
+    QThreadPool::globalInstance()->start(runnable);
   });
 }
 

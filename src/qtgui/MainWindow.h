@@ -362,7 +362,6 @@ private slots:
   void updateRegistrationActions();
   void maybeTriggerAutoSolver();
   void onFocusAnalysisRequested(bool checked, uint64_t flags);
-  void onFocusAnalysisFinished(bool success, colorscreen::finetune_result result);
   void onFindFocusAreasRequested();
   void onAnalyzeFocusAreasRequested(uint64_t flags);
   void onAdaptiveSharpeningRequested(const AdaptiveSharpeningParameters &parameters);
@@ -771,7 +770,6 @@ private:
   // Generations for replaceable background results. Starting a newer run makes
   // an older completion stale without conflating unrelated operation types.
   uint64_t m_detectScreenGeneration = 0;
-  uint64_t m_focusAnalysisGeneration = 0;
   uint64_t m_adaptiveSharpeningGeneration = 0;
   int m_coordinateAutodetectRequest = 0;
   std::shared_ptr<colorscreen::progress_info> m_coordinateAutodetectProgress;

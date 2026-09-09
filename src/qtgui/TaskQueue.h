@@ -6,8 +6,6 @@
 #include <QRecursiveMutex>
 #include <QElapsedTimer>
 #include <QVariant>
-#include <QFutureWatcher>
-#include <QtConcurrent>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -78,6 +76,8 @@ public:
    *        actually leaves the pending state and starts.
    *
    * The task is managed by the queue's concurrency and timeout rules.
+   * Background dispatch uses an explicitly constructed QRunnable so the object
+   * is fully published to QThreadPool before a worker can execute it.
    */
   void runAsync (std::function<void (colorscreen::progress_info *)> worker,
                  std::function<void (bool publishResult)> done,

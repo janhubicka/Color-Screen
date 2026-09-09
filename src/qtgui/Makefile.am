@@ -101,7 +101,6 @@ MOC_SOURCES = \
     moc_HistogramWorker.cpp \
     moc_MultiLineTabWidget.cpp \
     moc_ScalableImageLabel.cpp \
-    moc_FocusAnalysisWorker.cpp \
     moc_AdaptiveSharpeningWorker.cpp \
     moc_AdaptiveSharpeningChart.cpp \
     moc_RenderDialog.cpp \

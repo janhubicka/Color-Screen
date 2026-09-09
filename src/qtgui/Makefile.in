@@ -207,7 +207,6 @@ am__objects_1 = colorscreen_qt-moc_MainWindow.$(OBJEXT) \
 	colorscreen_qt-moc_HistogramWorker.$(OBJEXT) \
 	colorscreen_qt-moc_MultiLineTabWidget.$(OBJEXT) \
 	colorscreen_qt-moc_ScalableImageLabel.$(OBJEXT) \
-	colorscreen_qt-moc_FocusAnalysisWorker.$(OBJEXT) \
 	colorscreen_qt-moc_AdaptiveSharpeningWorker.$(OBJEXT) \
 	colorscreen_qt-moc_AdaptiveSharpeningChart.$(OBJEXT) \
 	colorscreen_qt-moc_RenderDialog.$(OBJEXT) \
@@ -319,7 +318,6 @@ am__depfiles_remade =  \
 	./$(DEPDIR)/colorscreen_qt-moc_FinetuneImagesPanel.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_FinetuneMisregisteredWorker.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_FinetuneWorker.Po \
-	./$(DEPDIR)/colorscreen_qt-moc_FocusAnalysisWorker.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_GeometryPanel.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_GeometrySolverWorker.Po \
 	./$(DEPDIR)/colorscreen_qt-moc_HDCurveWidget.Po \
@@ -644,7 +642,6 @@ MOC_SOURCES = \
     moc_HistogramWorker.cpp \
     moc_MultiLineTabWidget.cpp \
     moc_ScalableImageLabel.cpp \
-    moc_FocusAnalysisWorker.cpp \
     moc_AdaptiveSharpeningWorker.cpp \
     moc_AdaptiveSharpeningChart.cpp \
     moc_RenderDialog.cpp \
@@ -860,7 +857,6 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_FinetuneImagesPanel.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_FinetuneMisregisteredWorker.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_FinetuneWorker.Po@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_FocusAnalysisWorker.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_GeometryPanel.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_GeometrySolverWorker.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-moc_HDCurveWidget.Po@am__quote@ # am--include-marker
@@ -2272,20 +2268,6 @@ colorscreen_qt-moc_ScalableImageLabel.obj: moc_ScalableImageLabel.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-moc_ScalableImageLabel.obj `if test -f 'moc_ScalableImageLabel.cpp'; then $(CYGPATH_W) 'moc_ScalableImageLabel.cpp'; else $(CYGPATH_W) '$(srcdir)/moc_ScalableImageLabel.cpp'; fi`
 
-colorscreen_qt-moc_FocusAnalysisWorker.o: moc_FocusAnalysisWorker.cpp
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-moc_FocusAnalysisWorker.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-moc_FocusAnalysisWorker.Tpo -c -o colorscreen_qt-moc_FocusAnalysisWorker.o `test -f 'moc_FocusAnalysisWorker.cpp' || echo '$(srcdir)/'`moc_FocusAnalysisWorker.cpp
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-moc_FocusAnalysisWorker.Tpo $(DEPDIR)/colorscreen_qt-moc_FocusAnalysisWorker.Po
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='moc_FocusAnalysisWorker.cpp' object='colorscreen_qt-moc_FocusAnalysisWorker.o' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-moc_FocusAnalysisWorker.o `test -f 'moc_FocusAnalysisWorker.cpp' || echo '$(srcdir)/'`moc_FocusAnalysisWorker.cpp
-
-colorscreen_qt-moc_FocusAnalysisWorker.obj: moc_FocusAnalysisWorker.cpp
-@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-moc_FocusAnalysisWorker.obj -MD -MP -MF $(DEPDIR)/colorscreen_qt-moc_FocusAnalysisWorker.Tpo -c -o colorscreen_qt-moc_FocusAnalysisWorker.obj `if test -f 'moc_FocusAnalysisWorker.cpp'; then $(CYGPATH_W) 'moc_FocusAnalysisWorker.cpp'; else $(CYGPATH_W) '$(srcdir)/moc_FocusAnalysisWorker.cpp'; fi`
-@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-moc_FocusAnalysisWorker.Tpo $(DEPDIR)/colorscreen_qt-moc_FocusAnalysisWorker.Po
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='moc_FocusAnalysisWorker.cpp' object='colorscreen_qt-moc_FocusAnalysisWorker.obj' libtool=no @AMDEPBACKSLASH@
-@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-moc_FocusAnalysisWorker.obj `if test -f 'moc_FocusAnalysisWorker.cpp'; then $(CYGPATH_W) 'moc_FocusAnalysisWorker.cpp'; else $(CYGPATH_W) '$(srcdir)/moc_FocusAnalysisWorker.cpp'; fi`
-
 colorscreen_qt-moc_AdaptiveSharpeningWorker.o: moc_AdaptiveSharpeningWorker.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-moc_AdaptiveSharpeningWorker.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-moc_AdaptiveSharpeningWorker.Tpo -c -o colorscreen_qt-moc_AdaptiveSharpeningWorker.o `test -f 'moc_AdaptiveSharpeningWorker.cpp' || echo '$(srcdir)/'`moc_AdaptiveSharpeningWorker.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-moc_AdaptiveSharpeningWorker.Tpo $(DEPDIR)/colorscreen_qt-moc_AdaptiveSharpeningWorker.Po
@@ -2603,7 +2585,6 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_FinetuneImagesPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_FinetuneMisregisteredWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_FinetuneWorker.Po
-	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_FocusAnalysisWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_GeometryPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_GeometrySolverWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_HDCurveWidget.Po
@@ -2753,7 +2734,6 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_FinetuneImagesPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_FinetuneMisregisteredWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_FinetuneWorker.Po
-	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_FocusAnalysisWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_GeometryPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_GeometrySolverWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-moc_HDCurveWidget.Po

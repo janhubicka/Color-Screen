@@ -34,6 +34,7 @@
 #include <QToolBar>
 #include <QVBoxLayout>
 #include <QVariant>
+#include <QtConcurrent>
 
 #include <algorithm>
 #include <functional>
