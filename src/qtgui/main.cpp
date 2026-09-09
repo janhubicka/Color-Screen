@@ -7,6 +7,7 @@
 #include "ToneCurveWidget.h"
 #include "CoordinateTransformer.h"
 #include "DocumentLifecycleSmoke.h"
+#include "FocusAnalysisWorker.h"
 #include "FlatFieldWorker.h"
 #include "WorkspaceChurnSmoke.h"
 #include "WorkspaceWindow.h"
@@ -106,6 +107,15 @@ bool runBetaInvariantSmoke() {
   tabs.setCurrentIndex(secondTab);
   if (tabs.currentIndex() != secondTab)
     return fail("logically visible tab stayed unavailable under hidden ancestor");
+
+  // Focus analysis is now a plain background helper. Missing input must fail
+  // synchronously rather than depending on QObject/QThread signal delivery.
+  colorscreen::finetune_parameters focusParams;
+  const FocusAnalysisResult missingFocus = FocusAnalysisWorker::analyze(
+      colorscreen::render_parameters(), colorscreen::scr_to_img_parameters(),
+      std::shared_ptr<colorscreen::image_data>(), {0, 0}, focusParams, nullptr);
+  if (missingFocus.success || missingFocus.cancelled)
+    return fail("focus-analysis helper accepted a missing scan");
 
   // Exercise the real MainWindow -> ChangeParametersCommand -> QUndoStack
   // path. Two updates from one stable parameter key must coalesce, while an

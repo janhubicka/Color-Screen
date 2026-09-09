@@ -5609,37 +5609,47 @@ void MainWindow::onPointAdded(colorscreen::point_t imgPos,
                     colorscreen::finetune_verbose |
                     colorscreen::finetune_produce_images;
 
-    auto progress = std::make_shared<colorscreen::progress_info>();
-    progress->set_task("Focus analysis", 0);
-    addProgress(progress);
+    const std::shared_ptr<colorscreen::image_data> scan = m_scan;
+    const ParameterState baseline = getCurrentState();
+    auto result = std::make_shared<FocusAnalysisResult>();
 
-    const uint64_t generation = ++m_focusAnalysisGeneration;
-    FocusAnalysisWorker *worker = new FocusAnalysisWorker(
-        m_rparams, m_scrToImgParams, m_scan, imgPos, fparam, progress);
-    QThread *thread = new QThread(this);
-    worker->moveToThread(thread);
-    trackBackgroundThread(thread);
+    OneShotOperation operation;
+    operation.description = tr("Focus analysis");
+    operation.resultValid = [this, scan, baseline]() {
+      return m_scan == scan && getCurrentState() == baseline;
+    };
+    operation.applyResult = [this, result]() {
+      if (!result->success) {
+        if (!result->cancelled)
+          statusBar()->showMessage(tr("Focus analysis failed"), 3000);
+        return;
+      }
 
-    connect(thread, &QThread::started, worker, &FocusAnalysisWorker::run);
-    connect(worker, &FocusAnalysisWorker::finished, thread, &QThread::quit,
-          Qt::DirectConnection);
-    connect(thread, &QThread::finished, worker, &QObject::deleteLater);
-    connect(thread, &QThread::finished, thread, &QObject::deleteLater);
-    connect(worker, &FocusAnalysisWorker::finished, this,
-            [this, progress, generation](bool success,
-                                         colorscreen::finetune_result result) {
-              const bool cancelled = progress && progress->pool_cancel();
-              if (!m_closing && generation == m_focusAnalysisGeneration) {
-                if (!cancelled)
-                  onFocusAnalysisFinished(success, result);
-                else if (m_sharpnessPanel)
-                  m_sharpnessPanel->setFocusAnalysisChecked(false);
-              }
-              if (!m_closing)
-                removeProgress(progress);
-            });
+      ParameterState newState = getCurrentState();
+      newState.rparams.sharpen.scanner_mtf.sigma =
+          result->finetune.scanner_mtf_sigma;
+      newState.rparams.sharpen.scanner_mtf.defocus =
+          result->finetune.scanner_mtf_defocus;
+      newState.rparams.sharpen.scanner_mtf.blur_diameter =
+          result->finetune.scanner_mtf_blur_diameter;
+      changeParameters(newState, tr("Focus analysis"));
+      if (m_sharpnessPanel)
+        m_sharpnessPanel->updateFinetuneImages(result->finetune);
+      statusBar()->showMessage(tr("Focus analysis complete"), 3000);
+    };
+    operation.onDone = [this]() {
+      if (m_sharpnessPanel)
+        m_sharpnessPanel->setFocusAnalysisChecked(false);
+    };
 
-    thread->start();
+    runOneShotOperation(
+        std::move(operation),
+        [rparams = baseline.rparams, scrToImg = baseline.scrToImg, scan,
+         imgPos, fparam, result](colorscreen::progress_info *progress) mutable {
+          *result = FocusAnalysisWorker::analyze(
+              std::move(rparams), std::move(scrToImg), scan, imgPos,
+              std::move(fparam), progress);
+        });
     return;
   }
 
@@ -6946,36 +6956,6 @@ void MainWindow::onFocusAnalysisRequested(bool checked, uint64_t flags) {
   } else {
     restoreInteractionMode();
     statusBar()->clearMessage();
-  }
-}
-
-/** Handle completion of focus analysis.
-   On success, applies the measured scanner MTF parameters (sigma, defocus,
-   blur_diameter) to the render parameters and pushes an undo command.
-   Updates the sharpness panel's finetune diagnostic images.  */
-void MainWindow::onFocusAnalysisFinished(bool success,
-                                         colorscreen::finetune_result res) {
-  if (m_sharpnessPanel) {
-    m_sharpnessPanel->setFocusAnalysisChecked(false);
-  }
-
-  if (success) {
-    ParameterState oldState = getCurrentState();
-    m_rparams.sharpen.scanner_mtf.sigma = res.scanner_mtf_sigma;
-    m_rparams.sharpen.scanner_mtf.defocus = res.scanner_mtf_defocus;
-    m_rparams.sharpen.scanner_mtf.blur_diameter = res.scanner_mtf_blur_diameter;
-
-    ParameterState newState = getCurrentState();
-    m_undoStack->push(new ChangeParametersCommand(this, oldState, newState,
-                                                  "Focus analysis"));
-    m_imageWidget->updateParameters(&m_rparams, &m_scrToImgParams,
-                                    &m_detectParams, &m_renderTypeParams,
-                                    &m_solverParams);
-    m_sharpnessPanel->updateFinetuneImages(res);
-    updateUIFromState(newState);
-    statusBar()->showMessage(tr("Focus analysis complete"), 3000);
-  } else {
-    statusBar()->showMessage(tr("Focus analysis failed"), 3000);
   }
 }
 

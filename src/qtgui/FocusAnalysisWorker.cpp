@@ -1,26 +1,29 @@
 #include "FocusAnalysisWorker.h"
-#include "../libcolorscreen/include/finetune.h"
 
-FocusAnalysisWorker::FocusAnalysisWorker(colorscreen::render_parameters rparams,
-                                         colorscreen::scr_to_img_parameters scrToImg,
-                                         std::shared_ptr<colorscreen::image_data> scan,
-                                         colorscreen::point_t point,
-                                         colorscreen::finetune_parameters fparam,
-                                         std::shared_ptr<colorscreen::progress_info> progress)
-    : m_rparams(rparams), m_scrToImg(scrToImg), m_scan(scan),
-      m_point(point), m_fparam(fparam), m_progress(progress) {
-}
+#include "../libcolorscreen/include/imagedata.h"
 
-void FocusAnalysisWorker::run() {
-  std::vector<colorscreen::point_t> points = {m_point};
-  
-  colorscreen::finetune_result res = colorscreen::finetune(
-      m_rparams, m_scrToImg, *m_scan, points, nullptr, m_fparam, m_progress.get());
-  
-  if (m_progress && m_progress->cancelled()) {
-    emit finished(false, res);
-    return;
+#include <vector>
+
+/** Analyze one selected image point for scanner/process focus parameters. */
+FocusAnalysisResult FocusAnalysisWorker::analyze(
+    colorscreen::render_parameters rparams,
+    colorscreen::scr_to_img_parameters scrToImg,
+    std::shared_ptr<colorscreen::image_data> scan,
+    colorscreen::point_t point, colorscreen::finetune_parameters fparam,
+    colorscreen::progress_info *progress) {
+  FocusAnalysisResult result;
+  if (!scan)
+    return result;
+  if (progress && progress->pool_cancel()) {
+    result.cancelled = true;
+    return result;
   }
-  
-  emit finished(res.success, res);
+
+  const std::vector<colorscreen::point_t> points = {point};
+  result.finetune = colorscreen::finetune(rparams, scrToImg, *scan, points,
+                                          nullptr, fparam, progress);
+  result.cancelled = progress &&
+      (progress->pool_cancel() || progress->cancelled());
+  result.success = !result.cancelled && result.finetune.success;
+  return result;
 }

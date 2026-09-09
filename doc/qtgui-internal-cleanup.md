@@ -312,10 +312,18 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   levels, image-layer calibration and slanted-edge measurement) were the first
   migrated users. Flat-field analysis now follows the same lifecycle and its
   former QObject/QThread/generation wrapper has been reduced to a synchronous
-  background helper. They publish only while the captured image and complete
-  `ParameterState` snapshot are still current; any accepted document edit
+  background helper. Point-based focus analysis now uses the same lifecycle as
+  well: the old QObject/QThread/generation wrapper is gone, and an exact
+  image/`ParameterState` snapshot gate prevents stale MTF values from being
+  applied after an unrelated edit. These operations publish only while their
+  captured prerequisites are still current; any accepted document edit
   cancels them immediately. Workspace-churn smoke verifies that a racing
-  cancelled completion performs cleanup but cannot publish. Keep migrating
+  cancelled completion performs cleanup but cannot publish. `TaskQueue::runAsync`
+  now constructs its `QRunnable` fully before handing it to `QThreadPool`; this
+  avoids QtConcurrent's inline construct-and-submit path, which newer TSan runs
+  reported as a vptr construction/execution race. Completion still uses a
+  `QFutureWatcher` backed by `QPromise`, so destroying the owning queue safely
+  disconnects GUI publication while the cooperative worker winds down. Keep migrating
   custom one-shot `QThread` workers incrementally where their intermediate
   signal requirements allow the same policy without obscuring the worker API.
 - Separate "enabled" from "applicable/visible" in helper APIs.  Greyed controls
