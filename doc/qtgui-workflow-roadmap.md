@@ -161,11 +161,17 @@ fails on an otherwise regular screen, `Screen coordinates` is the explicit
 manual fallback: click the green origin dot, click its neighboring green dot in
 the +X direction (the pair is committed as one undoable setup step), optionally
 fine-tune/optimize that linear basis, then begin
-adding registration points. Once an accepted geometry fit (or nonlinear mesh)
-is based on those control points, the base-coordinate tool disappears rather
-than offering two competing ways to edit the same geometry. Its axis-lock and
-coordinate-finetune controls are contextual and appear only while that tool is
-active. Stochastic/no-screen processes never expose the tool.
+adding registration points. Screen coordinates are the reference frame of every
+stored control point, so automatic **Detect screen coordinates** is disabled once
+any point exists. Re-running **Detect screen** with existing points reuses the
+current coordinates and goes directly to finding/refining points; it must never
+replace the center/axes underneath those points. If points somehow exist without
+valid geometry, restore compatible coordinates or delete the points before
+redetection. Once an accepted geometry fit (or nonlinear mesh) is based on those
+control points, the base-coordinate tool disappears rather than offering two
+competing ways to edit the same geometry. Its axis-lock and coordinate-finetune
+controls are contextual and appear only while that tool is active. Stochastic/no-
+screen processes never expose the tool.
 
 ### Stage 5 — Reconstruction/detail
 

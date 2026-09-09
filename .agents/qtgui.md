@@ -468,6 +468,11 @@ The manual tool is an initializer/editor for the base linear coordinate system,
 not a competing editor for a control-point model. Hide it when the screen has no
 regular lattice, while nonlinear geometry is selected/materialized, or while the
 current mapping is still the output of an accepted control-point geometry fit.
+Automatic **Detect screen coordinates** follows the same reference-frame rule: it
+is disabled/refused as soon as any control point exists. The combined **Detect
+screen** command must then reuse the current coordinate system and proceed directly
+to adding/refining points; if points exist without valid geometry, refuse rather
+than silently establishing a new incompatible basis.
 `Lock axes` and coordinate finetuning actions are contextual: they are visible
 only while `Screen coordinates` is active, and are enabled only after the two-click
 bootstrap has produced a valid basis. Registration-point Select/Add tools remain

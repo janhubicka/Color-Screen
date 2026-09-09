@@ -8,6 +8,7 @@
 #include <QFormLayout>
 #include <QSlider>
 #include <QLabel>
+#include <QSizePolicy>
 #include "../libcolorscreen/include/render-parameters.h"
 #include "../libcolorscreen/include/finetune.h"
 
@@ -77,9 +78,17 @@ void GeometryPanel::setupUi() {
       return colorscreen::screen_geometry_configured_p(s.scrToImg);
   };
 
-  addButtonParameter("Step 1", "Detect screen coordinates", [this]() {
-      emit autodetectCoordinatesRequested();
-  }, nullptr, "Detect the regular screen pattern and establish its coordinate system (center, axes, and screen type).");
+  m_autodetectCoordinatesButton = addButtonParameter(
+      "Step 1", "Detect screen coordinates", [this]() {
+        emit autodetectCoordinatesRequested();
+      },
+      [](const ParameterState &state) { return state.solver.points.empty(); },
+      "Detect the regular screen pattern and establish its coordinate system "
+      "(center and axes). This is intentionally disabled once control points "
+      "exist because they are expressed in the current screen coordinate system; "
+      "delete the points before establishing a different coordinate system.");
+  m_autodetectCoordinatesButton->setObjectName(
+      QStringLiteral("DetectScreenCoordinatesButton"));
   
   addButtonParameter("Correction", "Swap screen colors", [this]() {
       emit alternateColorsRequested();
@@ -137,9 +146,23 @@ void GeometryPanel::setupUi() {
       if (m_autoOptimizeBox->isChecked()) emit optimizeRequested(true);
   };
 
+  auto configureDynamicStatusLabel = [](QLabel *label,
+                                                const QString &objectName) {
+    label->setObjectName(objectName);
+    label->setWordWrap(true);
+    QSizePolicy policy = label->sizePolicy();
+    policy.setHorizontalPolicy(QSizePolicy::Ignored);
+    label->setSizePolicy(policy);
+    label->setMinimumWidth(0);
+    label->setStyleSheet(
+        "font-size: 10px; color: #888; margin-left: 20px;");
+    label->setVisible(false);
+  };
+
   m_optimizationMessageLabel = new QLabel();
-  m_optimizationMessageLabel->setStyleSheet("font-size: 10px; color: #888; margin-left: 20px;");
-  m_optimizationMessageLabel->setVisible(false);
+  configureDynamicStatusLabel(
+      m_optimizationMessageLabel,
+      QStringLiteral("GeometryOptimizationMessage"));
   m_form->addRow(m_optimizationMessageLabel);
 
   m_lensCb = addCheckboxWithReset("Optimize lens correction",
@@ -164,8 +187,8 @@ void GeometryPanel::setupUi() {
       "crop far from the scanner lens optical axis.");
 
   m_lensMessageLabel = new QLabel();
-  m_lensMessageLabel->setStyleSheet("font-size: 10px; color: #888; margin-left: 20px;");
-  m_lensMessageLabel->setVisible(false);
+  configureDynamicStatusLabel(
+      m_lensMessageLabel, QStringLiteral("GeometryLensMessage"));
   m_form->addRow(m_lensMessageLabel);
 
   m_tiltCb = addCheckboxWithReset("Optimize tilt",
@@ -176,8 +199,8 @@ void GeometryPanel::setupUi() {
   connect(m_tiltCb, &QCheckBox::toggled, this, triggerIfAuto);
 
   m_tiltMessageLabel = new QLabel();
-  m_tiltMessageLabel->setStyleSheet("font-size: 10px; color: #888; margin-left: 20px;");
-  m_tiltMessageLabel->setVisible(false);
+  configureDynamicStatusLabel(
+      m_tiltMessageLabel, QStringLiteral("GeometryTiltMessage"));
   m_form->addRow(m_tiltMessageLabel);
 
   m_nlCb = addCheckboxParameter("Nonlinear corrections",
@@ -192,8 +215,8 @@ void GeometryPanel::setupUi() {
   connect(m_nlCb, &QCheckBox::toggled, this, &GeometryPanel::nonlinearToggled);
 
   m_nonlinearMessageLabel = new QLabel();
-  m_nonlinearMessageLabel->setStyleSheet("font-size: 10px; color: #888; margin-left: 20px;");
-  m_nonlinearMessageLabel->setVisible(false);
+  configureDynamicStatusLabel(
+      m_nonlinearMessageLabel, QStringLiteral("GeometryNonlinearMessage"));
   m_form->addRow(m_nonlinearMessageLabel);
 
   addEnumParameter("Scanner/camera geometry", pretty_scanner_type_names,
@@ -313,8 +336,17 @@ void GeometryPanel::updateRegistrationPointInfo(const ParameterState &state) {
   int numPoints = state.solver.points.size();
   colorscreen::scr_type type = state.scrToImg.type;
 
+  // Stored solver points use the current screen coordinate system as their
+  // reference frame. Redetecting the basis after points exist would silently
+  // reinterpret them. Keep this guard in the incremental update path too.
+  if (m_autodetectCoordinatesButton)
+    m_autodetectCoordinatesButton->setEnabled(numPoints == 0);
+
   if (m_showRegistrationPointsBox) {
-      m_showRegistrationPointsBox->setText(QString("Show registration points (%1 points)").arg(numPoints));
+      m_showRegistrationPointsBox->setText(tr("Show registration points"));
+      m_showRegistrationPointsBox->setToolTip(
+          tr("%1 control point(s) are stored in the current screen coordinate system.")
+              .arg(numPoints));
   }
 
   auto updateMsg = [numPoints](QLabel *label, int threshold, const QString &task) {

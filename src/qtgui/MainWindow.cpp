@@ -62,6 +62,7 @@
 #include <QScreen>
 #include <QSettings>
 #include <QSizeGrip>
+#include <QSizePolicy>
 #include <QSplitter>
 #include <QStringList>
 #include <QStatusBar>
@@ -794,6 +795,7 @@ void MainWindow::shutdownBackgroundThreads() {
 void MainWindow::setupUi() {
 
   m_mainSplitter = new QSplitter(Qt::Horizontal, this);
+  m_mainSplitter->setObjectName(QStringLiteral("DocumentMainSplitter"));
   setCentralWidget(m_mainSplitter);
 
   // Left: Image Widget
@@ -851,16 +853,26 @@ void MainWindow::setupUi() {
       "their existing beta order."));
   workflowLayout->addWidget(workflowStages);
 
+  auto configureDynamicWorkflowLabel = [](QLabel *label) {
+    label->setWordWrap(true);
+    // Live registration recommendations must wrap inside the current inspector
+    // allocation rather than changing the horizontal splitter size hint.
+    QSizePolicy policy = label->sizePolicy();
+    policy.setHorizontalPolicy(QSizePolicy::Ignored);
+    label->setSizePolicy(policy);
+    label->setMinimumWidth(0);
+  };
+
   m_workflowProcessLabel = new QLabel(workflowSummary);
   m_workflowProcessLabel->setObjectName(
       QStringLiteral("WorkflowProcessSummary"));
-  m_workflowProcessLabel->setWordWrap(true);
+  configureDynamicWorkflowLabel(m_workflowProcessLabel);
   workflowLayout->addWidget(m_workflowProcessLabel);
 
   m_workflowRegistrationLabel = new QLabel(workflowSummary);
   m_workflowRegistrationLabel->setObjectName(
       QStringLiteral("WorkflowRegistrationSummary"));
-  m_workflowRegistrationLabel->setWordWrap(true);
+  configureDynamicWorkflowLabel(m_workflowRegistrationLabel);
   m_workflowRegistrationLabel->setToolTip(tr(
       "Geometry freshness is tracked for fits completed in this session. "
       "Loaded or manually entered geometry remains available but is not "
@@ -870,13 +882,13 @@ void MainWindow::setupUi() {
   m_workflowCalibrationLabel = new QLabel(workflowSummary);
   m_workflowCalibrationLabel->setObjectName(
       QStringLiteral("WorkflowCalibrationSummary"));
-  m_workflowCalibrationLabel->setWordWrap(true);
+  configureDynamicWorkflowLabel(m_workflowCalibrationLabel);
   workflowLayout->addWidget(m_workflowCalibrationLabel);
 
   m_workflowProfileLabel = new QLabel(workflowSummary);
   m_workflowProfileLabel->setObjectName(
       QStringLiteral("WorkflowProfileSummary"));
-  m_workflowProfileLabel->setWordWrap(true);
+  configureDynamicWorkflowLabel(m_workflowProfileLabel);
   m_workflowProfileLabel->setProperty("workflowApplicable", false);
   m_workflowProfileLabel->setToolTip(tr(
       "Optional RGB screen-capture calibration. It fits a simple matrix "
@@ -895,7 +907,7 @@ void MainWindow::setupUi() {
   m_workflowNextStepLabel = new QLabel(workflowSummary);
   m_workflowNextStepLabel->setObjectName(
       QStringLiteral("WorkflowNextStepSummary"));
-  m_workflowNextStepLabel->setWordWrap(true);
+  configureDynamicWorkflowLabel(m_workflowNextStepLabel);
   QFont nextStepFont = m_workflowNextStepLabel->font();
   nextStepFont.setBold(true);
   m_workflowNextStepLabel->setFont(nextStepFont);
@@ -4287,12 +4299,17 @@ void MainWindow::updateWorkflowSummary() {
         colorDetection ? tr("Registration: optional geometry")
                        : tr("Registration: geometry");
     if (!geometryConfigured) {
-      registration = pointCount >= minimumPoints
-          ? tr("%1 — geometry not configured; fit from the existing %2 points")
-                .arg(prefix)
-                .arg(pointCount)
-          : tr("%1 — geometry not configured; detect screen coordinates")
-                .arg(prefix);
+      if (pointCount > 0) {
+        registration = tr(
+            "%1 — geometry not configured; %2 existing control point(s) "
+            "must keep their original coordinate system")
+                           .arg(prefix)
+                           .arg(pointCount);
+      } else {
+        registration = tr(
+            "%1 — geometry not configured; detect screen coordinates")
+                           .arg(prefix);
+      }
     } else if (pointCount == 0) {
       registration = tr("%1 — no points; detect or add at least %2")
                          .arg(prefix)
@@ -4378,6 +4395,13 @@ void MainWindow::updateWorkflowSummary() {
     nextStep = tr(
         "Next: reconstruct from detected screen colours; stochastic screens "
         "do not use Geometry.");
+  } else if (regularScreen && !geometryConfigured && pointCount > 0) {
+    nextStep = tr(
+        "Next: restore the coordinate system compatible with the existing "
+        "control points, or delete the points before detecting new screen "
+        "coordinates.");
+  } else if (regularScreen && !geometryConfigured) {
+    nextStep = tr("Next: Geometry — detect screen coordinates.");
   } else if (regularScreen && m_geometryFitPendingInputs) {
     nextStep = tr("Next: Geometry fit is running…");
   } else if (regularScreen && fitCurrent) {
@@ -5471,8 +5495,23 @@ void MainWindow::updateRegistrationActions() {
   if (m_setCenterAction)
     m_setCenterAction->setEnabled(screenCoordinateToolAvailable());
 
-  // Disable/enable optimize geometry and select all based on point count
-  size_t count = image ? image->registrationPointCount() : 0;
+  // Solver points are document state. Do not derive coordinate-system
+  // safety from whether the active view currently shows registration points.
+  const size_t documentPointCount = m_solverParams.n_points();
+  size_t count = image ? image->registrationPointCount() : documentPointCount;
+
+  // A control point appearing while coordinate autodetection runs makes its
+  // result unsafe to publish: the point is expressed in the old basis.
+  if (documentPointCount > 0 && m_coordinateAutodetectProgress &&
+      !m_coordinateAutodetectProgress->pool_cancel()) {
+    m_coordinateAutodetectProgress->cancel();
+    ++m_coordinateAutodetectRequest;
+    m_autoAddPointsAfterCoordinates = false;
+    statusBar()->showMessage(
+        tr("Coordinate autodetection cancelled because control points now exist."),
+        4000);
+  }
+
   int min_points = colorscreen::solver_parameters::min_points(m_scrToImgParams.type);
   if (m_selectAllAction) {
     m_selectAllAction->setEnabled(count > 0);
@@ -6301,6 +6340,22 @@ void MainWindow::onAutodetectScreen() {
   }
 
   if (colorscreen::screen_has_regular_geometry_p(m_scrToImgParams.type)) {
+    if (m_solverParams.n_points() > 0) {
+      // Existing points are expressed in the current basis. Detect Screen may
+      // refine/add points, but must never replace that basis underneath them.
+      m_autoAddPointsAfterCoordinates = false;
+      if (!colorscreen::screen_geometry_configured_p(m_scrToImgParams)) {
+        statusBar()->showMessage(
+            tr("Existing control points require their original screen "
+               "coordinate system. Restore it or delete the points before "
+               "detecting new coordinates."),
+            6000);
+        return;
+      }
+      onAutomaticallyAddPointsRequested(m_geometryPanel->finetuneAreaParams());
+      return;
+    }
+
     m_autoAddPointsAfterCoordinates = true;
     onAutodetectCoordinatesRequested();
     return;
@@ -6606,6 +6661,18 @@ void MainWindow::onSetCenter(colorscreen::point_t imgPos) {
 void MainWindow::onAutodetectCoordinatesRequested() {
   if (!m_scan || !m_coordOptimizationWorker)
     return;
+  if (m_solverParams.n_points() > 0) {
+    m_autoAddPointsAfterCoordinates = false;
+    statusBar()->showMessage(
+        tr("Delete existing control points before detecting a new screen "
+           "coordinate system."),
+        5000);
+    return;
+  }
+
+  if (m_coordinateAutodetectProgress &&
+      !m_coordinateAutodetectProgress->pool_cancel())
+    m_coordinateAutodetectProgress->cancel();
 
   m_coordOptimizationWorker->setScan(m_scan);
 
@@ -6613,6 +6680,7 @@ void MainWindow::onAutodetectCoordinatesRequested() {
   auto progress = std::make_shared<colorscreen::progress_info>();
   progress->set_task("Autodetecting coordinates", 1);
   addUserVisibleProgress(progress, tr("Coordinate autodetection"));
+  m_coordinateAutodetectProgress = progress;
 
   const int reqId = ++m_coordinateAutodetectRequest;
   QMetaObject::invokeMethod(
@@ -6638,6 +6706,8 @@ void MainWindow::onAutodetectCoordinatesFinished(
     bool cancelled) {
   if (progress && !m_closing)
     removeProgress(progress);
+  if (m_coordinateAutodetectProgress == progress)
+    m_coordinateAutodetectProgress.reset();
 
   if (m_closing || reqId != m_coordinateAutodetectRequest)
     return;
@@ -6645,17 +6715,22 @@ void MainWindow::onAutodetectCoordinatesFinished(
     m_autoAddPointsAfterCoordinates = false;
     return;
   }
+  if (m_solverParams.n_points() > 0) {
+    m_autoAddPointsAfterCoordinates = false;
+    statusBar()->showMessage(
+        tr("Discarded detected coordinates because control points were added "
+           "while detection was running."),
+        5000);
+    return;
+  }
 
   if (success) {
-    ParameterState oldState = getCurrentState();
-    m_scrToImgParams = result;
+    ParameterState newState = getCurrentState();
+    newState.scrToImg = result;
 
-    // Automatically switch to interpolated mode
+    // Switch before applyState refreshes the canvas with accepted geometry.
     m_renderTypeParams.type = colorscreen::render_type_interpolated;
-
-    // Update UI
-    updateUIFromState(getCurrentState());
-    changeParameters(getCurrentState(), "Autodetect Coordinates");
+    changeParameters(newState, "Autodetect Coordinates");
 
     // Enable "Set screen coordinates" tool
     if (m_addPointAction) {

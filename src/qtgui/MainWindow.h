@@ -776,6 +776,7 @@ private:
   uint64_t m_focusAnalysisGeneration = 0;
   uint64_t m_adaptiveSharpeningGeneration = 0;
   int m_coordinateAutodetectRequest = 0;
+  std::shared_ptr<colorscreen::progress_info> m_coordinateAutodetectProgress;
   int m_coordinateOptimizeRequest = 0;
 
   // Crash recovery

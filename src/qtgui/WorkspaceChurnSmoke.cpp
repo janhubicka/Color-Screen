@@ -21,6 +21,8 @@
 #include <QPointer>
 #include <QPushButton>
 #include <QStatusBar>
+#include <QSizePolicy>
+#include <QSplitter>
 #include <QString>
 #include <QStringList>
 #include <QTemporaryDir>
@@ -345,6 +347,18 @@ QDoubleSpinBox *redWavelengthSpin =
         : nullptr;
 QPushButton *mtfFitButton = inspector->findChild<QPushButton *>(
     QStringLiteral("MtfFitButton"));
+QPushButton *detectCoordinatesButton = inspector->findChild<QPushButton *>(
+    QStringLiteral("DetectScreenCoordinatesButton"));
+QLabel *geometryOptimizationMessage = inspector->findChild<QLabel *>(
+    QStringLiteral("GeometryOptimizationMessage"));
+QLabel *geometryLensMessage = inspector->findChild<QLabel *>(
+    QStringLiteral("GeometryLensMessage"));
+QLabel *geometryTiltMessage = inspector->findChild<QLabel *>(
+    QStringLiteral("GeometryTiltMessage"));
+QLabel *geometryNonlinearMessage = inspector->findChild<QLabel *>(
+    QStringLiteral("GeometryNonlinearMessage"));
+QSplitter *documentMainSplitter = first->findChild<QSplitter *>(
+    QStringLiteral("DocumentMainSplitter"));
 QToolButton *scannerCameraToggle = inspector->findChild<QToolButton *>(
     QStringLiteral("ScannerCameraPropertiesToggle"));
 QPushButton *imageLayerInfraredButton = inspector->findChild<QPushButton *>(
@@ -414,6 +428,26 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
     return;
   return;
 }
+
+        auto ignoresHorizontalHint = [](QWidget *widget) {
+          return widget &&
+                 widget->sizePolicy().horizontalPolicy() == QSizePolicy::Ignored &&
+                 widget->minimumWidth() == 0;
+        };
+        if (!documentMainSplitter ||
+            !ignoresHorizontalHint(processSummary) ||
+            !ignoresHorizontalHint(registrationSummary) ||
+            !ignoresHorizontalHint(calibrationSummary) ||
+            !ignoresHorizontalHint(profileSummary) ||
+            !ignoresHorizontalHint(nextStepSummary) ||
+            !ignoresHorizontalHint(geometryOptimizationMessage) ||
+            !ignoresHorizontalHint(geometryLensMessage) ||
+            !ignoresHorizontalHint(geometryTiltMessage) ||
+            !ignoresHorizontalHint(geometryNonlinearMessage)) {
+          fail(QStringLiteral(
+              "Dynamic workflow/geometry status text can resize the main inspector splitter"));
+          return;
+        }
 
         if (!profileCalibrationStatus || !profileOptimizeButton ||
             (profileApplicable
@@ -540,6 +574,44 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
               "Workspace churn lost numeric default/sentinel rows"));
           return;
         }
+
+        // Screen coordinates define the reference frame of solver points. Both
+        // the visible button and the MainWindow slot must refuse a new basis
+        // once any control point exists.
+        if (!detectCoordinatesButton) {
+          fail(QStringLiteral(
+              "Workspace churn lost the Detect screen coordinates button"));
+          return;
+        }
+        const ParameterState coordinateGuardBaseline =
+            first->documentStateSnapshot();
+        ParameterState coordinateNoPoints = coordinateGuardBaseline;
+        coordinateNoPoints.solver.points.clear();
+        first->applyState(coordinateNoPoints);
+        if (!detectCoordinatesButton->isEnabled()) {
+          fail(QStringLiteral(
+              "Detect screen coordinates stayed disabled with no control points"));
+          return;
+        }
+        ParameterState coordinateWithPoint = coordinateNoPoints;
+        coordinateWithPoint.solver.add_point(
+            {10, 10}, {0, 0}, colorscreen::solver_parameters::green);
+        first->applyState(coordinateWithPoint);
+        if (detectCoordinatesButton->isEnabled()) {
+          fail(QStringLiteral(
+              "Detect screen coordinates remained enabled with control points"));
+          return;
+        }
+        const int coordinateRequestBefore =
+            first->m_coordinateAutodetectRequest;
+        first->onAutodetectCoordinatesRequested();
+        if (first->m_coordinateAutodetectRequest != coordinateRequestBefore) {
+          fail(QStringLiteral(
+              "MainWindow started coordinate autodetection despite existing control points"));
+          return;
+        }
+        first->applyState(coordinateGuardBaseline);
+        first->statusBar()->clearMessage();
 
         // Exercise undo identity directly. Two edits deliberately use the
         // same human description: different keys must keep them separate,
