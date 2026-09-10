@@ -299,10 +299,13 @@ public:
       Sharpness panel, including external slanted-edge reference views. */
   QString mtfCalibrationSummary() const;
   bool mtfModelFitRunning() const { return m_mtfFitRunning; }
-  bool beginMtfModelFit(const colorscreen::mtf_parameters &inputs);
-  void failMtfModelFit(const colorscreen::mtf_parameters &inputs);
-  void acceptMtfModelFit(const colorscreen::mtf_parameters &fitted, double rms);
-  void finishMtfModelFitWithoutResult();
+  /** Start one measured-MTF model fit from an immutable dialog/document
+      snapshot. The fit is a document final-result operation shared by every
+      Sharpness panel. */
+  bool requestMtfModelFit(
+      const ParameterState &baseline,
+      const colorscreen::mtf_parameters &input,
+      const colorscreen::mtf_estimation_options &options, int flags);
 
   /** Lifecycle callbacks for one final-result background operation.
 
@@ -840,6 +843,9 @@ private:
   std::optional<colorscreen::mtf_parameters> m_mtfFitFailureInputs;
   double m_mtfFitRms = -1;
   bool m_mtfFitRunning = false;
+  // Request identity prevents a cancelled old fit from clearing provenance for
+  // a newer fit after parameter/image replacement.
+  std::weak_ptr<colorscreen::progress_info> m_mtfFitProgress;
   
   // One-shot background threads that intentionally publish intermediate
   // results (misregistered finetune, adaptive sharpening, etc.).
