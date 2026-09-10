@@ -27,155 +27,116 @@ jobs:
           git cherry-pick --no-commit "$staged"
           python3 - <<'PY'
           from pathlib import Path
-
           def replace(path, old, new):
-              p = Path(path)
-              text = p.read_text()
-              count = text.count(old)
+              p = Path(path); text = p.read_text(); count = text.count(old)
               if count != 1:
                   raise RuntimeError(f"{path}: expected one match, found {count}")
               p.write_text(text.replace(old, new, 1))
+          replace('src/qtgui/MainWindow.h', '''  bool requestMtfModelFit(
+      const ParameterState &baseline,
+      const colorscreen::mtf_parameters &input,
+      const colorscreen::mtf_estimation_options &options, int flags);
+''', '''  bool requestMtfModelFit(
+      const ParameterState &baseline,
+      const colorscreen::mtf_parameters &input,
+      const colorscreen::mtf_estimation_options &options, int flags,
+      QWidget *resultParent = nullptr);
+''')
+          replace('src/qtgui/MainWindow.cpp', '''  mtfCalibration.fitRequested =
+      [this](const ParameterState &baseline,
+             const colorscreen::mtf_parameters &input,
+             const colorscreen::mtf_estimation_options &options, int flags) {
+        return requestMtfModelFit(baseline, input, options, flags);
+      };
+''', '''  mtfCalibration.fitRequested =
+      [this](const ParameterState &baseline,
+             const colorscreen::mtf_parameters &input,
+             const colorscreen::mtf_estimation_options &options, int flags,
+             QWidget *resultParent) {
+        return requestMtfModelFit(baseline, input, options, flags, resultParent);
+      };
+''')
+          replace('src/qtgui/MainWindow.cpp', '''bool MainWindow::requestMtfModelFit(
+    const ParameterState &baseline, const colorscreen::mtf_parameters &input,
+    const colorscreen::mtf_estimation_options &options, int flags) {
+''', '''bool MainWindow::requestMtfModelFit(
+    const ParameterState &baseline, const colorscreen::mtf_parameters &input,
+    const colorscreen::mtf_estimation_options &options, int flags,
+    QWidget *resultParent) {
+''')
+          replace('src/qtgui/MainWindow.cpp', '''  const colorscreen::mtf_parameters baselineMtf =
+      baseline.rparams.sharpen.scanner_mtf;
+  auto result = std::make_shared<MtfModelFitResult>();
+''', '''  const colorscreen::mtf_parameters baselineMtf =
+      baseline.rparams.sharpen.scanner_mtf;
+  const QPointer<QWidget> guardedResultParent(resultParent);
+  auto result = std::make_shared<MtfModelFitResult>();
+''')
+          replace('src/qtgui/MainWindow.cpp', '''  operation.applyResult = [this, baselineMtf, result]() {
+''', '''  operation.applyResult = [this, baselineMtf, result,
+                           guardedResultParent]() {
+''')
+          replace('src/qtgui/MainWindow.cpp', '''          QMessageBox::Ok, this);
+      box->setObjectName(QStringLiteral("MtfFitErrorDialog"));
+''', '''          QMessageBox::Ok,
+          guardedResultParent ? guardedResultParent.data() : this);
+      box->setObjectName(QStringLiteral("MtfFitErrorDialog"));
+''')
+          replace('src/qtgui/MainWindow.cpp', '''    auto *box = new QMessageBox(QMessageBox::Information, tr("MTF model fit"),
+                                details, QMessageBox::Ok, this);
+''', '''    auto *box = new QMessageBox(QMessageBox::Information, tr("MTF model fit"),
+                                details, QMessageBox::Ok,
+                                guardedResultParent ? guardedResultParent.data()
+                                                    : this);
+''')
+          replace('src/qtgui/ImageViewWindow.cpp', '''  mtfCalibration.fitRequested =
+      [this](const ParameterState &baseline,
+             const colorscreen::mtf_parameters &input,
+             const colorscreen::mtf_estimation_options &options, int flags) {
+        return m_document &&
+               m_document->requestMtfModelFit(baseline, input, options, flags);
+      };
+''', '''  mtfCalibration.fitRequested =
+      [this](const ParameterState &baseline,
+             const colorscreen::mtf_parameters &input,
+             const colorscreen::mtf_estimation_options &options, int flags,
+             QWidget *resultParent) {
+        return m_document && m_document->requestMtfModelFit(
+                                 baseline, input, options, flags, resultParent);
+      };
+''')
+          replace('src/qtgui/SharpnessPanel.h', '''  std::function<bool(const ParameterState &,
+                     const colorscreen::mtf_parameters &,
+                     const colorscreen::mtf_estimation_options &, int)>
+      fitRequested;
+''', '''  std::function<bool(const ParameterState &,
+                     const colorscreen::mtf_parameters &,
+                     const colorscreen::mtf_estimation_options &, int,
+                     QWidget *)>
+      fitRequested;
+''')
+          replace('src/qtgui/SharpnessPanel.cpp', '''        m_mtfCalibration.fitRequested(baseline, input, options, flags);
+''', '''        m_mtfCalibration.fitRequested(baseline, input, options, flags, this);
+''')
+          replace('.agents/qtgui.md', '''request, dedicated Cancel row, fitting provenance, success/failure dialogs, and
+accepted Undo edit. Do not add a fit queue back to individual Sharpness panels:
+''', '''request, dedicated Cancel row, fitting provenance, success/failure dialogs, and
+accepted Undo edit. Result dialogs may retain a guarded initiating panel solely
+as presentation ownership; that widget must never gate result publication or
+worker lifetime. Do not add a fit queue back to individual Sharpness panels:
+''')
+          replace('doc/mtf-fitting-workflow.md', '''late result from publishing. A valid result is committed as one undoable
+parameter change. Failure or cancellation leaves the parameter state untouched.
 
-          replace('src/qtgui/MainWindow.h',
-          '''  bool requestMtfModelFit(
-                const ParameterState &baseline,
-                const colorscreen::mtf_parameters &input,
-                const colorscreen::mtf_estimation_options &options, int flags);
-          ''',
-          '''  bool requestMtfModelFit(
-                const ParameterState &baseline,
-                const colorscreen::mtf_parameters &input,
-                const colorscreen::mtf_estimation_options &options, int flags,
-                QWidget *resultParent = nullptr);
-          ''')
+The document also owns the accepted analytical-model fit as session-local
+''', '''late result from publishing. A valid result is committed as one undoable
+parameter change. Failure or cancellation leaves the parameter state untouched.
+Completion messages stay parented to the Sharpness panel that started the fit
+while that presentation exists; closing that panel does not own or cancel the
+underlying document operation.
 
-          replace('src/qtgui/MainWindow.cpp',
-          '''  mtfCalibration.fitRequested =
-                [this](const ParameterState &baseline,
-                       const colorscreen::mtf_parameters &input,
-                       const colorscreen::mtf_estimation_options &options, int flags) {
-                  return requestMtfModelFit(baseline, input, options, flags);
-                };
-          ''',
-          '''  mtfCalibration.fitRequested =
-                [this](const ParameterState &baseline,
-                       const colorscreen::mtf_parameters &input,
-                       const colorscreen::mtf_estimation_options &options, int flags,
-                       QWidget *resultParent) {
-                  return requestMtfModelFit(baseline, input, options, flags, resultParent);
-                };
-          ''')
-
-          replace('src/qtgui/MainWindow.cpp',
-          '''bool MainWindow::requestMtfModelFit(
-              const ParameterState &baseline, const colorscreen::mtf_parameters &input,
-              const colorscreen::mtf_estimation_options &options, int flags) {
-          ''',
-          '''bool MainWindow::requestMtfModelFit(
-              const ParameterState &baseline, const colorscreen::mtf_parameters &input,
-              const colorscreen::mtf_estimation_options &options, int flags,
-              QWidget *resultParent) {
-          ''')
-
-          replace('src/qtgui/MainWindow.cpp',
-          '''  const colorscreen::mtf_parameters baselineMtf =
-                baseline.rparams.sharpen.scanner_mtf;
-            auto result = std::make_shared<MtfModelFitResult>();
-          ''',
-          '''  const colorscreen::mtf_parameters baselineMtf =
-                baseline.rparams.sharpen.scanner_mtf;
-            const QPointer<QWidget> guardedResultParent(resultParent);
-            auto result = std::make_shared<MtfModelFitResult>();
-          ''')
-
-          replace('src/qtgui/MainWindow.cpp',
-          '''  operation.applyResult = [this, baselineMtf, result]() {
-          ''',
-          '''  operation.applyResult = [this, baselineMtf, result,
-                                     guardedResultParent]() {
-          ''')
-
-          replace('src/qtgui/MainWindow.cpp',
-          '''          QMessageBox::Ok, this);
-                box->setObjectName(QStringLiteral("MtfFitErrorDialog"));
-          ''',
-          '''          QMessageBox::Ok,
-                    guardedResultParent ? guardedResultParent.data() : this);
-                box->setObjectName(QStringLiteral("MtfFitErrorDialog"));
-          ''')
-
-          replace('src/qtgui/MainWindow.cpp',
-          '''    auto *box = new QMessageBox(QMessageBox::Information, tr("MTF model fit"),
-                                          details, QMessageBox::Ok, this);
-          ''',
-          '''    auto *box = new QMessageBox(QMessageBox::Information, tr("MTF model fit"),
-                                          details, QMessageBox::Ok,
-                                          guardedResultParent ? guardedResultParent.data()
-                                                              : this);
-          ''')
-
-          replace('src/qtgui/ImageViewWindow.cpp',
-          '''  mtfCalibration.fitRequested =
-                [this](const ParameterState &baseline,
-                       const colorscreen::mtf_parameters &input,
-                       const colorscreen::mtf_estimation_options &options, int flags) {
-                  return m_document &&
-                         m_document->requestMtfModelFit(baseline, input, options, flags);
-                };
-          ''',
-          '''  mtfCalibration.fitRequested =
-                [this](const ParameterState &baseline,
-                       const colorscreen::mtf_parameters &input,
-                       const colorscreen::mtf_estimation_options &options, int flags,
-                       QWidget *resultParent) {
-                  return m_document && m_document->requestMtfModelFit(
-                                           baseline, input, options, flags, resultParent);
-                };
-          ''')
-
-          replace('src/qtgui/SharpnessPanel.h',
-          '''  std::function<bool(const ParameterState &,
-                               const colorscreen::mtf_parameters &,
-                               const colorscreen::mtf_estimation_options &, int)>
-                fitRequested;
-          ''',
-          '''  std::function<bool(const ParameterState &,
-                               const colorscreen::mtf_parameters &,
-                               const colorscreen::mtf_estimation_options &, int,
-                               QWidget *)>
-                fitRequested;
-          ''')
-
-          replace('src/qtgui/SharpnessPanel.cpp',
-          '''        m_mtfCalibration.fitRequested(baseline, input, options, flags);
-          ''',
-          '''        m_mtfCalibration.fitRequested(baseline, input, options, flags, this);
-          ''')
-
-          replace('.agents/qtgui.md',
-          '''request, dedicated Cancel row, fitting provenance, success/failure dialogs, and
-          accepted Undo edit. Do not add a fit queue back to individual Sharpness panels:
-          ''',
-          '''request, dedicated Cancel row, fitting provenance, success/failure dialogs, and
-          accepted Undo edit. Result dialogs may retain a guarded initiating panel solely
-          as presentation ownership; that widget must never gate result publication or
-          worker lifetime. Do not add a fit queue back to individual Sharpness panels:
-          ''')
-
-          replace('doc/mtf-fitting-workflow.md',
-          '''late result from publishing. A valid result is committed as one undoable
-          parameter change. Failure or cancellation leaves the parameter state untouched.
-
-          The document also owns the accepted analytical-model fit as session-local
-          ''',
-          '''late result from publishing. A valid result is committed as one undoable
-          parameter change. Failure or cancellation leaves the parameter state untouched.
-          Completion messages stay parented to the Sharpness panel that started the fit
-          while that presentation exists; closing that panel does not own or cancel the
-          underlying document operation.
-
-          The document also owns the accepted analytical-model fit as session-local
-          ''')
+The document also owns the accepted analytical-model fit as session-local
+''')
           PY
           python3 - <<'PY'
           import subprocess
@@ -190,50 +151,33 @@ jobs:
             'src/qtgui/SharpnessPanel.h': '39afca6861ad01bed79b6371abe0b59f6066a844',
             'src/qtgui/WorkspaceChurnSmoke.cpp': 'eb879ff47bca995a783fa23ce4a26b327cb0331b'
           }
-          changed = set(subprocess.check_output(['git', 'diff', '--name-only'], text=True).splitlines())
+          changed = set(subprocess.check_output(['git', 'diff', 'HEAD', '--name-only'], text=True).splitlines())
           assert changed == set(expected), changed
           for path, digest in expected.items():
             actual = subprocess.check_output(['git', 'hash-object', path], text=True).strip()
             assert actual == digest, (path, actual, digest)
           print('Corrected tree matches all nine reviewed file hashes.')
           PY
-          git diff --check
+          git diff HEAD --check
           sh build-aux/check-generated-build-metadata.sh
           git config user.name "Jan Hubička"
           git config user.email "46065755+janhubicka@users.noreply.github.com"
-          git add .agents/qtgui.md doc/mtf-fitting-workflow.md \
-            doc/qtgui-internal-cleanup.md src/qtgui/ImageViewWindow.cpp \
-            src/qtgui/MainWindow.cpp src/qtgui/MainWindow.h \
-            src/qtgui/SharpnessPanel.cpp src/qtgui/SharpnessPanel.h \
-            src/qtgui/WorkspaceChurnSmoke.cpp
+          git add .agents/qtgui.md doc/mtf-fitting-workflow.md doc/qtgui-internal-cleanup.md \
+            src/qtgui/ImageViewWindow.cpp src/qtgui/MainWindow.cpp src/qtgui/MainWindow.h \
+            src/qtgui/SharpnessPanel.cpp src/qtgui/SharpnessPanel.h src/qtgui/WorkspaceChurnSmoke.cpp
           git commit -F - <<'MESSAGE'
           qtgui: migrate measured MTF fitting to one-shot lifecycle
 
-          Complete the simple final-result lifecycle batch by moving measured-MTF
-          model fitting out of each SharpnessPanel and into the source document.
-          Panels own only the editable fit setup dialog; MainWindow owns numerical
-          work, cancellation, progress, provenance, result presentation and Undo.
+          Move measured-MTF model fitting out of each SharpnessPanel and into the
+          source document. Panels own only the editable setup dialog; MainWindow
+          owns numerical work, cancellation, progress, provenance, presentation
+          and the accepted undoable parameter edit.
 
-          Bind setup-dialog acceptance to the complete input ParameterState. Once
-          running, document edits, image/parameter replacement, or newer final-result
-          work cancel the fit; newest-request ownership and an exact snapshot gate
-          independently reject late publication. Request-local progress ownership
-          prevents an older completion from clearing a replacement fit.
-
-          Remove the panel-local TaskQueue/QtConcurrent path and the reference-view
-          destructor repair it required. Closing a reference view no longer owns a
-          fit over already-stored curves. Result dialogs may stay visually parented
-          to their initiating panel through QPointer without making that widget part
-          of computation or publication validity.
-
-          Preserve Ready/Running/Current/Stale/Failed provenance and RMS reporting.
-          Successful output remains one normal undoable edit; failure/cancellation
-          leaves document parameters unchanged. Numerical fitting behavior is unchanged.
-
-          Extend workspace churn with a real empirical objective covering success,
-          exact Undo/Redo, edit-and-restore cancellation, validator failure, stale
-          setup acceptance, supersession, progress-row uniqueness and cleanup.
-          Update MTF workflow, contributor notes and beta-readiness documentation.
+          Bind setup acceptance and publication to a complete ParameterState.
+          Remove the panel-local queue/QtConcurrent path and reference-view cleanup
+          workaround. Preserve numerical fitting behavior and fit provenance.
+          Add smoke coverage for success/Undo/Redo, stale and cancelled work,
+          validator failure, supersession, and progress cleanup.
           MESSAGE
           test "$(git rev-parse HEAD^)" = "$base"
           test "$(git diff --name-only "$base" HEAD | wc -l)" -eq 9
