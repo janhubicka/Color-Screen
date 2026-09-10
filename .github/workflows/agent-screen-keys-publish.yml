@@ -1,0 +1,46 @@
+name: Agent Screen parameter keys publisher
+on:
+  push:
+    branches: [agent/qtgui-screen-keys-stage]
+    paths: [.github/workflows/agent-screen-keys-publish.yml]
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Publish exact reviewed Screen key migration
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE=6dd89551f43685f7293f97039161d0425d5f06c5
+          FEATURE=agent/qtgui-screen-parameter-keys
+          PATCH=/tmp/qtgui-screen-parameter-keys.patch
+
+          base64 -d .agent-screen-keys.patch.gz.b64 | gzip -d > "$PATCH"
+          echo "3b05b38a774d31b2bd70be6a8d253a9d431ba05f774c2a374e180dd9583e875c  $PATCH" | sha256sum -c -
+
+          git fetch origin main
+          test "$(git rev-parse origin/main)" = "$BASE"
+          git checkout -B "$FEATURE" "$BASE"
+          git apply "$PATCH"
+
+          expected=$'.agents/qtgui.md\ndoc/qtgui-internal-cleanup.md\nsrc/qtgui/ScreenPanel.cpp\nsrc/qtgui/WorkspaceChurnSmoke.cpp'
+          actual="$(git diff --name-only | LC_ALL=C sort)"
+          test "$actual" = "$expected"
+          git diff --check
+          sh build-aux/check-generated-build-metadata.sh
+
+          git config user.name "OpenAI Agent"
+          git config user.email "agent@example.invalid"
+          git add .agents/qtgui.md doc/qtgui-internal-cleanup.md src/qtgui/ScreenPanel.cpp src/qtgui/WorkspaceChurnSmoke.cpp
+          git commit -m "qtgui: give Screen controls stable parameter keys"
+          git push --force-with-lease origin "$FEATURE"
+
+          echo "feature=$(git rev-parse HEAD)"
+          for f in .agents/qtgui.md doc/qtgui-internal-cleanup.md src/qtgui/ScreenPanel.cpp src/qtgui/WorkspaceChurnSmoke.cpp; do
+            printf '%s  %s\n' "$(git hash-object "$f")" "$f"
+          done
