@@ -337,6 +337,8 @@ QWidget *redStripWidth = inspector->findChild<QWidget *>(
     QStringLiteral("ScreenRedStripWidth"));
 QWidget *greenStripWidth = inspector->findChild<QWidget *>(
     QStringLiteral("ScreenGreenStripWidth"));
+QComboBox *screenTypeCombo = inspector->findChild<QComboBox *>(
+    QStringLiteral("ScreenTypeCombo"));
 QAction *undoParametersAction = first->findChild<QAction *>(
     QStringLiteral("UndoParametersAction"));
 const QList<QToolButton *> parameterResetButtons =
@@ -350,6 +352,21 @@ auto findParameterResetButton =
           return button;
       return static_cast<QToolButton *>(nullptr);
     };
+auto findParameterSpinBox = [inspector](const QString &parameterKey) {
+  const QList<QDoubleSpinBox *> spins =
+      inspector->findChildren<QDoubleSpinBox *>();
+  for (QDoubleSpinBox *spin : spins)
+    if (spin && spin->property("parameterKey").toString() == parameterKey)
+      return spin;
+  return static_cast<QDoubleSpinBox *>(nullptr);
+};
+auto hasParameterKey = [inspector](const QString &parameterKey) {
+  const QList<QWidget *> widgets = inspector->findChildren<QWidget *>();
+  for (QWidget *widget : widgets)
+    if (widget && widget->property("parameterKey").toString() == parameterKey)
+      return true;
+  return false;
+};
 QToolButton *resolutionResetButton = findParameterResetButton(
     QStringLiteral("capture.mtf.scan_dpi"));
 QWidget *resolutionField =
@@ -690,15 +707,118 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         }
         first->applyState(checkboxSemanticsBaseline);
 
-        if (!redStripWidth || !greenStripWidth ||
+        if (!redStripWidth || !greenStripWidth || !screenTypeCombo ||
             redStripWidth->property("parameterKey").toString() !=
                 QStringLiteral("screen.red_strip_width") ||
             greenStripWidth->property("parameterKey").toString() !=
-                QStringLiteral("screen.green_strip_width")) {
+                QStringLiteral("screen.green_strip_width") ||
+            screenTypeCombo->property("parameterKey").toString() !=
+                QStringLiteral("screen.type")) {
           fail(QStringLiteral(
-              "Workspace churn lost stable parameter-key metadata"));
+              "Workspace churn lost stable Screen parameter-key metadata"));
           return;
         }
+
+        const QStringList screenParameterKeys = {
+            QStringLiteral("screen.type"),
+            QStringLiteral("screen.red_strip_width"),
+            QStringLiteral("screen.green_strip_width"),
+            QStringLiteral("screen.collection_threshold"),
+            QStringLiteral("screen.collection_quality"),
+            QStringLiteral("screen.demosaic"),
+            QStringLiteral("screen.demosaiced_scaling"),
+            QStringLiteral("screen.denoise.pre.mode"),
+            QStringLiteral("screen.denoise.pre.strength"),
+            QStringLiteral("screen.denoise.pre.patch_radius"),
+            QStringLiteral("screen.denoise.pre.search_radius"),
+            QStringLiteral("screen.denoise.pre.bilateral_sigma_s"),
+            QStringLiteral("screen.denoise.pre.bilateral_sigma_r"),
+            QStringLiteral("screen.denoise.post.mode"),
+            QStringLiteral("screen.denoise.post.strength"),
+            QStringLiteral("screen.denoise.post.patch_radius"),
+            QStringLiteral("screen.denoise.post.search_radius"),
+            QStringLiteral("screen.denoise.post.bilateral_sigma_s"),
+            QStringLiteral("screen.denoise.post.bilateral_sigma_r")};
+        for (const QString &key : screenParameterKeys) {
+          if (!hasParameterKey(key)) {
+            fail(QStringLiteral(
+                     "Workspace churn lost Screen parameter key %1")
+                     .arg(key));
+            return;
+          }
+        }
+
+        // Pre- and post-demosaic denoising intentionally reuse visible labels.
+        // Rapid changes in different stages must therefore remain separate Undo
+        // gestures even when they happen inside the historical merge interval.
+        QDoubleSpinBox *preDenoiseStrength = findParameterSpinBox(
+            QStringLiteral("screen.denoise.pre.strength"));
+        QDoubleSpinBox *postDenoiseStrength = findParameterSpinBox(
+            QStringLiteral("screen.denoise.post.strength"));
+        if (!preDenoiseStrength || !postDenoiseStrength ||
+            !undoParametersAction) {
+          fail(QStringLiteral(
+              "Workspace churn could not find keyed Screen strength controls or Undo"));
+          return;
+        }
+        const ParameterState screenUndoBaseline = first->documentStateSnapshot();
+        ParameterState screenUndoReady = screenUndoBaseline;
+        screenUndoReady.scrToImg.type = colorscreen::Dufay;
+        screenUndoReady.rparams.screen_demosaic =
+            colorscreen::render_parameters::default_demosaic;
+        screenUndoReady.rparams.screen_denoise.mode =
+            colorscreen::denoise_parameters::nl_means;
+        screenUndoReady.rparams.demosaiced_denoise.mode =
+            colorscreen::denoise_parameters::nl_means;
+        first->applyState(screenUndoReady);
+        if (!preDenoiseStrength->isEnabled() ||
+            !postDenoiseStrength->isEnabled()) {
+          fail(QStringLiteral(
+              "Workspace churn could not enable both Screen strength controls"));
+          return;
+        }
+        const double preStrengthBefore = preDenoiseStrength->value();
+        const double postStrengthBefore = postDenoiseStrength->value();
+        const double preStrengthAfter =
+            preStrengthBefore <= 0.98 ? preStrengthBefore + 0.01
+                                      : preStrengthBefore - 0.01;
+        const double postStrengthAfter =
+            postStrengthBefore <= 0.96 ? postStrengthBefore + 0.02
+                                       : postStrengthBefore - 0.02;
+        preDenoiseStrength->setValue(preStrengthAfter);
+        postDenoiseStrength->setValue(postStrengthAfter);
+        ParameterState afterScreenEdits = first->documentStateSnapshot();
+        if (std::abs(afterScreenEdits.rparams.screen_denoise.strength -
+                     preStrengthAfter) > 1e-8 ||
+            std::abs(afterScreenEdits.rparams.demosaiced_denoise.strength -
+                     postStrengthAfter) > 1e-8) {
+          fail(QStringLiteral(
+              "Keyed Screen strength controls did not update their stages"));
+          return;
+        }
+        undoParametersAction->trigger();
+        const ParameterState afterPostStrengthUndo =
+            first->documentStateSnapshot();
+        if (std::abs(afterPostStrengthUndo.rparams.screen_denoise.strength -
+                     preStrengthAfter) > 1e-8 ||
+            std::abs(afterPostStrengthUndo.rparams.demosaiced_denoise.strength -
+                     postStrengthBefore) > 1e-8) {
+          fail(QStringLiteral(
+              "Undo merged duplicate Screen labels from different stages"));
+          return;
+        }
+        undoParametersAction->trigger();
+        const ParameterState afterPreStrengthUndo =
+            first->documentStateSnapshot();
+        if (std::abs(afterPreStrengthUndo.rparams.screen_denoise.strength -
+                     preStrengthBefore) > 1e-8 ||
+            std::abs(afterPreStrengthUndo.rparams.demosaiced_denoise.strength -
+                     postStrengthBefore) > 1e-8) {
+          fail(QStringLiteral(
+              "Second Undo did not restore both Screen strength baselines"));
+          return;
+        }
+        first->applyState(screenUndoBaseline);
 
         const QStringList captureDefaultKeys = {
             QStringLiteral("capture.gamma"),

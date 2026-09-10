@@ -293,7 +293,14 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   gives a below-range sentinel its own slider/spinbox position; capture MTF
   wavelengths and process strip widths exercise this rule. Values whose
   sentinel is already inside the ordinary range (for example Geometry's
-  `0 = Auto`) need no special range handling.
+  `0 = Auto`) need no special range handling. The Screen panel is now the
+  first complete panel migration: every stateful helper plus its custom screen
+  selector has a `screen.*` key. In particular, the pre- and post-demosaic
+  denoising stages use distinct keys despite intentionally repeated captions
+  such as `Denoise Mode`, `Strength`, `Patch Radius`, and `Search Radius`.
+  Workspace churn drives the two real `Strength` spin boxes back-to-back and
+  verifies that one Undo reverts only the later stage; this catches regression
+  to visible-text merge identity rather than merely checking metadata.
 - Prefer `QSignalBlocker` for temporary signal suppression. The first P1 cleanup
   converts the central `ParameterPanel` synchronization helpers and the simple
   refresh/update pairs in Capture, Screen, Geometry, Image Layer, Tiles, Color,
