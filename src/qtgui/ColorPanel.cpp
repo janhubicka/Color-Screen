@@ -140,9 +140,19 @@ void ColorPanel::setupUi() {
       3.0, nullptr, false, "Color temperature of the backlight in Kelvin. Higher values are bluer (daylight), lower values are yellower (tungsten).");
 
   m_currentGroupForm = nullptr; // End Backlight section
+  auto historicalCaptureApplicable = [this](const ParameterState &state) {
+    const auto image = m_imageGetter();
+    const auto capture = image ? state.rparams.get_capture_type(image.get())
+                               : state.rparams.capture_type;
+    return render_parameters::capture_has_screen_p(capture);
+  };
+
   addSeparator("Screen dyes");
   m_screenDyesGroup = m_currentGroupForm ? m_currentGroupForm->parentWidget()
                                          : nullptr;
+  if (m_screenDyesGroup)
+    m_screenDyesGroup->setObjectName(QStringLiteral("ColorScreenDyesGroup"));
+  setParameterApplicability(m_screenDyesGroup, historicalCaptureApplicable);
   setupTiles("Color Preview");
 
   // Gamut Chart
@@ -213,13 +223,17 @@ void ColorPanel::setupUi() {
 
   m_spectraContainer->addWidget(m_spectraSection);
 
-  // Add to form layout (at the top)
+  // A spectral chart has no meaning for a matrix-only dye model. Treat it as
+  // logical row applicability rather than presentation-time show/hide state.
+  spectraWrapper->setObjectName(QStringLiteral("ColorSpectralChartRow"));
   if (m_currentGroupForm)
     m_currentGroupForm->addRow(spectraWrapper);
   else
     m_form->addRow(spectraWrapper);
-
-
+  setParameterApplicability(spectraWrapper, [](const ParameterState &state) {
+    return render_parameters::color_model_properties[state.rparams.color_model]
+               .flags & render_parameters::SPECTRA_BASED;
+  });
 
   addCorrelatedRGBParameter(
       "dye age", -10.0, 110.0, 1.0, 0, "%",
@@ -245,6 +259,11 @@ void ColorPanel::setupUi() {
   addSeparator("Viewing conditions correction");
   m_viewingCorrectionGroup =
       m_currentGroupForm ? m_currentGroupForm->parentWidget() : nullptr;
+  if (m_viewingCorrectionGroup)
+    m_viewingCorrectionGroup->setObjectName(
+        QStringLiteral("ColorViewingCorrectionGroup"));
+  setParameterApplicability(m_viewingCorrectionGroup,
+                            historicalCaptureApplicable);
 
   // Corrected Color Preview
   {
@@ -402,35 +421,10 @@ void ColorPanel::setupUi() {
   });
   m_currentGroupForm = nullptr;
 
-    // Updater for Spectra Chart visibility in main layout
-  m_paramUpdaters.push_back([this](const ParameterState &s) {
-    bool spectraBased =
-        render_parameters::color_model_properties[s.rparams.color_model].flags &
-        render_parameters::SPECTRA_BASED;
-        
-     if (spectraBased) {
-         if (m_spectraSection) m_spectraSection->show();
-     } else {
-         if (m_spectraSection) m_spectraSection->hide();
-     }
-  });
+  // Historical-process sections and the nested spectral row are registered
+  // with ParameterPanel applicability above; no direct visibility repair is
+  // needed here.
 
-  // Ordinary/unknown captures still use the generic black, backlight and
-  // final-output controls in this panel. Hide only the historical
-  // screen-dye/viewing-model sections until a screen capture is selected.
-  m_widgetStateUpdaters.push_back([this]() {
-    const ParameterState state = m_stateGetter();
-    const auto image = m_imageGetter();
-    const auto capture = image
-        ? state.rparams.get_capture_type(image.get())
-        : state.rparams.capture_type;
-    const bool historical = render_parameters::capture_has_screen_p(capture);
-    if (m_screenDyesGroup)
-      m_screenDyesGroup->setVisible(historical);
-    if (m_viewingCorrectionGroup)
-      m_viewingCorrectionGroup->setVisible(historical);
-  });
-  
   updateUI();
 }
 
@@ -467,12 +461,8 @@ void ColorPanel::updateSpectraChart() {
 
     m_spectraChart->setSpectraData(data.red, data.green, data.blue,
                                    data.backlight);
-    if (m_spectraSection)
-      m_spectraSection->show();
   } else {
     m_spectraChart->clear();
-    if (m_spectraSection)
-      m_spectraSection->hide();
   }
 }
 

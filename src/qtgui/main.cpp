@@ -69,6 +69,8 @@ public:
   using ParameterPanel::ParameterPanel;
   using ParameterPanel::addCheckboxParameter;
   using ParameterPanel::addCheckboxWithReset;
+  using ParameterPanel::addSeparator;
+  using ParameterPanel::setParameterApplicability;
 };
 
 /** Deliver one synthetic mouse event using Qt6's local/global constructor. */
@@ -156,6 +158,41 @@ bool runBetaInvariantSmoke() {
   if (plainCheckbox->isHidden() || resetCheckbox->isHidden() ||
       !plainCheckbox->isEnabled() || !resetCheckbox->isEnabled())
     return fail("checkbox enabledCheck did not restore enablement");
+
+  // Whole addSeparator() groups are form rows too. Applicability must hide the
+  // group without changing its independent expanded/collapsed state.
+  bool sectionApplicable = true;
+  QToolButton *sectionToggle =
+      checkboxProbe.addSeparator(QStringLiteral("Applicable section"));
+  QWidget *sectionGroup = sectionToggle ? sectionToggle->parentWidget() : nullptr;
+  if (sectionGroup)
+    sectionGroup = sectionGroup->parentWidget();
+  QCheckBox *sectionCheckbox = checkboxProbe.addCheckboxParameter(
+      QStringLiteral("Section child"),
+      [](const ParameterState &) { return false; },
+      [](ParameterState &, bool) {});
+  QWidget *sectionRow = sectionCheckbox ? sectionCheckbox->parentWidget() : nullptr;
+  checkboxProbe.setParameterApplicability(
+      sectionGroup, [&sectionApplicable](const ParameterState &) {
+        return sectionApplicable;
+      });
+  checkboxProbe.updateUI();
+  if (!sectionGroup || !sectionToggle || !sectionRow ||
+      sectionGroup->isHidden() ||
+      !sectionGroup->property("parameterApplicable").toBool())
+    return fail("section applicability did not expose an applicable group");
+  sectionToggle->setChecked(false);
+  sectionApplicable = false;
+  checkboxProbe.updateUI();
+  if (!sectionGroup->isHidden() || sectionToggle->isChecked() ||
+      sectionGroup->property("parameterApplicable").toBool())
+    return fail("section applicability changed collapsed presentation state");
+  sectionApplicable = true;
+  checkboxProbe.updateUI();
+  if (sectionGroup->isHidden() || sectionToggle->isChecked() ||
+      !sectionGroup->property("parameterApplicable").toBool() ||
+      !sectionRow->isHidden())
+    return fail("restored section applicability resurrected collapsed content");
 
   // Focus analysis is now a plain background helper. Missing input must fail
   // synchronously rather than depending on QObject/QThread signal delivery.
