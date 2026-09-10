@@ -1,0 +1,21 @@
+name: Agent Qt GUI next cleanup staging
+on:
+  push:
+    branches: [agent/qtgui-cleanup-next-stage]
+    paths: [.github/workflows/agent-qtgui-next-stage.yml, .agent-qtgui-next-patch.py]
+permissions:
+  contents: read
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 651e34544bb8eaebf452ffebe44732978967a368
+      - name: Archive exact reviewed baseline
+        run: git archive --format=tar.gz --prefix=Color-Screen/ HEAD > /tmp/colorscreen-source.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: qtgui-next-source-651e345
+          path: /tmp/colorscreen-source.tar.gz
+          retention-days: 2
