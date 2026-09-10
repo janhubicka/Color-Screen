@@ -18,9 +18,23 @@ jobs:
           set -euo pipefail
           BASE=6dd89551f43685f7293f97039161d0425d5f06c5
           FEATURE=agent/qtgui-screen-parameter-keys
+          PATCH_B64=/tmp/qtgui-screen-parameter-keys.patch.gz.b64
           PATCH=/tmp/qtgui-screen-parameter-keys.patch
 
-          base64 -d .agent-screen-keys.patch.gz.b64 | gzip -d > "$PATCH"
+          test "$(git hash-object .agent-screen-keys.patch.gz.b64.part00)" = b371ebe1f540a7eb8fcad10d66bae26ae94fa44f
+          test "$(git hash-object .agent-screen-keys.patch.gz.b64.part01)" = a85d109f95593f4012a0b1efb8f97b87457b6c25
+          test "$(git hash-object .agent-screen-keys.patch.gz.b64.part02)" = 5e322d2867cc7dbdbe0348b9927957c4763bccda
+          test "$(git hash-object .agent-screen-keys.patch.gz.b64.correct03)" = 4803818f044787cc7fdc7b5fd5964c0f30d5e2c3
+          test "$(git hash-object .agent-screen-keys.patch.gz.b64.correct04)" = cfde93404d6252a7d7a8a4e32da37305ee7b4613
+          test "$(git hash-object .agent-screen-keys.patch.gz.b64.correct05)" = 9685e8916cd2ab251c21f0ba7ce59d8661248b19
+          cat .agent-screen-keys.patch.gz.b64.part00 \
+              .agent-screen-keys.patch.gz.b64.part01 \
+              .agent-screen-keys.patch.gz.b64.part02 \
+              .agent-screen-keys.patch.gz.b64.correct03 \
+              .agent-screen-keys.patch.gz.b64.correct04 \
+              .agent-screen-keys.patch.gz.b64.correct05 > "$PATCH_B64"
+          echo "38dcba12cf4f778a6ed25e42fb128037909ad8c5b4c8d66d2d73da5c738372aa  $PATCH_B64" | sha256sum -c -
+          base64 -d "$PATCH_B64" | gzip -d > "$PATCH"
           echo "3b05b38a774d31b2bd70be6a8d253a9d431ba05f774c2a374e180dd9583e875c  $PATCH" | sha256sum -c -
 
           git fetch origin main
