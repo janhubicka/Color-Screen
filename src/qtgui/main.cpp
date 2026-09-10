@@ -7,6 +7,7 @@
 #include "ToneCurveWidget.h"
 #include "CoordinateTransformer.h"
 #include "DocumentLifecycleSmoke.h"
+#include "DetectScreenWorker.h"
 #include "FocusAnalysisWorker.h"
 #include "FinetuneWorker.h"
 #include "FlatFieldWorker.h"
@@ -117,6 +118,15 @@ bool runBetaInvariantSmoke() {
       std::shared_ptr<colorscreen::image_data>(), {0, 0}, focusParams, nullptr);
   if (missingFocus.success || missingFocus.cancelled)
     return fail("focus-analysis helper accepted a missing scan");
+
+  const DetectScreenAnalysisResult missingDetection =
+      DetectScreenWorker::analyze(
+          colorscreen::scr_detect_parameters(), colorscreen::solver_parameters(),
+          colorscreen::scr_to_img_parameters(), colorscreen::render_parameters(),
+          std::shared_ptr<colorscreen::image_data>(), nullptr);
+  if (missingDetection.success || missingDetection.cancelled ||
+      missingDetection.screenMap || missingDetection.detected.smap)
+    return fail("screen-detection helper accepted a missing scan");
 
   colorscreen::finetune_area_parameters finetuneAreaParams;
   const FinetuneAreaResult missingFinetune = FinetuneWorker::findPoints(

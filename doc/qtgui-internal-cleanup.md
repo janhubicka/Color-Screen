@@ -321,9 +321,14 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   cancelled completion performs cleanup but cannot publish. `TaskQueue::runAsync`
   now constructs its `QRunnable` fully before handing it to `QThreadPool`; this
   avoids QtConcurrent's inline construct-and-submit path, which newer TSan runs
-  reported as a vptr construction/execution race. Completion still uses a
-  `QFutureWatcher` backed by `QPromise`, so destroying the owning queue safely
-  disconnects GUI publication while the cooperative worker winds down.
+  reported as a vptr construction/execution race. The worker closure is also
+  published and taken under an explicit `std::mutex`: Qt's thread-pool submission
+  is thread-safe, but TSan does not model it as a C++ happens-before edge for
+  arbitrary runnable members. The explicit handoff prevents the pool thread from
+  racing the submitting thread while a captured `std::function` is moved into
+  place. Completion still uses a `QFutureWatcher` backed by `QPromise`, so
+  destroying the owning queue safely disconnects GUI publication while the
+  cooperative worker winds down.
   Single-area registration finetune now follows the same final-result lifecycle:
   its helper returns only points produced from the captured solver/render/geometry
   snapshot, and exact scan/`ParameterState` plus finetune-control validation
@@ -332,7 +337,14 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   a dedicated `QThread` because its point and geometry batches are intentionally
   visible while it is still running. Keep migrating custom one-shot `QThread`
   workers incrementally where their intermediate signal requirements allow the
-  same policy without obscuring the worker API.
+  same policy without obscuring the worker API. Final-result screen-type detection
+  now follows this rule too: the detector owns its diagnostic screen map through
+  RAII, exact scan/`ParameterState` validation gates worker completion, and the
+  asynchronous dye-model confirmation remains tied to that same baseline. A
+  document edit or newer final-result operation dismisses the obsolete prompt,
+  preventing a valid old detection from being accepted into newer state. The
+  former DetectScreen QObject/QThread generation wrapper and unused cached mesh
+  member are therefore gone.
 - Separate "enabled" from "applicable/visible" in helper APIs.  Greyed controls
   are useful when they teach a prerequisite; hidden controls are useful when a
   whole concept is meaningless for the current process.  A lambda called

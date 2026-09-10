@@ -5,29 +5,47 @@
 #include <QPromise>
 #include <QRunnable>
 #include <QThreadPool>
+#include <mutex>
 #include "Logging.h"
 
 namespace {
 
-/** A fully constructed fire-and-forget runnable for TaskQueue workers.
+/** Fire-and-forget runnable with an explicitly synchronized worker payload.
 
-    QtConcurrent's helper constructs and submits its internal QRunnable inside
-    one call. ThreadSanitizer can observe a pool thread entering the virtual
-    run() while that internal object's vptr construction is still visible on
-    the submitting thread. Constructing this object first and only then calling
-    QThreadPool::start() gives the handoff an explicit synchronization point. */
+    The runnable must be fully constructed before QThreadPool sees it, and the
+    closure itself must cross a C++ synchronization edge before run() reads it.
+    Qt's pool submission is thread-safe, but ThreadSanitizer does not model that
+    internal handoff as publication of arbitrary QRunnable members. publish()
+    therefore stores the closure under a std::mutex before submission; run()
+    takes it under the same mutex and executes the local copy after unlocking. */
 class TaskQueueRunnable final : public QRunnable {
 public:
-  explicit TaskQueueRunnable(std::function<void()> function)
-      : m_function(std::move(function)) {
-    setAutoDelete(true);
+  TaskQueueRunnable() { setAutoDelete(true); }
+
+  /** Publish FUNCTION before this runnable is submitted to QThreadPool. */
+  void publish(std::function<void()> function) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    m_function = std::move(function);
+    m_published = true;
   }
 
-  /** Execute the already-constructed worker closure on the pool thread. */
-  void run() override { m_function(); }
+  /** Take the published closure on the pool thread and execute it unlocked. */
+  void run() override {
+    std::function<void()> function;
+    {
+      std::lock_guard<std::mutex> lock(m_mutex);
+      if (!m_published)
+        return;
+      function = std::move(m_function);
+    }
+    if (function)
+      function();
+  }
 
 private:
+  std::mutex m_mutex;
   std::function<void()> m_function;
+  bool m_published = false;
 };
 
 } // namespace
@@ -242,7 +260,8 @@ void TaskQueue::runAsync (std::function<void (colorscreen::progress_info *)> wor
             });
     watcher->setFuture(future);
 
-    auto *runnable = new TaskQueueRunnable(
+    auto *runnable = new TaskQueueRunnable;
+    runnable->publish(
         [w = std::move(worker), progress, promise]() mutable {
           w(progress.get());
           promise->finish();

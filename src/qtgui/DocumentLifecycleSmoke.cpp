@@ -48,7 +48,6 @@ struct DocumentLifecycleState {
   bool firstInitialMirror = false;
   bool secondInitialMirror = false;
   bool workspaceCancelTested = false;
-  QPointer<QThread> backgroundThread;
   std::function<void()> completed;
 };
 
@@ -576,36 +575,27 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
       }
 
       case 5: {
-        // Start a real production one-shot worker. Screen detection is useful
-        // here because it owns a QThread through the same registry as finetune,
-        // focus, flat-field and sharpening workers, but needs no modal setup.
-        const QList<QThread *> before = second->findChildren<QThread *>(
-            QString(), Qt::FindDirectChildrenOnly);
-        QSet<QThread *> existing;
-        for (QThread *thread : before)
-          existing.insert(thread);
+        // Start a real production final-result operation. Screen detection now
+        // uses the shared TaskQueue/QThreadPool one-shot lifecycle rather than
+        // owning a dedicated child QThread, so test the queue contract instead
+        // of the removed implementation detail.
         if (!QMetaObject::invokeMethod(second, "onAutodetectScreen",
                                        Qt::DirectConnection)) {
           fail(QStringLiteral(
               "Document lifecycle smoke could not start screen detection"));
           return;
         }
-        const QList<QThread *> after = second->findChildren<QThread *>(
-            QString(), Qt::FindDirectChildrenOnly);
-        for (QThread *thread : after)
-          if (thread && !existing.contains(thread)) {
-            state->backgroundThread = thread;
-            break;
-          }
-        if (!state->backgroundThread || !state->backgroundThread->isRunning()) {
+        if (!second->m_oneShotOperationQueue.hasActiveTasks()) {
           fail(QStringLiteral(
-              "Document lifecycle smoke did not start a one-shot worker thread"));
+              "Document lifecycle smoke did not enqueue one-shot screen detection"));
           return;
         }
 
-        // Explicit Discard is the final supported close outcome.  Close while
-        // the production worker is still running: teardown must cancel its
-        // progress and join the tracked thread before document state vanishes.
+        // Explicit Discard is the final supported close outcome. Close while
+        // production one-shot work is active: teardown must cancel publication
+        // and detach it safely from document state. The top-level smoke cleanup
+        // drains QThreadPool before process exit, allowing cooperative work that
+        // owns only captured snapshots to wind down.
         queueDialogResponses(app, {{QStringLiteral("Unsaved Changes"),
                                     QMessageBox::Discard}});
         if (!second->close()) {
@@ -618,7 +608,7 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
 
       case 6:
         QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
-        if (state->second || state->backgroundThread ||
+        if (state->second ||
             !app.documentWindows().isEmpty() || !app.viewWindows().isEmpty() ||
             app.tabCount() != 0 || (workspace && workspace->isVisible())) {
           if (retryOrFail(QStringLiteral(

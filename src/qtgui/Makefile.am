@@ -78,7 +78,6 @@ MOC_SOURCES = \
     moc_GeometrySolverWorker.cpp \
     moc_ColorOptimizerWorker.cpp \
     moc_CoordinateOptimizationWorker.cpp \
-    moc_DetectScreenWorker.cpp \
     moc_FinetuneMisregisteredWorker.cpp \
     moc_WorkerBase.cpp \
     moc_ContactCopyPanel.cpp \

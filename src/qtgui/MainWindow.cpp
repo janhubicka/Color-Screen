@@ -3742,7 +3742,9 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
   if (fileName.isEmpty())
     return;
 
-  // A final-result one-shot is tied to the current image snapshot.
+  // Final-result work and any pending detection confirmation belong to the
+  // current image snapshot. Invalidate both before starting replacement I/O.
+  dismissDetectScreenPrompt();
   m_oneShotOperationQueue.cancelAll();
   m_imageLoadPending = true;
   bool parameterDataLoaded = false;
@@ -4016,6 +4018,7 @@ void MainWindow::saveRecentFiles() {
 void MainWindow::applyState(const ParameterState &state) {
   // Final-result one-shot operations consume an exact document snapshot. Any
   // accepted parameter change (including Undo/Redo) makes that result stale.
+  dismissDetectScreenPrompt();
   m_oneShotOperationQueue.cancelAll();
 
   const bool invalidateFocusAreas
@@ -5769,6 +5772,16 @@ void MainWindow::startAreaSelection(const QString &message,
   statusBar()->showMessage(message);
 }
 
+/** Close a stale screen-detection confirmation without applying its result. */
+void MainWindow::dismissDetectScreenPrompt() {
+  if (QMessageBox *prompt = m_detectScreenPrompt.data()) {
+    // Clear first: close() emits finished, whose callback must recognize that
+    // this prompt no longer owns publication.
+    m_detectScreenPrompt = nullptr;
+    prompt->close();
+  }
+}
+
 /** Run one final-result operation with shared lifecycle policy.
 
     Prerequisites and publication validation execute on the GUI thread. The
@@ -5783,6 +5796,10 @@ void MainWindow::runOneShotOperation(
     return;
   if (operation.prerequisites && !operation.prerequisites())
     return;
+
+  // A newer final-result action supersedes a detected-screen result that is
+  // still waiting for confirmation, just as it supersedes running work.
+  dismissDetectScreenPrompt();
 
   auto lifecycle =
       std::make_shared<OneShotOperation>(std::move(operation));
@@ -5869,7 +5886,9 @@ void MainWindow::runAreaComputation(
    existing values).  Updates ImageWidget, NavigationView, gamut warning,
    undo history, and all panels.  Returns true on success.  */
 bool MainWindow::loadParameterFile(const QString &fileName) {
-  // Loading external parameters invalidates every final-result state snapshot.
+  // Loading external parameters invalidates every final-result state snapshot
+  // and any screen-detection confirmation waiting on the old parameters.
+  dismissDetectScreenPrompt();
   m_oneShotOperationQueue.cancelAll();
   FILE *f = fopen(fileName.toUtf8().constData(), "r");
   if (!f) {
@@ -6300,20 +6319,23 @@ void MainWindow::onAutomaticallyAddPointsRequested(const colorscreen::finetune_a
   thread->start();
 }
 
-/** Launch the automatic screen type detection worker.
-   Creates a DetectScreenWorker running in a new thread, which analyses
-   the scan to determine the colour screen type, initial geometry, and
-   registration points.  Results are handled by onDetectScreenFinished.  */
+/** Launch automatic screen detection.
+   Regular screens with a known type follow the coordinate/registration path.
+   Unknown regular-screen detection is a final-result OneShotOperation whose
+   scan and complete ParameterState must remain current through computation and
+   the later confirmation prompt. */
 void MainWindow::onAutodetectScreen() {
-  if (!m_scan) {
+  if (!m_scan)
     return;
-  }
+
+  // Starting this action supersedes an older successful detection that may
+  // still be waiting for the user to confirm its dye-model choice.
+  dismissDetectScreenPrompt();
 
   // A stochastic process has no regular lattice to identify. Color-element
   // autodetection is performed by the screen-detection render modes instead.
-  if (colorscreen::stochastic_screen_p(m_scrToImgParams.type)) {
+  if (colorscreen::stochastic_screen_p(m_scrToImgParams.type))
     return;
-  }
 
   if (colorscreen::screen_has_regular_geometry_p(m_scrToImgParams.type)) {
     if (m_solverParams.n_points() > 0) {
@@ -6337,146 +6359,73 @@ void MainWindow::onAutodetectScreen() {
     return;
   }
 
-  // Create progress info
-  auto progress = std::make_shared<colorscreen::progress_info>();
-  progress->set_task("Detecting screen", 1);
-  colorscreen::sub_task task(progress.get()); /* Keep so tasks appear nested. */
-  addProgress(progress);
+  const auto scan = m_scan;
+  const ParameterState baseline = getCurrentState();
+  auto result = std::make_shared<DetectScreenAnalysisResult>();
 
-  // Create worker and thread
-  const uint64_t generation = ++m_detectScreenGeneration;
-  DetectScreenWorker *worker =
-      new DetectScreenWorker(m_detectParams, m_solverParams, m_scrToImgParams,
-                             m_rparams, m_scan, progress, m_rparams.gamma);
-  QThread *thread = new QThread(this);
-  worker->moveToThread(thread);
-  trackBackgroundThread(thread);
+  OneShotOperation operation;
+  operation.description = tr("Detecting screen");
+  operation.prerequisites =
+      [this, scan]() { return !m_closing && m_scan == scan; };
+  operation.resultValid = [this, scan, baseline, result]() {
+    return m_scan == scan && getCurrentState() == baseline &&
+           !result->cancelled;
+  };
+  operation.applyResult = [this, scan, baseline, result]() {
+    presentDetectedScreenResult(*result, scan, baseline);
+  };
 
-  // Connect signals
-  connect(thread, &QThread::started, worker, &DetectScreenWorker::detect);
-  connect(worker, &DetectScreenWorker::finished, thread, &QThread::quit,
-          Qt::DirectConnection);
-  connect(thread, &QThread::finished, worker, &QObject::deleteLater);
-  connect(thread, &QThread::finished, thread, &QObject::deleteLater);
-
-  // Connect to our slot to handle results
-  connect(worker, &DetectScreenWorker::finished, this,
-          [this, progress, generation](
-              bool success, colorscreen::detected_screen result,
-              colorscreen::solver_parameters solverParams) {
-            if (!m_closing && generation == m_detectScreenGeneration &&
-                (!progress || !progress->pool_cancel())) {
-              onDetectScreenFinished(success, result, solverParams);
-            } else {
-              /* A discarded detection result still owns its optional raw
-                 diagnostic map.  The accepted path transfers that ownership
-                 in onDetectScreenFinished(). */
-              delete result.smap;
-              result.smap = nullptr;
-            }
-            if (!m_closing)
-              removeProgress(progress);
-          });
-
-  thread->start();
+  runOneShotOperation(
+      std::move(operation),
+      [scan, baseline,
+       result](colorscreen::progress_info *progress) mutable {
+        *result = DetectScreenWorker::analyze(
+            baseline.detect, baseline.solver, baseline.scrToImg,
+            baseline.rparams, scan, progress);
+      });
 }
 
-/** Handle completion of automatic screen detection.
-   Shows the detected screen type with a preview icon.  If the detected
-   dye model differs from the current one, prompts the user to switch.
-   Applies the detected screen type, geometry, mesh, and solver points,
-   switches to interpolated render mode, and queues a geometry solve
-   to refine the detected parameters (without recomputing the mesh,
-   to preserve the detected pattern).  */
-void MainWindow::onDetectScreenFinished(
-    bool success, colorscreen::detected_screen result,
-    colorscreen::solver_parameters solverParams) {
-  /* detect_regular_screen() returns ownership of the optional diagnostic map
-     to its caller. Keep it alive for the Qt overlay instead of leaking the raw
-     pointer as the old Qt path did. */
-  std::shared_ptr<const colorscreen::screen_map> detectedScreenMap(result.smap);
-  result.smap = nullptr;
-  if (!success || !result.success) {
-    QMessageBox::warning(this, "Screen Detection", "Screen detection failed.");
+/** Present a completed screen detection and publish it only after confirmation.
+   BASELINE is deliberately retained after the worker finishes: asynchronous
+   QMessageBox::open() leaves the GUI responsive, so an edit, image change, or
+   newer final-result operation while the prompt is visible must invalidate the
+   result instead of applying it to a different document state. */
+void MainWindow::presentDetectedScreenResult(
+    const DetectScreenAnalysisResult &result,
+    std::shared_ptr<colorscreen::image_data> scan,
+    const ParameterState &baseline) {
+  if (!result.success || !result.detected.success) {
+    QMessageBox::warning(this, tr("Screen Detection"),
+                         tr("Screen detection failed."));
     return;
   }
 
-  // Store detected mesh for later restoration
-  m_detectedMesh = result.mesh_trans;
+  const colorscreen::scr_to_img_parameters detectedParam =
+      result.detected.param;
+  const std::shared_ptr<colorscreen::mesh> detectedMesh =
+      result.detected.mesh_trans;
+  const auto solverPoints = result.solver.points;
+  const std::shared_ptr<const colorscreen::screen_map> detectedScreenMap =
+      result.screenMap;
 
-  // Determine what the automatic colour model would be before presenting
-  // the result. The actual document mutation is deferred until the window-modal
-  // message box closes.
-  colorscreen::render_parameters tempParams = m_rparams;
-  tempParams.auto_color_model(result.param.type);
-
+  colorscreen::render_parameters automaticColor = baseline.rparams;
+  automaticColor.auto_color_model(detectedParam.type);
   const QString currentDye = QString::fromUtf8(
-      colorscreen::render_parameters::color_model_properties[m_rparams
-                                                                 .color_model]
+      colorscreen::render_parameters::color_model_properties[
+          baseline.rparams.color_model]
           .pretty_name);
   const QString detectedDye = QString::fromUtf8(
-      colorscreen::render_parameters::color_model_properties[tempParams
-                                                                 .color_model]
+      colorscreen::render_parameters::color_model_properties[
+          automaticColor.color_model]
           .pretty_name);
   const QString detectedScreen = QString::fromUtf8(
-      colorscreen::scr_names[(int)result.param.type].pretty_name);
-
-  const colorscreen::scr_to_img_parameters detectedParam = result.param;
-  const std::shared_ptr<colorscreen::mesh> detectedMesh = result.mesh_trans;
-  const auto solverPoints = solverParams.points;
-  auto applyDetectedScreen =
-      [this, detectedParam, detectedMesh, solverPoints,
-       detectedScreenMap = std::move(detectedScreenMap)](
-          bool updateColorModel) mutable {
-        // The prompt is window-modal, so this snapshot has the same semantics
-        // as the old code immediately following QMessageBox::exec().
-        ParameterState oldState = getCurrentState();
-
-        m_scrToImgParams.type = detectedParam.type;
-        if (detectedMesh) {
-          m_scrToImgParams.merge_solver_solution(detectedParam);
-          m_scrToImgParams.mesh_trans = detectedMesh;
-          m_scrToImgParams.mesh_trans_is_scr_to_img = true;
-        }
-
-        if (updateColorModel)
-          m_rparams.auto_color_model(detectedParam.type);
-
-        m_solverParams.points = solverPoints;
-
-        m_detectedScreenMap = std::move(detectedScreenMap);
-        m_imageWidget->setDetectedScreenMap(m_detectedScreenMap);
-        if (ImageWidget *image = inspectorImageWidget();
-            image && image != m_imageWidget)
-          image->setDetectedScreenMap(m_detectedScreenMap);
-        if (m_detectedPatchCentersAction)
-          m_detectedPatchCentersAction->setEnabled(
-              static_cast<bool>(m_detectedScreenMap));
-
-        m_renderTypeParams.type = colorscreen::render_type_interpolated;
-
-        m_imageWidget->updateParameters(&m_rparams, &m_scrToImgParams,
-                                        &m_detectParams, &m_renderTypeParams,
-                                        &m_solverParams);
-        m_navigationView->updateParameters(&m_rparams, &m_scrToImgParams,
-                                           &m_detectParams);
-        updateUIFromState(getCurrentState());
-        updateRegistrationActions();
-        updateModeMenu();
-
-        // Preserve the detected mesh while refining the remaining geometry.
-        m_solverQueue.requestRender(false);
-
-        ParameterState newState = getCurrentState();
-        m_undoStack->push(new ChangeParametersCommand(
-            this, oldState, newState, "Autodetect screen"));
-      };
-
+      colorscreen::scr_names[(int)detectedParam.type].pretty_name);
   const bool askColorModel = currentDye != detectedDye;
+
   auto *msgBox = new QMessageBox(this);
   msgBox->setAttribute(Qt::WA_DeleteOnClose);
   msgBox->setWindowTitle(tr("Screen Detection"));
-  msgBox->setIconPixmap(renderScreenIcon(result.param.type).pixmap(128, 128));
+  msgBox->setIconPixmap(renderScreenIcon(detectedParam.type).pixmap(128, 128));
   if (askColorModel) {
     msgBox->setText(tr("Detected Screen: <b>%1</b>").arg(detectedScreen));
     msgBox->setInformativeText(
@@ -6490,15 +6439,56 @@ void MainWindow::onDetectScreenFinished(
         tr("Detected Screen: <b>%1</b> successfully.").arg(detectedScreen));
     msgBox->setStandardButtons(QMessageBox::Ok);
   }
-  connect(msgBox, &QMessageBox::finished, this,
-          [msgBox, askColorModel,
-           applyDetectedScreen = std::move(applyDetectedScreen)](int) mutable {
-            const bool updateColorModel =
-                askColorModel &&
-                msgBox->standardButton(msgBox->clickedButton()) ==
-                    QMessageBox::Yes;
-            applyDetectedScreen(updateColorModel);
-          });
+
+  m_detectScreenPrompt = msgBox;
+  connect(
+      msgBox, &QMessageBox::finished, this,
+      [this, msgBox, askColorModel, scan, baseline, detectedParam,
+       detectedMesh, solverPoints, detectedScreenMap](int) mutable {
+        // A newer operation or document edit clears m_detectScreenPrompt before
+        // closing this box, making its delayed finished signal harmless.
+        if (m_detectScreenPrompt != msgBox)
+          return;
+        m_detectScreenPrompt = nullptr;
+        if (m_closing || m_scan != scan || getCurrentState() != baseline)
+          return;
+
+        const bool updateColorModel =
+            askColorModel &&
+            msgBox->standardButton(msgBox->clickedButton()) ==
+                QMessageBox::Yes;
+
+        ParameterState newState = baseline;
+        newState.scrToImg.type = detectedParam.type;
+        if (detectedMesh) {
+          newState.scrToImg.merge_solver_solution(detectedParam);
+          newState.scrToImg.mesh_trans = detectedMesh;
+          newState.scrToImg.mesh_trans_is_scr_to_img = true;
+        }
+        if (updateColorModel)
+          newState.rparams.auto_color_model(detectedParam.type);
+        newState.solver.points = solverPoints;
+
+        // Render mode is view/session state, not part of the undoable document
+        // snapshot. Set it before applying parameters so the refresh uses it.
+        m_renderTypeParams.type = colorscreen::render_type_interpolated;
+        changeParameters(newState, tr("Autodetect screen"));
+
+        m_detectedScreenMap = std::move(detectedScreenMap);
+        m_imageWidget->setDetectedScreenMap(m_detectedScreenMap);
+        if (ImageWidget *image = inspectorImageWidget();
+            image && image != m_imageWidget)
+          image->setDetectedScreenMap(m_detectedScreenMap);
+        if (m_detectedPatchCentersAction)
+          m_detectedPatchCentersAction->setEnabled(
+              static_cast<bool>(m_detectedScreenMap));
+
+        updateRegistrationActions();
+        updateModeMenu();
+
+        // Preserve the detected mesh while refining remaining geometry.
+        m_solverQueue.requestRender(false);
+      });
   msgBox->open();
 }
 
