@@ -18,6 +18,7 @@
 #include <QList>
 #include <QMdiArea>
 #include <QMdiSubWindow>
+#include <QMessageBox>
 #include <QPointer>
 #include <QPushButton>
 #include <QStatusBar>
@@ -1043,6 +1044,165 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
               "Tiled activation did not return the inspector to the primary view"));
           return;
         }
+        // Cancel the real discovery request before delivering its completion.
+        // Restoring the exact input snapshot must not resurrect cancelled work.
+        const ParameterState focusBaseline = first->getCurrentState();
+        first->onFindFocusAreasRequested();
+        if (!first->m_focusAreaAnalysisRunning ||
+            !first->m_oneShotOperationQueue.hasActiveTasks()) {
+          fail(QStringLiteral("Focus-area discovery bypassed the one-shot lifecycle"));
+          return;
+        }
+        ParameterState edited = focusBaseline;
+        edited.rparams.brightness += 0.125;
+        first->applyState(edited);
+        first->applyState(focusBaseline);
+        schedule(100, 50, 200);
+        return;
+      }
+
+      case 100: {
+        if (first->m_focusAreaAnalysisRunning) {
+          retryOrFail(QStringLiteral("Cancelled focus-area discovery did not finish cleanup"));
+          return;
+        }
+        if (!first->m_focusAreaCandidates.empty() || first->m_focusAreaPrompt ||
+            first->m_oneShotOperationQueue.hasActiveTasks()) {
+          fail(QStringLiteral("Cancelled focus-area discovery published stale output"));
+          return;
+        }
+
+        // Run the real multi-area path too. A geometry edit clears the source
+        // candidates; a late completion must not put its old vector back.
+        const ParameterState focusBaseline = first->getCurrentState();
+        first->m_focusAreaCandidates.resize(3);
+        first->onAnalyzeFocusAreasRequested(
+            colorscreen::finetune_scanner_mtf_sigma);
+        if (!first->m_focusAreaAnalysisRunning ||
+            !first->m_oneShotOperationQueue.hasActiveTasks()) {
+          fail(QStringLiteral("Multi-area focus fitting bypassed the one-shot lifecycle"));
+          return;
+        }
+        ParameterState edited = focusBaseline;
+        edited.scrToImg.center.x += 1;
+        first->applyState(edited);
+        first->applyState(focusBaseline);
+        schedule(101, 50, 200);
+        return;
+      }
+
+      case 101: {
+        if (first->m_focusAreaAnalysisRunning) {
+          retryOrFail(QStringLiteral("Cancelled multi-area fit did not finish cleanup"));
+          return;
+        }
+        if (!first->m_focusAreaCandidates.empty() || first->m_focusAreaPrompt ||
+            !first->m_focusAreaAnalysisResult.selected.empty() ||
+            first->m_oneShotOperationQueue.hasActiveTasks()) {
+          fail(QStringLiteral("Cancelled multi-area fit restored stale diagnostics"));
+          return;
+        }
+        for (const ProgressEntry &entry : first->m_activeProgresses) {
+          if (entry.title == QStringLiteral("Find focus areas") ||
+              entry.title == QStringLiteral("Analyze focus areas")) {
+            fail(QStringLiteral("Cancelled focus-area operation retained its task row"));
+            return;
+          }
+        }
+
+        // Use synthetic successful diagnostics to exercise the actual Apply
+        // dialog without requiring an expensive, numerically successful fit.
+        const ParameterState baseline = first->getCurrentState();
+        const auto scan = first->sharedImageData();
+        constexpr uint64_t flags = colorscreen::finetune_scanner_mtf_sigma;
+        colorscreen::finetune_focus_analysis_result analysis;
+        analysis.success = true;
+        analysis.joint_fit.success = true;
+        analysis.joint_fit.scanner_mtf_sigma =
+            baseline.rparams.sharpen.scanner_mtf.sigma + 0.25;
+        auto showPrompt = [first, scan, baseline, analysis, flags]() -> QPushButton * {
+          first->presentFocusAreaAnalysisResult(analysis, scan, baseline, flags);
+          if (QMessageBox *box = first->m_focusAreaPrompt.data())
+            for (QAbstractButton *button : box->buttons())
+              if (box->buttonRole(button) == QMessageBox::AcceptRole)
+                return qobject_cast<QPushButton *>(button);
+          return nullptr;
+        };
+
+        ParameterState edited = baseline;
+        edited.rparams.brightness += 0.125;
+        first->presentFocusAreaAnalysisResult(analysis, scan, edited, flags);
+        if (first->m_focusAreaPrompt) {
+          fail(QStringLiteral("Focus Apply dialog accepted stale input parameters"));
+          return;
+        }
+        first->presentFocusAreaAnalysisResult(
+            analysis, second->sharedImageData(), baseline, flags);
+        if (first->m_focusAreaPrompt) {
+          fail(QStringLiteral("Focus Apply dialog accepted a different scan"));
+          return;
+        }
+
+        QPointer<QPushButton> obsoleteApply = showPrompt();
+        QPointer<QMessageBox> obsoletePrompt = first->m_focusAreaPrompt;
+        if (!obsoleteApply || !obsoletePrompt) {
+          fail(QStringLiteral("Focus analysis did not offer its Apply dialog"));
+          return;
+        }
+        first->applyState(edited);
+        first->applyState(baseline);
+        if (first->m_focusAreaPrompt ||
+            (obsoletePrompt && obsoletePrompt->isVisible())) {
+          fail(QStringLiteral("Document edit did not dismiss obsolete focus approval"));
+          return;
+        }
+        if (obsoleteApply)
+          obsoleteApply->click();
+        if (first->getCurrentState() != baseline) {
+          fail(QStringLiteral("Old focus approval became publishable after restoring inputs"));
+          return;
+        }
+
+        if (!showPrompt()) {
+          fail(QStringLiteral("Focus approval could not be reopened"));
+          return;
+        }
+        MainWindow::OneShotOperation replacement;
+        replacement.description = QStringLiteral("Replace focus approval smoke");
+        first->runOneShotOperation(std::move(replacement),
+                                   [](colorscreen::progress_info *) {});
+        if (first->m_focusAreaPrompt) {
+          fail(QStringLiteral("New one-shot did not supersede pending focus approval"));
+          return;
+        }
+
+        QPushButton *apply = showPrompt();
+        QUndoStack *undo = first->findChild<QUndoStack *>();
+        if (!apply || !undo) {
+          fail(QStringLiteral("Focus approval lost its Apply control or undo stack"));
+          return;
+        }
+        const int undoIndex = undo->index();
+        ParameterState expected = baseline;
+        expected.rparams.sharpen.scanner_mtf.sigma =
+            analysis.joint_fit.scanner_mtf_sigma;
+        apply->click();
+        if (first->getCurrentState() != expected || first->m_focusAreaPrompt ||
+            undo->index() != undoIndex + 1 || !first->isDocumentModified()) {
+          fail(QStringLiteral("Accepted multi-area focus was not one undoable edit"));
+          return;
+        }
+        undo->undo();
+        if (first->getCurrentState() != baseline || undo->index() != undoIndex) {
+          fail(QStringLiteral("Undo multi-area focus did not restore the exact baseline"));
+          return;
+        }
+        undo->redo();
+        if (first->getCurrentState() != expected) {
+          fail(QStringLiteral("Redo multi-area focus did not restore the accepted fit"));
+          return;
+        }
+        undo->undo();
         workspace->cascadeDocuments();
         schedule(2, 50, 40);
         return;

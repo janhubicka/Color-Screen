@@ -356,6 +356,18 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   diagnostics; the old live-state mutation caused `changeParameters()` to see
   a no-op and omit the undo/dirty transition. Workspace-churn smoke checks the
   exact coordinate-edit Undo/Redo state and dedicated progress-row cleanup.
+  Automatic focus-area discovery and multi-area fitting now also share that
+  lifecycle, retaining their dedicated Cancel rows and input-model/validation
+  settings. Their numerical work lives in `FocusAnalysisWorker`, with immutable
+  inputs and structured missing-input/cancellation/exception results. Cancelled
+  or stale runs cannot restore old candidate rectangles or partial diagnostics
+  after a document edit. Successful joint fits still need explicit Apply, and
+  the approval dialog remains bound to the original scan and full state until
+  acceptance. Edits (even if later undone), image/parameter replacement, close,
+  or a newer final-result request dismiss obsolete focus/detection approvals.
+  Beta smoke covers missing/pre-cancelled helper inputs; workspace churn covers
+  both production cancellation paths, late approval after input restoration,
+  prompt supersession, task-row cleanup, and exact Apply/Undo/Redo state.
 - Separate "enabled" from "applicable/visible" in helper APIs.  Greyed controls
   are useful when they teach a prerequisite; hidden controls are useful when a
   whole concept is meaningless for the current process.  A lambda called

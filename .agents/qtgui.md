@@ -137,7 +137,16 @@ diagnostics belong to the source `MainWindow`; they must never be static or
 application-global.  Ordinary views only present that state as overlays, and an
 active secondary view receives the same document overlay when it takes over the
 inspector.  Discovery and multi-area fitting are one-shot cancellable background
-operations.  A validated focus result is still applied through the source
+operations using `MainWindow::OneShotOperation` and synchronous
+`FocusAnalysisWorker` helpers. Discovery and fitting each capture the scan and
+complete `ParameterState`; stale/cancelled completions must not repopulate
+candidate rectangles or partial diagnostics. The explicit **Apply focus**
+approval is part of the same request lifetime: dismiss it on document edits,
+image/parameter replacement, document close or a newer final-result operation,
+and recheck the snapshot when the dialog finishes. Restoring old parameter
+values must not resurrect an already superseded approval. Both focus operations
+retain dedicated Cancel rows and restore their controls on every completion.
+A validated focus result is still applied through the source
 document's normal undoable parameter path, never by mutating renderer/view
 state directly.
 

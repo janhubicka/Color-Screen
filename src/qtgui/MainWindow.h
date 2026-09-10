@@ -457,8 +457,17 @@ private:
       std::shared_ptr<colorscreen::image_data> scan,
       const ParameterState &baseline);
 
-  /** Dismiss an obsolete screen-detection confirmation without publishing it. */
-  void dismissDetectScreenPrompt();
+  /** Dismiss obsolete one-shot confirmations without publishing their results. */
+  void dismissOneShotPrompts();
+
+  /** Reset focus-area busy state after success, failure, cancellation or staleness. */
+  void finishFocusAreaOperation(const QString &summary);
+
+  /** Present snapshot-bound focus diagnostics and return the visible summary. */
+  QString presentFocusAreaAnalysisResult(
+      const colorscreen::finetune_focus_analysis_result &analysis,
+      std::shared_ptr<colorscreen::image_data> scan,
+      const ParameterState &baseline, uint64_t flags);
 
   /** Launch an area-based parameter computation.
       Shows MESSAGE, captures the current image/ParameterState snapshot, then
@@ -626,6 +635,7 @@ private:
   colorscreen::solver_parameters m_solverParams;
   std::shared_ptr<const colorscreen::screen_map> m_detectedScreenMap;
   QPointer<QMessageBox> m_detectScreenPrompt;
+  QPointer<QMessageBox> m_focusAreaPrompt;
   bool m_showDetectedPatchCenters = false;
   /** Last slanted-edge setup used in this session.  Each accepted measurement
       stores an independent copy of its metadata, while the numerical controls
