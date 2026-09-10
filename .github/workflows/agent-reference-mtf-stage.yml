@@ -1,0 +1,104 @@
+name: Agent reference MTF lifecycle staging
+on:
+  push:
+    branches: [agent/qtgui-reference-mtf-stage]
+    paths: [.github/workflows/agent-reference-mtf-stage.yml]
+permissions:
+  contents: write
+concurrency:
+  group: agent-reference-mtf-stage
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Publish the exact reviewed eight-file change
+        shell: bash
+        run: |
+          set -euo pipefail
+          base=93c07313e95ec4af92e561def748ded5d6951ecd
+          target=agent/qtgui-reference-mtf-one-shot
+          test "$(git rev-parse origin/main)" = "$base"
+          test -z "$(git ls-remote --heads origin "refs/heads/$target")"
+          python3 - <<'PY'
+          import base64, hashlib, zlib
+          from pathlib import Path
+          payload = Path('.agent-reference-mtf.patch.b64').read_bytes()
+          blob = b'blob ' + str(len(payload)).encode() + b'\0' + payload
+          assert hashlib.sha1(blob).hexdigest() == 'ad2f59ab3de32cbe0c82031ce33a2c055201696a'
+          patch = zlib.decompress(base64.b64decode(payload, validate=True))
+          assert hashlib.sha256(patch).hexdigest() == '16765987382f5504fc4a630f76c771e18df86b1103dce57443f916b5af60aa60'
+          Path('/tmp/reference-mtf.patch').write_bytes(patch)
+          PY
+          git checkout -b "$target" "$base"
+          git apply --check /tmp/reference-mtf.patch
+          git apply /tmp/reference-mtf.patch
+          python3 - <<'PY'
+          import subprocess
+          expected = {
+            '.agents/qtgui.md': 'b32138ccf4665b6b4d3315dd3cc06a1fd09fd50b',
+            'doc/mtf-fitting-workflow.md': '3b88adfe5b4edc6290ba953a3943dae93b7b34f8',
+            'doc/qtgui-internal-cleanup.md': '87d8eaf4a43607ba4a845ef74ba5dbff98916710',
+            'src/qtgui/ImageViewWindow.cpp': '9d990b9c998fa46e80c2affa747b3943142823c3',
+            'src/qtgui/ImageViewWindow.h': 'bdc01502f19a22781aed4c7ad5d06bce0a34026c',
+            'src/qtgui/MainWindow.cpp': '614cbb2d0998aee250d4f70636c668f193d4d06d',
+            'src/qtgui/MainWindow.h': 'da37c9c7bb41faa6c9e6b0dbd9a0bdff7ff151c9',
+            'src/qtgui/WorkspaceChurnSmoke.cpp': 'd9d216c012f2e0dea173aaea5df78403f785ca04'
+          }
+          changed = set(subprocess.check_output(['git', 'diff', '--name-only'], text=True).splitlines())
+          assert changed == set(expected), changed
+          for path, digest in expected.items():
+            actual = subprocess.check_output(['git', 'hash-object', path], text=True).strip()
+            assert actual == digest, (path, actual, digest)
+          print('All eight file hashes match the reviewed local tree.')
+          PY
+          git diff --check
+          sh build-aux/check-generated-build-metadata.sh
+          git config user.name "Jan Hubička"
+          git config user.email "46065755+janhubicka@users.noreply.github.com"
+          git add .agents/qtgui.md doc/mtf-fitting-workflow.md \
+            doc/qtgui-internal-cleanup.md src/qtgui/ImageViewWindow.cpp \
+            src/qtgui/ImageViewWindow.h src/qtgui/MainWindow.cpp \
+            src/qtgui/MainWindow.h src/qtgui/WorkspaceChurnSmoke.cpp
+          git commit -F - <<'MESSAGE'
+          qtgui: migrate reference MTF measurement to one-shot lifecycle
+
+          Run external slanted-edge measurements through the owning document's
+          OneShotOperation instead of an independent QtConcurrent watcher that
+          could overwrite newer edits with an old complete ParameterState.
+          Guard both view/document lifetimes and the reference scan, source scan,
+          full input snapshot, and request-local progress identity before apply.
+
+          Pass progress to one-shot start callbacks so reference views can cancel
+          only their own work on reload, accepted close or replacement. Keep a
+          dedicated Cancel row and prevent older completions from resetting newer
+          controls. Validate delayed setup-dialog acceptance and keep errors
+          parent-owned and asynchronous. Workers capture no GUI objects.
+
+          Stage channel measurements privately and append only a complete batch
+          through the normal undoable document setter. Cancellation, exceptions,
+          and a failed channel leave existing measurements unchanged.
+
+          Extend workspace smoke with a real synthetic RGB edge and the actual
+          measurement/publication path: three-channel success and exact Undo/Redo,
+          edit-and-restore cancellation, partial-channel failure, reload, rapid
+          replacement, unrelated operation supersession and reference close.
+          Update concurrency, MTF and beta notes; leave measured-MTF model fitting
+          as the next separate lifecycle migration. Algorithms and formats remain
+          unchanged.
+
+          Validation: git diff --check and generated metadata audit passed locally
+          and on the publishing runner. Exact baseline tree and all eight file
+          hashes verified. Local GUI configuration is blocked by missing Exiv2
+          and Qt development dependencies; no linked build or runtime pass is
+          claimed. Ubuntu optimized build/smoke/tests and TSan requested on the
+          draft PR.
+          MESSAGE
+          test "$(git rev-parse HEAD^)" = "$base"
+          test "$(git diff --name-only "$base" HEAD | wc -l)" -eq 8
+          git push origin "HEAD:refs/heads/$target"
+          git log -1 --format=fuller
+          git diff --stat "$base" HEAD
