@@ -4,18 +4,107 @@ on:
     branches: [agent/qtgui-mtf-fit-stage]
     paths: [.github/workflows/agent-mtf-fit-stage.yml, .agent-mtf-fit.patch.b64]
 permissions:
-  contents: read
+  contents: write
+concurrency:
+  group: agent-mtf-fit-stage
+  cancel-in-progress: false
 jobs:
-  source:
+  publish:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: 2ddd51b41fbb22944df0414189df425569315362
-      - name: Archive exact stacked baseline
-        run: git archive --format=tar.gz --prefix=Color-Screen/ HEAD > /tmp/colorscreen-mtf-fit-source.tar.gz
-      - uses: actions/upload-artifact@v4
-        with:
-          name: qtgui-mtf-fit-source-2ddd51b
-          path: /tmp/colorscreen-mtf-fit-source.tar.gz
-          retention-days: 2
+          fetch-depth: 0
+      - name: Publish the exact reviewed measured-MTF change
+        shell: bash
+        run: |
+          set -euo pipefail
+          base=2ddd51b41fbb22944df0414189df425569315362
+          target=agent/qtgui-mtf-fit-one-shot
+          test -z "$(git ls-remote --heads origin "refs/heads/$target")"
+          python3 - <<'PY'
+          import base64, hashlib, zlib
+          from pathlib import Path
+          payload = Path('.agent-mtf-fit.patch.b64').read_bytes()
+          blob = b'blob ' + str(len(payload)).encode() + b'\0' + payload
+          assert hashlib.sha1(blob).hexdigest() == '747859ab985c4cf8a7cbf20cc1e7cf18da9303b8'
+          patch = zlib.decompress(base64.b64decode(payload, validate=True))
+          assert hashlib.sha256(patch).hexdigest() == '1f42d450631482e2f2dfc82488860201b327d9db9ab2c54a46c6362cf22d7f00'
+          Path('/tmp/mtf-fit.patch').write_bytes(patch)
+          PY
+          git checkout -b "$target" "$base"
+          git apply --check /tmp/mtf-fit.patch
+          git apply /tmp/mtf-fit.patch
+          python3 - <<'PY'
+          import subprocess
+          expected = {
+            '.agents/qtgui.md': '4695540a5fbf110761ca57308aa40b9bffc75a50',
+            'doc/mtf-fitting-workflow.md': '6ce7d39f287bf44d9ec0f9f9d5394cd8398bf044',
+            'doc/qtgui-internal-cleanup.md': '7738a3631a963c563ababde26afed5da07a0daa2',
+            'src/qtgui/ImageViewWindow.cpp': '362943b772822a9e6d6625db630713e484cd8ff9',
+            'src/qtgui/MainWindow.cpp': 'a312e9d5310d1bc91a61ecc93ecc0f9e8df2066f',
+            'src/qtgui/MainWindow.h': 'e854268a78f45fca4c02b0607ed8d5514b3a7678',
+            'src/qtgui/SharpnessPanel.cpp': '7aef55c694f70e1961609d22f229eb6c4064a118',
+            'src/qtgui/SharpnessPanel.h': '4d7651f840801b02b9eee8d079fc458073c33ed3',
+            'src/qtgui/WorkspaceChurnSmoke.cpp': 'eb879ff47bca995a783fa23ce4a26b327cb0331b'
+          }
+          changed = set(subprocess.check_output(['git', 'diff', '--name-only'], text=True).splitlines())
+          assert changed == set(expected), changed
+          for path, digest in expected.items():
+            actual = subprocess.check_output(['git', 'hash-object', path], text=True).strip()
+            assert actual == digest, (path, actual, digest)
+          print('All nine published file hashes match the reviewed local tree.')
+          PY
+          git diff --check
+          sh build-aux/check-generated-build-metadata.sh
+          git config user.name "Jan Hubička"
+          git config user.email "46065755+janhubicka@users.noreply.github.com"
+          git add .agents/qtgui.md doc/mtf-fitting-workflow.md \
+            doc/qtgui-internal-cleanup.md src/qtgui/ImageViewWindow.cpp \
+            src/qtgui/MainWindow.cpp src/qtgui/MainWindow.h \
+            src/qtgui/SharpnessPanel.cpp src/qtgui/SharpnessPanel.h \
+            src/qtgui/WorkspaceChurnSmoke.cpp
+          git commit -F - <<'MESSAGE'
+          qtgui: migrate measured MTF fitting to one-shot lifecycle
+
+          Complete the simple final-result lifecycle batch by moving measured-MTF
+          model fitting out of each SharpnessPanel and into the source document.
+          Panels now own only the editable fit setup dialog; MainWindow owns the
+          background computation, cancellation, dedicated progress row, fit
+          provenance, publication dialogs, and accepted undoable state change.
+
+          Bind dialog acceptance to its complete ParameterState snapshot before
+          launching expensive work. Once running, document edits, image/parameter
+          replacement, or a newer final-result request cancel the fit through the
+          same OneShotOperation queue. TaskQueue publication ownership plus an
+          exact state gate reject late results independently. Request-local
+          progress identity prevents a cancelled old completion from clearing a
+          newer fit after an external parameter replacement.
+
+          Remove the panel-local TaskQueue/QtConcurrent plumbing and the reference
+          view destructor workaround that repaired document busy state when its
+          panel-owned queue disappeared. Closing a reference view no longer owns
+          a fit: fitting stored measurements is a document operation.
+
+          Keep Ready/Running/Current/Stale/Failed provenance and RMS reporting in
+          MainWindow. Successful output is one normal undoable edit; validation
+          failure or cancellation leaves parameters unchanged. All numerical fit
+          options and solver behavior are preserved.
+
+          Extend workspace churn with a real explicit empirical objective: verify
+          successful state/provenance/Undo/Redo, edit-and-restore cancellation,
+          validator failure, stale setup-dialog rejection, supersession by another
+          final-result request, dedicated Cancel-row uniqueness, and cleanup.
+          Update the MTF workflow, contributor notes, and beta tracker.
+
+          Validation: git diff --check and generated Qt build-metadata audit pass;
+          the published patch digest and all nine file hashes match the reviewed
+          local tree. Local GUI compilation is unavailable because this container
+          lacks Qt6 and Exiv2 development packages. Focused Ubuntu build/smoke and
+          ThreadSanitizer are requested on the stacked draft pull request.
+          MESSAGE
+          test "$(git rev-parse HEAD^)" = "$base"
+          test "$(git diff --name-only "$base" HEAD | wc -l)" -eq 9
+          git push origin "HEAD:refs/heads/$target"
+          git log -1 --format=fuller
+          git diff --stat "$base" HEAD
