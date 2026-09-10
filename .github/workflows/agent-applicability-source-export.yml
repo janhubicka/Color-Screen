@@ -1,0 +1,24 @@
+name: Agent applicability source export
+on:
+  push:
+    branches: [agent/qtgui-applicability-source-stage]
+    paths: [.github/workflows/agent-applicability-source-export.yml]
+permissions:
+  contents: read
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify source revision
+        run: |
+          test "$(git rev-parse HEAD^)" = 698c71a7deabaae0b7f22deab75e2f65ae94f7bc
+      - name: Pack exact base source
+        run: |
+          git archive --format=tar.gz --prefix=Color-Screen/ 698c71a7deabaae0b7f22deab75e2f65ae94f7bc > colorscreen-main-698c71a7.tar.gz
+          sha256sum colorscreen-main-698c71a7.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: colorscreen-main-698c71a7
+          path: colorscreen-main-698c71a7.tar.gz
+          compression-level: 0
