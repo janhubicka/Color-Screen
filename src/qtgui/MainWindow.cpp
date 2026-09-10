@@ -5744,7 +5744,9 @@ void MainWindow::dismissOneShotPrompts() {
     TaskQueue owns progress, cancellation and newest-request identity; WORKER
     runs on Qt's thread pool. APPLYRESULT is called only after both the queue
     and RESULTVALID approve publication. ONDONE restores transient UI for every
-    request that actually started, including cancelled and stale completions. */
+    request that actually started, including cancelled and stale completions.
+    ONSTART receives the same progress handle used by the queue, allowing a
+    reference view to cancel its own work without cancelling unrelated work. */
 void MainWindow::runOneShotOperation(
     OneShotOperation operation,
     std::function<void(colorscreen::progress_info *)> worker) {
@@ -5795,7 +5797,7 @@ void MainWindow::runOneShotOperation(
           addUserVisibleProgress(progress, lifecycle->progressTitle);
         }
         if (lifecycle->onStart)
-          lifecycle->onStart();
+          lifecycle->onStart(progress);
       });
 }
 
@@ -5825,7 +5827,11 @@ void MainWindow::runAreaComputation(
     operation.description = description;
     operation.prerequisites =
         [this, scan]() { return !m_closing && m_scan == scan; };
-    operation.onStart = std::move(onStart);
+    operation.onStart = [onStart = std::move(onStart)](
+                            std::shared_ptr<colorscreen::progress_info>) {
+      if (onStart)
+        onStart();
+    };
     operation.resultValid = [this, scan, baseline]() {
       return m_scan == scan && getCurrentState() == baseline;
     };
@@ -6944,7 +6950,7 @@ void MainWindow::onFindFocusAreasRequested() {
   operation.description = tr("Finding focus analysis areas");
   operation.progressTitle = tr("Find focus areas");
   operation.prerequisites = [this, scan]() { return m_scan == scan; };
-  operation.onStart = [this]() {
+  operation.onStart = [this](std::shared_ptr<colorscreen::progress_info>) {
     m_focusAreaAnalysisRunning = true;
     clearFocusAreaAnalysis();
     if (m_sharpnessPanel)
@@ -7010,7 +7016,7 @@ void MainWindow::onAnalyzeFocusAreasRequested(uint64_t flags) {
   operation.description = tr("Analyzing focus areas");
   operation.progressTitle = tr("Analyze focus areas");
   operation.prerequisites = [this, scan]() { return m_scan == scan; };
-  operation.onStart = [this]() {
+  operation.onStart = [this](std::shared_ptr<colorscreen::progress_info>) {
     m_focusAreaAnalysisRunning = true;
     if (m_sharpnessPanel)
       m_sharpnessPanel->setFocusAreaAnalysisState(

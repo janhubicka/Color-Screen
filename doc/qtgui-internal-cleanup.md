@@ -368,6 +368,22 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   Beta smoke covers missing/pre-cancelled helper inputs; workspace churn covers
   both production cancellation paths, late approval after input restoration,
   prompt supersession, task-row cleanup, and exact Apply/Undo/Redo state.
+  Slanted-edge measurement in an external reference view now also enters the
+  owning document's one-shot queue. The old independent watcher could restore
+  a whole stale `ParameterState` and had no registered Cancel control. Reference
+  batches now append only their measurements, after checking the source scan,
+  reference scan, complete document snapshot and live request ownership. All
+  requested channels must succeed before any are appended. Closing/reloading a
+  reference cancels its own progress handle, not a newer document operation;
+  old completions cannot reset a newer request's controls. The start callback
+  exposes that request-local progress handle and the lifecycle entry point is
+  shared with guarded secondary-view callers. Workspace churn exercises a real
+  synthetic RGB edge, batch failure, Undo/Redo, stale-result rejection, reload,
+  replacement, reference close and progress cleanup.
+  The next final-result candidate is measured-MTF model fitting, which still
+  has a panel-local queue and shared document provenance callbacks. Keep that
+  migration separate from the reference-measurement change; geometry/color
+  optimizer queues and incremental workers have different lifecycle contracts.
 - Separate "enabled" from "applicable/visible" in helper APIs.  Greyed controls
   are useful when they teach a prerequisite; hidden controls are useful when a
   whole concept is meaningless for the current process.  A lambda called

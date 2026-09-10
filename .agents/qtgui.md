@@ -167,6 +167,17 @@ presentation window becomes the dock host. This avoids nested `QMainWindow` dock
 ownership without reintroducing panel-specific wiring. **Reload and demosaic** reloads both the source scan and every associated
 slanted-edge reference from its own filename using the current demosaic mode.
 
+Reference-image slanted-edge measurements use the source document's public
+`runOneShotOperation()` lifecycle. The reference supplies guarded GUI callbacks
+and validates both scan identities plus the complete document snapshot. The
+`onStart` callback receives the queue's progress handle; retain it weakly in the
+view so close/reload can cancel that request without cancelling a newer task.
+Only the owning request may reset the measurement controls on completion. The
+worker owns immutable scan/parameter snapshots and publishes a complete channel
+batch or nothing. Failure messages belong in the gated apply callback, not in
+unconditional cleanup, and must be parent-owned/asynchronous. Never use a
+reference-local watcher to apply a captured whole document state.
+
 **Window → New View** creates another MDI view of the same document. Ordinary
 views present the same complete Navigation + parameter-panel inspector as the
 primary view; the document owns one inspector instance and the active ordinary

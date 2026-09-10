@@ -406,6 +406,24 @@ and should never encode fit intent in a numeric value.
 9. validate the resulting sharpening on independent fine detail rather than
    only on the edge used for fitting.
 
+## Reference-measurement lifetime
+
+An external slanted-edge reference shares the source document's parameter and
+undo state, but not its pixels. Once a rectangle is selected, measurement
+captures both scan identities and the full document parameters and runs in the
+source document's final-result queue, with a dedicated **Cancel** row.
+An edit, source-image replacement or a newer final-result operation cancels or
+supersedes the batch. Reloading or closing the reference cancels only that
+reference's active request. Restoring earlier input values does not revive a
+cancelled measurement.
+
+Native-channel groups are atomic: a failure in any requested channel leaves all
+previously saved measurements unchanged. A successful current group is appended
+as one undoable edit; unrelated document fields are never copied back from an
+old worker snapshot. Existing sampling, qualification and wavelength/grouping
+rules are unchanged. This lifecycle does not change the separate model-fitting
+operation or independent file exports.
+
 ## 11. Regression coverage
 
 The library unit tests verify:

@@ -304,6 +304,32 @@ public:
   void acceptMtfModelFit(const colorscreen::mtf_parameters &fitted, double rms);
   void finishMtfModelFitWithoutResult();
 
+  /** Lifecycle callbacks for one final-result background operation.
+
+      PREREQUISITES run on the GUI thread before the request enters the queue.
+      ONSTART receives request-local progress only when TaskQueue starts work.
+      Reference views must guard their callbacks and validate their own scan
+      as well as the document snapshot. RESULTVALID is the final publication
+      gate after newest-request/cancellation checks.
+      APPLYRESULT publishes accepted output, and ONDONE restores transient UI
+      state for every started request, including stale/cancelled completions. */
+  struct OneShotOperation {
+    QString description;
+    // Non-empty for a dedicated task row; otherwise use transient progress.
+    QString progressTitle;
+    std::function<bool()> prerequisites;
+    std::function<void(std::shared_ptr<colorscreen::progress_info>)> onStart;
+    std::function<bool()> resultValid;
+    std::function<void()> applyResult;
+    std::function<void()> onDone;
+  };
+
+  /** Run WORKER under this document's one-shot progress/cancellation lifecycle.
+      Secondary/reference views use the same queue, not independent watchers. */
+  void runOneShotOperation(
+      OneShotOperation operation,
+      std::function<void(colorscreen::progress_info *)> worker);
+
 signals:
   /** Emitted after the loaded image or shared document parameters change.
       Secondary views refresh from this signal while keeping render mode, zoom,
@@ -420,29 +446,6 @@ private:
   void createModeShortcuts(); // Create 1-0 hotkeys for modes
   void updateModeMenu(); // Updates combo box items
   QIcon renderScreenIcon(colorscreen::scr_type type);
-
-  /** Lifecycle callbacks for one final-result background operation.
-
-      PREREQUISITES run on the GUI thread before the request enters the queue.
-      ONSTART runs only when TaskQueue actually starts the request. RESULTVALID
-      is the final publication gate after newest-request/cancellation checks.
-      APPLYRESULT publishes accepted output, and ONDONE restores transient UI
-      state for every started request, including stale/cancelled completions. */
-  struct OneShotOperation {
-    QString description;
-    // Non-empty for a dedicated task row; otherwise use transient progress.
-    QString progressTitle;
-    std::function<bool()> prerequisites;
-    std::function<void()> onStart;
-    std::function<bool()> resultValid;
-    std::function<void()> applyResult;
-    std::function<void()> onDone;
-  };
-
-  /** Run WORKER under the common one-shot progress/cancellation lifecycle. */
-  void runOneShotOperation(
-      OneShotOperation operation,
-      std::function<void(colorscreen::progress_info *)> worker);
 
   /** Detect an initial basis; optionally continue with automatic point finding.
       The continuation belongs to this request, never to mutable window state. */
