@@ -10,6 +10,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
       - name: Verify source revision
         run: |
           test "$(git rev-parse HEAD^)" = 698c71a7deabaae0b7f22deab75e2f65ae94f7bc
