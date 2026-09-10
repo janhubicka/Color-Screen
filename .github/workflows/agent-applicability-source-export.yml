@@ -11,10 +11,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          fetch-depth: 0
       - name: Verify source revision
         run: |
-          test "$(git rev-parse HEAD^)" = 698c71a7deabaae0b7f22deab75e2f65ae94f7bc
+          base=698c71a7deabaae0b7f22deab75e2f65ae94f7bc
+          test "$(git merge-base HEAD "$base")" = "$base"
       - name: Pack exact base source
         run: |
           git archive --format=tar.gz --prefix=Color-Screen/ 698c71a7deabaae0b7f22deab75e2f65ae94f7bc > colorscreen-main-698c71a7.tar.gz
