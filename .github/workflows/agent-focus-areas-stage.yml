@@ -1,0 +1,108 @@
+name: Agent focus-area lifecycle staging
+on:
+  push:
+    branches: [agent/qtgui-focus-areas-stage]
+    paths: [.github/workflows/agent-focus-areas-stage.yml]
+permissions:
+  contents: write
+concurrency:
+  group: agent-focus-areas-stage
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply exact reviewed patch on the merged baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          base=1eb6ba3fa8a5924f5c76ce92d7020497c78fcf29
+          target=agent/qtgui-focus-areas-one-shot
+          test "$(git rev-parse origin/main)" = "$base"
+          test -z "$(git ls-remote --heads origin "refs/heads/$target")"
+          python3 - <<'PY'
+          import base64, hashlib, zlib
+          from pathlib import Path
+          payload = Path('.agent-focus-areas.patch.b64').read_text()
+          # Repair one known transport transcription before exact digest checks.
+          payload = payload.replace('N5vDoWScrcco3owhKK79', 'N5vDoWScrcco3owKK79')
+          encoded = payload.encode()
+          blob = b'blob ' + str(len(encoded)).encode() + b'\0' + encoded
+          assert hashlib.sha1(blob).hexdigest() == 'e9486a577932c7788edc4ff622435ce9a7d9bf4a'
+          patch = zlib.decompress(base64.b64decode(payload, validate=True))
+          assert hashlib.sha256(patch).hexdigest() == '5e4fd71057246c38eff51d3db03c9deb9ddb2aa9ace768bf1d4e6bf55fbc3cc6'
+          Path('/tmp/focus-areas.patch').write_bytes(patch)
+          PY
+          git checkout -b "$target" "$base"
+          git apply --check /tmp/focus-areas.patch
+          git apply /tmp/focus-areas.patch
+          python3 - <<'PY'
+          import subprocess
+          expected = {
+            '.agents/qtgui.md': '7f389a73f01887e747774c843d9b47961a361620',
+            'doc/qtgui-internal-cleanup.md': '54f2f687821e5e5f5ad7d389eb3c1a20a3190176',
+            'src/qtgui/FocusAnalysisWorker.cpp': 'e2d25dcf6dc767fc9cf77036ceaf8e4ec3d28696',
+            'src/qtgui/FocusAnalysisWorker.h': 'babe8a4cfd5db4422d4d10c62d3bc64fb7014fa4',
+            'src/qtgui/MainWindow.cpp': '21713b8b943e2223d09ed9cd005a8461165460fd',
+            'src/qtgui/MainWindow.h': 'c955b69f12bd408948970960aea62d15ec47180d',
+            'src/qtgui/WorkspaceChurnSmoke.cpp': '77354b7ad6bacb59a64d872f89b06983ea280521',
+            'src/qtgui/main.cpp': 'f2dd952716a4c3c2ade891811d308126fd9dcb0b'
+          }
+          changed = set(subprocess.check_output(['git', 'diff', '--name-only'], text=True).splitlines())
+          assert changed == set(expected), changed
+          for path, digest in expected.items():
+            actual = subprocess.check_output(['git', 'hash-object', path], text=True).strip()
+            assert actual == digest, (path, actual, digest)
+          print('All eight published file hashes match the reviewed local tree.')
+          PY
+          git diff --check
+          sh build-aux/check-generated-build-metadata.sh
+          git config user.name "Jan Hubička"
+          git config user.email "46065755+janhubicka@users.noreply.github.com"
+          git add .agents/qtgui.md doc/qtgui-internal-cleanup.md \
+            src/qtgui/FocusAnalysisWorker.cpp src/qtgui/FocusAnalysisWorker.h \
+            src/qtgui/MainWindow.cpp src/qtgui/MainWindow.h \
+            src/qtgui/WorkspaceChurnSmoke.cpp src/qtgui/main.cpp
+          git commit -F - <<'MESSAGE'
+          qtgui: migrate focus-area analyses to one-shot lifecycle
+
+          Continue the P1 cleanup after coordinate analysis. Run uniform-area
+          discovery and individual/joint focus fitting through OneShotOperation
+          with captured scan ownership and complete ParameterState snapshots.
+          Move numerical orchestration into plain FocusAnalysisWorker helpers,
+          retaining search limits, RGB/BW model flags, colour-diverse selection,
+          leave-one-out and held-out diagnostics. Preserve dedicated Cancel rows
+          and restore transient controls on success, failure and stale completion.
+
+          The previous watcher callbacks could repopulate obsolete rectangles
+          after edits; fitting also published partial diagnostics before checking
+          cancellation. Only current non-cancelled requests now publish output.
+          Return structured missing-input, cancellation and exception results;
+          keep failure notification parent-owned and asynchronous.
+
+          Keep explicit Apply focus approval tied to the same snapshot. Invalidate
+          focus and detection prompts together on edits, input replacement, close,
+          and newer final-result actions. Clear ownership before closing, and
+          recheck it on finished, so restoring the old inputs cannot resurrect a
+          superseded approval. Accepted scalar focus edits remain one normal
+          undoable document change. Incremental workers and exports are unchanged.
+
+          Add missing/pre-cancelled helper probes and workspace regressions for
+          both production cancellation paths, stale candidate rejection, task-row
+          cleanup, delayed approval after input restoration, prompt supersession,
+          and exact Apply/Undo/Redo state. Update contributor and beta notes.
+
+          Validation: GCC 14 C++17 helper syntax checks passed with -O2/-Ofast;
+          diff and generated-metadata audits passed. Full local configuration is
+          blocked by missing development dependencies (Exiv2 is the fatal probe).
+          Ubuntu optimized build/smoke/tests and TSan are requested on the draft
+          PR; their runtime results are not yet claimed.
+          MESSAGE
+          test "$(git rev-parse HEAD^)" = "$base"
+          test "$(git diff --name-only "$base" HEAD | wc -l)" -eq 8
+          git push origin "HEAD:refs/heads/$target"
+          git log -1 --format=fuller
+          git diff --stat "$base" HEAD
