@@ -1,0 +1,99 @@
+name: Agent section applicability publisher
+on:
+  push:
+    branches: [agent/qtgui-applicability-source-stage]
+    paths: [.github/workflows/agent-section-applicability-publish.yml]
+permissions:
+  contents: write
+concurrency:
+  group: agent-section-applicability-publish
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Publish exact reviewed cleanup
+        shell: bash
+        run: |
+          set -euo pipefail
+          base=698c71a7deabaae0b7f22deab75e2f65ae94f7bc
+          target=agent/qtgui-section-applicability
+          test "$(git rev-parse origin/main)" = "$base"
+          test -z "$(git ls-remote --heads origin "refs/heads/$target")"
+          cp .agent-section-applicability.patch.b64 /tmp/patch.b64
+          python3 - <<'PY'
+          import base64, hashlib, zlib
+          from pathlib import Path
+          encoded = Path('/tmp/patch.b64').read_bytes()
+          blob = b'blob ' + str(len(encoded)).encode() + b'\0' + encoded
+          assert hashlib.sha1(blob).hexdigest() == 'd9931cacd0df08333f2815b6c3599ca30fdfe5b1'
+          patch = zlib.decompress(base64.b64decode(encoded, validate=True))
+          assert hashlib.sha256(patch).hexdigest() == 'ca361f89d7f1219e7f3fca58a6e3cc6d716693d6e088f445bbc52187d413a2cd'
+          Path('/tmp/section-applicability.patch').write_bytes(patch)
+          PY
+          git checkout -b "$target" "$base"
+          git apply --check /tmp/section-applicability.patch
+          git apply /tmp/section-applicability.patch
+          python3 - <<'PY'
+          import subprocess
+          expected = {
+            '.agents/qtgui.md': 'd9e05fc1e14626f85bbbe878e4814bdee2953c0a',
+            'doc/qtgui-internal-cleanup.md': '1f3c1cc5cf5e34143316822291d3ece35120ca5c',
+            'src/qtgui/ColorPanel.cpp': 'df490324facbcdd867575736fbe06121a7711ffa',
+            'src/qtgui/ContactCopyPanel.cpp': 'dcb243846a85e5af76812ab0dbb55674322fd6ca',
+            'src/qtgui/ImageLayerPanel.cpp': '5952fabbff9d0303da4631fd36575398a22973af',
+            'src/qtgui/WorkspaceChurnSmoke.cpp': '6b44e54f2342792a3b2be5b80133a87b96c1741d',
+            'src/qtgui/main.cpp': '052beea2b4f43729327e5de0f61c0f64da5f4932',
+          }
+          changed = set(subprocess.check_output(['git', 'diff', '--name-only'], text=True).splitlines())
+          assert changed == set(expected), changed
+          for path, digest in expected.items():
+            actual = subprocess.check_output(['git', 'hash-object', path], text=True).strip()
+            assert actual == digest, (path, actual, digest)
+          print('All seven reviewed file hashes match.')
+          PY
+          git diff --check
+          sh build-aux/check-generated-build-metadata.sh
+          git config user.name "Jan Hubička"
+          git config user.email "46065755+janhubicka@users.noreply.github.com"
+          git add .agents/qtgui.md doc/qtgui-internal-cleanup.md \
+            src/qtgui/ColorPanel.cpp src/qtgui/ContactCopyPanel.cpp \
+            src/qtgui/ImageLayerPanel.cpp src/qtgui/WorkspaceChurnSmoke.cpp \
+            src/qtgui/main.cpp
+          git commit -F - <<'MESSAGE'
+          qtgui: unify conditional section applicability
+
+          Continue the P1 enabled/applicable cleanup by moving the remaining
+          logical section visibility in Image Layer, Contact Copy and Color onto
+          ParameterPanel::setParameterApplicability(). Whole addSeparator()
+          QGroupBoxes are form rows, so their applicability now composes with
+          each section's independent expanded/collapsed presentation state.
+
+          Make the simulated RGB Image Layer group explicit applicability. Mark
+          all Contact Copy specialist groups applicable only while simulation is
+          active, while scheduling H&D histogram work after applicability/folding
+          updates so hidden or collapsed charts still do no background work.
+          Mark Color's historical screen-dye/viewing sections by effective
+          capture type and the nested spectral-chart row by spectra-based model
+          capability; chart refresh now only updates chart data.
+
+          Extend the beta invariant smoke with whole-section fold preservation
+          and workspace churn with actual Image Layer, Contact Copy and Color
+          parameterApplicable metadata. Update contributor and cleanup docs.
+          Remaining direct show calls in these panels are presentation-only
+          reattachment mechanics. Algorithms and saved formats are unchanged.
+
+          Validation: git diff --check and generated Qt build metadata audit
+          passed locally and on the publishing runner. Exact main baseline,
+          patch digest and all seven file hashes were verified. Local linked Qt
+          compilation is unavailable because Qt6/Exiv2 development packages are
+          absent; Ubuntu smoke/tests and TSan are requested on the PR.
+          MESSAGE
+          test "$(git rev-parse HEAD^)" = "$base"
+          test "$(git diff --name-only "$base" HEAD | wc -l)" -eq 7
+          git push origin "HEAD:refs/heads/$target"
+          git log -1 --format=fuller
+          git diff --stat "$base" HEAD
