@@ -25,9 +25,10 @@ jobs:
           staged=b9464c6a86ed120bcc4cbea86ceb8f94e084c23d
           target=agent/qtgui-mtf-fit-one-shot-v2
           test -z "$(git ls-remote --heads origin "refs/heads/$target")"
+          cp .agent-mtf-fit-correct.py /tmp/mtf-fit-correct.py
           git checkout -b "$target" "$base"
           git cherry-pick --no-commit "$staged"
-          python3 .agent-mtf-fit-correct.py
+          python3 /tmp/mtf-fit-correct.py
           git diff HEAD --check
           sh build-aux/check-generated-build-metadata.sh
           git config user.name "Jan Hubička"
