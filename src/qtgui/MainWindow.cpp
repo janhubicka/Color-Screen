@@ -159,23 +159,6 @@ Q_DECLARE_METATYPE(colorscreen::finetune_result)
 
 namespace {
 
-/** Result returned by the asynchronous cheap solid-area discovery pass. */
-struct FocusAreaFindTaskResult {
-  bool success = false;
-  bool cancelled = false;
-  std::vector<colorscreen::finetune_focus_area_candidate> candidates;
-  std::string error;
-};
-
-/** Result returned by the asynchronous individual/joint focus-area pass. */
-struct FocusAreaAnalyzeTaskResult {
-  bool success = false;
-  bool cancelled = false;
-  std::vector<colorscreen::finetune_focus_area_candidate> candidates;
-  colorscreen::finetune_focus_analysis_result analysis;
-  std::string error;
-};
-
 /** Return the application-level document manager when MainWindow is running
     inside the normal Color-Screen Qt application.  */
 ColorScreenApplication *documentApplication() {
@@ -674,6 +657,7 @@ MainWindow::~MainWindow() {
   // queued result stale, request cooperative cancellation, and join one-shot
   // workers before any document parameters or panels can disappear.
   m_closing = true;
+  dismissOneShotPrompts();
   m_solverQueue.cancelAll();
   m_colorOptimizerQueue.cancelAll();
   m_oneShotOperationQueue.cancelAll();
@@ -3720,9 +3704,9 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
   if (fileName.isEmpty())
     return;
 
-  // Final-result work and any pending detection confirmation belong to the
+  // Final-result work and any pending one-shot confirmation belong to the
   // current image snapshot. Invalidate both before starting replacement I/O.
-  dismissDetectScreenPrompt();
+  dismissOneShotPrompts();
   m_oneShotOperationQueue.cancelAll();
   m_imageLoadPending = true;
   bool parameterDataLoaded = false;
@@ -3996,7 +3980,7 @@ void MainWindow::saveRecentFiles() {
 void MainWindow::applyState(const ParameterState &state) {
   // Final-result one-shot operations consume an exact document snapshot. Any
   // accepted parameter change (including Undo/Redo) makes that result stale.
-  dismissDetectScreenPrompt();
+  dismissOneShotPrompts();
   m_oneShotOperationQueue.cancelAll();
 
   const bool invalidateFocusAreas
@@ -4652,6 +4636,7 @@ void MainWindow::closeEvent(QCloseEvent *event) {
   }
 
   m_closing = true;
+  dismissOneShotPrompts();
 
   // Cancel all active processes
   for (const auto &progress : m_activeProgresses) {
@@ -5741,13 +5726,15 @@ void MainWindow::startAreaSelection(const QString &message,
   statusBar()->showMessage(message);
 }
 
-/** Close a stale screen-detection confirmation without applying its result. */
-void MainWindow::dismissDetectScreenPrompt() {
-  if (QMessageBox *prompt = m_detectScreenPrompt.data()) {
-    // Clear first: close() emits finished, whose callback must recognize that
-    // this prompt no longer owns publication.
-    m_detectScreenPrompt = nullptr;
-    prompt->close();
+/** Close stale final-result confirmations without applying their results. */
+void MainWindow::dismissOneShotPrompts() {
+  for (QPointer<QMessageBox> *guard : {&m_detectScreenPrompt, &m_focusAreaPrompt}) {
+    if (QMessageBox *prompt = guard->data()) {
+      // Clear first: close() emits finished, whose callback must recognize that
+      // this prompt no longer owns publication, even after a later Undo.
+      *guard = nullptr;
+      prompt->close();
+    }
   }
 }
 
@@ -5766,9 +5753,9 @@ void MainWindow::runOneShotOperation(
   if (operation.prerequisites && !operation.prerequisites())
     return;
 
-  // A newer final-result action supersedes a detected-screen result that is
+  // A newer final-result action supersedes any one-shot result that is
   // still waiting for confirmation, just as it supersedes running work.
-  dismissDetectScreenPrompt();
+  dismissOneShotPrompts();
 
   auto lifecycle =
       std::make_shared<OneShotOperation>(std::move(operation));
@@ -5862,8 +5849,8 @@ void MainWindow::runAreaComputation(
    undo history, and all panels.  Returns true on success.  */
 bool MainWindow::loadParameterFile(const QString &fileName) {
   // Loading external parameters invalidates every final-result state snapshot
-  // and any screen-detection confirmation waiting on the old parameters.
-  dismissDetectScreenPrompt();
+  // and any one-shot confirmation waiting on the old parameters.
+  dismissOneShotPrompts();
   m_oneShotOperationQueue.cancelAll();
   FILE *f = fopen(fileName.toUtf8().constData(), "r");
   if (!f) {
@@ -6305,7 +6292,7 @@ void MainWindow::onAutodetectScreen() {
 
   // Starting this action supersedes an older successful detection that may
   // still be waiting for the user to confirm its dye-model choice.
-  dismissDetectScreenPrompt();
+  dismissOneShotPrompts();
 
   // A stochastic process has no regular lattice to identify. Color-element
   // autodetection is performed by the screen-detection render modes instead.
@@ -6934,80 +6921,64 @@ void MainWindow::clearFocusAreaAnalysis() {
     m_sharpnessPanel->setFocusAreaAnalysisState(0, m_focusAreaAnalysisRunning);
 }
 
-/** Find locally uniform areas on an unadjusted interpolated reconstruction.
-    The complete render/search pass runs outside the GUI thread and stores its
-    result only in this MainWindow, preserving the document boundary. */
+/** Finish a focus-area request without overwriting its accepted result summary. */
+void MainWindow::finishFocusAreaOperation(const QString &summary) {
+  m_focusAreaAnalysisRunning = false;
+  if (m_sharpnessPanel)
+    m_sharpnessPanel->setFocusAreaAnalysisState(
+        static_cast<int>(m_focusAreaCandidates.size()), false, summary);
+}
+
+/** Find uniform areas under the shared final-result snapshot/publication rules. */
 void MainWindow::onFindFocusAreasRequested() {
   if (!m_scan || m_focusAreaAnalysisRunning)
     return;
 
-  m_focusAreaAnalysisRunning = true;
-  clearFocusAreaAnalysis();
-  if (m_sharpnessPanel)
-    m_sharpnessPanel->setFocusAreaAnalysisState(
-        0, true, tr("Searching for uniform colour areas…"));
+  const auto scan = m_scan;
+  const ParameterState baseline = getCurrentState();
+  auto result = std::make_shared<FocusAreaFindResult>();
+  auto summary = std::make_shared<QString>(
+      tr("Focus-area search cancelled or superseded."));
 
-  auto progress = std::make_shared<colorscreen::progress_info>();
-  progress->set_task("Finding focus analysis areas", 1);
-  addUserVisibleProgress(progress, tr("Find focus areas"));
+  OneShotOperation operation;
+  operation.description = tr("Finding focus analysis areas");
+  operation.progressTitle = tr("Find focus areas");
+  operation.prerequisites = [this, scan]() { return m_scan == scan; };
+  operation.onStart = [this]() {
+    m_focusAreaAnalysisRunning = true;
+    clearFocusAreaAnalysis();
+    if (m_sharpnessPanel)
+      m_sharpnessPanel->setFocusAreaAnalysisState(
+          0, true, tr("Searching for uniform colour areas…"));
+  };
+  operation.resultValid = [this, scan, baseline, result]() {
+    return m_scan == scan && getCurrentState() == baseline && !result->cancelled;
+  };
+  operation.applyResult = [this, result, summary]() {
+    if (!result->success) {
+      *summary = tr("Focus-area search failed: %1")
+                     .arg(QString::fromStdString(result->error));
+      return;
+    }
+    m_focusAreaCandidates = std::move(result->candidates);
+    m_focusAreaAnalysisResult = colorscreen::finetune_focus_analysis_result();
+    updateFocusAreaOverlays();
+    const int count = static_cast<int>(m_focusAreaCandidates.size());
+    *summary = tr("Found %1 candidate uniform area(s).").arg(count);
+    statusBar()->showMessage(
+        tr("Found %1 focus analysis area(s)").arg(count), 4000);
+  };
+  operation.onDone = [this, summary]() { finishFocusAreaOperation(*summary); };
 
-  const colorscreen::render_parameters rparams = m_rparams;
-  const colorscreen::scr_to_img_parameters geometry = m_scrToImgParams;
-  const std::shared_ptr<colorscreen::image_data> scan = m_scan;
-  auto *watcher = new QFutureWatcher<FocusAreaFindTaskResult>(this);
-  connect(watcher, &QFutureWatcher<FocusAreaFindTaskResult>::finished, this,
-          [this, watcher, progress]() {
-            if (m_closing) {
-              watcher->deleteLater();
-              return;
-            }
-            const FocusAreaFindTaskResult result = watcher->result();
-            watcher->deleteLater();
-            removeProgress(progress);
-            m_focusAreaAnalysisRunning = false;
-            if (result.cancelled) {
-              if (m_sharpnessPanel)
-                m_sharpnessPanel->setFocusAreaAnalysisState(
-                    0, false, tr("Focus-area search cancelled."));
-              return;
-            }
-            if (!result.success) {
-              if (m_sharpnessPanel)
-                m_sharpnessPanel->setFocusAreaAnalysisState(
-                    0, false,
-                    tr("Focus-area search failed: %1")
-                        .arg(QString::fromStdString(result.error)));
-              return;
-            }
-            m_focusAreaCandidates = result.candidates;
-            m_focusAreaAnalysisResult
-                = colorscreen::finetune_focus_analysis_result();
-            updateFocusAreaOverlays();
-            const int count = static_cast<int>(m_focusAreaCandidates.size());
-            if (m_sharpnessPanel)
-              m_sharpnessPanel->setFocusAreaAnalysisState(
-                  count, false,
-                  tr("Found %1 candidate uniform area(s).").arg(count));
-            statusBar()->showMessage(
-                tr("Found %1 focus analysis area(s)").arg(count), 4000);
-          });
-
-  colorscreen::finetune_focus_area_image_search_parameters search;
-  search.search.max_candidates = 24;
-  watcher->setFuture(QtConcurrent::run(
-      [rparams, geometry, scan, progress, search]() mutable {
-        FocusAreaFindTaskResult result;
-        result.success = colorscreen::finetune_find_focus_area_candidates_in_image(
-            rparams, geometry, *scan, search, &result.candidates,
-            progress.get(), &result.error);
-        result.cancelled = progress->cancelled();
-        return result;
-      }));
+  runOneShotOperation(
+      std::move(operation),
+      [scan, baseline, result](colorscreen::progress_info *progress) {
+        *result = FocusAnalysisWorker::findAreas(
+            baseline.rparams, baseline.scrToImg, scan, progress);
+      });
 }
 
-/** Verify discovered areas individually, fit the selected colour-diverse set
-    jointly, and compute leave-one-out plus true held-out diagnostics.  No
-    measured focus value is applied until the user explicitly accepts it. */
+/** Jointly fit discovered areas; keep diagnostics and approval snapshot-bound. */
 void MainWindow::onAnalyzeFocusAreasRequested(uint64_t flags) {
   if (!m_scan || m_focusAreaAnalysisRunning)
     return;
@@ -7027,191 +6998,150 @@ void MainWindow::onAnalyzeFocusAreasRequested(uint64_t flags) {
     return;
   }
 
-
-  m_focusAreaAnalysisRunning = true;
-  if (m_sharpnessPanel)
-    m_sharpnessPanel->setFocusAreaAnalysisState(
-        static_cast<int>(m_focusAreaCandidates.size()), true,
-        tr("Verifying and jointly fitting focus areas…"));
-
-  auto progress = std::make_shared<colorscreen::progress_info>();
-  progress->set_task("Analyzing focus areas", 1);
-  addUserVisibleProgress(progress, tr("Analyze focus areas"));
-
-  const colorscreen::render_parameters rparams = m_rparams;
-  const colorscreen::scr_to_img_parameters geometry = m_scrToImgParams;
-  const std::shared_ptr<colorscreen::image_data> scan = m_scan;
-  const std::vector<colorscreen::finetune_focus_area_candidate> candidates
-      = m_focusAreaCandidates;
+  const auto scan = m_scan;
+  const ParameterState baseline = getCurrentState();
+  const auto candidates = m_focusAreaCandidates;
   const bool useMonochrome = focusAnalysisUsesMonochromeInput(*scan);
-  auto *watcher = new QFutureWatcher<FocusAreaAnalyzeTaskResult>(this);
-  connect(watcher, &QFutureWatcher<FocusAreaAnalyzeTaskResult>::finished, this,
-          [this, watcher, progress, flags]() {
-            if (m_closing) {
-              watcher->deleteLater();
-              return;
-            }
-            const FocusAreaAnalyzeTaskResult result = watcher->result();
-            watcher->deleteLater();
-            removeProgress(progress);
-            m_focusAreaAnalysisRunning = false;
-            m_focusAreaCandidates = result.candidates;
-            m_focusAreaAnalysisResult = result.analysis;
-            updateFocusAreaOverlays();
-            if (result.cancelled) {
-              if (m_sharpnessPanel)
-                m_sharpnessPanel->setFocusAreaAnalysisState(
-                    static_cast<int>(m_focusAreaCandidates.size()), false,
-                    tr("Focus-area analysis cancelled."));
-              return;
-            }
-            if (!result.success) {
-              const QString error = QString::fromStdString(result.error);
-              if (m_sharpnessPanel)
-                m_sharpnessPanel->setFocusAreaAnalysisState(
-                    static_cast<int>(m_focusAreaCandidates.size()), false,
-                    tr("Focus-area analysis failed: %1").arg(error));
-              QMessageBox::warning(this, tr("Focus analysis areas"), error);
-              return;
-            }
+  auto result = std::make_shared<FocusAreaAnalyzeResult>();
+  auto summary = std::make_shared<QString>(
+      tr("Focus-area analysis cancelled or superseded."));
 
-            const auto analysis = m_focusAreaAnalysisResult;
-            QStringList details;
-            details << tr("Selected %1 of %2 verified candidates.")
-                           .arg(static_cast<int>(analysis.selected.size()))
-                           .arg(static_cast<int>(m_focusAreaCandidates.size()));
-            if (analysis.leave_one_out_focus_span >= 0)
-              details << tr("Leave-one-out focus span: %1")
-                             .arg(analysis.leave_one_out_focus_span, 0, 'g', 5);
-            if (analysis.leave_one_out_focus_max_delta >= 0)
-              details << tr("Maximum leave-one-out displacement: %1")
-                             .arg(analysis.leave_one_out_focus_max_delta, 0,
-                                  'g', 5);
-            if (analysis.held_out_max_relative_badness >= 0)
-              details << tr("Maximum held-out relative residual: %1")
-                             .arg(analysis.held_out_max_relative_badness, 0,
-                                  'g', 5);
-            if (analysis.screen_frequency > 0 && analysis.joint_screen_mtf >= 0)
-              details << tr("Process-screen MTF at %1 cycles/pixel: %2%")
-                             .arg(analysis.screen_frequency, 0, 'g', 6)
-                             .arg(analysis.joint_screen_mtf * 100, 0, 'g', 5);
-            if ((flags & colorscreen::finetune_scanner_mtf_sigma)
-                && analysis.joint_fit.scanner_mtf_sigma >= 0)
-              details << tr("Residual MTF sigma: %1 px")
-                             .arg(analysis.joint_fit.scanner_mtf_sigma, 0, 'g',
-                                  5);
+  OneShotOperation operation;
+  operation.description = tr("Analyzing focus areas");
+  operation.progressTitle = tr("Analyze focus areas");
+  operation.prerequisites = [this, scan]() { return m_scan == scan; };
+  operation.onStart = [this]() {
+    m_focusAreaAnalysisRunning = true;
+    if (m_sharpnessPanel)
+      m_sharpnessPanel->setFocusAreaAnalysisState(
+          static_cast<int>(m_focusAreaCandidates.size()), true,
+          tr("Verifying and jointly fitting focus areas…"));
+  };
+  operation.resultValid = [this, scan, baseline, result]() {
+    return m_scan == scan && getCurrentState() == baseline && !result->cancelled;
+  };
+  operation.applyResult = [this, scan, baseline, flags, result, summary]() {
+    // Partial diagnostics from cancelled/stale runs never reach this callback.
+    m_focusAreaCandidates = std::move(result->candidates);
+    m_focusAreaAnalysisResult = std::move(result->analysis);
+    updateFocusAreaOverlays();
+    if (!result->success) {
+      const QString error = QString::fromStdString(result->error);
+      *summary = tr("Focus-area analysis failed: %1").arg(error);
+      auto *box = new QMessageBox(QMessageBox::Warning,
+                                  tr("Focus analysis areas"), error,
+                                  QMessageBox::Ok, this);
+      box->setAttribute(Qt::WA_DeleteOnClose);
+      box->open();
+      return;
+    }
+    *summary = presentFocusAreaAnalysisResult(
+        m_focusAreaAnalysisResult, scan, baseline, flags);
+  };
+  operation.onDone = [this, summary]() { finishFocusAreaOperation(*summary); };
+
+  runOneShotOperation(
+      std::move(operation),
+      [scan, baseline, candidates, flags, useMonochrome, result](
+          colorscreen::progress_info *progress) {
+        *result = FocusAnalysisWorker::analyzeAreas(
+            baseline.rparams, baseline.scrToImg, scan, candidates, flags,
+            useMonochrome, progress);
+      });
+}
+
+/** Show accepted diagnostics and return their summary. The separate Apply step
+    must still own the same scan/state when the asynchronous prompt finishes. */
+QString MainWindow::presentFocusAreaAnalysisResult(
+    const colorscreen::finetune_focus_analysis_result &analysis,
+    std::shared_ptr<colorscreen::image_data> scan,
+    const ParameterState &baseline, uint64_t flags) {
+  if (m_closing || m_scan != scan || getCurrentState() != baseline ||
+      !analysis.success)
+    return QString();
+  dismissOneShotPrompts();
+
+  QStringList details;
+  details << tr("Selected %1 of %2 verified candidates.")
+                 .arg(static_cast<int>(analysis.selected.size()))
+                 .arg(static_cast<int>(m_focusAreaCandidates.size()));
+  if (analysis.leave_one_out_focus_span >= 0)
+    details << tr("Leave-one-out focus span: %1")
+                   .arg(analysis.leave_one_out_focus_span, 0, 'g', 5);
+  if (analysis.leave_one_out_focus_max_delta >= 0)
+    details << tr("Maximum leave-one-out displacement: %1")
+                   .arg(analysis.leave_one_out_focus_max_delta, 0,
+                        'g', 5);
+  if (analysis.held_out_max_relative_badness >= 0)
+    details << tr("Maximum held-out relative residual: %1")
+                   .arg(analysis.held_out_max_relative_badness, 0,
+                        'g', 5);
+  if (analysis.screen_frequency > 0 && analysis.joint_screen_mtf >= 0)
+    details << tr("Process-screen MTF at %1 cycles/pixel: %2%")
+                   .arg(analysis.screen_frequency, 0, 'g', 6)
+                   .arg(analysis.joint_screen_mtf * 100, 0, 'g', 5);
+  if ((flags & colorscreen::finetune_scanner_mtf_sigma)
+      && analysis.joint_fit.scanner_mtf_sigma >= 0)
+    details << tr("Residual MTF sigma: %1 px")
+                   .arg(analysis.joint_fit.scanner_mtf_sigma, 0, 'g',
+                        5);
+  if (flags & colorscreen::finetune_scanner_mtf_defocus) {
+    if (baseline.rparams.sharpen.scanner_mtf.simulate_diffraction_p())
+      details << tr("Physical defocus: %1 mm")
+                     .arg(analysis.joint_fit.scanner_mtf_defocus, 0,
+                          'g', 5);
+    else
+      details << tr("Compact blur diameter: %1 px")
+                     .arg(analysis.joint_fit.scanner_mtf_blur_diameter,
+                          0, 'g', 5);
+  }
+  const QString summary = details.join(QStringLiteral("\n"));
+  auto *box = new QMessageBox(this);
+  box->setAttribute(Qt::WA_DeleteOnClose);
+  box->setWindowTitle(tr("Focus analysis areas"));
+  box->setIcon(QMessageBox::Information);
+  box->setText(summary);
+  box->setInformativeText(
+      tr("The value is not applied automatically. Inspect the selected "
+         "rectangles and validation diagnostics before accepting it."));
+  QPushButton *applyButton =
+      box->addButton(tr("Apply focus"), QMessageBox::AcceptRole);
+  box->addButton(QMessageBox::Close);
+  m_focusAreaPrompt = box;
+  connect(box, &QMessageBox::finished, this,
+          [this, box, analysis, flags, applyButton, scan, baseline](int) {
+            // Clear ownership before changeParameters() can dismiss prompts.
+            // An obsolete box cannot become valid again after Edit -> Undo.
+            if (m_focusAreaPrompt != box)
+              return;
+            m_focusAreaPrompt = nullptr;
+            if (m_closing || m_scan != scan || getCurrentState() != baseline ||
+                box->clickedButton() != applyButton)
+              return;
+
+            ParameterState state = getCurrentState();
+            if ((flags & colorscreen::finetune_screen_blur) &&
+                analysis.joint_fit.screen_blur_radius >= 0)
+              state.rparams.screen_blur_radius =
+                  analysis.joint_fit.screen_blur_radius;
+            if ((flags & colorscreen::finetune_scanner_mtf_sigma) &&
+                analysis.joint_fit.scanner_mtf_sigma >= 0)
+              state.rparams.sharpen.scanner_mtf.sigma =
+                  analysis.joint_fit.scanner_mtf_sigma;
             if (flags & colorscreen::finetune_scanner_mtf_defocus) {
-              if (m_rparams.sharpen.scanner_mtf.simulate_diffraction_p())
-                details << tr("Physical defocus: %1 mm")
-                               .arg(analysis.joint_fit.scanner_mtf_defocus, 0,
-                                    'g', 5);
+              if (state.rparams.sharpen.scanner_mtf
+                      .simulate_diffraction_p())
+                state.rparams.sharpen.scanner_mtf.defocus =
+                    analysis.joint_fit.scanner_mtf_defocus;
               else
-                details << tr("Compact blur diameter: %1 px")
-                               .arg(analysis.joint_fit.scanner_mtf_blur_diameter,
-                                    0, 'g', 5);
+                state.rparams.sharpen.scanner_mtf.blur_diameter =
+                    analysis.joint_fit.scanner_mtf_blur_diameter;
             }
-            const QString summary = details.join(QStringLiteral("\n"));
-            if (m_sharpnessPanel)
-              m_sharpnessPanel->setFocusAreaAnalysisState(
-                  static_cast<int>(m_focusAreaCandidates.size()), false,
-                  summary);
-
-            auto *box = new QMessageBox(this);
-            box->setAttribute(Qt::WA_DeleteOnClose);
-            box->setWindowTitle(tr("Focus analysis areas"));
-            box->setIcon(QMessageBox::Information);
-            box->setText(summary);
-            box->setInformativeText(
-                tr("The value is not applied automatically. Inspect the "
-                   "selected rectangles and validation diagnostics before "
-                   "accepting it."));
-            QPushButton *applyButton =
-                box->addButton(tr("Apply focus"), QMessageBox::AcceptRole);
-            box->addButton(QMessageBox::Close);
-            connect(box, &QMessageBox::buttonClicked, this,
-                    [this, analysis, flags, applyButton](
-                        QAbstractButton *button) {
-                      if (button != applyButton)
-                        return;
-
-                      ParameterState state = getCurrentState();
-                      if ((flags & colorscreen::finetune_screen_blur) &&
-                          analysis.joint_fit.screen_blur_radius >= 0)
-                        state.rparams.screen_blur_radius =
-                            analysis.joint_fit.screen_blur_radius;
-                      if ((flags & colorscreen::finetune_scanner_mtf_sigma) &&
-                          analysis.joint_fit.scanner_mtf_sigma >= 0)
-                        state.rparams.sharpen.scanner_mtf.sigma =
-                            analysis.joint_fit.scanner_mtf_sigma;
-                      if (flags & colorscreen::finetune_scanner_mtf_defocus) {
-                        if (state.rparams.sharpen.scanner_mtf
-                                .simulate_diffraction_p())
-                          state.rparams.sharpen.scanner_mtf.defocus =
-                              analysis.joint_fit.scanner_mtf_defocus;
-                        else
-                          state.rparams.sharpen.scanner_mtf.blur_diameter =
-                              analysis.joint_fit.scanner_mtf_blur_diameter;
-                      }
-                      changeParameters(
-                          state, tr("Apply multi-area focus analysis"));
-                    });
-            box->open();
+            changeParameters(
+                state, tr("Apply multi-area focus analysis"));
           });
-
-  watcher->setFuture(QtConcurrent::run(
-      [rparams, geometry, scan, candidates, progress, flags,
-       useMonochrome]() mutable {
-        FocusAreaAnalyzeTaskResult result;
-        result.candidates = candidates;
-        colorscreen::finetune_parameters local;
-        local.range = 4;
-        local.ignore_outliers = 0;
-        /* Candidate verification determines local phase/colour only.
-           Scanner MTF is shared and is fitted after area selection. */
-        local.flags = colorscreen::finetune_position;
-        if (useMonochrome)
-          local.flags |= colorscreen::finetune_bw
-              | colorscreen::finetune_no_normalize
-              | colorscreen::finetune_no_data_collection;
-        for (auto &candidate : result.candidates) {
-          if (progress->cancelled()) {
-            result.cancelled = true;
-            return result;
-          }
-          candidate.fit = colorscreen::finetune(
-              rparams, geometry, *scan, {candidate.center}, nullptr, local,
-              progress.get());
-        }
-
-        colorscreen::finetune_parameters joint = local;
-        joint.flags |= flags | colorscreen::finetune_no_normalize
-            | colorscreen::finetune_no_data_collection;
-        if (!useMonochrome)
-          joint.flags |= colorscreen::finetune_uniform_image_layer;
-        colorscreen::finetune_focus_analysis_parameters analysisParameters;
-        analysisParameters.selection.min_areas = 3;
-        analysisParameters.selection.max_areas = 8;
-        /* Full RGB rank is required to learn shared RGB screen-primary
-           responses, but it is not an identifiability condition for BW: each
-           BW area has its own three primary weights and only blur is shared.
-           Keep D-optimal ordering, but do not reject the best BW subset solely
-           because its cross-area colour Gram matrix is rank deficient. */
-        if (useMonochrome)
-          analysisParameters.selection.minimum_color_volume = 0;
-        analysisParameters.leave_one_out = true;
-        /* Frozen RGB-primary held-out validation belongs to the RGB uniform
-           image-layer model.  BW still gets full leave-one-out stability. */
-        analysisParameters.held_out = !useMonochrome;
-        result.success = colorscreen::finetune_analyze_focus_areas(
-            rparams, geometry, *scan, result.candidates, joint,
-            analysisParameters, &result.analysis, progress.get());
-        result.cancelled = progress->cancelled();
-        if (!result.success && !result.cancelled)
-          result.error = result.analysis.err.empty()
-              ? "focus-area joint analysis failed"
-              : result.analysis.err;
-        return result;
-      }));
+  box->open();
+  return summary;
 }
 
 /** Render the current image to a TIFF or DNG file.

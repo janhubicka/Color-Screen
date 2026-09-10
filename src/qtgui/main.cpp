@@ -156,6 +156,29 @@ bool runBetaInvariantSmoke() {
       cancelledRefinement.success || !cancelledRefinement.cancelled)
     return fail("coordinate helper ignored pre-dispatch cancellation");
 
+  // Multi-area focus helpers share the one-shot lifecycle. Invalid or already
+  // cancelled inputs must return before searching/rendering/fitting any pixels.
+  const auto missingFocusAreas = FocusAnalysisWorker::findAreas(
+      colorscreen::render_parameters(), coordinateInputs, {}, nullptr);
+  const auto missingAreaFit = FocusAnalysisWorker::analyzeAreas(
+      colorscreen::render_parameters(), coordinateInputs, {}, {},
+      colorscreen::finetune_scanner_mtf_sigma, false, nullptr);
+  if (missingFocusAreas.success || missingFocusAreas.cancelled ||
+      missingFocusAreas.error.empty() || !missingFocusAreas.candidates.empty() ||
+      missingAreaFit.success || missingAreaFit.cancelled ||
+      missingAreaFit.error.empty() || !missingAreaFit.analysis.selected.empty())
+    return fail("multi-area focus helper accepted a missing scan");
+  const auto cancelledFocusAreas = FocusAnalysisWorker::findAreas(
+      colorscreen::render_parameters(), coordinateInputs, emptyScan,
+      &cancelledCoordinates);
+  const auto cancelledAreaFit = FocusAnalysisWorker::analyzeAreas(
+      colorscreen::render_parameters(), coordinateInputs, emptyScan, {},
+      colorscreen::finetune_scanner_mtf_sigma, true, &cancelledCoordinates);
+  if (cancelledFocusAreas.success || !cancelledFocusAreas.cancelled ||
+      !cancelledFocusAreas.candidates.empty() || cancelledAreaFit.success ||
+      !cancelledAreaFit.cancelled || !cancelledAreaFit.candidates.empty())
+    return fail("multi-area focus helper ignored pre-dispatch cancellation");
+
   colorscreen::finetune_area_parameters finetuneAreaParams;
   const FinetuneAreaResult missingFinetune = FinetuneWorker::findPoints(
       colorscreen::solver_parameters(), colorscreen::render_parameters(),
