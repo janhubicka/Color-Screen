@@ -1,0 +1,62 @@
+name: Agent checkbox semantics staging
+on:
+  push:
+    branches: [agent/qtgui-checkbox-semantics-stage]
+    paths:
+      - .github/workflows/agent-checkbox-semantics-stage.yml
+      - .agent-checkbox-semantics.py
+permissions:
+  contents: write
+concurrency:
+  group: agent-checkbox-semantics-stage
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Publish clean checkbox semantics change
+        shell: bash
+        run: |
+          set -euo pipefail
+          base=ea7a45588d78d5ecd9ec29a559452e114c9e0087
+          target=agent/qtgui-checkbox-enablement
+          test "$(git rev-parse origin/agent/qtgui-reference-mtf-one-shot)" = "$base"
+          test -z "$(git ls-remote --heads origin "refs/heads/$target")"
+          cp .agent-checkbox-semantics.py /tmp/checkbox-semantics.py
+          git checkout -b "$target" "$base"
+          python3 /tmp/checkbox-semantics.py
+          git diff HEAD --check
+          sh build-aux/check-generated-build-metadata.sh
+          test "$(git diff --name-only HEAD | wc -l)" -eq 8
+          git config user.name "Jan Hubička"
+          git config user.email "46065755+janhubicka@users.noreply.github.com"
+          git add .agents/qtgui.md doc/qtgui-internal-cleanup.md \
+            src/qtgui/GeometryPanel.cpp src/qtgui/ImageLayerPanel.cpp \
+            src/qtgui/ParameterPanel.cpp src/qtgui/ParameterPanel.h \
+            src/qtgui/WorkspaceChurnSmoke.cpp src/qtgui/main.cpp
+          git commit -F - <<'MESSAGE'
+          qtgui: make checkbox enablement semantics consistent
+
+          Make ParameterPanel checkbox helpers interpret enabledCheck exactly
+          like sliders, enums and buttons: keep the row visible and disable its
+          container when a prerequisite is missing. Logical disappearance stays
+          an explicit setParameterApplicability decision and continues composing
+          with section folding.
+
+          Move Image Layer's native-vs-simulated source selector from direct
+          setVisible bookkeeping to row applicability. Keep final-image mirroring
+          visible but disabled until screen geometry exists, matching the adjacent
+          final-rotation control and giving the prerequisite a discoverable UI.
+
+          Add a lightweight helper probe covering plain and Reset checkboxes plus
+          workspace coverage for Image Layer applicability metadata and Geometry's
+          disabled-to-enabled transition. Update contributor and cleanup notes.
+          MESSAGE
+          test "$(git rev-parse HEAD^)" = "$base"
+          test "$(git diff --name-only "$base" HEAD | wc -l)" -eq 8
+          git push origin "HEAD:refs/heads/$target"
+          git log -1 --format=fuller
+          git diff --stat "$base" HEAD
