@@ -37,6 +37,7 @@ class QDoubleSpinBox;
 class QVBoxLayout; // Added for Linearization tab
 class QLabel;
 class QProgressBar;
+class QMessageBox;
 class QPushButton;
 class QWidget;
 #include "ImageWidget.h"
@@ -84,6 +85,7 @@ class CoordinateOptimizationWorker;
 class AdaptiveSharpeningChart; // Added
 class QUndoStack; // Forward decl
 class ColorScreenApplication;
+struct DetectScreenAnalysisResult;
 
 /** Start the completion-driven workspace ownership/lifecycle smoke test. */
 void startWorkspaceChurnSmoke(ColorScreenApplication &app,
@@ -443,6 +445,15 @@ private:
       OneShotOperation operation,
       std::function<void(colorscreen::progress_info *)> worker);
 
+  /** Present RESULT and defer accepted publication through a window-modal prompt. */
+  void presentDetectedScreenResult(
+      const DetectScreenAnalysisResult &result,
+      std::shared_ptr<colorscreen::image_data> scan,
+      const ParameterState &baseline);
+
+  /** Dismiss an obsolete screen-detection confirmation without publishing it. */
+  void dismissDetectScreenPrompt();
+
   /** Launch an area-based parameter computation.
       Shows MESSAGE, captures the current image/ParameterState snapshot, then
       runs WORKER through runOneShotOperation(). The whole-state result is
@@ -609,6 +620,7 @@ private:
   colorscreen::scr_to_img_parameters m_scrToImgParams;
   colorscreen::solver_parameters m_solverParams;
   std::shared_ptr<const colorscreen::screen_map> m_detectedScreenMap;
+  QPointer<QMessageBox> m_detectScreenPrompt;
   bool m_showDetectedPatchCenters = false;
   /** Last slanted-edge setup used in this session.  Each accepted measurement
       stores an independent copy of its metadata, while the numerical controls
@@ -651,7 +663,6 @@ private slots:
   void onCoordinateSystemChanged();
   void onAutodetectScreen();
   void onFlatFieldRequested();
-  void onDetectScreenFinished(bool success, colorscreen::detected_screen result, colorscreen::solver_parameters solverParams);
   void onMirrorHorizontally(bool checked);
 
   // Helper to update color checkbox state and visibility
@@ -765,9 +776,7 @@ private:
   bool m_focusAreaAnalysisRunning = false;
   int m_selectedMtfMeasurement = -1;
 
-  // Generations for replaceable background results. Starting a newer run makes
-  // an older completion stale without conflating unrelated operation types.
-  uint64_t m_detectScreenGeneration = 0;
+  // Generation retained for the progressive adaptive-sharpening worker.
   uint64_t m_adaptiveSharpeningGeneration = 0;
   int m_coordinateAutodetectRequest = 0;
   std::shared_ptr<colorscreen::progress_info> m_coordinateAutodetectProgress;
@@ -795,9 +804,6 @@ private:
   double m_profileCalibrationAverageDeltaE = -1;
   // std::shared_ptr<colorscreen::progress_info> m_solverProgress; // Removed, now handled by queue request
   
-  // Detect Screen Worker
-  std::shared_ptr<colorscreen::mesh> m_detectedMesh; // Store mesh from autodetection
-  
   // Solver Queue
   TaskQueue m_solverQueue;
 
@@ -824,7 +830,8 @@ private:
   CoordinateOptimizationWorker *m_coordOptimizationWorker = nullptr;
   QThread *m_coordOptimizationThread = nullptr;
 
-  // One-shot background threads (finetune, detection, focus, sharpening, etc.).
+  // One-shot background threads that intentionally publish intermediate
+  // results (misregistered finetune, adaptive sharpening, etc.).
   // QPointer makes completed/deleteLater threads harmless until the vector is
   // pruned; shutdown joins every still-running operation before document state
   // is destroyed.
@@ -836,6 +843,9 @@ private:
   // The workspace smoke probe exercises private one-shot publication rules.
   friend void startWorkspaceChurnSmoke(ColorScreenApplication &app,
                                        std::function<void()> completed);
+  // The document lifecycle smoke verifies pooled one-shot cancellation on close.
+  friend void startDocumentLifecycleSmoke(ColorScreenApplication &app,
+                                          std::function<void()> completed);
   
 private slots:
   void onTriggerSolve(int reqId, std::shared_ptr<colorscreen::progress_info> progress, const QVariant &userData);

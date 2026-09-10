@@ -6,36 +6,31 @@
 #include "../libcolorscreen/include/detect-regular-screen-parameters.h"
 #include "../libcolorscreen/include/progress-info.h"
 #include "../libcolorscreen/include/render-parameters.h"
-#include <QObject>
 #include <memory>
 
 namespace colorscreen {
 class image_data;
+class screen_map;
 }
 
-class DetectScreenWorker : public QObject {
-  Q_OBJECT
+/** Final result of one automatic regular-screen detection. */
+struct DetectScreenAnalysisResult {
+  bool success = false;
+  bool cancelled = false;
+  colorscreen::detected_screen detected{};
+  colorscreen::solver_parameters solver;
+  std::shared_ptr<const colorscreen::screen_map> screenMap;
+};
+
+/** Synchronous screen-detection helper intended for a background thread. */
+class DetectScreenWorker final {
 public:
-  DetectScreenWorker(colorscreen::scr_detect_parameters detectParams,
-                     colorscreen::solver_parameters solverParams,
-                     colorscreen::scr_to_img_parameters scrToImgParams,
-                     colorscreen::render_parameters renderParams,
-                     std::shared_ptr<colorscreen::image_data> scan,
-                     std::shared_ptr<colorscreen::progress_info> progress,
-                     colorscreen::luminosity_t gamma);
-
-public slots:
-  void detect();
-
-signals:
-  void finished(bool success, colorscreen::detected_screen result, colorscreen::solver_parameters solverParams);
-
-private:
-  colorscreen::scr_detect_parameters m_detectParams;
-  colorscreen::solver_parameters m_solverParams;
-  colorscreen::scr_to_img_parameters m_scrToImgParams;
-  colorscreen::render_parameters m_renderParams;
-  std::shared_ptr<colorscreen::image_data> m_scan;
-  std::shared_ptr<colorscreen::progress_info> m_progress;
-  colorscreen::luminosity_t m_gamma;
+  /** Detect a regular screen using immutable document input snapshots. */
+  static DetectScreenAnalysisResult analyze(
+      colorscreen::scr_detect_parameters detectParams,
+      colorscreen::solver_parameters solverParams,
+      colorscreen::scr_to_img_parameters scrToImgParams,
+      colorscreen::render_parameters renderParams,
+      std::shared_ptr<colorscreen::image_data> scan,
+      colorscreen::progress_info *progress);
 };
