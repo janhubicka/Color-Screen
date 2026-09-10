@@ -642,24 +642,13 @@ MainWindow::MainWindow(const QString &recoveryDirectory, QWidget *parent)
   connect(&m_colorOptimizerQueue, &TaskQueue::progressFinished, this,
           &MainWindow::removeProgress);
 
-  // Initialize Coordinate Optimization Worker
-  m_coordOptimizationThread = new QThread(this);
-  m_coordOptimizationWorker = new CoordinateOptimizationWorker(m_scan);
-  m_coordOptimizationWorker->moveToThread(m_coordOptimizationThread);
-  m_coordOptimizationThread->start();
-
-  connect(m_coordOptimizationWorker, &CoordinateOptimizationWorker::autodetectFinished, this,
-          &MainWindow::onAutodetectCoordinatesFinished);
-  connect(m_coordOptimizationWorker, &CoordinateOptimizationWorker::optimizeFinished, this,
-          &MainWindow::onOptimizeCoordinatesFinished);
-
   updateWindowTitle();
 }
 
 /** Destroy the main window.
    Hides the window first to prevent stale accessibility events on macOS
    (QTBUG-71850).  Shuts down all background worker threads (solver, color
-   optimizer, coordinate optimizer) and waits for them to finish.  Explicitly
+   optimizer) and waits for them to finish. Explicitly
    deletes the main splitter before member variables are destroyed so that
    panel callbacks don't access freed data.  Finally cleans up any floating
    dock widgets that may hold detached chart views.  */
@@ -696,8 +685,6 @@ MainWindow::~MainWindow() {
   // service blocking queued calls from those workers.
   if (m_solverWorker)
     disconnect(m_solverWorker, nullptr, this, nullptr);
-  if (m_coordOptimizationWorker)
-    disconnect(m_coordOptimizationWorker, nullptr, this, nullptr);
   if (m_colorOptimizerWorker)
     disconnect(m_colorOptimizerWorker, nullptr, this, nullptr);
 
@@ -710,13 +697,6 @@ MainWindow::~MainWindow() {
     m_solverWorker = nullptr;
   }
   
-  if (m_coordOptimizationThread) {
-    m_coordOptimizationThread->quit();
-    m_coordOptimizationThread->wait();
-    delete m_coordOptimizationWorker;
-    m_coordOptimizationWorker = nullptr;
-  }
-
   if (m_colorOptimizerThread) {
     m_colorOptimizerThread->quit();
     m_colorOptimizerThread->wait();
@@ -3162,8 +3142,6 @@ void MainWindow::onImageLoaded() {
       m_solverWorker->setScan(m_scan);
     if (m_colorOptimizerWorker)
       m_colorOptimizerWorker->setScan(m_scan);
-    if (m_coordOptimizationWorker)
-      m_coordOptimizationWorker->setScan(m_scan);
     m_navigationView->setImage(m_scan, &m_rparams, &m_scrToImgParams,
                                &m_detectParams);
     m_navigationView->setMinScale(m_imageWidget->getMinScale());
@@ -5503,17 +5481,8 @@ void MainWindow::updateRegistrationActions() {
   const size_t documentPointCount = m_solverParams.n_points();
   size_t count = image ? image->registrationPointCount() : documentPointCount;
 
-  // A control point appearing while coordinate autodetection runs makes its
-  // result unsafe to publish: the point is expressed in the old basis.
-  if (documentPointCount > 0 && m_coordinateAutodetectProgress &&
-      !m_coordinateAutodetectProgress->pool_cancel()) {
-    m_coordinateAutodetectProgress->cancel();
-    ++m_coordinateAutodetectRequest;
-    m_autoAddPointsAfterCoordinates = false;
-    statusBar()->showMessage(
-        tr("Coordinate autodetection cancelled because control points now exist."),
-        4000);
-  }
+  // Coordinate autodetection now uses the shared one-shot cancellation and
+  // exact snapshot gate, which also rejects any newly added control point.
 
   int min_points = colorscreen::solver_parameters::min_points(m_scrToImgParams.type);
   if (m_selectAllAction) {
@@ -5831,7 +5800,13 @@ void MainWindow::runOneShotOperation(
           lifecycle->onDone();
       },
       QVariant(),
-      [lifecycle]() {
+      [this, lifecycle](std::shared_ptr<colorscreen::progress_info> progress) {
+        if (!lifecycle->progressTitle.isEmpty()) {
+          // TaskQueue already registered ordinary progress. Replace that entry
+          // rather than tracking the same request twice in the workspace.
+          removeProgress(progress);
+          addUserVisibleProgress(progress, lifecycle->progressTitle);
+        }
         if (lifecycle->onStart)
           lifecycle->onStart();
       });
@@ -6341,7 +6316,6 @@ void MainWindow::onAutodetectScreen() {
     if (m_solverParams.n_points() > 0) {
       // Existing points are expressed in the current basis. Detect Screen may
       // refine/add points, but must never replace that basis underneath them.
-      m_autoAddPointsAfterCoordinates = false;
       if (!colorscreen::screen_geometry_configured_p(m_scrToImgParams)) {
         statusBar()->showMessage(
             tr("Existing control points require their original screen "
@@ -6354,8 +6328,7 @@ void MainWindow::onAutodetectScreen() {
       return;
     }
 
-    m_autoAddPointsAfterCoordinates = true;
-    onAutodetectCoordinatesRequested();
+    startCoordinateAutodetection(true);
     return;
   }
 
@@ -6620,15 +6593,19 @@ void MainWindow::onSetCenter(colorscreen::point_t imgPos) {
   m_imageWidget->update();
 }
 
-/** Launch autodetection of screen coordinates (center, coordinate1,
-   coordinate2).  Invokes the CoordinateOptimizationWorker's autodetect
-   method in its background thread.  Results arrive at
-   onAutodetectCoordinatesFinished.  */
+/** Detect coordinates without implicitly continuing another request's workflow. */
 void MainWindow::onAutodetectCoordinatesRequested() {
-  if (!m_scan || !m_coordOptimizationWorker)
+  startCoordinateAutodetection(false);
+}
+
+/** Detect an initial coordinate system from immutable scan/parameter snapshots.
+    Existing control points prohibit replacement of their coordinate frame.
+    ADDPOINTSAFTERDETECTION is captured by this request, so a superseded request
+    cannot start registration work or change a newer request's continuation. */
+void MainWindow::startCoordinateAutodetection(bool addPointsAfterDetection) {
+  if (!m_scan)
     return;
   if (m_solverParams.n_points() > 0) {
-    m_autoAddPointsAfterCoordinates = false;
     statusBar()->showMessage(
         tr("Delete existing control points before detecting a new screen "
            "coordinate system."),
@@ -6636,152 +6613,105 @@ void MainWindow::onAutodetectCoordinatesRequested() {
     return;
   }
 
-  if (m_coordinateAutodetectProgress &&
-      !m_coordinateAutodetectProgress->pool_cancel())
-    m_coordinateAutodetectProgress->cancel();
+  const auto scan = m_scan;
+  const ParameterState baseline = getCurrentState();
+  auto result = std::make_shared<CoordinateAutodetectionResult>();
 
-  m_coordOptimizationWorker->setScan(m_scan);
+  OneShotOperation operation;
+  operation.description = tr("Autodetecting coordinates");
+  operation.progressTitle = tr("Coordinate autodetection");
+  operation.prerequisites = [this, scan]() { return m_scan == scan; };
+  operation.resultValid = [this, scan, baseline, result]() {
+    return m_scan == scan && getCurrentState() == baseline &&
+           m_solverParams.n_points() == 0 && !result->cancelled;
+  };
+  operation.applyResult = [this, result, addPointsAfterDetection]() {
+    if (!result->success) {
+      QMessageBox::warning(this, tr("Autodetect Coordinates"),
+                           tr("Autodetect coordinates failed."));
+      return;
+    }
 
-  // Create progress info
-  auto progress = std::make_shared<colorscreen::progress_info>();
-  progress->set_task("Autodetecting coordinates", 1);
-  addUserVisibleProgress(progress, tr("Coordinate autodetection"));
-  m_coordinateAutodetectProgress = progress;
+    ParameterState newState = getCurrentState();
+    newState.scrToImg = result->coordinates;
+    // Switch before applyState refreshes the canvas with accepted geometry.
+    m_renderTypeParams.type = colorscreen::render_type_interpolated;
+    changeParameters(newState, "Autodetect Coordinates");
+    if (m_addPointAction)
+      m_addPointAction->setChecked(true);
+    m_imageWidget->update();
+    statusBar()->showMessage(tr("Autodetect coordinates finished"), 3000);
 
-  const int reqId = ++m_coordinateAutodetectRequest;
-  QMetaObject::invokeMethod(
-      m_coordOptimizationWorker, "autodetect", Qt::QueuedConnection,
-      Q_ARG(int, reqId),
-      Q_ARG(colorscreen::scr_to_img_parameters, m_scrToImgParams),
-      Q_ARG(colorscreen::render_parameters, m_rparams),
-      Q_ARG(std::shared_ptr<colorscreen::progress_info>, progress));
+    if (addPointsAfterDetection && m_geometryPanel)
+      onAutomaticallyAddPointsRequested(m_geometryPanel->finetuneAreaParams());
+  };
+
+  runOneShotOperation(
+      std::move(operation),
+      [scan, baseline, result](colorscreen::progress_info *progress) mutable {
+        *result = CoordinateOptimizationWorker::autodetect(
+            baseline.scrToImg, baseline.rparams, scan, progress);
+      });
 }
 
-/** Forward coordinate optimisation request to onOptimizeCoordinates.  */
+/** Forward coordinate optimisation request to onOptimizeCoordinates. */
 void MainWindow::onOptimizeCoordinatesRequested() {
   onOptimizeCoordinates();
 }
 
-/** Handle completion of coordinate autodetection.
-   On success, applies the detected coordinates, switches to interpolated
-   render mode, activates the AddPoint tool, and pushes an undo command.
-   On failure, shows a warning.  */
-void MainWindow::onAutodetectCoordinatesFinished(
-    int reqId, colorscreen::scr_to_img_parameters result,
-    std::shared_ptr<colorscreen::progress_info> progress, bool success,
-    bool cancelled) {
-  if (progress && !m_closing)
-    removeProgress(progress);
-  if (m_coordinateAutodetectProgress == progress)
-    m_coordinateAutodetectProgress.reset();
-
-  if (m_closing || reqId != m_coordinateAutodetectRequest)
-    return;
-  if (cancelled || (progress && progress->pool_cancel())) {
-    m_autoAddPointsAfterCoordinates = false;
-    return;
-  }
-  if (m_solverParams.n_points() > 0) {
-    m_autoAddPointsAfterCoordinates = false;
-    statusBar()->showMessage(
-        tr("Discarded detected coordinates because control points were added "
-           "while detection was running."),
-        5000);
-    return;
-  }
-
-  if (success) {
-    ParameterState newState = getCurrentState();
-    newState.scrToImg = result;
-
-    // Switch before applyState refreshes the canvas with accepted geometry.
-    m_renderTypeParams.type = colorscreen::render_type_interpolated;
-    changeParameters(newState, "Autodetect Coordinates");
-
-    // Enable "Set screen coordinates" tool
-    if (m_addPointAction) {
-      m_addPointAction->setChecked(true);
-    }
-
-    m_imageWidget->update();
-    statusBar()->showMessage("Autodetect coordinates finished", 3000);
-
-    if (m_autoAddPointsAfterCoordinates) {
-      m_autoAddPointsAfterCoordinates = false;
-      onAutomaticallyAddPointsRequested(m_geometryPanel->finetuneAreaParams());
-    }
-  } else {
-    m_autoAddPointsAfterCoordinates = false;
-    QMessageBox::warning(this, "Autodetect Coordinates",
-                         "Autodetect coordinates failed.");
-  }
-}
-
-/** Launch coordinate optimisation.
-   Invokes the CoordinateOptimizationWorker's optimize method in its
-   background thread to refine center, coordinate1, and coordinate2
-   using finetune-based analysis.  */
+/** Refine an existing coordinate system under the shared one-shot lifecycle. */
 void MainWindow::onOptimizeCoordinates() {
-  if (!m_scan || !m_coordOptimizationWorker)
+  if (!m_scan)
     return;
   if (!colorscreen::screen_geometry_configured_p(m_scrToImgParams)) {
     statusBar()->showMessage(tr("Detect screen coordinates before refining them."), 3000);
     return;
   }
 
-  m_coordOptimizationWorker->setScan(m_scan);
+  const auto scan = m_scan;
+  const ParameterState baseline = getCurrentState();
+  auto result = std::make_shared<CoordinateOptimizationResult>();
 
-  // Create progress info
-  auto progress = std::make_shared<colorscreen::progress_info>();
-  progress->set_task("Optimizing coordinates", 1);
-  addProgress(progress);
+  OneShotOperation operation;
+  operation.description = tr("Optimizing coordinates");
+  operation.prerequisites = [this, scan]() { return m_scan == scan; };
+  operation.resultValid = [this, scan, baseline, result]() {
+    return m_scan == scan && getCurrentState() == baseline && !result->cancelled;
+  };
+  operation.applyResult = [this, result]() {
+    if (result->success) {
+      applyOptimizedCoordinates(result->finetune);
+    } else {
+      QMessageBox::warning(this, tr("Optimization"),
+                           tr("Optimization failed: ") +
+                               QString::fromStdString(result->finetune.err));
+    }
+  };
 
-  const int reqId = ++m_coordinateOptimizeRequest;
-  QMetaObject::invokeMethod(
-      m_coordOptimizationWorker, "optimize", Qt::QueuedConnection,
-      Q_ARG(int, reqId),
-      Q_ARG(colorscreen::scr_to_img_parameters, m_scrToImgParams),
-      Q_ARG(colorscreen::render_parameters, m_rparams),
-      Q_ARG(std::shared_ptr<colorscreen::progress_info>, progress));
+  runOneShotOperation(
+      std::move(operation),
+      [scan, baseline, result](colorscreen::progress_info *progress) mutable {
+        *result = CoordinateOptimizationWorker::optimize(
+            baseline.scrToImg, baseline.rparams, scan, progress);
+      });
 }
 
-/** Handle completion of coordinate optimisation.
-   On success, applies the refined center and coordinates, clears any
-   mesh_trans (since coordinates changed), pushes an undo command, and
-   updates the finetune diagnostic images.  */
-void MainWindow::onOptimizeCoordinatesFinished(
-    int reqId, colorscreen::finetune_result ret,
-    std::shared_ptr<colorscreen::progress_info> progress, bool success,
-    bool cancelled) {
-  if (progress && !m_closing)
-    removeProgress(progress);
-
-  if (m_closing || reqId != m_coordinateOptimizeRequest || cancelled ||
-      (progress && progress->pool_cancel()))
-    return;
-
-  if (success) {
-    // Update parameters
-    m_scrToImgParams.center = ret.center;
-    m_scrToImgParams.coordinate1 = ret.coordinate1;
-    m_scrToImgParams.coordinate2 = ret.coordinate2;
-    m_scrToImgParams.mesh_trans = NULL;
-
-    // Update UI
-    changeParameters(getCurrentState(), "Optimize Coordinates");
-    m_imageWidget->update();
-
-    // Update finetune diagnostic images
-    if (m_geometryPanel) {
-      m_geometryPanel->updateFinetuneImages(ret);
-    }
-    updateWorkflowSummary();
-    statusBar()->showMessage("Optimize coordinates finished", 3000);
-  } else {
-    QMessageBox::warning(this, "Optimization",
-                         "Optimization failed: " +
-                             QString::fromStdString(ret.err));
-  }
+/** Apply accepted coordinates without mutating the live state before Undo sees it.
+    A new linear basis invalidates the old nonlinear mesh. Diagnostics remain
+    document-local derived presentation, outside the saved ParameterState. */
+void MainWindow::applyOptimizedCoordinates(
+    const colorscreen::finetune_result &result) {
+  ParameterState newState = getCurrentState();
+  newState.scrToImg.center = result.center;
+  newState.scrToImg.coordinate1 = result.coordinate1;
+  newState.scrToImg.coordinate2 = result.coordinate2;
+  newState.scrToImg.mesh_trans = nullptr;
+  changeParameters(newState, "Optimize Coordinates");
+  m_imageWidget->update();
+  if (m_geometryPanel)
+    m_geometryPanel->updateFinetuneImages(result);
+  updateWorkflowSummary();
+  statusBar()->showMessage(tr("Optimize coordinates finished"), 3000);
 }
 
 /** Propagate coordinate system parameter changes to the renderer.

@@ -78,11 +78,14 @@ public:
    * The task is managed by the queue's concurrency and timeout rules.
    * Background dispatch uses an explicitly constructed QRunnable so the object
    * is fully published to QThreadPool before a worker can execute it.
+   * STARTED receives the request's progress on the GUI thread, before worker
+   * dispatch, so callers can select the appropriate progress presentation.
    */
   void runAsync (std::function<void (colorscreen::progress_info *)> worker,
                  std::function<void (bool publishResult)> done,
                  const QVariant &userData = {},
-                 std::function<void ()> started = nullptr);
+                 std::function<void (
+                     std::shared_ptr<colorscreen::progress_info>)> started = nullptr);
 
   /** @return True if there are any active or pending tasks in the queue. */
   bool hasActiveTasks() const;

@@ -81,7 +81,6 @@ class GeometryPanel;
 class GeometrySolverWorker;
 class ColorOptimizerWorker;
 class AdaptiveSharpeningWorker;
-class CoordinateOptimizationWorker;
 class AdaptiveSharpeningChart; // Added
 class QUndoStack; // Forward decl
 class ColorScreenApplication;
@@ -374,8 +373,6 @@ private slots:
   void onAutodetectCoordinatesRequested();
   void onAlternateColorsRequested();
   void onOptimizeCoordinatesRequested();
-  void onAutodetectCoordinatesFinished(int reqId, colorscreen::scr_to_img_parameters result, std::shared_ptr<colorscreen::progress_info> progress, bool success, bool cancelled);
-  void onOptimizeCoordinatesFinished(int reqId, colorscreen::finetune_result result, std::shared_ptr<colorscreen::progress_info> progress, bool success, bool cancelled);
   void onMeasureRequested();
   void onMeasureMtfRequested(bool checked);
   void onDistanceMeasured(colorscreen::point_t p1, colorscreen::point_t p2);
@@ -433,6 +430,8 @@ private:
       state for every started request, including stale/cancelled completions. */
   struct OneShotOperation {
     QString description;
+    // Non-empty for a dedicated task row; otherwise use transient progress.
+    QString progressTitle;
     std::function<bool()> prerequisites;
     std::function<void()> onStart;
     std::function<bool()> resultValid;
@@ -444,6 +443,13 @@ private:
   void runOneShotOperation(
       OneShotOperation operation,
       std::function<void(colorscreen::progress_info *)> worker);
+
+  /** Detect an initial basis; optionally continue with automatic point finding.
+      The continuation belongs to this request, never to mutable window state. */
+  void startCoordinateAutodetection(bool addPointsAfterDetection);
+
+  /** Apply a successful coordinate refinement as one undoable document edit. */
+  void applyOptimizedCoordinates(const colorscreen::finetune_result &result);
 
   /** Present RESULT and defer accepted publication through a window-modal prompt. */
   void presentDetectedScreenResult(
@@ -610,7 +616,6 @@ private:
 
   std::function<void(QRect)> m_areaSelectionCallback = nullptr;
   ImageWidget::InteractionMode m_previousInteractionMode = ImageWidget::PanMode;
-  bool m_autoAddPointsAfterCoordinates = false;
   bool m_switchingInspectorImage = false;
 
 
@@ -778,9 +783,6 @@ private:
 
   // Generation retained for the progressive adaptive-sharpening worker.
   uint64_t m_adaptiveSharpeningGeneration = 0;
-  int m_coordinateAutodetectRequest = 0;
-  std::shared_ptr<colorscreen::progress_info> m_coordinateAutodetectProgress;
-  int m_coordinateOptimizeRequest = 0;
 
   // Crash recovery
   QString m_recoveryDir;
@@ -826,10 +828,6 @@ private:
   double m_mtfFitRms = -1;
   bool m_mtfFitRunning = false;
   
-  // Coordinate Optimization Worker
-  CoordinateOptimizationWorker *m_coordOptimizationWorker = nullptr;
-  QThread *m_coordOptimizationThread = nullptr;
-
   // One-shot background threads that intentionally publish intermediate
   // results (misregistered finetune, adaptive sharpening, etc.).
   // QPointer makes completed/deleteLater threads harmless until the vector is

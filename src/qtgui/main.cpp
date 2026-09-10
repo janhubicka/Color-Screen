@@ -6,6 +6,7 @@
 #include "SharpnessPanel.h"
 #include "ToneCurveWidget.h"
 #include "CoordinateTransformer.h"
+#include "CoordinateOptimizationWorker.h"
 #include "DocumentLifecycleSmoke.h"
 #include "DetectScreenWorker.h"
 #include "FocusAnalysisWorker.h"
@@ -127,6 +128,33 @@ bool runBetaInvariantSmoke() {
   if (missingDetection.success || missingDetection.cancelled ||
       missingDetection.screenMap || missingDetection.detected.smap)
     return fail("screen-detection helper accepted a missing scan");
+
+  // Coordinate helpers must fail without a scan and short-circuit an already
+  // cancelled request before touching an uninitialized image's pixel data.
+  const colorscreen::scr_to_img_parameters coordinateInputs;
+  const auto missingCoordinates = CoordinateOptimizationWorker::autodetect(
+      coordinateInputs, colorscreen::render_parameters(), {}, nullptr);
+  const auto missingRefinement = CoordinateOptimizationWorker::optimize(
+      coordinateInputs, colorscreen::render_parameters(), {}, nullptr);
+  if (missingCoordinates.success || missingCoordinates.cancelled ||
+      missingCoordinates.coordinates != coordinateInputs ||
+      missingRefinement.success || missingRefinement.cancelled ||
+      missingRefinement.finetune.err.empty())
+    return fail("coordinate helper accepted a missing scan");
+
+  auto emptyScan = std::make_shared<colorscreen::image_data>();
+  colorscreen::progress_info cancelledCoordinates;
+  cancelledCoordinates.cancel();
+  const auto cancelledDetection = CoordinateOptimizationWorker::autodetect(
+      coordinateInputs, colorscreen::render_parameters(), emptyScan,
+      &cancelledCoordinates);
+  const auto cancelledRefinement = CoordinateOptimizationWorker::optimize(
+      coordinateInputs, colorscreen::render_parameters(), emptyScan,
+      &cancelledCoordinates);
+  if (cancelledDetection.success || !cancelledDetection.cancelled ||
+      cancelledDetection.coordinates != coordinateInputs ||
+      cancelledRefinement.success || !cancelledRefinement.cancelled)
+    return fail("coordinate helper ignored pre-dispatch cancellation");
 
   colorscreen::finetune_area_parameters finetuneAreaParams;
   const FinetuneAreaResult missingFinetune = FinetuneWorker::findPoints(
