@@ -61,10 +61,13 @@ void ContactCopyPanel::setupUi() {
         m_currentGroupForm ? m_currentGroupForm->parentWidget() : nullptr;
     if (group)
       group->setObjectName(objectName);
+    setParameterApplicability(group, [](const ParameterState &state) {
+      return state.rparams.contact_copy.simulate;
+    });
     return group;
   };
 
-  QWidget *filmCharacteristicsGroup = addSimulationSection(
+  addSimulationSection(
       QStringLiteral("Film characteristics"),
       QStringLiteral("ContactCopyFilmCharacteristicsGroup"));
   m_hdCurveWidget = new HDCurveWidget();
@@ -173,7 +176,7 @@ void ContactCopyPanel::setupUi() {
   createSpinBox(m_linear1XSpin); createSpinBox(m_linear1YSpin);
   createSpinBox(m_linear2XSpin); createSpinBox(m_linear2YSpin);
   createSpinBox(m_maxXSpin); createSpinBox(m_maxYSpin);
-  QWidget *richardsGroup = addSimulationSection(
+  addSimulationSection(
       QStringLiteral("H&D Richards model parameters"),
       QStringLiteral("ContactCopyRichardsGroup"));
 
@@ -239,7 +242,7 @@ void ContactCopyPanel::setupUi() {
       }
   }
 
-  QWidget *manualPointsGroup = addSimulationSection(
+  addSimulationSection(
       QStringLiteral("H&D Coordinate points (manual entry)"),
       QStringLiteral("ContactCopyManualPointsGroup"));
 
@@ -266,7 +269,7 @@ void ContactCopyPanel::setupUi() {
   addRow("Linear end", m_linear2XSpin, m_linear2YSpin);
   addRow("Max point", m_maxXSpin, m_maxYSpin);
 
-  QWidget *darkroomGroup = addSimulationSection(
+  addSimulationSection(
       QStringLiteral("Simulated darkroom"),
       QStringLiteral("ContactCopyDarkroomGroup"));
 
@@ -310,16 +313,8 @@ void ContactCopyPanel::setupUi() {
   }
 
   // Sync state to UI
-  m_paramUpdaters.push_back(
-      [this, filmCharacteristicsGroup, richardsGroup, manualPointsGroup,
-       darkroomGroup](const ParameterState &s) {
+  m_paramUpdaters.push_back([this](const ParameterState &s) {
       bool sim = s.rparams.contact_copy.simulate;
-      QWidget *simulationGroups[] = {filmCharacteristicsGroup, richardsGroup,
-                                     manualPointsGroup, darkroomGroup};
-      for (QWidget *group : simulationGroups) {
-          if (group)
-              group->setVisible(sim);
-      }
       if (!sim) {
           m_taskQueue.cancelAll();
           m_hdCurveWidget->setHistogram({}, 0, 0);
@@ -385,20 +380,33 @@ void ContactCopyPanel::setupUi() {
           auto colors = colorscreen::hd_y_to_rgb(mut_rparams, 400, minY, maxY, colorscreen::screen_has_regular_geometry_p(s.scrToImg.type) ? colorscreen::patch_proportions(s.scrToImg.type, &mut_rparams) : (colorscreen::rgbdata){1.0/3, 1.0/3, 1.0/3}, axisType);
           m_hdCurveWidget->setHDColors(colors, minY, maxY);
 
-          if (m_imageGetter() && m_hdCurveWidget->isVisible() && m_hdCurveWidget->isEnabled()) {
-              HistogramRequestData data;
-              data.params = mut_rparams;
-              data.steps = 256;
-              data.minX = m_hdCurveWidget->minX();
-              data.maxX = m_hdCurveWidget->maxX();
-              data.axisType = axisType;
-              
-              m_taskQueue.requestRender(QVariant::fromValue(data));
-          }
+          // Histogram work is scheduled after applicability/folding updates.
       } else {
           m_taskQueue.cancelAll();
           m_hdCurveWidget->setHistogram({}, 0, 0);
       }
+  });
+
+  // Run this after all section-applicability callbacks. Effective visibility
+  // then reflects both the simulation prerequisite and the user's fold state.
+  m_widgetStateUpdaters.push_back([this]() {
+      const ParameterState state = m_stateGetter();
+      if (!state.rparams.contact_copy.simulate || !m_imageGetter() ||
+          !m_hdCurveWidget->isVisible() || !m_hdCurveWidget->isEnabled())
+        return;
+
+      const double minY = m_hdCurveWidget->minY();
+      const double maxY = m_hdCurveWidget->maxY();
+      if (maxY <= minY)
+        return;
+
+      HistogramRequestData data;
+      data.params = state.rparams;
+      data.steps = 256;
+      data.minX = m_hdCurveWidget->minX();
+      data.maxX = m_hdCurveWidget->maxX();
+      data.axisType = m_hdCurveWidget->getDisplayMode();
+      m_taskQueue.requestRender(QVariant::fromValue(data));
   });
 
   updateUI();

@@ -52,6 +52,7 @@ void ImageLayerPanel::setupUi() {
     return img->has_rgb() &&
            (!img->has_grayscale_or_ir() || s.rparams.ignore_infrared);
   };
+  setParameterApplicability(simulatedSection, enableSimulated);
 
   addSliderParameter(
       tr("Mix dark (red)"), -3.0, 1.0, 1, 4, "", "",
@@ -122,17 +123,9 @@ void ImageLayerPanel::setupUi() {
                s.rparams.ignore_infrared;
       });
 
-  // The checkbox exists only when there is a real source choice. Likewise, do
-  // not show the RGB mixer when the active image layer comes from a native
-  // grayscale/IR channel, or when no RGB data exists to synthesize one.
-  m_widgetStateUpdaters.push_back(
-      [this, simulatedSection, enableSimulated]() {
-        const auto img = m_imageGetter();
-        const ParameterState state = m_stateGetter();
-        const bool simulatedActive = enableSimulated(state);
-        if (simulatedSection)
-          simulatedSection->setVisible(simulatedActive);
-      });
+  // The source-choice row and the complete simulated-RGB section use the
+  // common applicability contract. Section folding therefore remains purely
+  // presentation state and cannot resurrect this section for a native layer.
 }
 
 void ImageLayerPanel::onParametersRefreshed(const ParameterState &state) {

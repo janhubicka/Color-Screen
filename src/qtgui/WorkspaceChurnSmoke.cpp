@@ -385,6 +385,22 @@ QToolButton *imageLayerToggle = inspector->findChild<QToolButton *>(
     QStringLiteral("SimulatedImageLayerToggle"));
 QCheckBox *imageLayerSourceChoice = inspector->findChild<QCheckBox *>(
     QStringLiteral("ImageLayerUseSimulatedRgbCheck"));
+QWidget *imageLayerSection = inspector->findChild<QWidget *>(
+    QStringLiteral("SimulatedImageLayerSection"));
+QWidget *contactCopyFilmGroup = inspector->findChild<QWidget *>(
+    QStringLiteral("ContactCopyFilmCharacteristicsGroup"));
+QWidget *contactCopyRichardsGroup = inspector->findChild<QWidget *>(
+    QStringLiteral("ContactCopyRichardsGroup"));
+QWidget *contactCopyManualGroup = inspector->findChild<QWidget *>(
+    QStringLiteral("ContactCopyManualPointsGroup"));
+QWidget *contactCopyDarkroomGroup = inspector->findChild<QWidget *>(
+    QStringLiteral("ContactCopyDarkroomGroup"));
+QWidget *colorScreenDyesGroup = inspector->findChild<QWidget *>(
+    QStringLiteral("ColorScreenDyesGroup"));
+QWidget *colorViewingCorrectionGroup = inspector->findChild<QWidget *>(
+    QStringLiteral("ColorViewingCorrectionGroup"));
+QWidget *colorSpectralChartRow = inspector->findChild<QWidget *>(
+    QStringLiteral("ColorSpectralChartRow"));
 QCheckBox *finalMirrorCheck = inspector->findChild<QCheckBox *>(
     QStringLiteral("GeometryFinalMirrorCheck"));
 QWidget *mtfUseMeasuredRow =
@@ -556,6 +572,75 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
             imageLayerSourceChoice->isHidden() == imageLayerSourceApplicable) {
           fail(QStringLiteral(
               "Image Layer source choice bypassed row applicability semantics"));
+          return;
+        }
+
+        const bool simulatedSectionApplicable =
+            imageLayerImage && imageLayerImage->has_rgb() &&
+            (!imageLayerImage->has_grayscale_or_ir() ||
+             imageLayerState.rparams.ignore_infrared);
+        const QVariant simulatedSectionApplicability =
+            imageLayerSection
+                ? imageLayerSection->property("parameterApplicable")
+                : QVariant();
+        if (!imageLayerSection || !simulatedSectionApplicability.isValid() ||
+            simulatedSectionApplicability.toBool() != simulatedSectionApplicable ||
+            imageLayerSection->isHidden() == simulatedSectionApplicable) {
+          fail(QStringLiteral(
+              "Image Layer simulated section bypassed applicability semantics"));
+          return;
+        }
+
+        // Specialist section visibility now shares one logical row contract.
+        const ParameterState sectionState = first->documentStateSnapshot();
+        const bool contactCopyApplicable =
+            sectionState.rparams.contact_copy.simulate;
+        QWidget *contactCopyGroups[] = {
+            contactCopyFilmGroup, contactCopyRichardsGroup,
+            contactCopyManualGroup, contactCopyDarkroomGroup};
+        for (QWidget *group : contactCopyGroups) {
+          const QVariant applicable =
+              group ? group->property("parameterApplicable") : QVariant();
+          if (!group || !applicable.isValid() ||
+              applicable.toBool() != contactCopyApplicable ||
+              group->isHidden() == contactCopyApplicable) {
+            fail(QStringLiteral(
+                "Contact Copy section bypassed applicability semantics"));
+            return;
+          }
+        }
+
+        const auto sectionImage = first->sharedImageData();
+        const auto sectionCapture =
+            sectionImage ? sectionState.rparams.get_capture_type(sectionImage.get())
+                         : sectionState.rparams.capture_type;
+        const bool historicalColorApplicable =
+            colorscreen::render_parameters::capture_has_screen_p(sectionCapture);
+        QWidget *historicalColorGroups[] = {
+            colorScreenDyesGroup, colorViewingCorrectionGroup};
+        for (QWidget *group : historicalColorGroups) {
+          const QVariant applicable =
+              group ? group->property("parameterApplicable") : QVariant();
+          if (!group || !applicable.isValid() ||
+              applicable.toBool() != historicalColorApplicable ||
+              group->isHidden() == historicalColorApplicable) {
+            fail(QStringLiteral(
+                "Color historical section bypassed applicability semantics"));
+            return;
+          }
+        }
+        const bool spectralApplicable =
+            colorscreen::render_parameters::color_model_properties[
+                sectionState.rparams.color_model]
+                .flags & colorscreen::render_parameters::SPECTRA_BASED;
+        const QVariant spectralRowApplicability =
+            colorSpectralChartRow
+                ? colorSpectralChartRow->property("parameterApplicable")
+                : QVariant();
+        if (!colorSpectralChartRow || !spectralRowApplicability.isValid() ||
+            spectralRowApplicability.toBool() != spectralApplicable) {
+          fail(QStringLiteral(
+              "Color spectral row bypassed applicability semantics"));
           return;
         }
 

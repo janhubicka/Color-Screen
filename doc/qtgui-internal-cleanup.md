@@ -409,8 +409,17 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   final-mirror prerequisite remains visible and disabled until screen geometry
   exists. Lightweight and workspace smoke probes cover both checkbox helper
   variants, row applicability metadata, and the visible-disabled transition.
-  Continue moving remaining panel-specific visibility predicates to this API as
-  the individual panels are simplified.
+  Whole `addSeparator()` sections now use the same contract too: Image Layer's
+  simulated-RGB mixer, all Contact Copy specialist sections, and Color's
+  historical-process sections no longer maintain parallel direct-visibility
+  repair paths. The nested Color spectral-chart row is explicitly applicable
+  only to spectra-based dye models, while chart refresh only updates its data.
+  Contact Copy schedules its histogram after applicability/folding updates so
+  disabled or collapsed sections still avoid background work. Lightweight and
+  workspace smoke tests verify that hiding a section does not overwrite its
+  independent fold state and that the migrated real sections expose consistent
+  `parameterApplicable` metadata. Remaining direct `setVisible()` calls in these
+  panels are presentation/status mechanics rather than logical parameter rows.
 
 ### P2 — maintenance refactoring
 
