@@ -4,18 +4,69 @@ on:
     branches: [agent/qtgui-cleanup-next-stage]
     paths: [.github/workflows/agent-qtgui-next-stage.yml, .agent-qtgui-next-patch.py]
 permissions:
-  contents: read
+  contents: write
+concurrency:
+  group: agent-qtgui-next-stage
+  cancel-in-progress: false
 jobs:
-  source:
+  publish:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: 651e34544bb8eaebf452ffebe44732978967a368
-      - name: Archive exact reviewed baseline
-        run: git archive --format=tar.gz --prefix=Color-Screen/ HEAD > /tmp/colorscreen-source.tar.gz
-      - uses: actions/upload-artifact@v4
-        with:
-          name: qtgui-next-source-651e345
-          path: /tmp/colorscreen-source.tar.gz
-          retention-days: 2
+          fetch-depth: 0
+      - name: Apply reviewed changes to an exact clean baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          base=651e34544bb8eaebf452ffebe44732978967a368
+          target=agent/qtgui-coordinate-one-shot
+          test "$(git rev-parse origin/main)" = "$base"
+          test -z "$(git ls-remote --heads origin "refs/heads/$target")"
+          cp .agent-qtgui-next-patch.py /tmp/coordinate-migration.py
+          git checkout -b "$target" "$base"
+          python /tmp/coordinate-migration.py
+          git diff --check
+          sh build-aux/check-generated-build-metadata.sh
+          git config user.name "Jan Hubička"
+          git config user.email "46065755+janhubicka@users.noreply.github.com"
+          git add .agents/qtgui.md doc/qtgui-internal-cleanup.md \
+            src/qtgui/CoordinateOptimizationWorker.cpp src/qtgui/CoordinateOptimizationWorker.h \
+            src/qtgui/MainWindow.cpp src/qtgui/MainWindow.h \
+            src/qtgui/Makefile.am src/qtgui/Makefile.in \
+            src/qtgui/TaskQueue.cpp src/qtgui/TaskQueue.h \
+            src/qtgui/WorkspaceChurnSmoke.cpp src/qtgui/main.cpp
+          git commit -F - <<'MESSAGE'
+          qtgui: migrate coordinate analyses to one-shot lifecycle
+
+          Run coordinate autodetection and local refinement with captured scan
+          ownership and complete ParameterState snapshots through OneShotOperation.
+          Remove the persistent QObject/QThread worker, its live setScan updates,
+          manual request counters and obsolete moc target. Both final results now
+          obey shared replacement, cancellation and exact-state publication gates.
+
+          Keep Detect Screen's optional automatic point-finding continuation in
+          the individual request rather than a mutable window flag. Preserve the
+          dedicated coordinate-autodetection Cancel row by letting the one-shot
+          start callback select progress presentation without duplicating entries.
+
+          Apply coordinate refinement to a copied state before changeParameters:
+          the old code mutated live coordinates first, making the setter see a
+          no-op and lose the undo/dirty transition. Preserve algorithm flags,
+          the local 2x2-period fitting sample and accepted-result diagnostics.
+          Incremental workers remain on dedicated threads.
+
+          Add missing-scan/pre-cancelled helper probes and workspace smoke checks
+          for the real coordinate publisher's Undo/Redo sequence, existing-point
+          prerequisite and dedicated progress cleanup. Update concurrency/beta
+          notes and generated build metadata without unrelated Automake churn.
+
+          Validation: local diff checks and generated-metadata audit passed; all
+          twelve staged file hashes match the reviewed local tree. Optimized Qt
+          build/smoke and TSan validation are requested on the draft pull request.
+          MESSAGE
+          test "$(git rev-parse HEAD^)" = "$base"
+          test "$(git diff --name-only "$base" HEAD | wc -l)" -eq 12
+          git push origin "HEAD:refs/heads/$target"
+          git log -1 --format=fuller
+          git diff --stat "$base" HEAD
