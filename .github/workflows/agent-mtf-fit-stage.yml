@@ -1,0 +1,21 @@
+name: Agent MTF fit staging
+on:
+  push:
+    branches: [agent/qtgui-mtf-fit-stage]
+    paths: [.github/workflows/agent-mtf-fit-stage.yml, .agent-mtf-fit.patch.b64]
+permissions:
+  contents: read
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 2ddd51b41fbb22944df0414189df425569315362
+      - name: Archive exact stacked baseline
+        run: git archive --format=tar.gz --prefix=Color-Screen/ HEAD > /tmp/colorscreen-mtf-fit-source.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: qtgui-mtf-fit-source-2ddd51b
+          path: /tmp/colorscreen-mtf-fit-source.tar.gz
+          retention-days: 2
