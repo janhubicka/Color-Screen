@@ -12,6 +12,7 @@
 #include <QCoreApplication>
 #include <QDebug>
 #include <QDoubleSpinBox>
+#include <QDialog>
 #include <QEvent>
 #include <QFont>
 #include <QLabel>
@@ -69,6 +70,12 @@ struct WorkspaceChurnState {
   bool referenceReplacementDone = false;
   std::shared_ptr<colorscreen::progress_info> referenceReplacementProgress;
   std::vector<colorscreen::slanted_edge_parameters> referenceParameters;
+  ParameterState mtfFitBaseline;
+  ParameterState mtfFitExpected;
+  colorscreen::mtf_parameters mtfFitInput;
+  colorscreen::mtf_estimation_options mtfFitOptions;
+  int mtfFitUndoIndex = 0;
+  std::shared_ptr<colorscreen::progress_info> mtfFitCancelledProgress;
   std::function<void()> completed;
 };
 
@@ -1482,6 +1489,239 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
             fail(QStringLiteral("Reference MTF left a stale progress row"));
             return;
           }
+        first->applyState(state->beforeReference);
+
+        // Measured-MTF model fitting is now one document-owned final-result
+        // operation. Use a tiny explicit no-variable empirical fit so the
+        // smoke exercises real validation/objective/publication without
+        // spending time in an optimizer. The dialog's edited sigma makes the
+        // accepted result a visible, undoable state change.
+        state->mtfFitBaseline = state->beforeReference;
+        colorscreen::mtf_parameters &baselineMtf =
+            state->mtfFitBaseline.rparams.sharpen.scanner_mtf;
+        baselineMtf = colorscreen::mtf_parameters();
+        baselineMtf.model = colorscreen::mtf_model::empirical_fallback;
+        baselineMtf.sigma = 0.125;
+        baselineMtf.blur_diameter = 1.0;
+        baselineMtf.measured_mtf_idx = -1;
+        colorscreen::mtf_measurement curve;
+        curve.name = "Workspace MTF fit smoke";
+        curve.channel = 1;
+        curve.add_value(0.0, 100.0);
+        curve.add_value(0.25, 78.0);
+        curve.add_value(0.5, 52.0);
+        baselineMtf.measurements.push_back(curve);
+        first->applyState(state->mtfFitBaseline);
+
+        state->mtfFitInput = baselineMtf;
+        state->mtfFitInput.sigma = 0.25;
+        state->mtfFitOptions = colorscreen::mtf_estimation_options();
+        state->mtfFitOptions.model = colorscreen::mtf_model::empirical_fallback;
+        state->mtfFitExpected = state->mtfFitBaseline;
+        state->mtfFitExpected.rparams.sharpen.scanner_mtf = state->mtfFitInput;
+        state->mtfFitUndoIndex = first->m_undoStack->index();
+        if (!first->requestMtfModelFit(state->mtfFitBaseline, state->mtfFitInput,
+                                      state->mtfFitOptions, 0) ||
+            !first->m_mtfFitRunning || first->m_mtfFitProgress.expired()) {
+          fail(QStringLiteral("Measured-MTF model fit did not start as a document operation"));
+          return;
+        }
+        int fitRows = 0;
+        for (const ProgressEntry &entry : first->m_activeProgresses)
+          if (entry.title == QStringLiteral("MTF model fit")) {
+            ++fitRows;
+            if (!entry.userVisible || !entry.row || !entry.rowActionButton) {
+              fail(QStringLiteral("MTF model fit lost its dedicated Cancel row"));
+              return;
+            }
+          }
+        if (fitRows != 1) {
+          fail(QStringLiteral("MTF model fit registered duplicate/missing progress rows"));
+          return;
+        }
+        schedule(208, 50, 200);
+        return;
+      }
+
+      case 208: {
+        if (first->m_mtfFitRunning ||
+            first->m_oneShotOperationQueue.hasActiveTasks()) {
+          retryOrFail(QStringLiteral("Measured-MTF model fit did not finish"));
+          return;
+        }
+        auto *resultDialog = first->findChild<QMessageBox *>(
+            QStringLiteral("MtfFitResultDialog"));
+        if (!resultDialog || first->getCurrentState() != state->mtfFitExpected ||
+            first->m_undoStack->index() != state->mtfFitUndoIndex + 1 ||
+            !first->m_mtfFitBaseline ||
+            !first->m_mtfFitBaseline->fit_inputs_equal_p(state->mtfFitInput) ||
+            first->m_mtfFitRms < 0 ||
+            !first->mtfCalibrationSummary().contains(QStringLiteral("model current"))) {
+          fail(QStringLiteral("Successful measured-MTF fit lost state, provenance, or Undo"));
+          return;
+        }
+        resultDialog->accept();
+        first->m_undoStack->undo();
+        if (first->getCurrentState() != state->mtfFitBaseline ||
+            first->m_undoStack->index() != state->mtfFitUndoIndex ||
+            !first->mtfCalibrationSummary().contains(QStringLiteral("model stale"))) {
+          fail(QStringLiteral("Undo measured-MTF fit did not restore its exact baseline"));
+          return;
+        }
+        first->m_undoStack->redo();
+        if (first->getCurrentState() != state->mtfFitExpected ||
+            !first->mtfCalibrationSummary().contains(QStringLiteral("model current"))) {
+          fail(QStringLiteral("Redo measured-MTF fit did not restore its fitted model"));
+          return;
+        }
+        first->m_undoStack->undo();
+
+        // Editing and then restoring the exact inputs must not resurrect a
+        // completion that was cancelled while those inputs were stale.
+        if (!first->requestMtfModelFit(state->mtfFitBaseline, state->mtfFitInput,
+                                       state->mtfFitOptions, 0)) {
+          fail(QStringLiteral("Could not start stale measured-MTF fit smoke"));
+          return;
+        }
+        state->mtfFitCancelledProgress = first->m_mtfFitProgress.lock();
+        ParameterState edited = state->mtfFitBaseline;
+        edited.rparams.brightness += 0.125;
+        first->applyState(edited);
+        first->applyState(state->mtfFitBaseline);
+        if (!state->mtfFitCancelledProgress ||
+            !state->mtfFitCancelledProgress->pool_cancel()) {
+          fail(QStringLiteral("Document edit did not cancel measured-MTF fitting"));
+          return;
+        }
+        schedule(209, 50, 200);
+        return;
+      }
+
+      case 209: {
+        if (first->m_mtfFitRunning ||
+            first->m_oneShotOperationQueue.hasActiveTasks()) {
+          retryOrFail(QStringLiteral("Cancelled measured-MTF fit did not clean up"));
+          return;
+        }
+        if (first->getCurrentState() != state->mtfFitBaseline ||
+            first->findChild<QMessageBox *>(QStringLiteral("MtfFitResultDialog")) ||
+            first->findChild<QMessageBox *>(QStringLiteral("MtfFitErrorDialog"))) {
+          fail(QStringLiteral("Restoring inputs resurrected a cancelled measured-MTF fit"));
+          return;
+        }
+        for (const ProgressEntry &entry : first->m_activeProgresses)
+          if (entry.title == QStringLiteral("MTF model fit")) {
+            fail(QStringLiteral("Cancelled measured-MTF fit left a stale progress row"));
+            return;
+          }
+
+        // A validation failure is a completed current request: record failure
+        // provenance and report it, but leave the document and Undo stack alone.
+        colorscreen::mtf_estimation_options invalid = state->mtfFitOptions;
+        invalid.include_measurements = {false};
+        if (!first->requestMtfModelFit(state->mtfFitBaseline, state->mtfFitInput,
+                                       invalid, 0)) {
+          fail(QStringLiteral("Could not start invalid measured-MTF fit smoke"));
+          return;
+        }
+        schedule(210, 50, 200);
+        return;
+      }
+
+      case 210: {
+        if (first->m_mtfFitRunning ||
+            first->m_oneShotOperationQueue.hasActiveTasks()) {
+          retryOrFail(QStringLiteral("Failed measured-MTF fit did not settle"));
+          return;
+        }
+        auto *errorDialog = first->findChild<QMessageBox *>(
+            QStringLiteral("MtfFitErrorDialog"));
+        if (!errorDialog || first->getCurrentState() != state->mtfFitBaseline ||
+            first->m_undoStack->index() != state->mtfFitUndoIndex ||
+            !first->m_mtfFitFailureInputs ||
+            !first->m_mtfFitFailureInputs->fit_inputs_equal_p(
+                state->mtfFitBaseline.rparams.sharpen.scanner_mtf) ||
+            !first->mtfCalibrationSummary().contains(QStringLiteral("fit failed"))) {
+          fail(QStringLiteral("Failed measured-MTF fit changed state or lost failure provenance"));
+          return;
+        }
+        errorDialog->accept();
+
+        // Setup-dialog acceptance is snapshot-bound too: a document edit while
+        // the dialog is open must reject the old settings before any worker starts.
+        QToolButton *scannerProperties = first->m_sharpnessPanel
+            ? first->m_sharpnessPanel->findChild<QToolButton *>(
+                  QStringLiteral("ScannerCameraPropertiesToggle"))
+            : nullptr;
+        if (scannerProperties && !scannerProperties->isChecked())
+          scannerProperties->click();
+        QPushButton *fitButton = first->m_sharpnessPanel
+            ? first->m_sharpnessPanel->findChild<QPushButton *>(
+                  QStringLiteral("MtfFitButton"))
+            : nullptr;
+        if (!fitButton || !fitButton->isEnabled()) {
+          fail(QStringLiteral("Measured-MTF fit button is unavailable for stale-dialog smoke"));
+          return;
+        }
+        fitButton->click();
+        QDialog *fitDialog = first->m_sharpnessPanel->findChild<QDialog *>(
+            QStringLiteral("MtfFitDialog"));
+        if (!fitDialog) {
+          fail(QStringLiteral("Measured-MTF fit dialog did not open"));
+          return;
+        }
+        ParameterState edited = state->mtfFitBaseline;
+        edited.rparams.brightness += 0.25;
+        first->applyState(edited);
+        fitDialog->accept();
+        first->applyState(state->mtfFitBaseline);
+        auto *staleDialog = first->m_sharpnessPanel->findChild<QMessageBox *>(
+            QStringLiteral("MtfFitStaleDialog"));
+        if (!staleDialog || first->m_mtfFitRunning ||
+            first->m_oneShotOperationQueue.hasActiveTasks()) {
+          fail(QStringLiteral("Stale measured-MTF setup dialog started background work"));
+          return;
+        }
+        staleDialog->accept();
+
+        // A newer final-result operation must supersede a model fit through the
+        // same shared queue, without publishing a late result or error.
+        if (!first->requestMtfModelFit(state->mtfFitBaseline, state->mtfFitInput,
+                                       state->mtfFitOptions, 0)) {
+          fail(QStringLiteral("Could not start measured-MTF supersession smoke"));
+          return;
+        }
+        auto fitProgress = first->m_mtfFitProgress.lock();
+        MainWindow::OneShotOperation replacement;
+        replacement.description = QStringLiteral("Supersede MTF model fit smoke");
+        first->runOneShotOperation(std::move(replacement),
+                                   [](colorscreen::progress_info *) {});
+        if (!fitProgress || !fitProgress->pool_cancel()) {
+          fail(QStringLiteral("New final-result operation did not cancel MTF model fit"));
+          return;
+        }
+        schedule(211, 50, 200);
+        return;
+      }
+
+      case 211: {
+        if (first->m_mtfFitRunning ||
+            first->m_oneShotOperationQueue.hasActiveTasks()) {
+          retryOrFail(QStringLiteral("Superseded measured-MTF fit did not clean up"));
+          return;
+        }
+        if (first->getCurrentState() != state->mtfFitBaseline ||
+            first->findChild<QMessageBox *>(QStringLiteral("MtfFitResultDialog")) ||
+            first->findChild<QMessageBox *>(QStringLiteral("MtfFitErrorDialog"))) {
+          fail(QStringLiteral("Superseded measured-MTF fit published a late result"));
+          return;
+        }
+        for (const ProgressEntry &entry : first->m_activeProgresses)
+          if (entry.title == QStringLiteral("MTF model fit")) {
+            fail(QStringLiteral("Superseded measured-MTF fit left a progress row"));
+            return;
+          }
+
         first->applyState(state->beforeReference);
         state->referenceDirectory.reset();
         workspace->activateDocument(first);

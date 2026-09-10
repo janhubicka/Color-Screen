@@ -145,13 +145,9 @@ ImageViewWindow::ImageViewWindow(MainWindow *document, int viewNumber,
 /** Destroy a secondary view without taking the document-owned inspector with it. */
 ImageViewWindow::~ImageViewWindow() {
   cancelReferenceMtfMeasurement();
-  // A reference-owned Sharpness panel may be the document's active MTF-fit
-  // controller. Closing the reference destroys its TaskQueue/watcher, so clear
-  // the shared busy state before that happens; otherwise the surviving document
-  // would permanently believe that a fit is still running.
-  if (m_slantedEdgeReference && m_sharpnessPanel &&
-      m_sharpnessPanel->mtfFitRunning() && m_document)
-    m_document->finishMtfModelFitWithoutResult();
+  // Measured-MTF model fitting is document-owned. Closing a reference view no
+  // longer destroys or clears an in-flight fit; only reference-image
+  // measurement itself depends on this view and is cancelled above.
 
   {
     std::unique_lock<std::mutex> locker(m_referenceLoadMutex);
@@ -446,22 +442,14 @@ void ImageViewWindow::setupReferenceInspector() {
   mtfCalibration.fitAvailable = [this]() {
     return m_document && !m_document->mtfModelFitRunning();
   };
-  mtfCalibration.fitStarted = [this](const colorscreen::mtf_parameters &inputs) {
-    return m_document && m_document->beginMtfModelFit(inputs);
-  };
-  mtfCalibration.fitFailed = [this](const colorscreen::mtf_parameters &inputs) {
-    if (m_document)
-      m_document->failMtfModelFit(inputs);
-  };
-  mtfCalibration.fitAccepted =
-      [this](const colorscreen::mtf_parameters &fitted, double rms) {
-        if (m_document)
-          m_document->acceptMtfModelFit(fitted, rms);
+  mtfCalibration.fitRequested =
+      [this](const ParameterState &baseline,
+             const colorscreen::mtf_parameters &input,
+             const colorscreen::mtf_estimation_options &options, int flags,
+             QWidget *resultParent) {
+        return m_document && m_document->requestMtfModelFit(
+                                 baseline, input, options, flags, resultParent);
       };
-  mtfCalibration.fitFinishedWithoutResult = [this]() {
-    if (m_document)
-      m_document->finishMtfModelFitWithoutResult();
-  };
   m_sharpnessPanel = new SharpnessPanel(
       [this]() {
         return m_document ? m_document->documentStateSnapshot()

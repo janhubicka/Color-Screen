@@ -244,19 +244,31 @@ embedded spin boxes. The dialog also chooses its initial size from font metrics
 and remains resizable. This avoids clipped wavelength text and checkbox
 indicators with accessibility fonts or high-DPI desktop scaling.
 
-The fit runs outside the GUI thread, reports cancellable progress, and operates
-on a snapshot. When it finishes, Color-Screen verifies that the MTF state has
-not changed in the meantime. A valid result is committed as one undoable
-parameter change; a stale result is reported but not applied.
+The fit runs outside the GUI thread through the source document's shared
+`OneShotOperation` lifecycle, reports a dedicated cancellable progress row, and
+operates on the complete document snapshot captured when the dialog was opened.
+The panel owns only that setup dialog. If the document changes before the dialog
+is accepted, Color-Screen asks the user to reopen it instead of launching an
+optimizer with obsolete controls. Once started, any accepted document edit,
+image/parameter replacement, or newer final-result operation cancels the fit;
+TaskQueue request ownership and an exact state check independently prevent a
+late result from publishing. A valid result is committed as one undoable
+parameter change. Failure or cancellation leaves the parameter state untouched.
+Completion messages stay parented to the Sharpness panel that started the fit
+while that presentation exists; closing that panel does not own or cancel the
+underlying document operation.
 
-The document also tracks the accepted analytical-model fit as session-local
+The document also owns the accepted analytical-model fit as session-local
 provenance shared by the primary and external-reference Sharpness panels. The
 GUI reports **ready**, **running**, **current**, **stale**, or **failed** and
 shows the accepted RMS residual when available. Only one model fit may run per
-document at a time. Numerical model/curve inputs make an accepted fit stale;
-renaming a measurement or changing its saved ROI/source/edge-quality metadata
-does not, because those fields describe where the observation came from rather
-than the transfer function being fitted.
+document at a time. Closing an external slanted-edge reference does not abort a
+model fit: once the measured curves are stored, fitting depends only on the
+source document snapshot, not on reference-view pixels or widgets. Numerical
+model/curve inputs make an accepted fit stale; renaming a measurement or
+changing its saved ROI/source/edge-quality metadata does not, because those
+fields describe where the observation came from rather than the transfer
+function being fitted.
 
 The numerical solver normally runs derivative-free simplex first and then an
 optional local least-squares refinement. This order is important because the

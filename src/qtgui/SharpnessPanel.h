@@ -2,7 +2,6 @@
 #define SHARPNESS_PANEL_H
 
 #include "ParameterPanel.h"
-#include "TaskQueue.h"
 #include "AdaptiveSharpeningParameters.h"
 #include "AdaptiveSharpeningChart.h"
 #include <QPointer>
@@ -26,16 +25,17 @@ struct finetune_result;
 
 #include "TilePreviewPanel.h"
 
-/** Document-owned MTF fit provenance hooks shared by primary and reference
-    Sharpness panels. The panel owns the background operation; the document
-    owns the meaning of Current/Stale across all views. */
+/** Document-owned MTF fit hooks shared by primary and reference Sharpness
+    panels. The panel owns only the setup dialog; numerical work, cancellation,
+    provenance, publication, and accepted document state belong to MainWindow. */
 struct MtfCalibrationCallbacks {
   std::function<QString()> summary;
   std::function<bool()> fitAvailable;
-  std::function<bool(const colorscreen::mtf_parameters &)> fitStarted;
-  std::function<void(const colorscreen::mtf_parameters &)> fitFailed;
-  std::function<void(const colorscreen::mtf_parameters &, double)> fitAccepted;
-  std::function<void()> fitFinishedWithoutResult;
+  std::function<bool(const ParameterState &,
+                     const colorscreen::mtf_parameters &,
+                     const colorscreen::mtf_estimation_options &, int,
+                     QWidget *)>
+      fitRequested;
 };
 
 class SharpnessPanel : public TilePreviewPanel {
@@ -65,9 +65,6 @@ public:
   QString mtfCalibrationSummary() const;
   /** Refresh the panel-local status label from document-owned provenance. */
   void refreshMtfCalibrationStatus();
-  /** Return whether this panel currently owns the document's active MTF fit. */
-  bool mtfFitRunning() const { return m_mtfFitRunning; }
-
   void reattachDotSpread(QWidget *widget);
   void reattachAdaptiveChart(QWidget *widget);
   AdaptiveSharpeningChart *getAdaptiveChart() const;
@@ -148,10 +145,6 @@ private:
   class QLabel *m_focusAreaStatusLabel = nullptr;
   class QPushButton *m_measureMtfBtn = nullptr;
   class QPushButton *m_fitMtfBtn = nullptr;
-  /** Queue dedicated to one-shot MTF fits so tile rendering stays responsive.  */
-  TaskQueue m_mtfFitQueue;
-  /** True while M_MTF_FIT_QUEUE is processing a submitted fit.  */
-  bool m_mtfFitRunning = false;
   MtfCalibrationCallbacks m_mtfCalibration;
   QLabel *m_mtfFitStatusLabel = nullptr;
   uint64_t m_finetuneFlags = 0;
