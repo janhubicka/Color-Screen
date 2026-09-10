@@ -380,10 +380,22 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   shared with guarded secondary-view callers. Workspace churn exercises a real
   synthetic RGB edge, batch failure, Undo/Redo, stale-result rejection, reload,
   replacement, reference close and progress cleanup.
-  The next final-result candidate is measured-MTF model fitting, which still
-  has a panel-local queue and shared document provenance callbacks. Keep that
-  migration separate from the reference-measurement change; geometry/color
-  optimizer queues and incremental workers have different lifecycle contracts.
+  Measured-MTF model fitting now completes this group of simple final-result
+  migrations. Sharpness panels own only the editable setup dialog; the source
+  `MainWindow` owns computation, one-shot cancellation, the dedicated Cancel
+  row, Current/Stale/Failed provenance, result publication and the accepted
+  undo edit. The setup dialog itself is snapshot-bound, so accepting controls
+  copied from an older document state does not launch expensive obsolete work.
+  The former panel-local `TaskQueue` and the reference-view destructor repair
+  for abandoned fits are gone. An explicit request-progress identity prevents
+  a cancelled old completion from clearing a newer fit after external parameter
+  replacement, and a newer final-result operation cancels model fitting through
+  the same queue. Workspace churn covers a real successful objective evaluation,
+  exact Apply/Undo/Redo state, edit-and-restore cancellation, validator failure,
+  stale dialog acceptance, supersession and progress-row cleanup.
+  Geometry/color optimizer queues and workers that intentionally publish
+  intermediate results retain their separate lifecycle contracts; do not force
+  them through `OneShotOperation` merely to remove another queue.
 - Separate "enabled" from "applicable/visible" in helper APIs.  Greyed controls
   are useful when they teach a prerequisite; hidden controls are useful when a
   whole concept is meaningless for the current process.  A lambda called
