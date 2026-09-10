@@ -239,12 +239,13 @@ bool TaskQueue::hasActiveTasks() const {
 void TaskQueue::runAsync (std::function<void (colorscreen::progress_info *)> worker,
                           std::function<void (bool publishResult)> done,
                           const QVariant &userData,
-                          std::function<void ()> started)
+                          std::function<void (
+                              std::shared_ptr<colorscreen::progress_info>)> started)
 {
   requestRender(userData, [this, worker = std::move(worker), done = std::move(done),
                            started = std::move(started)](int reqId, std::shared_ptr<colorscreen::progress_info> progress) mutable {
     if (started)
-      started();
+      started(progress);
     /* Keep completion on this object's GUI thread, but submit a runnable only
        after its construction is complete. QPromise preserves QFutureWatcher
        lifetime/disconnect behavior when TaskQueue is destroyed mid-operation. */

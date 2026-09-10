@@ -345,6 +345,17 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   preventing a valid old detection from being accepted into newer state. The
   former DetectScreen QObject/QThread generation wrapper and unused cached mesh
   member are therefore gone.
+  Coordinate autodetection and local coordinate refinement now also use these
+  snapshot/publication rules. Their shared persistent QObject/QThread and both
+  manual request counters are removed. The known-screen Detect Screen path
+  captures its optional automatic-point-finding continuation in the detection
+  request rather than a mutable window flag, so cancellation or a newer direct
+  coordinate request cannot inherit another request's continuation. Detection
+  retains its dedicated Cancel row through an optional one-shot progress title.
+  Refinement applies a copied state through `changeParameters()` before updating
+  diagnostics; the old live-state mutation caused `changeParameters()` to see
+  a no-op and omit the undo/dirty transition. Workspace-churn smoke checks the
+  exact coordinate-edit Undo/Redo state and dedicated progress-row cleanup.
 - Separate "enabled" from "applicable/visible" in helper APIs.  Greyed controls
   are useful when they teach a prerequisite; hidden controls are useful when a
   whole concept is meaningless for the current process.  A lambda called

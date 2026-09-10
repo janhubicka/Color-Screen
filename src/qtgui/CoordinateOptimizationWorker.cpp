@@ -1,88 +1,79 @@
 #include "CoordinateOptimizationWorker.h"
-#include "../libcolorscreen/include/finetune.h"
+#include "../libcolorscreen/include/colorscreen.h"
+#include "../libcolorscreen/include/imagedata.h"
 #include <QDebug>
+#include <exception>
 
-CoordinateOptimizationWorker::CoordinateOptimizationWorker(
-    std::shared_ptr<colorscreen::image_data> scan, QObject *parent)
-    : WorkerBase(scan, parent) {}
-
-void CoordinateOptimizationWorker::autodetect(
-    int reqId, colorscreen::scr_to_img_parameters params,
+CoordinateAutodetectionResult CoordinateOptimizationWorker::autodetect(
+    colorscreen::scr_to_img_parameters params,
     colorscreen::render_parameters rparams,
-    std::shared_ptr<colorscreen::progress_info> progress) {
-  if (!m_scan) {
-    qWarning() << "CoordinateOptimizationWorker::autodetect: no scan!";
-    emit autodetectFinished(reqId, params, progress, false, false);
-    return;
+    std::shared_ptr<colorscreen::image_data> scan,
+    colorscreen::progress_info *progress) {
+  CoordinateAutodetectionResult result;
+  result.coordinates = params;
+  if (progress && progress->pool_cancel()) {
+    result.cancelled = true;
+    return result;
   }
-  qDebug() << "CoordinateOptimizationWorker::autodetect starting";
-
-  bool success = false;
-  bool cancelled = false;
+  if (!scan)
+    return result;
 
   try {
-    colorscreen::sub_task task(progress.get());
-    success = colorscreen::autodetect_coordinates(*m_scan, params, rparams,
-                                                  progress.get());
-    if (progress && progress->cancelled()) {
-      success = false;
-      cancelled = true;
-    }
+    colorscreen::sub_task task(progress);
+    result.success = colorscreen::autodetect_coordinates(
+        *scan, result.coordinates, rparams, progress);
   } catch (const std::exception &e) {
     qWarning() << "Autodetect coordinates failed with exception:" << e.what();
-    success = false;
   } catch (...) {
     qWarning() << "Autodetect coordinates failed with unknown exception";
-    success = false;
   }
 
-  emit autodetectFinished(reqId, params, progress, success, cancelled);
+  result.cancelled = progress &&
+      (progress->pool_cancel() || progress->cancelled());
+  result.success = result.success && !result.cancelled;
+  return result;
 }
 
-void CoordinateOptimizationWorker::optimize(
-    int reqId, colorscreen::scr_to_img_parameters params,
+CoordinateOptimizationResult CoordinateOptimizationWorker::optimize(
+    colorscreen::scr_to_img_parameters params,
     colorscreen::render_parameters rparams,
-    std::shared_ptr<colorscreen::progress_info> progress) {
-  if (!m_scan) {
-    qWarning() << "CoordinateOptimizationWorker::optimize: no scan!";
-    emit optimizeFinished(reqId, colorscreen::finetune_result(), progress, false,
-                          false);
-    return;
+    std::shared_ptr<colorscreen::image_data> scan,
+    colorscreen::progress_info *progress) {
+  CoordinateOptimizationResult result;
+  if (progress && progress->pool_cancel()) {
+    result.cancelled = true;
+    return result;
   }
-  qDebug() << "CoordinateOptimizationWorker::optimize starting";
-
-  colorscreen::finetune_result result;
-  bool success = false;
-  bool cancelled = false;
+  if (!scan) {
+    result.finetune.err = "No scan available.";
+    return result;
+  }
 
   try {
-    colorscreen::sub_task task(progress.get());
+    colorscreen::sub_task task(progress);
     colorscreen::finetune_parameters fparams;
     fparams.flags = colorscreen::finetune_position | colorscreen::finetune_verbose |
                     colorscreen::finetune_coordinates | colorscreen::finetune_bw |
                     colorscreen::finetune_use_strip_widths |
                     colorscreen::finetune_produce_images;
 
-    // Coordinate refinement only needs a small local sample. Finetune's RANGE
-    // is the half-extent in periodic screen coordinates, so range 1 requests a
-    // 2x2-screen-period tile instead of the much larger coordinate-mode default.
+    // RANGE is the half-extent in periodic screen coordinates: keep the
+    // existing local 2x2-screen-period sample rather than the larger default.
     fparams.range = 1;
 
-    result = colorscreen::finetune(rparams, params, *m_scan, {}, nullptr, fparams,
-                                   progress.get());
-    success = result.success;
-
-    if (progress && progress->cancelled()) {
-      success = false;
-      cancelled = true;
-    }
+    result.finetune = colorscreen::finetune(
+        rparams, params, *scan, {}, nullptr, fparams, progress);
+    result.success = result.finetune.success;
   } catch (const std::exception &e) {
+    result.finetune.err = e.what();
     qWarning() << "Optimize coordinates failed with exception:" << e.what();
-    success = false;
   } catch (...) {
+    result.finetune.err = "Unknown coordinate optimization exception.";
     qWarning() << "Optimize coordinates failed with unknown exception";
-    success = false;
   }
 
-  emit optimizeFinished(reqId, result, progress, success, cancelled);
+  result.cancelled = progress &&
+      (progress->pool_cancel() || progress->cancelled());
+  result.success = result.success && !result.cancelled;
+  return result;
 }

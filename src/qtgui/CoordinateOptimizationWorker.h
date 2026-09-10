@@ -1,33 +1,44 @@
 #ifndef COORDINATE_OPTIMIZATION_WORKER_H
 #define COORDINATE_OPTIMIZATION_WORKER_H
 
-#include "WorkerBase.h"
 #include "../libcolorscreen/include/render-parameters.h"
 #include "../libcolorscreen/include/finetune.h"
-#include <QVariant>
+#include "../libcolorscreen/include/progress-info.h"
+#include "../libcolorscreen/include/scr-to-img-parameters.h"
+#include <memory>
 
-class CoordinateOptimizationWorker : public WorkerBase {
-  Q_OBJECT
+namespace colorscreen {
+class image_data;
+}
+
+/** Final result of detecting a screen's initial coordinate system. */
+struct CoordinateAutodetectionResult {
+  bool success = false;
+  bool cancelled = false;
+  colorscreen::scr_to_img_parameters coordinates;
+};
+
+/** Final result of refining an existing screen coordinate system. */
+struct CoordinateOptimizationResult {
+  bool success = false;
+  bool cancelled = false;
+  colorscreen::finetune_result finetune;
+};
+
+/** Synchronous coordinate helpers, run with immutable background inputs. */
+class CoordinateOptimizationWorker final {
 public:
-  explicit CoordinateOptimizationWorker(std::shared_ptr<colorscreen::image_data> scan, QObject *parent = nullptr);
+  static CoordinateAutodetectionResult autodetect(
+      colorscreen::scr_to_img_parameters params,
+      colorscreen::render_parameters rparams,
+      std::shared_ptr<colorscreen::image_data> scan,
+      colorscreen::progress_info *progress);
 
-public slots:
-  void autodetect(int reqId, colorscreen::scr_to_img_parameters params,
-                  colorscreen::render_parameters rparams,
-                  std::shared_ptr<colorscreen::progress_info> progress);
-
-  void optimize(int reqId, colorscreen::scr_to_img_parameters params,
-                colorscreen::render_parameters rparams,
-                std::shared_ptr<colorscreen::progress_info> progress);
-
-signals:
-  void autodetectFinished(int reqId, colorscreen::scr_to_img_parameters params,
-                          std::shared_ptr<colorscreen::progress_info> progress,
-                          bool success, bool cancelled);
-  void optimizeFinished(int reqId, colorscreen::finetune_result result,
-                        std::shared_ptr<colorscreen::progress_info> progress,
-                        bool success, bool cancelled);
-
+  static CoordinateOptimizationResult optimize(
+      colorscreen::scr_to_img_parameters params,
+      colorscreen::render_parameters rparams,
+      std::shared_ptr<colorscreen::image_data> scan,
+      colorscreen::progress_info *progress);
 };
 
 #endif // COORDINATE_OPTIMIZATION_WORKER_H

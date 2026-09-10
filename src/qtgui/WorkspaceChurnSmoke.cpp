@@ -30,6 +30,7 @@
 #include <QThread>
 #include <QToolBar>
 #include <QToolButton>
+#include <QUndoStack>
 #include <QWidget>
 
 #include <atomic>
@@ -602,10 +603,8 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
               "Detect screen coordinates remained enabled with control points"));
           return;
         }
-        const int coordinateRequestBefore =
-            first->m_coordinateAutodetectRequest;
         first->onAutodetectCoordinatesRequested();
-        if (first->m_coordinateAutodetectRequest != coordinateRequestBefore) {
+        if (first->m_oneShotOperationQueue.hasActiveTasks()) {
           fail(QStringLiteral(
               "MainWindow started coordinate autodetection despite existing control points"));
           return;
@@ -868,11 +867,51 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
           return;
         }
 
+        // Exercise the actual coordinate-result publisher. Previously it
+        // mutated live parameters before changeParameters(), making the edit
+        // look like a no-op and silently losing the undo/dirty transition.
+        const ParameterState beforeCoordinates = first->getCurrentState();
+        QUndoStack *coordinateUndo = first->findChild<QUndoStack *>();
+        if (!coordinateUndo) {
+          fail(QStringLiteral("Coordinate refinement smoke lost the undo stack"));
+          return;
+        }
+        const int coordinateUndoIndex = coordinateUndo->index();
+        colorscreen::finetune_result refinedCoordinates;
+        refinedCoordinates.success = true;
+        refinedCoordinates.center = beforeCoordinates.scrToImg.center;
+        refinedCoordinates.center.x += 1;
+        refinedCoordinates.coordinate1 = beforeCoordinates.scrToImg.coordinate1;
+        refinedCoordinates.coordinate2 = beforeCoordinates.scrToImg.coordinate2;
+        ParameterState expectedCoordinates = beforeCoordinates;
+        expectedCoordinates.scrToImg.center = refinedCoordinates.center;
+        expectedCoordinates.scrToImg.mesh_trans = nullptr;
+        first->applyOptimizedCoordinates(refinedCoordinates);
+        if (first->getCurrentState() != expectedCoordinates ||
+            coordinateUndo->index() != coordinateUndoIndex + 1 ||
+            !first->isDocumentModified()) {
+          fail(QStringLiteral("Coordinate refinement did not create one undoable dirty edit"));
+          return;
+        }
+        coordinateUndo->undo();
+        if (first->getCurrentState() != beforeCoordinates ||
+            coordinateUndo->index() != coordinateUndoIndex) {
+          fail(QStringLiteral("Undo coordinate refinement did not restore its exact baseline"));
+          return;
+        }
+        coordinateUndo->redo();
+        if (first->getCurrentState() != expectedCoordinates) {
+          fail(QStringLiteral("Redo coordinate refinement did not restore its result"));
+          return;
+        }
+        coordinateUndo->undo();
+
         // A state-mutating one-shot must be cancelled as soon as the document
         // accepts another parameter snapshot. Its racing completion must still
         // execute cleanup but must never publish the stale result.
         MainWindow::OneShotOperation oneShotSmoke;
         oneShotSmoke.description = QStringLiteral("One-shot cancellation smoke");
+        oneShotSmoke.progressTitle = QStringLiteral("One-shot progress smoke");
         oneShotSmoke.prerequisites = [first]() { return first != nullptr; };
         oneShotSmoke.onStart = [state]() { state->oneShotStarted = true; };
         oneShotSmoke.resultValid = []() { return true; };
@@ -892,6 +931,26 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         if (!state->oneShotStarted) {
           fail(QStringLiteral(
               "Workspace churn one-shot request did not enter its start lifecycle"));
+          return;
+        }
+
+        int oneShotProgressEntries = 0;
+        for (const ProgressEntry &entry : first->m_activeProgresses) {
+          if (entry.userVisible &&
+              entry.title == QStringLiteral("One-shot progress smoke")) {
+            ++oneShotProgressEntries;
+            int matchingEntries = 0;
+            for (const ProgressEntry &other : first->m_activeProgresses)
+              if (other.info == entry.info)
+                ++matchingEntries;
+            if (!entry.row || !entry.rowActionButton || matchingEntries != 1) {
+              fail(QStringLiteral("One-shot progress row duplicated its request or lost Cancel"));
+              return;
+            }
+          }
+        }
+        if (oneShotProgressEntries != 1) {
+          fail(QStringLiteral("One-shot did not register its dedicated progress row"));
           return;
         }
 
@@ -931,6 +990,13 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
           fail(QStringLiteral(
               "Workspace churn allowed a cancelled one-shot result to publish"));
           return;
+        }
+
+        for (const ProgressEntry &entry : first->m_activeProgresses) {
+          if (entry.title == QStringLiteral("One-shot progress smoke")) {
+            fail(QStringLiteral("Cancelled one-shot retained its progress row"));
+            return;
+          }
         }
 
         if (!second || !view || workspace->isTabbedView() ||
