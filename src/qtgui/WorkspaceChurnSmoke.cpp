@@ -383,6 +383,10 @@ QPushButton *imageLayerInfraredButton = inspector->findChild<QPushButton *>(
     QStringLiteral("ImageLayerSetByInfraredButton"));
 QToolButton *imageLayerToggle = inspector->findChild<QToolButton *>(
     QStringLiteral("SimulatedImageLayerToggle"));
+QCheckBox *imageLayerSourceChoice = inspector->findChild<QCheckBox *>(
+    QStringLiteral("ImageLayerUseSimulatedRgbCheck"));
+QCheckBox *finalMirrorCheck = inspector->findChild<QCheckBox *>(
+    QStringLiteral("GeometryFinalMirrorCheck"));
 QWidget *mtfUseMeasuredRow =
     mtfUseMeasured ? mtfUseMeasured->parentWidget() : nullptr;
 const bool hasMtfMeasurements =
@@ -539,6 +543,22 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
               "Workspace churn lost Image Layer applicability metadata"));
           return;
         }
+        const bool imageLayerSourceApplicable =
+            imageLayerImage && imageLayerImage->has_rgb() &&
+            imageLayerImage->has_grayscale_or_ir();
+        const QVariant imageLayerSourceApplicability =
+            imageLayerSourceChoice
+                ? imageLayerSourceChoice->property("parameterApplicable")
+                : QVariant();
+        if (!imageLayerSourceChoice ||
+            !imageLayerSourceApplicability.isValid() ||
+            imageLayerSourceApplicability.toBool() != imageLayerSourceApplicable ||
+            imageLayerSourceChoice->isHidden() == imageLayerSourceApplicable) {
+          fail(QStringLiteral(
+              "Image Layer source choice bypassed row applicability semantics"));
+          return;
+        }
+
         const bool imageLayerWasExpanded = imageLayerToggle->isChecked();
         imageLayerToggle->setChecked(false);
         if (!imageLayerInfraredButton->isHidden()) {
@@ -553,6 +573,37 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
           return;
         }
         imageLayerToggle->setChecked(imageLayerWasExpanded);
+
+        // enabledCheck must never mean visibility. Final orientation remains
+        // discoverable before screen geometry exists, but teaches the missing
+        // prerequisite by being disabled; configuring a valid basis enables it.
+        if (!finalMirrorCheck) {
+          fail(QStringLiteral("Workspace churn lost final mirror checkbox"));
+          return;
+        }
+        const ParameterState checkboxSemanticsBaseline =
+            first->documentStateSnapshot();
+        ParameterState withoutFinalGeometry = checkboxSemanticsBaseline;
+        withoutFinalGeometry.scrToImg.type = colorscreen::Dufay;
+        withoutFinalGeometry.scrToImg.mesh_trans = nullptr;
+        withoutFinalGeometry.scrToImg.coordinate1 = {0, 0};
+        withoutFinalGeometry.scrToImg.coordinate2 = {0, 0};
+        first->applyState(withoutFinalGeometry);
+        if (finalMirrorCheck->isHidden() || finalMirrorCheck->isEnabled()) {
+          fail(QStringLiteral(
+              "Checkbox prerequisite hid final orientation instead of disabling it"));
+          return;
+        }
+        ParameterState withFinalGeometry = withoutFinalGeometry;
+        withFinalGeometry.scrToImg.coordinate1 = {10, 0};
+        withFinalGeometry.scrToImg.coordinate2 = {0, 10};
+        first->applyState(withFinalGeometry);
+        if (finalMirrorCheck->isHidden() || !finalMirrorCheck->isEnabled()) {
+          fail(QStringLiteral(
+              "Checkbox prerequisite did not enable final orientation"));
+          return;
+        }
+        first->applyState(checkboxSemanticsBaseline);
 
         if (!redStripWidth || !greenStripWidth ||
             redStripWidth->property("parameterKey").toString() !=

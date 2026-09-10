@@ -236,13 +236,14 @@ void GeometryPanel::setupUi() {
       "Continuous rotation in degrees in the libcolorscreen final plane. "
       "Unlike scan rotation this is not restricted to 90-degree steps and is "
       "saved in the parameter file.");
-  addCheckboxParameter(
+  QCheckBox *finalMirrorCheck = addCheckboxParameter(
       "Mirror final image",
       [](const ParameterState &s) { return s.scrToImg.final_mirror; },
       [](ParameterState &s, bool v) { s.scrToImg.final_mirror = v; },
       hasFinalGeometry,
       "Mirror the final-coordinate image horizontally before Final rotation. "
       "This is part of geometry and is saved in the parameter file.");
+  finalMirrorCheck->setObjectName(QStringLiteral("GeometryFinalMirrorCheck"));
 
   // Ensure Finetune widget is separate from the geometry-fit group
   endGroup();

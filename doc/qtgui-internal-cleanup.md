@@ -402,9 +402,15 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   `enabledCheck` should not silently mean different things in different helper
   functions.  `ParameterPanel::setParameterApplicability()` now establishes
   this distinction for form rows and composes it with section folding; Screen
-  pattern rows and measured-MTF controls are the first users.  Continue moving
-  panel-specific visibility predicates to this API as the individual panels are
-  simplified.
+  pattern rows and measured-MTF controls were the first users. Both checkbox
+  helpers now follow the same enable-only `enabledCheck` contract as sliders,
+  enums and buttons. Image Layer's native-vs-simulated source choice uses explicit
+  row applicability instead of a direct `setVisible()` repair, while Geometry's
+  final-mirror prerequisite remains visible and disabled until screen geometry
+  exists. Lightweight and workspace smoke probes cover both checkbox helper
+  variants, row applicability metadata, and the visible-disabled transition.
+  Continue moving remaining panel-specific visibility predicates to this API as
+  the individual panels are simplified.
 
 ### P2 — maintenance refactoring
 

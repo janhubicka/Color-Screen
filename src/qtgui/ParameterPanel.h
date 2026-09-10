@@ -142,6 +142,8 @@ protected:
                             tooltip, parameterKey);
   }
 
+  /** Add a stateful checkbox row. ENABLEDCHECK controls enablement only;
+      use setParameterApplicability() when the concept should disappear. */
   QCheckBox *addCheckboxParameter(
       const QString &label, std::function<bool(const ParameterState &)> getter,
       std::function<void(ParameterState &, bool)> setter,
@@ -149,6 +151,8 @@ protected:
       const QString &tooltip = QString(),
       const QString &parameterKey = QString());
 
+  /** Add a stateful checkbox with an explicit Reset action. ENABLEDCHECK
+      has the same enable-only semantics as every other parameter helper. */
   QCheckBox *addCheckboxWithReset(
       const QString &label, std::function<bool(const ParameterState &)> getter,
       std::function<void(ParameterState &, bool)> setter,

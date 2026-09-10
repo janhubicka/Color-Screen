@@ -1059,12 +1059,13 @@ QCheckBox *ParameterPanel::addCheckboxParameter(
     signalBlocker10.unblock();
   });
 
-  // Enable/Visibility Update
+  // Enablement is independent of applicability/visibility. Disabling the
+  // container keeps the inline label (and Reset control, when present) in the
+  // same prerequisite state as the checkbox itself.
   if (enabledCheck) {
     m_widgetStateUpdaters.push_back([this, container, enabledCheck]() {
-      ParameterState state = m_stateGetter();
-      bool visible = enabledCheck(state);
-      container->setVisible(visible);
+      const bool enabled = enabledCheck(m_stateGetter());
+      container->setEnabled(enabled);
     });
   }
   return checkbox;
@@ -1125,12 +1126,13 @@ QCheckBox *ParameterPanel::addCheckboxWithReset(
     signalBlocker11.unblock();
   });
 
-  // Enable/Visibility Update
+  // Enablement is independent of applicability/visibility. Disabling the
+  // container keeps the inline label (and Reset control, when present) in the
+  // same prerequisite state as the checkbox itself.
   if (enabledCheck) {
     m_widgetStateUpdaters.push_back([this, container, enabledCheck]() {
-      ParameterState state = m_stateGetter();
-      bool visible = enabledCheck(state);
-      container->setVisible(visible);
+      const bool enabled = enabledCheck(m_stateGetter());
+      container->setEnabled(enabled);
     });
   }
   return checkbox;

@@ -638,7 +638,7 @@ precise numeric entry.
 1. **Aesthetics**: Prefer palette/theme-aware standard Qt presentation and consistent spacing. Use custom styling only where it adds functional value (for example wrapping inspector navigation or data-semantic charts).
 2. **Responsiveness**: Always use background workers for any task taking > 50ms.
 3. **Helpfulness**: Always provide tooltips for parameters using the `tooltip` argument in `ParameterPanel` helpers.
-4. **Validation**: Use `enabledCheck` when a control should stay visible but temporarily unavailable because a prerequisite is missing. Use `setParameterApplicability()` when the control's concept does not apply to the current image/process. For rows inside `addSeparator()` sections, never repair logical visibility with a direct `setVisible()` plus a section-toggle callback; section folding must compose with applicability automatically.
+4. **Validation**: Use `enabledCheck` when a control should stay visible but temporarily unavailable because a prerequisite is missing. This is now uniform across sliders, enums, buttons, and both checkbox helpers. Use `setParameterApplicability()` when the control's concept does not apply to the current image/process; do not reintroduce checkbox-specific hide-on-disable behavior. For rows inside `addSeparator()` sections, never repair logical visibility with a direct `setVisible()` plus a section-toggle callback; section folding must compose with applicability automatically.
 
 ---
 
