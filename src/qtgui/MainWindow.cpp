@@ -79,6 +79,8 @@
 #include <QtConcurrent>
 
 #include <algorithm>
+#include <exception>
+#include <string>
 #include <utility>
 
 // Undo/Redo Implementation
@@ -163,6 +165,56 @@ namespace {
     inside the normal Color-Screen Qt application.  */
 ColorScreenApplication *documentApplication() {
   return dynamic_cast<ColorScreenApplication *>(QCoreApplication::instance());
+}
+
+/** Numerical result of one document-owned measured-MTF model fit. */
+struct MtfModelFitResult {
+  colorscreen::mtf_parameters fitted;
+  double objective = -1;
+  std::size_t observations = 0;
+  std::string error;
+  bool cancelled = false;
+  std::shared_ptr<colorscreen::progress_info> progress;
+};
+
+/** Fit an analytical MTF model without touching QObject/UI state. */
+void runMtfModelFit(const colorscreen::mtf_parameters &input,
+                    const colorscreen::mtf_estimation_options &options,
+                    int flags, MtfModelFitResult *result,
+                    colorscreen::progress_info *progress) {
+  if (!result)
+    return;
+  result->fitted = input;
+  if (progress && progress->pool_cancel()) {
+    result->cancelled = true;
+    return;
+  }
+
+  for (std::size_t measurement = 0; measurement < input.measurements.size();
+       ++measurement) {
+    if (!options.include_measurement_p(measurement))
+      continue;
+    const colorscreen::mtf_measurement &curve = input.measurements[measurement];
+    for (std::size_t sample = 0; sample < curve.size(); ++sample)
+      if (curve.get_freq(static_cast<int>(sample)) <= 0.5)
+        ++result->observations;
+  }
+
+  try {
+    colorscreen::mtf_parameters fitInput = input;
+    const char *error = nullptr;
+    result->objective = result->fitted.estimate_parameters(
+        fitInput, options, nullptr, progress, &error, flags);
+    if (error)
+      result->error = error;
+  } catch (const std::exception &exception) {
+    result->error = exception.what();
+  } catch (...) {
+    result->error = "unexpected exception during MTF fitting";
+  }
+
+  result->cancelled = progress &&
+                      (progress->cancelled() || progress->pool_cancel());
 }
 
 /** Return whether geometry-fit prerequisites/calibration differ between two
@@ -957,18 +1009,13 @@ void MainWindow::setupUi() {
   MtfCalibrationCallbacks mtfCalibration;
   mtfCalibration.summary = [this]() { return mtfCalibrationSummary(); };
   mtfCalibration.fitAvailable = [this]() { return !m_mtfFitRunning; };
-  mtfCalibration.fitStarted = [this](const colorscreen::mtf_parameters &inputs) {
-    return beginMtfModelFit(inputs);
-  };
-  mtfCalibration.fitFailed = [this](const colorscreen::mtf_parameters &inputs) {
-    failMtfModelFit(inputs);
-  };
-  mtfCalibration.fitAccepted =
-      [this](const colorscreen::mtf_parameters &fitted, double rms) {
-        acceptMtfModelFit(fitted, rms);
+  mtfCalibration.fitRequested =
+      [this](const ParameterState &baseline,
+             const colorscreen::mtf_parameters &input,
+             const colorscreen::mtf_estimation_options &options, int flags,
+             QWidget *resultParent) {
+        return requestMtfModelFit(baseline, input, options, flags, resultParent);
       };
-  mtfCalibration.fitFinishedWithoutResult =
-      [this]() { finishMtfModelFitWithoutResult(); };
   m_sharpnessPanel =
       new SharpnessPanel([this]() { return getCurrentState(); },
                          [this](const ParameterState &s, const QString &desc,
@@ -4071,40 +4118,122 @@ void MainWindow::refreshMtfCalibrationPresentation() {
   emit mtfCalibrationStateChanged();
 }
 
-bool MainWindow::beginMtfModelFit(const colorscreen::mtf_parameters &inputs) {
-  if (m_mtfFitRunning)
+bool MainWindow::requestMtfModelFit(
+    const ParameterState &baseline, const colorscreen::mtf_parameters &input,
+    const colorscreen::mtf_estimation_options &options, int flags,
+    QWidget *resultParent) {
+  if (m_closing || m_mtfFitRunning || getCurrentState() != baseline)
     return false;
-  m_mtfFitRunning = true;
-  m_mtfFitPendingInputs = inputs;
-  m_mtfFitFailureInputs.reset();
-  refreshMtfCalibrationPresentation();
+
+  const colorscreen::mtf_parameters baselineMtf =
+      baseline.rparams.sharpen.scanner_mtf;
+  const QPointer<QWidget> guardedResultParent(resultParent);
+  auto result = std::make_shared<MtfModelFitResult>();
+
+  OneShotOperation operation;
+  operation.description = tr("Fitting measured MTF model");
+  operation.progressTitle = tr("MTF model fit");
+  operation.prerequisites = [this, baseline]() {
+    return !m_mtfFitRunning && getCurrentState() == baseline;
+  };
+  operation.onStart = [this, baselineMtf, result](
+                          std::shared_ptr<colorscreen::progress_info> progress) {
+    m_mtfFitRunning = true;
+    m_mtfFitPendingInputs = baselineMtf;
+    m_mtfFitFailureInputs.reset();
+    m_mtfFitProgress = progress;
+    result->progress = std::move(progress);
+    refreshMtfCalibrationPresentation();
+  };
+  operation.resultValid = [this, baseline, result]() {
+    return result->progress &&
+           m_mtfFitProgress.lock() == result->progress &&
+           getCurrentState() == baseline && !result->cancelled;
+  };
+  operation.applyResult = [this, baselineMtf, result,
+                           guardedResultParent]() {
+    // Only the request that still owns document fit provenance reaches here.
+    m_mtfFitRunning = false;
+    m_mtfFitPendingInputs.reset();
+    m_mtfFitProgress.reset();
+
+    if (result->objective < 0 || !result->error.empty()) {
+      m_mtfFitFailureInputs = baselineMtf;
+      refreshMtfCalibrationPresentation();
+      auto *box = new QMessageBox(
+          QMessageBox::Warning, tr("MTF model fit"),
+          tr("The MTF model could not be fitted: %1")
+              .arg(QString::fromStdString(
+                  result->error.empty() ? "unknown fitting error"
+                                        : result->error)),
+          QMessageBox::Ok,
+          guardedResultParent ? guardedResultParent.data() : this);
+      box->setObjectName(QStringLiteral("MtfFitErrorDialog"));
+      box->setAttribute(Qt::WA_DeleteOnClose);
+      box->open();
+      return;
+    }
+
+    const colorscreen::mtf_parameters fitted = result->fitted;
+    const double rms = result->observations
+                           ? std::sqrt(result->objective / result->observations)
+                           : 0.0;
+    m_mtfFitBaseline = fitted;
+    m_mtfFitFailureInputs.reset();
+    m_mtfFitRms = rms;
+
+    ParameterState updated = getCurrentState();
+    updated.rparams.sharpen.scanner_mtf = fitted;
+    changeParameters(updated, tr("Fit measured MTF model"));
+    refreshMtfCalibrationPresentation();
+
+    QString details =
+        tr("The selected model was fitted successfully.\n\n"
+           "RMS residual: %1 percentage points\n"
+           "Gaussian sigma: %2 px")
+            .arg(rms, 0, 'g', 6)
+            .arg(fitted.sigma, 0, 'g', 8);
+    if (fitted.model == colorscreen::mtf_model::physical_diffraction) {
+      details += tr("\nDefocus: %1 mm\nMarked f-number: %2"
+                    "\nSensor fill factor: %3\nHalo fraction: %4")
+                     .arg(fitted.defocus, 0, 'g', 8)
+                     .arg(fitted.f_stop, 0, 'g', 8)
+                     .arg(fitted.sensor_fill_factor, 0, 'g', 8)
+                     .arg(fitted.halo_fraction, 0, 'g', 8);
+      if (fitted.halo_fraction > 0)
+        details += tr("\nHalo radius: %1 px").arg(fitted.halo_sigma, 0, 'g', 8);
+      else
+        details += tr("\nHalo radius: inactive");
+    } else {
+      details += tr("\nFallback blur diameter: %1 px")
+                     .arg(fitted.blur_diameter, 0, 'g', 8);
+    }
+    auto *box = new QMessageBox(QMessageBox::Information, tr("MTF model fit"),
+                                details, QMessageBox::Ok,
+                                guardedResultParent ? guardedResultParent.data()
+                                                    : this);
+    box->setObjectName(QStringLiteral("MtfFitResultDialog"));
+    box->setAttribute(Qt::WA_DeleteOnClose);
+    box->open();
+  };
+  operation.onDone = [this, result]() {
+    // Parameter/image replacement may reset the fit and start another request
+    // before this cancelled worker returns. Request identity prevents that old
+    // completion from clearing the new fit's provenance or enabled state.
+    if (!result->progress || m_mtfFitProgress.lock() != result->progress)
+      return;
+    m_mtfFitProgress.reset();
+    m_mtfFitRunning = false;
+    m_mtfFitPendingInputs.reset();
+    refreshMtfCalibrationPresentation();
+  };
+
+  runOneShotOperation(
+      std::move(operation),
+      [input, options, flags, result](colorscreen::progress_info *progress) {
+        runMtfModelFit(input, options, flags, result.get(), progress);
+      });
   return true;
-}
-
-void MainWindow::failMtfModelFit(const colorscreen::mtf_parameters &inputs) {
-  m_mtfFitRunning = false;
-  m_mtfFitPendingInputs.reset();
-  m_mtfFitFailureInputs = inputs;
-  refreshMtfCalibrationPresentation();
-}
-
-void MainWindow::acceptMtfModelFit(const colorscreen::mtf_parameters &fitted,
-                                   double rms) {
-  m_mtfFitRunning = false;
-  m_mtfFitPendingInputs.reset();
-  m_mtfFitBaseline = fitted;
-  m_mtfFitFailureInputs.reset();
-  m_mtfFitRms = rms;
-  /* SharpnessPanel applies FITTED immediately after this callback. Defer the
-     presentation refresh so it observes the accepted document state rather
-     than briefly calling the new baseline stale. */
-  QTimer::singleShot(0, this, [this]() { refreshMtfCalibrationPresentation(); });
-}
-
-void MainWindow::finishMtfModelFitWithoutResult() {
-  m_mtfFitRunning = false;
-  m_mtfFitPendingInputs.reset();
-  refreshMtfCalibrationPresentation();
 }
 
 QString MainWindow::profileCalibrationSummary() const {
@@ -5744,7 +5873,9 @@ void MainWindow::dismissOneShotPrompts() {
     TaskQueue owns progress, cancellation and newest-request identity; WORKER
     runs on Qt's thread pool. APPLYRESULT is called only after both the queue
     and RESULTVALID approve publication. ONDONE restores transient UI for every
-    request that actually started, including cancelled and stale completions. */
+    request that actually started, including cancelled and stale completions.
+    ONSTART receives the same progress handle used by the queue, allowing a
+    reference view to cancel its own work without cancelling unrelated work. */
 void MainWindow::runOneShotOperation(
     OneShotOperation operation,
     std::function<void(colorscreen::progress_info *)> worker) {
@@ -5795,7 +5926,7 @@ void MainWindow::runOneShotOperation(
           addUserVisibleProgress(progress, lifecycle->progressTitle);
         }
         if (lifecycle->onStart)
-          lifecycle->onStart();
+          lifecycle->onStart(progress);
       });
 }
 
@@ -5825,7 +5956,11 @@ void MainWindow::runAreaComputation(
     operation.description = description;
     operation.prerequisites =
         [this, scan]() { return !m_closing && m_scan == scan; };
-    operation.onStart = std::move(onStart);
+    operation.onStart = [onStart = std::move(onStart)](
+                            std::shared_ptr<colorscreen::progress_info>) {
+      if (onStart)
+        onStart();
+    };
     operation.resultValid = [this, scan, baseline]() {
       return m_scan == scan && getCurrentState() == baseline;
     };
@@ -5902,6 +6037,7 @@ bool MainWindow::loadParameterFile(const QString &fileName) {
   m_mtfFitFailureInputs.reset();
   m_mtfFitRms = -1;
   m_mtfFitRunning = false;
+  m_mtfFitProgress.reset();
   m_colorOptimizerQueue.cancelAll();
   m_profileCalibrationBaseline.reset();
   m_profileCalibrationPendingInputs.reset();
@@ -6944,7 +7080,7 @@ void MainWindow::onFindFocusAreasRequested() {
   operation.description = tr("Finding focus analysis areas");
   operation.progressTitle = tr("Find focus areas");
   operation.prerequisites = [this, scan]() { return m_scan == scan; };
-  operation.onStart = [this]() {
+  operation.onStart = [this](std::shared_ptr<colorscreen::progress_info>) {
     m_focusAreaAnalysisRunning = true;
     clearFocusAreaAnalysis();
     if (m_sharpnessPanel)
@@ -7010,7 +7146,7 @@ void MainWindow::onAnalyzeFocusAreasRequested(uint64_t flags) {
   operation.description = tr("Analyzing focus areas");
   operation.progressTitle = tr("Analyze focus areas");
   operation.prerequisites = [this, scan]() { return m_scan == scan; };
-  operation.onStart = [this]() {
+  operation.onStart = [this](std::shared_ptr<colorscreen::progress_info>) {
     m_focusAreaAnalysisRunning = true;
     if (m_sharpnessPanel)
       m_sharpnessPanel->setFocusAreaAnalysisState(

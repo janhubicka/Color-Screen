@@ -9,10 +9,12 @@
 #include <QRect>
 #include <QString>
 #include <condition_variable>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <vector>
 
+class ColorScreenApplication;
 class ImageWidget;
 class MainWindow;
 class MultiLineTabWidget;
@@ -23,6 +25,7 @@ class QCheckBox;
 class QCloseEvent;
 class QComboBox;
 class QDockWidget;
+class QDialog;
 class QStatusBar;
 class QToolBar;
 
@@ -158,6 +161,14 @@ private:
   /** Load the external reference image without changing the source document. */
   void loadReferenceImage(const QString &fileName);
 
+  /** Run a scan-coordinate reference measurement through the owning document. */
+  void startReferenceMtfMeasurement(
+      const colorscreen::int_image_area &area,
+      std::vector<colorscreen::slanted_edge_parameters> parameters);
+
+  /** Cancel only this view's request, including pending selection/settings. */
+  void cancelReferenceMtfMeasurement();
+
   /** Convert a selection rectangle to bounded reference-image coordinates. */
   QRect referenceImageArea(QRect widgetArea) const;
 
@@ -215,4 +226,11 @@ private:
   colorscreen::render_type_parameters m_renderTypeParams;
   colorscreen::slanted_edge_parameters m_slantedEdgeParameters;
   std::vector<colorscreen::slanted_edge_parameters> m_pendingMtfParameters;
+  QPointer<QDialog> m_referenceMtfDialog;
+  // Borrow the active request's cancellation handle; the document/worker owns it.
+  std::weak_ptr<colorscreen::progress_info> m_referenceMtfProgress;
+
+  // Exercise production reference measurement and view-local cancellation.
+  friend void startWorkspaceChurnSmoke(ColorScreenApplication &app,
+                                       std::function<void()> completed);
 };

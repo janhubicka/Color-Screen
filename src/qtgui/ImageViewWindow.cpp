@@ -34,9 +34,9 @@
 #include <QToolBar>
 #include <QVBoxLayout>
 #include <QVariant>
-#include <QtConcurrent>
 
 #include <algorithm>
+#include <exception>
 #include <functional>
 #include <utility>
 
@@ -144,13 +144,10 @@ ImageViewWindow::ImageViewWindow(MainWindow *document, int viewNumber,
 
 /** Destroy a secondary view without taking the document-owned inspector with it. */
 ImageViewWindow::~ImageViewWindow() {
-  // A reference-owned Sharpness panel may be the document's active MTF-fit
-  // controller. Closing the reference destroys its TaskQueue/watcher, so clear
-  // the shared busy state before that happens; otherwise the surviving document
-  // would permanently believe that a fit is still running.
-  if (m_slantedEdgeReference && m_sharpnessPanel &&
-      m_sharpnessPanel->mtfFitRunning() && m_document)
-    m_document->finishMtfModelFitWithoutResult();
+  cancelReferenceMtfMeasurement();
+  // Measured-MTF model fitting is document-owned. Closing a reference view no
+  // longer destroys or clears an in-flight fit; only reference-image
+  // measurement itself depends on this view and is cancelled above.
 
   {
     std::unique_lock<std::mutex> locker(m_referenceLoadMutex);
@@ -445,22 +442,14 @@ void ImageViewWindow::setupReferenceInspector() {
   mtfCalibration.fitAvailable = [this]() {
     return m_document && !m_document->mtfModelFitRunning();
   };
-  mtfCalibration.fitStarted = [this](const colorscreen::mtf_parameters &inputs) {
-    return m_document && m_document->beginMtfModelFit(inputs);
-  };
-  mtfCalibration.fitFailed = [this](const colorscreen::mtf_parameters &inputs) {
-    if (m_document)
-      m_document->failMtfModelFit(inputs);
-  };
-  mtfCalibration.fitAccepted =
-      [this](const colorscreen::mtf_parameters &fitted, double rms) {
-        if (m_document)
-          m_document->acceptMtfModelFit(fitted, rms);
+  mtfCalibration.fitRequested =
+      [this](const ParameterState &baseline,
+             const colorscreen::mtf_parameters &input,
+             const colorscreen::mtf_estimation_options &options, int flags,
+             QWidget *resultParent) {
+        return m_document && m_document->requestMtfModelFit(
+                                 baseline, input, options, flags, resultParent);
       };
-  mtfCalibration.fitFinishedWithoutResult = [this]() {
-    if (m_document)
-      m_document->finishMtfModelFitWithoutResult();
-  };
   m_sharpnessPanel = new SharpnessPanel(
       [this]() {
         return m_document ? m_document->documentStateSnapshot()
@@ -517,6 +506,8 @@ void ImageViewWindow::loadReferenceImage(const QString &fileName) {
   if (!m_slantedEdgeReference || fileName.isEmpty() || m_referenceLoadPending)
     return;
 
+  // Invalidate immediately, even if the reload fails and leaves the old scan.
+  cancelReferenceMtfMeasurement();
   m_referenceLoadPending = true;
   m_referenceFile = QFileInfo(fileName).absoluteFilePath();
   statusBar()->showMessage(tr("Opening slanted-edge reference…"));
@@ -876,18 +867,17 @@ void ImageViewWindow::onMeasureMtfRequested(bool checked) {
     return;
 
   if (!checked) {
-    m_pendingMtfParameters.clear();
-    if (m_imageWidget->interactionMode() == ImageWidget::GenericAreaMode)
-      m_imageWidget->setInteractionMode(ImageWidget::PanMode);
+    cancelReferenceMtfMeasurement();
     statusBar()->showMessage(
         tr("Slanted-edge reference — sharpness parameters are shared"));
     return;
   }
-  if (!m_document || !m_scan) {
-    m_sharpnessPanel->setMeasureMtfChecked(false);
+  cancelReferenceMtfMeasurement();
+  if (!m_document || !m_scan || m_referenceLoadPending)
     return;
-  }
+  m_sharpnessPanel->setMeasureMtfChecked(true);
 
+  const auto scan = m_scan;
   const ParameterState currentState = m_document->documentStateSnapshot();
   const colorscreen::mtf_parameters currentMtf =
       currentState.rparams.sharpen.scanner_mtf;
@@ -908,12 +898,23 @@ void ImageViewWindow::onMeasureMtfRequested(bool checked) {
   auto *dialog = new SlantedEdgeDialog(
       defaults, !currentMtf.measurements.empty(), hasRgb, hasInfrared, this);
   dialog->setAttribute(Qt::WA_DeleteOnClose);
-  connect(dialog, &QDialog::rejected, this, [this]() {
-    if (m_sharpnessPanel)
-      m_sharpnessPanel->setMeasureMtfChecked(false);
+  m_referenceMtfDialog = dialog;
+  connect(dialog, &QDialog::rejected, this, [this, dialog]() {
+    if (m_referenceMtfDialog != dialog)
+      return;
+    m_referenceMtfDialog = nullptr;
+    m_sharpnessPanel->setMeasureMtfChecked(false);
   });
   connect(dialog, &QDialog::accepted, this,
-          [this, dialog, currentMtf, hasInfrared]() {
+          [this, dialog, scan, currentState, currentMtf, hasInfrared]() {
+    if (m_referenceMtfDialog != dialog)
+      return;
+    m_referenceMtfDialog = nullptr;
+    if (!m_document || m_referenceLoadPending || m_scan != scan ||
+        m_document->documentStateSnapshot() != currentState) {
+      cancelReferenceMtfMeasurement();
+      return;
+    }
     const colorscreen::slanted_edge_parameters baseParameters =
         dialog->parameters();
     m_slantedEdgeParameters = baseParameters;
@@ -1004,80 +1005,159 @@ QRect ImageViewWindow::referenceImageArea(QRect area) const {
   return m_imageWidget ? m_imageWidget->widgetAreaToImageArea(area) : QRect();
 }
 
-/** Measure the selected reference edge and append results to shared params. */
+/** Cancel reference-local work without cancelling a newer document operation. */
+void ImageViewWindow::cancelReferenceMtfMeasurement() {
+  if (auto progress = m_referenceMtfProgress.lock())
+    progress->cancel();
+  m_referenceMtfProgress.reset();
+  m_pendingMtfParameters.clear();
+  if (QDialog *dialog = m_referenceMtfDialog.data()) {
+    m_referenceMtfDialog = nullptr;
+    dialog->close();
+  }
+  if (m_slantedEdgeReference && m_sharpnessPanel) {
+    m_sharpnessPanel->setMeasureMtfChecked(false);
+    m_sharpnessPanel->setMeasureMtfEnabled(true);
+  }
+  if (m_slantedEdgeReference && m_imageWidget &&
+      m_imageWidget->interactionMode() == ImageWidget::GenericAreaMode)
+    m_imageWidget->setInteractionMode(ImageWidget::PanMode);
+}
+
+/** Convert the selected rectangle, then start an atomic channel batch. */
 void ImageViewWindow::onReferenceAreaSelected(QRect widgetArea) {
   if (!m_slantedEdgeReference || m_pendingMtfParameters.empty() ||
-      !m_document || !m_scan)
+      !m_document || !m_scan || m_referenceLoadPending)
     return;
-
   const QRect area = referenceImageArea(widgetArea);
   if (area.isEmpty())
     return;
-
-  m_imageWidget->setInteractionMode(ImageWidget::PanMode);
-  m_sharpnessPanel->setMeasureMtfEnabled(false);
-  statusBar()->showMessage(tr("Measuring slanted-edge MTF…"));
-
-  const auto scan = m_scan;
-  const ParameterState state = m_document->documentStateSnapshot();
-  const auto parameters = m_pendingMtfParameters;
-  m_pendingMtfParameters.clear();
-  auto progress = std::make_shared<colorscreen::progress_info>();
-  progress->set_task("Measure slanted edge reference", parameters.size());
-  auto error = std::make_shared<std::string>();
-  auto *watcher = new QFutureWatcher<ParameterState>(this);
-  connect(watcher, &QFutureWatcher<ParameterState>::finished, this,
-          [this, watcher, error]() {
-            const ParameterState updated = watcher->result();
-            watcher->deleteLater();
-            if (!m_document)
-              return;
-            if (!error->empty()) {
-              QMessageBox::warning(
-                  this, tr("MTF Measurement Failed"),
-                  tr("%1\n\nSelect one straight, isolated edge with clear "
-                     "plateaus on both sides. Avoid dust, texture, multiple "
-                     "edges, and edges parallel to the pixel grid.")
-                      .arg(QString::fromStdString(*error)));
-            } else {
-              m_document->applySharedDocumentState(
-                  updated, tr("Measure MTF from slanted-edge reference"));
-            }
-            m_sharpnessPanel->setMeasureMtfChecked(false);
-            m_sharpnessPanel->setMeasureMtfEnabled(true);
-            m_sharpnessPanel->updateUI();
-            statusBar()->showMessage(
-                tr("Slanted-edge reference — sharpness parameters are shared"));
-          });
-
-  QFuture<ParameterState> future = QtConcurrent::run(
-      [scan, state, area, parameters, progress, error]() mutable {
-        ParameterState updated = state;
-        std::vector<colorscreen::slanted_edge_results> results;
-        results.reserve(parameters.size());
-        const colorscreen::int_image_area imageArea = {
-            area.x(), area.y(), area.width(), area.height()};
-        for (const auto &p : parameters) {
-          colorscreen::slanted_edge_results result = colorscreen::slanted_edge_mtf(
-              updated.rparams, *scan, imageArea, p, progress.get());
-          if (!result.success) {
-            *error = p.name + ": " +
-                     (result.error.empty()
-                          ? std::string("no usable single slanted edge was found")
-                          : result.error);
-            return updated;
-          }
-          results.push_back(std::move(result));
-          progress->inc_progress();
-        }
-        for (auto &result : results)
-          updated.rparams.sharpen.scanner_mtf.measurements.push_back(
-              std::move(result.measurement));
-        return updated;
-      });
-  watcher->setFuture(future);
+  auto parameters = std::move(m_pendingMtfParameters);
+  startReferenceMtfMeasurement(
+      {area.x(), area.y(), area.width(), area.height()}, std::move(parameters));
 }
 
+/** Measure a reference edge using immutable inputs and document-owned dispatch.
+    Closing/reloading this view cancels only its own progress object. A newer
+    request owns its controls, so an older completion cannot reset them. */
+void ImageViewWindow::startReferenceMtfMeasurement(
+    const colorscreen::int_image_area &area,
+    std::vector<colorscreen::slanted_edge_parameters> parameters) {
+  cancelReferenceMtfMeasurement();
+  if (!m_slantedEdgeReference || !m_document || !m_scan ||
+      !m_sharpnessPanel || m_referenceLoadPending || parameters.empty() ||
+      area.width <= 0 || area.height <= 0)
+    return;
+
+  /** Worker output; progress is assigned before thread-pool dispatch. */
+  struct MeasurementResult {
+    std::vector<colorscreen::mtf_measurement> measurements;
+    std::string error;
+    std::shared_ptr<colorscreen::progress_info> progress;
+  };
+  auto result = std::make_shared<MeasurementResult>();
+  const QPointer<ImageViewWindow> view(this);
+  const QPointer<MainWindow> document = m_document;
+  const auto scan = m_scan;
+  const auto documentScan = document->sharedImageData();
+  const ParameterState baseline = document->documentStateSnapshot();
+
+  MainWindow::OneShotOperation operation;
+  operation.description = tr("Measuring slanted-edge reference");
+  operation.progressTitle = tr("Reference MTF measurement");
+  operation.resultValid = [view, document, scan, documentScan, baseline, result]() {
+    return view && document && view->m_document == document &&
+           !view->m_referenceLoadPending && view->m_scan == scan &&
+           document->sharedImageData() == documentScan &&
+           document->documentStateSnapshot() == baseline &&
+           view->m_referenceMtfProgress.lock() == result->progress;
+  };
+  operation.onStart = [view, result](
+                          std::shared_ptr<colorscreen::progress_info> progress) {
+    result->progress = progress;
+    if (!view) {
+      progress->cancel();
+      return;
+    }
+    view->m_referenceMtfProgress = progress;
+    view->m_sharpnessPanel->setMeasureMtfChecked(true);
+    view->m_sharpnessPanel->setMeasureMtfEnabled(false);
+    // Progress is presented by the document's task row, not a view-local task.
+    view->statusBar()->clearMessage();
+  };
+  operation.applyResult = [view, document, result]() {
+    // This callback is entered only after queue, document and reference gates.
+    if (!result->error.empty()) {
+      auto *message = new QMessageBox(
+          QMessageBox::Warning, tr("MTF Measurement Failed"),
+          tr("%1\n\nExisting measurements were left unchanged. Select one "
+             "straight, isolated edge with clear plateaus on both sides. "
+             "Avoid dust, texture, multiple edges, and edges parallel to "
+             "the pixel grid.")
+              .arg(QString::fromStdString(result->error)),
+          QMessageBox::Ok, view);
+      message->setObjectName(QStringLiteral("ReferenceMtfError"));
+      message->setAttribute(Qt::WA_DeleteOnClose);
+      message->open();
+      return;
+    }
+    ParameterState updated = document->documentStateSnapshot();
+    auto &measurements = updated.rparams.sharpen.scanner_mtf.measurements;
+    measurements.insert(measurements.end(), result->measurements.begin(),
+                        result->measurements.end());
+    document->applySharedDocumentState(
+        updated, tr("Measure MTF from slanted-edge reference"));
+    view->statusBar()->showMessage(tr("Reference MTF measurements added"), 3000);
+  };
+  operation.onDone = [view, result]() {
+    if (!view || view->m_referenceMtfProgress.lock() != result->progress)
+      return;
+    view->m_referenceMtfProgress.reset();
+    view->m_sharpnessPanel->setMeasureMtfChecked(false);
+    view->m_sharpnessPanel->setMeasureMtfEnabled(true);
+    view->m_sharpnessPanel->updateUI();
+  };
+
+  document->runOneShotOperation(
+      std::move(operation),
+      [scan, baseline, area, parameters = std::move(parameters), result](
+          colorscreen::progress_info *progress) {
+        // Stage all channels privately. Neither failure nor cancellation may
+        // publish a prefix of an RGB/RGB+IR measurement group.
+        std::vector<colorscreen::mtf_measurement> measurements;
+        try {
+          progress->set_task("Measure slanted edge reference", parameters.size());
+          measurements.reserve(parameters.size());
+          for (const auto &p : parameters) {
+            if (progress->pool_cancel())
+              return;
+            colorscreen::slanted_edge_results measured;
+            {
+              colorscreen::sub_task task(progress);
+              measured = colorscreen::slanted_edge_mtf(
+                  baseline.rparams, *scan, area, p, progress);
+            }
+            if (progress->pool_cancel() || progress->cancelled())
+              return;
+            if (!measured.success) {
+              result->error = p.name + ": " +
+                  (measured.error.empty()
+                       ? std::string("no usable single slanted edge was found")
+                       : measured.error);
+              return;
+            }
+            measurements.push_back(std::move(measured.measurement));
+            progress->inc_progress();
+          }
+          if (!progress->pool_cancel())
+            result->measurements = std::move(measurements);
+        } catch (const std::exception &error) {
+          result->error = error.what();
+        } catch (...) {
+          result->error = "Unexpected exception during reference MTF measurement";
+        }
+      });
+}
 
 /** Present the source document's full inspector in this detached ordinary view. */
 void ImageViewWindow::claimDocumentInspector() {
@@ -1122,6 +1202,7 @@ void ImageViewWindow::closeEvent(QCloseEvent *event) {
       return;
     }
   }
+  cancelReferenceMtfMeasurement();
   QMainWindow::closeEvent(event);
 }
 

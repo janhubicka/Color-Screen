@@ -299,10 +299,40 @@ public:
       Sharpness panel, including external slanted-edge reference views. */
   QString mtfCalibrationSummary() const;
   bool mtfModelFitRunning() const { return m_mtfFitRunning; }
-  bool beginMtfModelFit(const colorscreen::mtf_parameters &inputs);
-  void failMtfModelFit(const colorscreen::mtf_parameters &inputs);
-  void acceptMtfModelFit(const colorscreen::mtf_parameters &fitted, double rms);
-  void finishMtfModelFitWithoutResult();
+  /** Start one measured-MTF model fit from an immutable dialog/document
+      snapshot. The fit is a document final-result operation shared by every
+      Sharpness panel. */
+  bool requestMtfModelFit(
+      const ParameterState &baseline,
+      const colorscreen::mtf_parameters &input,
+      const colorscreen::mtf_estimation_options &options, int flags,
+      QWidget *resultParent = nullptr);
+
+  /** Lifecycle callbacks for one final-result background operation.
+
+      PREREQUISITES run on the GUI thread before the request enters the queue.
+      ONSTART receives request-local progress only when TaskQueue starts work.
+      Reference views must guard their callbacks and validate their own scan
+      as well as the document snapshot. RESULTVALID is the final publication
+      gate after newest-request/cancellation checks.
+      APPLYRESULT publishes accepted output, and ONDONE restores transient UI
+      state for every started request, including stale/cancelled completions. */
+  struct OneShotOperation {
+    QString description;
+    // Non-empty for a dedicated task row; otherwise use transient progress.
+    QString progressTitle;
+    std::function<bool()> prerequisites;
+    std::function<void(std::shared_ptr<colorscreen::progress_info>)> onStart;
+    std::function<bool()> resultValid;
+    std::function<void()> applyResult;
+    std::function<void()> onDone;
+  };
+
+  /** Run WORKER under this document's one-shot progress/cancellation lifecycle.
+      Secondary/reference views use the same queue, not independent watchers. */
+  void runOneShotOperation(
+      OneShotOperation operation,
+      std::function<void(colorscreen::progress_info *)> worker);
 
 signals:
   /** Emitted after the loaded image or shared document parameters change.
@@ -420,29 +450,6 @@ private:
   void createModeShortcuts(); // Create 1-0 hotkeys for modes
   void updateModeMenu(); // Updates combo box items
   QIcon renderScreenIcon(colorscreen::scr_type type);
-
-  /** Lifecycle callbacks for one final-result background operation.
-
-      PREREQUISITES run on the GUI thread before the request enters the queue.
-      ONSTART runs only when TaskQueue actually starts the request. RESULTVALID
-      is the final publication gate after newest-request/cancellation checks.
-      APPLYRESULT publishes accepted output, and ONDONE restores transient UI
-      state for every started request, including stale/cancelled completions. */
-  struct OneShotOperation {
-    QString description;
-    // Non-empty for a dedicated task row; otherwise use transient progress.
-    QString progressTitle;
-    std::function<bool()> prerequisites;
-    std::function<void()> onStart;
-    std::function<bool()> resultValid;
-    std::function<void()> applyResult;
-    std::function<void()> onDone;
-  };
-
-  /** Run WORKER under the common one-shot progress/cancellation lifecycle. */
-  void runOneShotOperation(
-      OneShotOperation operation,
-      std::function<void(colorscreen::progress_info *)> worker);
 
   /** Detect an initial basis; optionally continue with automatic point finding.
       The continuation belongs to this request, never to mutable window state. */
@@ -837,6 +844,9 @@ private:
   std::optional<colorscreen::mtf_parameters> m_mtfFitFailureInputs;
   double m_mtfFitRms = -1;
   bool m_mtfFitRunning = false;
+  // Request identity prevents a cancelled old fit from clearing provenance for
+  // a newer fit after parameter/image replacement.
+  std::weak_ptr<colorscreen::progress_info> m_mtfFitProgress;
   
   // One-shot background threads that intentionally publish intermediate
   // results (misregistered finetune, adaptive sharpening, etc.).

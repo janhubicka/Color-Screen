@@ -368,15 +368,49 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   Beta smoke covers missing/pre-cancelled helper inputs; workspace churn covers
   both production cancellation paths, late approval after input restoration,
   prompt supersession, task-row cleanup, and exact Apply/Undo/Redo state.
+  Slanted-edge measurement in an external reference view now also enters the
+  owning document's one-shot queue. The old independent watcher could restore
+  a whole stale `ParameterState` and had no registered Cancel control. Reference
+  batches now append only their measurements, after checking the source scan,
+  reference scan, complete document snapshot and live request ownership. All
+  requested channels must succeed before any are appended. Closing/reloading a
+  reference cancels its own progress handle, not a newer document operation;
+  old completions cannot reset a newer request's controls. The start callback
+  exposes that request-local progress handle and the lifecycle entry point is
+  shared with guarded secondary-view callers. Workspace churn exercises a real
+  synthetic RGB edge, batch failure, Undo/Redo, stale-result rejection, reload,
+  replacement, reference close and progress cleanup.
+  Measured-MTF model fitting now completes this group of simple final-result
+  migrations. Sharpness panels own only the editable setup dialog; the source
+  `MainWindow` owns computation, one-shot cancellation, the dedicated Cancel
+  row, Current/Stale/Failed provenance, result publication and the accepted
+  undo edit. The setup dialog itself is snapshot-bound, so accepting controls
+  copied from an older document state does not launch expensive obsolete work.
+  The former panel-local `TaskQueue` and the reference-view destructor repair
+  for abandoned fits are gone. An explicit request-progress identity prevents
+  a cancelled old completion from clearing a newer fit after external parameter
+  replacement, and a newer final-result operation cancels model fitting through
+  the same queue. Workspace churn covers a real successful objective evaluation,
+  exact Apply/Undo/Redo state, edit-and-restore cancellation, validator failure,
+  stale dialog acceptance, supersession and progress-row cleanup.
+  Geometry/color optimizer queues and workers that intentionally publish
+  intermediate results retain their separate lifecycle contracts; do not force
+  them through `OneShotOperation` merely to remove another queue.
 - Separate "enabled" from "applicable/visible" in helper APIs.  Greyed controls
   are useful when they teach a prerequisite; hidden controls are useful when a
   whole concept is meaningless for the current process.  A lambda called
   `enabledCheck` should not silently mean different things in different helper
   functions.  `ParameterPanel::setParameterApplicability()` now establishes
   this distinction for form rows and composes it with section folding; Screen
-  pattern rows and measured-MTF controls are the first users.  Continue moving
-  panel-specific visibility predicates to this API as the individual panels are
-  simplified.
+  pattern rows and measured-MTF controls were the first users. Both checkbox
+  helpers now follow the same enable-only `enabledCheck` contract as sliders,
+  enums and buttons. Image Layer's native-vs-simulated source choice uses explicit
+  row applicability instead of a direct `setVisible()` repair, while Geometry's
+  final-mirror prerequisite remains visible and disabled until screen geometry
+  exists. Lightweight and workspace smoke probes cover both checkbox helper
+  variants, row applicability metadata, and the visible-disabled transition.
+  Continue moving remaining panel-specific visibility predicates to this API as
+  the individual panels are simplified.
 
 ### P2 — maintenance refactoring
 

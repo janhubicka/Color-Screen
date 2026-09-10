@@ -12,6 +12,7 @@
 #include <QCoreApplication>
 #include <QDebug>
 #include <QDoubleSpinBox>
+#include <QDialog>
 #include <QEvent>
 #include <QFont>
 #include <QLabel>
@@ -35,6 +36,7 @@
 #include <QWidget>
 
 #include <atomic>
+#include <cmath>
 #include <functional>
 #include <memory>
 #include <utility>
@@ -60,6 +62,20 @@ struct WorkspaceChurnState {
   bool oneShotApplied = false;
   bool oneShotDone = false;
   std::atomic_bool oneShotSawCancellation{false};
+  QPointer<ImageViewWindow> reference;
+  std::unique_ptr<QTemporaryDir> referenceDirectory;
+  ParameterState beforeReference;
+  ParameterState referenceInputs;
+  int referenceUndoIndex = 0;
+  bool referenceReplacementDone = false;
+  std::shared_ptr<colorscreen::progress_info> referenceReplacementProgress;
+  std::vector<colorscreen::slanted_edge_parameters> referenceParameters;
+  ParameterState mtfFitBaseline;
+  ParameterState mtfFitExpected;
+  colorscreen::mtf_parameters mtfFitInput;
+  colorscreen::mtf_estimation_options mtfFitOptions;
+  int mtfFitUndoIndex = 0;
+  std::shared_ptr<colorscreen::progress_info> mtfFitCancelledProgress;
   std::function<void()> completed;
 };
 
@@ -367,6 +383,10 @@ QPushButton *imageLayerInfraredButton = inspector->findChild<QPushButton *>(
     QStringLiteral("ImageLayerSetByInfraredButton"));
 QToolButton *imageLayerToggle = inspector->findChild<QToolButton *>(
     QStringLiteral("SimulatedImageLayerToggle"));
+QCheckBox *imageLayerSourceChoice = inspector->findChild<QCheckBox *>(
+    QStringLiteral("ImageLayerUseSimulatedRgbCheck"));
+QCheckBox *finalMirrorCheck = inspector->findChild<QCheckBox *>(
+    QStringLiteral("GeometryFinalMirrorCheck"));
 QWidget *mtfUseMeasuredRow =
     mtfUseMeasured ? mtfUseMeasured->parentWidget() : nullptr;
 const bool hasMtfMeasurements =
@@ -523,6 +543,22 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
               "Workspace churn lost Image Layer applicability metadata"));
           return;
         }
+        const bool imageLayerSourceApplicable =
+            imageLayerImage && imageLayerImage->has_rgb() &&
+            imageLayerImage->has_grayscale_or_ir();
+        const QVariant imageLayerSourceApplicability =
+            imageLayerSourceChoice
+                ? imageLayerSourceChoice->property("parameterApplicable")
+                : QVariant();
+        if (!imageLayerSourceChoice ||
+            !imageLayerSourceApplicability.isValid() ||
+            imageLayerSourceApplicability.toBool() != imageLayerSourceApplicable ||
+            imageLayerSourceChoice->isHidden() == imageLayerSourceApplicable) {
+          fail(QStringLiteral(
+              "Image Layer source choice bypassed row applicability semantics"));
+          return;
+        }
+
         const bool imageLayerWasExpanded = imageLayerToggle->isChecked();
         imageLayerToggle->setChecked(false);
         if (!imageLayerInfraredButton->isHidden()) {
@@ -537,6 +573,37 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
           return;
         }
         imageLayerToggle->setChecked(imageLayerWasExpanded);
+
+        // enabledCheck must never mean visibility. Final orientation remains
+        // discoverable before screen geometry exists, but teaches the missing
+        // prerequisite by being disabled; configuring a valid basis enables it.
+        if (!finalMirrorCheck) {
+          fail(QStringLiteral("Workspace churn lost final mirror checkbox"));
+          return;
+        }
+        const ParameterState checkboxSemanticsBaseline =
+            first->documentStateSnapshot();
+        ParameterState withoutFinalGeometry = checkboxSemanticsBaseline;
+        withoutFinalGeometry.scrToImg.type = colorscreen::Dufay;
+        withoutFinalGeometry.scrToImg.mesh_trans = nullptr;
+        withoutFinalGeometry.scrToImg.coordinate1 = {0, 0};
+        withoutFinalGeometry.scrToImg.coordinate2 = {0, 0};
+        first->applyState(withoutFinalGeometry);
+        if (finalMirrorCheck->isHidden() || finalMirrorCheck->isEnabled()) {
+          fail(QStringLiteral(
+              "Checkbox prerequisite hid final orientation instead of disabling it"));
+          return;
+        }
+        ParameterState withFinalGeometry = withoutFinalGeometry;
+        withFinalGeometry.scrToImg.coordinate1 = {10, 0};
+        withFinalGeometry.scrToImg.coordinate2 = {0, 10};
+        first->applyState(withFinalGeometry);
+        if (finalMirrorCheck->isHidden() || !finalMirrorCheck->isEnabled()) {
+          fail(QStringLiteral(
+              "Checkbox prerequisite did not enable final orientation"));
+          return;
+        }
+        first->applyState(checkboxSemanticsBaseline);
 
         if (!redStripWidth || !greenStripWidth ||
             redStripWidth->property("parameterKey").toString() !=
@@ -914,7 +981,10 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         oneShotSmoke.description = QStringLiteral("One-shot cancellation smoke");
         oneShotSmoke.progressTitle = QStringLiteral("One-shot progress smoke");
         oneShotSmoke.prerequisites = [first]() { return first != nullptr; };
-        oneShotSmoke.onStart = [state]() { state->oneShotStarted = true; };
+        oneShotSmoke.onStart = [state](
+            std::shared_ptr<colorscreen::progress_info>) {
+          state->oneShotStarted = true;
+        };
         oneShotSmoke.resultValid = []() { return true; };
         oneShotSmoke.applyResult = [state]() { state->oneShotApplied = true; };
         oneShotSmoke.onDone = [state]() { state->oneShotDone = true; };
@@ -1203,6 +1273,509 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
           return;
         }
         undo->undo();
+
+        // A small Gaussian edge uses the same construction as the library's
+        // blur-range regression, not an external image or a mocked result.
+        state->beforeReference = first->getCurrentState();
+        state->referenceDirectory = std::make_unique<QTemporaryDir>();
+        colorscreen::image_data edge;
+        if (!state->referenceDirectory->isValid() ||
+            !edge.set_dimensions(256, 192, true, false)) {
+          fail(QStringLiteral("Could not allocate reference MTF smoke fixture"));
+          return;
+        }
+        edge.maxval = 65535;
+        const double angle = 5.0 * std::acos(-1.0) / 180.0;
+        for (int y = 0; y < edge.height; ++y)
+          for (int x = 0; x < edge.width; ++x) {
+            const double distance = (x - edge.width / 2.0) * std::cos(angle) +
+                                    (y - edge.height / 2.0) * std::sin(angle);
+            const auto value = static_cast<uint16_t>(std::lround(
+                10000 + 20000 * (1 + std::erf(distance / std::sqrt(2.0)))));
+            edge.put_rgb_pixel(x, y, {value, value, value});
+          }
+        const QString path = state->referenceDirectory->filePath(
+            QStringLiteral("reference-edge.tif"));
+        if (!edge.save_tiff(path.toUtf8().constData())) {
+          fail(QStringLiteral("Could not write reference MTF smoke fixture"));
+          return;
+        }
+        state->reference = app.createSlantedEdgeReference(first, path, true);
+        schedule(200, 50, 200);
+        return;
+      }
+
+      case 200: {
+        ImageViewWindow *reference = state->reference.data();
+        if (!reference || reference->m_referenceLoadPending ||
+            !reference->sharedImageData()) {
+          retryOrFail(QStringLiteral("Reference MTF smoke image did not load"));
+          return;
+        }
+        state->referenceInputs = state->beforeReference;
+        state->referenceInputs.rparams = colorscreen::render_parameters();
+        state->referenceInputs.rparams.gamma = 1;
+        state->referenceInputs.rparams.scan_mirror = state->expectedFirstScanMirror;
+        first->applyState(state->referenceInputs);
+        state->referenceUndoIndex = first->m_undoStack->index();
+        for (int channel = 0; channel < 3; ++channel) {
+          colorscreen::slanted_edge_parameters parameters;
+          parameters.channel = channel;
+          parameters.wavelength = 550;
+          parameters.same_capture = channel != 0;
+          parameters.name = "Reference smoke " + std::to_string(channel);
+          parameters.source_filename = reference->referenceFile().toUtf8().toStdString();
+          state->referenceParameters.push_back(parameters);
+        }
+        const auto area = reference->sharedImageData()->get_area();
+        reference->startReferenceMtfMeasurement(area, {});
+        if (!reference->m_referenceMtfProgress.expired()) {
+          fail(QStringLiteral("Empty reference batch started work"));
+          return;
+        }
+        reference->startReferenceMtfMeasurement(area, state->referenceParameters);
+        auto progress = reference->m_referenceMtfProgress.lock();
+        int progressEntries = 0;
+        for (const ProgressEntry &entry : first->m_activeProgresses)
+          if (entry.info == progress && entry.userVisible && entry.row &&
+              entry.rowActionButton)
+            ++progressEntries;
+        if (!progress || !first->m_oneShotOperationQueue.hasActiveTasks() ||
+            progressEntries != 1) {
+          fail(QStringLiteral("Reference MTF did not register one document-owned Cancel row"));
+          return;
+        }
+        schedule(201, 50, 400);
+        return;
+      }
+
+      case 201: {
+        ImageViewWindow *reference = state->reference.data();
+        if (!reference || !reference->m_referenceMtfProgress.expired()) {
+          retryOrFail(QStringLiteral("Reference MTF batch did not finish"));
+          return;
+        }
+        const ParameterState measured = first->getCurrentState();
+        const auto &curves = measured.rparams.sharpen.scanner_mtf.measurements;
+        ParameterState withoutCurves = measured;
+        withoutCurves.rparams.sharpen.scanner_mtf.measurements.clear();
+        if (curves.size() != 3 || withoutCurves != state->referenceInputs ||
+            first->m_undoStack->index() != state->referenceUndoIndex + 1 ||
+            !first->isDocumentModified()) {
+          fail(QStringLiteral("Reference MTF did not append one atomic undoable RGB batch"));
+          return;
+        }
+        for (int channel = 0; channel < 3; ++channel)
+          if (!curves[channel].size() || curves[channel].channel != channel ||
+              curves[channel].same_capture != (channel != 0) ||
+              curves[channel].source_filename !=
+                  state->referenceParameters[channel].source_filename ||
+              !curves[channel].has_spatial_metadata()) {
+            fail(QStringLiteral("Reference MTF lost channel grouping or ROI provenance"));
+            return;
+          }
+        first->m_undoStack->undo();
+        if (first->getCurrentState() != state->referenceInputs) {
+          fail(QStringLiteral("Undo reference MTF did not restore its exact inputs"));
+          return;
+        }
+        first->m_undoStack->redo();
+        if (first->getCurrentState() != measured) {
+          fail(QStringLiteral("Redo reference MTF did not restore its exact batch"));
+          return;
+        }
+        first->m_undoStack->undo();
+
+        reference->startReferenceMtfMeasurement(
+            reference->sharedImageData()->get_area(), state->referenceParameters);
+        auto progress = reference->m_referenceMtfProgress.lock();
+        ParameterState edited = state->referenceInputs;
+        edited.rparams.brightness += 0.125;
+        first->applyState(edited);
+        first->applyState(state->referenceInputs);
+        if (!progress || !progress->pool_cancel()) {
+          fail(QStringLiteral("Document edit did not cancel reference MTF"));
+          return;
+        }
+        schedule(202, 50, 400);
+        return;
+      }
+
+      case 202: {
+        ImageViewWindow *reference = state->reference.data();
+        if (!reference || !reference->m_referenceMtfProgress.expired()) {
+          retryOrFail(QStringLiteral("Stale reference MTF did not finish cleanup"));
+          return;
+        }
+        if (first->getCurrentState() != state->referenceInputs ||
+            reference->findChild<QMessageBox *>(QStringLiteral("ReferenceMtfError"))) {
+          fail(QStringLiteral("Restoring inputs resurrected a stale reference result or error"));
+          return;
+        }
+        // The first channel is valid. Failure in a later channel must discard it.
+        auto invalidBatch = state->referenceParameters;
+        invalidBatch[1].channel = 9;
+        reference->startReferenceMtfMeasurement(
+            reference->sharedImageData()->get_area(), std::move(invalidBatch));
+        schedule(203, 50, 400);
+        return;
+      }
+
+      case 203: {
+        ImageViewWindow *reference = state->reference.data();
+        if (!reference || !reference->m_referenceMtfProgress.expired()) {
+          retryOrFail(QStringLiteral("Failed reference batch did not finish cleanup"));
+          return;
+        }
+        auto *error = reference->findChild<QMessageBox *>(QStringLiteral("ReferenceMtfError"));
+        if (!error || first->getCurrentState() != state->referenceInputs ||
+            first->m_undoStack->index() != state->referenceUndoIndex) {
+          fail(QStringLiteral("Failed reference batch applied a partial channel group"));
+          return;
+        }
+        error->accept();
+        reference->startReferenceMtfMeasurement(
+            reference->sharedImageData()->get_area(), state->referenceParameters);
+        auto progress = reference->m_referenceMtfProgress.lock();
+        reference->reloadReferenceImage();
+        if (!progress || !progress->pool_cancel() ||
+            !reference->m_referenceMtfProgress.expired()) {
+          fail(QStringLiteral("Reference reload did not cancel its measurement"));
+          return;
+        }
+        schedule(204, 50, 400);
+        return;
+      }
+
+      case 204: {
+        ImageViewWindow *reference = state->reference.data();
+        if (!reference || reference->m_referenceLoadPending ||
+            first->m_oneShotOperationQueue.hasActiveTasks()) {
+          retryOrFail(QStringLiteral("Reference reload/cancellation did not settle"));
+          return;
+        }
+        if (first->getCurrentState() != state->referenceInputs) {
+          fail(QStringLiteral("Reloaded reference published its old measurement"));
+          return;
+        }
+        const auto area = reference->sharedImageData()->get_area();
+        reference->startReferenceMtfMeasurement(area, state->referenceParameters);
+        auto oldProgress = reference->m_referenceMtfProgress.lock();
+        reference->startReferenceMtfMeasurement(area, state->referenceParameters);
+        auto newProgress = reference->m_referenceMtfProgress.lock();
+        if (!oldProgress || !newProgress || oldProgress == newProgress ||
+            !oldProgress->pool_cancel() || newProgress->pool_cancel()) {
+          fail(QStringLiteral("Reference MTF replacement lost request-local cancellation"));
+          return;
+        }
+        schedule(205, 50, 400);
+        return;
+      }
+
+      case 205: {
+        ImageViewWindow *reference = state->reference.data();
+        if (!reference || !reference->m_referenceMtfProgress.expired() ||
+            first->m_oneShotOperationQueue.hasActiveTasks()) {
+          retryOrFail(QStringLiteral("Replacement reference MTF did not settle"));
+          return;
+        }
+        if (first->getCurrentState().rparams.sharpen.scanner_mtf.measurements.size() != 3) {
+          fail(QStringLiteral("Superseded reference MTF published or reset the newer request"));
+          return;
+        }
+        first->m_undoStack->undo();
+        if (first->getCurrentState() != state->referenceInputs) {
+          fail(QStringLiteral("Replacement reference MTF did not form one undo step"));
+          return;
+        }
+        reference->startReferenceMtfMeasurement(
+            reference->sharedImageData()->get_area(), state->referenceParameters);
+        MainWindow::OneShotOperation replacement;
+        replacement.description = QStringLiteral("Reference cancellation isolation smoke");
+        replacement.onStart = [state](
+            std::shared_ptr<colorscreen::progress_info> progress) {
+          state->referenceReplacementProgress = progress;
+        };
+        replacement.onDone = [state]() { state->referenceReplacementDone = true; };
+        first->runOneShotOperation(std::move(replacement),
+                                   [](colorscreen::progress_info *) {});
+        reference->cancelReferenceMtfMeasurement();
+        if (!state->referenceReplacementProgress ||
+            state->referenceReplacementProgress->pool_cancel()) {
+          fail(QStringLiteral("Reference cancellation stopped another document request"));
+          return;
+        }
+        schedule(206, 50, 400);
+        return;
+      }
+
+      case 206: {
+        ImageViewWindow *reference = state->reference.data();
+        if (!reference || !state->referenceReplacementDone) {
+          retryOrFail(QStringLiteral("Unrelated replacement did not finish"));
+          return;
+        }
+        reference->startReferenceMtfMeasurement(
+            reference->sharedImageData()->get_area(), state->referenceParameters);
+        auto progress = reference->m_referenceMtfProgress.lock();
+        if (!app.closeView(reference) || !progress || !progress->pool_cancel()) {
+          fail(QStringLiteral("Closing the reference did not cancel its measurement"));
+          return;
+        }
+        schedule(207, 50, 400);
+        return;
+      }
+
+      case 207: {
+        if (state->reference || first->m_oneShotOperationQueue.hasActiveTasks()) {
+          retryOrFail(QStringLiteral("Closed reference work did not settle"));
+          return;
+        }
+        if (first->getCurrentState() != state->referenceInputs) {
+          fail(QStringLiteral("Closed reference published a late measurement"));
+          return;
+        }
+        for (const ProgressEntry &entry : first->m_activeProgresses)
+          if (entry.title == QStringLiteral("Reference MTF measurement")) {
+            fail(QStringLiteral("Reference MTF left a stale progress row"));
+            return;
+          }
+        first->applyState(state->beforeReference);
+
+        // Measured-MTF model fitting is now one document-owned final-result
+        // operation. Use a tiny explicit no-variable empirical fit so the
+        // smoke exercises real validation/objective/publication without
+        // spending time in an optimizer. The dialog's edited sigma makes the
+        // accepted result a visible, undoable state change.
+        state->mtfFitBaseline = state->beforeReference;
+        colorscreen::mtf_parameters &baselineMtf =
+            state->mtfFitBaseline.rparams.sharpen.scanner_mtf;
+        baselineMtf = colorscreen::mtf_parameters();
+        baselineMtf.model = colorscreen::mtf_model::empirical_fallback;
+        baselineMtf.sigma = 0.125;
+        baselineMtf.blur_diameter = 1.0;
+        baselineMtf.measured_mtf_idx = -1;
+        colorscreen::mtf_measurement curve;
+        curve.name = "Workspace MTF fit smoke";
+        curve.channel = 1;
+        curve.add_value(0.0, 100.0);
+        curve.add_value(0.25, 78.0);
+        curve.add_value(0.5, 52.0);
+        baselineMtf.measurements.push_back(curve);
+        first->applyState(state->mtfFitBaseline);
+
+        state->mtfFitInput = baselineMtf;
+        state->mtfFitInput.sigma = 0.25;
+        state->mtfFitOptions = colorscreen::mtf_estimation_options();
+        state->mtfFitOptions.model = colorscreen::mtf_model::empirical_fallback;
+        state->mtfFitExpected = state->mtfFitBaseline;
+        state->mtfFitExpected.rparams.sharpen.scanner_mtf = state->mtfFitInput;
+        state->mtfFitUndoIndex = first->m_undoStack->index();
+        if (!first->requestMtfModelFit(state->mtfFitBaseline, state->mtfFitInput,
+                                      state->mtfFitOptions, 0) ||
+            !first->m_mtfFitRunning || first->m_mtfFitProgress.expired()) {
+          fail(QStringLiteral("Measured-MTF model fit did not start as a document operation"));
+          return;
+        }
+        int fitRows = 0;
+        for (const ProgressEntry &entry : first->m_activeProgresses)
+          if (entry.title == QStringLiteral("MTF model fit")) {
+            ++fitRows;
+            if (!entry.userVisible || !entry.row || !entry.rowActionButton) {
+              fail(QStringLiteral("MTF model fit lost its dedicated Cancel row"));
+              return;
+            }
+          }
+        if (fitRows != 1) {
+          fail(QStringLiteral("MTF model fit registered duplicate/missing progress rows"));
+          return;
+        }
+        schedule(208, 50, 200);
+        return;
+      }
+
+      case 208: {
+        if (first->m_mtfFitRunning ||
+            first->m_oneShotOperationQueue.hasActiveTasks()) {
+          retryOrFail(QStringLiteral("Measured-MTF model fit did not finish"));
+          return;
+        }
+        auto *resultDialog = first->findChild<QMessageBox *>(
+            QStringLiteral("MtfFitResultDialog"));
+        if (!resultDialog || first->getCurrentState() != state->mtfFitExpected ||
+            first->m_undoStack->index() != state->mtfFitUndoIndex + 1 ||
+            !first->m_mtfFitBaseline ||
+            !first->m_mtfFitBaseline->fit_inputs_equal_p(state->mtfFitInput) ||
+            first->m_mtfFitRms < 0 ||
+            !first->mtfCalibrationSummary().contains(QStringLiteral("model current"))) {
+          fail(QStringLiteral("Successful measured-MTF fit lost state, provenance, or Undo"));
+          return;
+        }
+        resultDialog->accept();
+        first->m_undoStack->undo();
+        if (first->getCurrentState() != state->mtfFitBaseline ||
+            first->m_undoStack->index() != state->mtfFitUndoIndex ||
+            !first->mtfCalibrationSummary().contains(QStringLiteral("model stale"))) {
+          fail(QStringLiteral("Undo measured-MTF fit did not restore its exact baseline"));
+          return;
+        }
+        first->m_undoStack->redo();
+        if (first->getCurrentState() != state->mtfFitExpected ||
+            !first->mtfCalibrationSummary().contains(QStringLiteral("model current"))) {
+          fail(QStringLiteral("Redo measured-MTF fit did not restore its fitted model"));
+          return;
+        }
+        first->m_undoStack->undo();
+
+        // Editing and then restoring the exact inputs must not resurrect a
+        // completion that was cancelled while those inputs were stale.
+        if (!first->requestMtfModelFit(state->mtfFitBaseline, state->mtfFitInput,
+                                       state->mtfFitOptions, 0)) {
+          fail(QStringLiteral("Could not start stale measured-MTF fit smoke"));
+          return;
+        }
+        state->mtfFitCancelledProgress = first->m_mtfFitProgress.lock();
+        ParameterState edited = state->mtfFitBaseline;
+        edited.rparams.brightness += 0.125;
+        first->applyState(edited);
+        first->applyState(state->mtfFitBaseline);
+        if (!state->mtfFitCancelledProgress ||
+            !state->mtfFitCancelledProgress->pool_cancel()) {
+          fail(QStringLiteral("Document edit did not cancel measured-MTF fitting"));
+          return;
+        }
+        schedule(209, 50, 200);
+        return;
+      }
+
+      case 209: {
+        if (first->m_mtfFitRunning ||
+            first->m_oneShotOperationQueue.hasActiveTasks()) {
+          retryOrFail(QStringLiteral("Cancelled measured-MTF fit did not clean up"));
+          return;
+        }
+        if (first->getCurrentState() != state->mtfFitBaseline ||
+            first->findChild<QMessageBox *>(QStringLiteral("MtfFitResultDialog")) ||
+            first->findChild<QMessageBox *>(QStringLiteral("MtfFitErrorDialog"))) {
+          fail(QStringLiteral("Restoring inputs resurrected a cancelled measured-MTF fit"));
+          return;
+        }
+        for (const ProgressEntry &entry : first->m_activeProgresses)
+          if (entry.title == QStringLiteral("MTF model fit")) {
+            fail(QStringLiteral("Cancelled measured-MTF fit left a stale progress row"));
+            return;
+          }
+
+        // A validation failure is a completed current request: record failure
+        // provenance and report it, but leave the document and Undo stack alone.
+        colorscreen::mtf_estimation_options invalid = state->mtfFitOptions;
+        invalid.include_measurements = {false};
+        if (!first->requestMtfModelFit(state->mtfFitBaseline, state->mtfFitInput,
+                                       invalid, 0)) {
+          fail(QStringLiteral("Could not start invalid measured-MTF fit smoke"));
+          return;
+        }
+        schedule(210, 50, 200);
+        return;
+      }
+
+      case 210: {
+        if (first->m_mtfFitRunning ||
+            first->m_oneShotOperationQueue.hasActiveTasks()) {
+          retryOrFail(QStringLiteral("Failed measured-MTF fit did not settle"));
+          return;
+        }
+        auto *errorDialog = first->findChild<QMessageBox *>(
+            QStringLiteral("MtfFitErrorDialog"));
+        if (!errorDialog || first->getCurrentState() != state->mtfFitBaseline ||
+            first->m_undoStack->index() != state->mtfFitUndoIndex ||
+            !first->m_mtfFitFailureInputs ||
+            !first->m_mtfFitFailureInputs->fit_inputs_equal_p(
+                state->mtfFitBaseline.rparams.sharpen.scanner_mtf) ||
+            !first->mtfCalibrationSummary().contains(QStringLiteral("fit failed"))) {
+          fail(QStringLiteral("Failed measured-MTF fit changed state or lost failure provenance"));
+          return;
+        }
+        errorDialog->accept();
+
+        // Setup-dialog acceptance is snapshot-bound too: a document edit while
+        // the dialog is open must reject the old settings before any worker starts.
+        QToolButton *scannerProperties = first->m_sharpnessPanel
+            ? first->m_sharpnessPanel->findChild<QToolButton *>(
+                  QStringLiteral("ScannerCameraPropertiesToggle"))
+            : nullptr;
+        if (scannerProperties && !scannerProperties->isChecked())
+          scannerProperties->click();
+        QPushButton *fitButton = first->m_sharpnessPanel
+            ? first->m_sharpnessPanel->findChild<QPushButton *>(
+                  QStringLiteral("MtfFitButton"))
+            : nullptr;
+        if (!fitButton || !fitButton->isEnabled()) {
+          fail(QStringLiteral("Measured-MTF fit button is unavailable for stale-dialog smoke"));
+          return;
+        }
+        fitButton->click();
+        QDialog *fitDialog = first->m_sharpnessPanel->findChild<QDialog *>(
+            QStringLiteral("MtfFitDialog"));
+        if (!fitDialog) {
+          fail(QStringLiteral("Measured-MTF fit dialog did not open"));
+          return;
+        }
+        ParameterState edited = state->mtfFitBaseline;
+        edited.rparams.brightness += 0.25;
+        first->applyState(edited);
+        fitDialog->accept();
+        first->applyState(state->mtfFitBaseline);
+        auto *staleDialog = first->m_sharpnessPanel->findChild<QMessageBox *>(
+            QStringLiteral("MtfFitStaleDialog"));
+        if (!staleDialog || first->m_mtfFitRunning ||
+            first->m_oneShotOperationQueue.hasActiveTasks()) {
+          fail(QStringLiteral("Stale measured-MTF setup dialog started background work"));
+          return;
+        }
+        staleDialog->accept();
+
+        // A newer final-result operation must supersede a model fit through the
+        // same shared queue, without publishing a late result or error.
+        if (!first->requestMtfModelFit(state->mtfFitBaseline, state->mtfFitInput,
+                                       state->mtfFitOptions, 0)) {
+          fail(QStringLiteral("Could not start measured-MTF supersession smoke"));
+          return;
+        }
+        auto fitProgress = first->m_mtfFitProgress.lock();
+        MainWindow::OneShotOperation replacement;
+        replacement.description = QStringLiteral("Supersede MTF model fit smoke");
+        first->runOneShotOperation(std::move(replacement),
+                                   [](colorscreen::progress_info *) {});
+        if (!fitProgress || !fitProgress->pool_cancel()) {
+          fail(QStringLiteral("New final-result operation did not cancel MTF model fit"));
+          return;
+        }
+        schedule(211, 50, 200);
+        return;
+      }
+
+      case 211: {
+        if (first->m_mtfFitRunning ||
+            first->m_oneShotOperationQueue.hasActiveTasks()) {
+          retryOrFail(QStringLiteral("Superseded measured-MTF fit did not clean up"));
+          return;
+        }
+        if (first->getCurrentState() != state->mtfFitBaseline ||
+            first->findChild<QMessageBox *>(QStringLiteral("MtfFitResultDialog")) ||
+            first->findChild<QMessageBox *>(QStringLiteral("MtfFitErrorDialog"))) {
+          fail(QStringLiteral("Superseded measured-MTF fit published a late result"));
+          return;
+        }
+        for (const ProgressEntry &entry : first->m_activeProgresses)
+          if (entry.title == QStringLiteral("MTF model fit")) {
+            fail(QStringLiteral("Superseded measured-MTF fit left a progress row"));
+            return;
+          }
+
+        first->applyState(state->beforeReference);
+        state->referenceDirectory.reset();
+        workspace->activateDocument(first);
         workspace->cascadeDocuments();
         schedule(2, 50, 40);
         return;

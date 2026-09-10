@@ -167,6 +167,31 @@ presentation window becomes the dock host. This avoids nested `QMainWindow` dock
 ownership without reintroducing panel-specific wiring. **Reload and demosaic** reloads both the source scan and every associated
 slanted-edge reference from its own filename using the current demosaic mode.
 
+Reference-image slanted-edge measurements use the source document's public
+`runOneShotOperation()` lifecycle. The reference supplies guarded GUI callbacks
+and validates both scan identities plus the complete document snapshot. The
+`onStart` callback receives the queue's progress handle; retain it weakly in the
+view so close/reload can cancel that request without cancelling a newer task.
+Only the owning request may reset the measurement controls on completion. The
+worker owns immutable scan/parameter snapshots and publishes a complete channel
+batch or nothing. Failure messages belong in the gated apply callback, not in
+unconditional cleanup, and must be parent-owned/asynchronous. Never use a
+reference-local watcher to apply a captured whole document state.
+
+Measured-MTF **model fitting** is likewise a source-document final-result
+operation. `SharpnessPanel` owns only `MTFFitDialog`; acceptance is valid only
+for the complete `ParameterState` from which the dialog was opened. The panel
+forwards immutable fit inputs/options to `MainWindow`, which owns the one-shot
+request, dedicated Cancel row, fitting provenance, success/failure dialogs, and
+accepted Undo edit. Result dialogs may retain a guarded initiating panel solely
+as presentation ownership; that widget must never gate result publication or
+worker lifetime. Do not add a fit queue back to individual Sharpness panels:
+there may be both primary and reference panels, but there is exactly one model
+fit lifecycle per document. Closing a reference view must not clear or cancel a
+fit that has already captured stored measurement curves. Request-local progress
+identity is required when resetting fit provenance so a cancelled old completion
+cannot clear a newer request after external parameter replacement.
+
 **Window → New View** creates another MDI view of the same document. Ordinary
 views present the same complete Navigation + parameter-panel inspector as the
 primary view; the document owns one inspector instance and the active ordinary
@@ -291,7 +316,7 @@ Tasks that run in the background and report a final result (or series of interme
 - **When to Use**: Computations that should work with the freshest data; if the data changes significantly, the old task should be cancelled and a new one started.
 - **Implementation**: Can use `QThread + moveToThread` (if custom signal/slot communication is needed) or `QtConcurrent::run` (for simple functional tasks).
 - **Examples**: FinetuneWorker, DetectScreenWorker, FlatFieldWorker, FocusAnalysisWorker, AdaptiveSharpeningWorker, area-based computations (white balance, auto levels).
-- **Behavior**: Tracked via `progress_info` for manual or automatic cancellation. `MainWindow::OneShotOperation` is the shared final-result lifecycle for simple document operations: it records prerequisites, a progress description, start/cleanup UI callbacks, a final result-validation gate, and the apply callback. These operations are replaceable: starting a new one cancels the previous request immediately, and TaskQueue newest-request ownership is an additional publication gate. The first migrated users are area-based parameter computations and flat-field analysis. Area computations validate the captured image pointer and complete `ParameterState` snapshot before publishing, so a stale whole-state result cannot overwrite an intervening edit. Flat-field analysis, point-based focus analysis, single-area registration finetune, and final-result screen-type detection are plain synchronous helpers executed by this lifecycle; none owns a QObject thread or generation counter. Their publication gates require the captured image and relevant document snapshot to remain current. Coordinate autodetection and refinement use the same lifecycle too; the optional post-detection point-finding continuation is request-local. A non-empty `OneShotOperation::progressTitle` retains a dedicated Cancel row, replacing rather than duplicating TaskQueue's ordinary progress entry before dispatch. Coordinate refinement must construct the new state before calling `changeParameters()`; mutating the live coordinates first makes that setter see a no-op and loses Undo. Screen detection additionally keeps its asynchronous confirmation prompt under the same ownership rule: a document edit or newer final-result action dismisses an obsolete prompt before it can publish. Custom `QThread` workers that emit intermediate results, such as `FinetuneMisregisteredWorker`, keep their explicit wiring until their interfaces can use the same policy cleanly.
+- **Behavior**: Tracked via `progress_info` for manual or automatic cancellation. `MainWindow::OneShotOperation` is the shared final-result lifecycle for simple document operations: it records prerequisites, a progress description, start/cleanup UI callbacks, a final result-validation gate, and the apply callback. These operations are replaceable: starting a new one cancels the previous request immediately, and TaskQueue newest-request ownership is an additional publication gate. The first migrated users are area-based parameter computations and flat-field analysis. Area computations validate the captured image pointer and complete `ParameterState` snapshot before publishing, so a stale whole-state result cannot overwrite an intervening edit. Flat-field analysis, point-based focus analysis, single-area registration finetune, and final-result screen-type detection are plain synchronous helpers executed by this lifecycle; none owns a QObject thread or generation counter. Their publication gates require the captured image and relevant document snapshot to remain current. Coordinate autodetection and refinement use the same lifecycle too; the optional post-detection point-finding continuation is request-local. A non-empty `OneShotOperation::progressTitle` retains a dedicated Cancel row, replacing rather than duplicating TaskQueue's ordinary progress entry before dispatch. Coordinate refinement must construct the new state before calling `changeParameters()`; mutating the live coordinates first makes that setter see a no-op and loses Undo. Screen detection additionally keeps its asynchronous confirmation prompt under the same ownership rule: a document edit or newer final-result action dismisses an obsolete prompt before it can publish. Automatic focus-area discovery/fitting, external-reference MTF measurement, and measured-MTF model fitting also use this lifecycle. The model-fit setup dialog remains panel-local, but computation/provenance/publication are document-owned so primary and reference inspectors cannot create competing fit queues. Custom `QThread` workers that emit intermediate results, such as `FinetuneMisregisteredWorker`, keep their explicit wiring until their interfaces can use the same policy cleanly.
 
 ### 3. Independent Exports (Render to File)
 - **When to Use**: Tasks that are independent of ongoing UI parameter tweaks once started and should run to completion.
@@ -613,7 +638,7 @@ precise numeric entry.
 1. **Aesthetics**: Prefer palette/theme-aware standard Qt presentation and consistent spacing. Use custom styling only where it adds functional value (for example wrapping inspector navigation or data-semantic charts).
 2. **Responsiveness**: Always use background workers for any task taking > 50ms.
 3. **Helpfulness**: Always provide tooltips for parameters using the `tooltip` argument in `ParameterPanel` helpers.
-4. **Validation**: Use `enabledCheck` when a control should stay visible but temporarily unavailable because a prerequisite is missing. Use `setParameterApplicability()` when the control's concept does not apply to the current image/process. For rows inside `addSeparator()` sections, never repair logical visibility with a direct `setVisible()` plus a section-toggle callback; section folding must compose with applicability automatically.
+4. **Validation**: Use `enabledCheck` when a control should stay visible but temporarily unavailable because a prerequisite is missing. This is now uniform across sliders, enums, buttons, and both checkbox helpers. Use `setParameterApplicability()` when the control's concept does not apply to the current image/process; do not reintroduce checkbox-specific hide-on-disable behavior. For rows inside `addSeparator()` sections, never repair logical visibility with a direct `setVisible()` plus a section-toggle callback; section folding must compose with applicability automatically.
 
 ---
 
