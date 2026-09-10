@@ -20,6 +20,11 @@ void ImageLayerPanel::setupUi() {
          "channel, use a weighted RGB simulation as the image layer instead. "
          "Leave this unchecked to use the native grayscale/infrared channel."));
   m_form->addRow(m_ignoreInfraredCheck);
+  setParameterApplicability(
+      m_ignoreInfraredCheck, [this](const ParameterState &) {
+        const auto img = m_imageGetter();
+        return img && img->has_rgb() && img->has_grayscale_or_ir();
+      });
 
   connect(m_ignoreInfraredCheck, &QCheckBox::toggled, this, [this](bool checked) {
     ParameterState s = m_stateGetter();
@@ -124,12 +129,7 @@ void ImageLayerPanel::setupUi() {
       [this, simulatedSection, enableSimulated]() {
         const auto img = m_imageGetter();
         const ParameterState state = m_stateGetter();
-        const bool hasRgb = img && img->has_rgb();
-        const bool hasNativeLayer = img && img->has_grayscale_or_ir();
-        const bool hasSourceChoice = hasRgb && hasNativeLayer;
         const bool simulatedActive = enableSimulated(state);
-        if (m_ignoreInfraredCheck)
-          m_ignoreInfraredCheck->setVisible(hasSourceChoice);
         if (simulatedSection)
           simulatedSection->setVisible(simulatedActive);
       });

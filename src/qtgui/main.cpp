@@ -1,6 +1,7 @@
 #include "ColorScreenApplication.h"
 #include "MainWindow.h"
 #include "MultiLineTabWidget.h"
+#include "ParameterPanel.h"
 #include "ImageViewWindow.h"
 #include "ImageWidget.h"
 #include "SharpnessPanel.h"
@@ -61,6 +62,15 @@ public:
   QPointF plotPoint(double x, double y) const { return plotToWidget(x, y); }
 };
 
+/** Expose checkbox helpers so their common enabled/applicable contract can be
+    checked without relying on a particular processing panel. */
+class CheckboxSemanticsProbe final : public ParameterPanel {
+public:
+  using ParameterPanel::ParameterPanel;
+  using ParameterPanel::addCheckboxParameter;
+  using ParameterPanel::addCheckboxWithReset;
+};
+
 /** Deliver one synthetic mouse event using Qt6's local/global constructor. */
 void sendPointerSmokeEvent(QWidget &target, QEvent::Type type, QPointF pos,
                            Qt::MouseButton button, Qt::MouseButtons buttons,
@@ -110,6 +120,42 @@ bool runBetaInvariantSmoke() {
   tabs.setCurrentIndex(secondTab);
   if (tabs.currentIndex() != secondTab)
     return fail("logically visible tab stayed unavailable under hidden ancestor");
+
+  // Checkbox enabledCheck must match the rest of ParameterPanel: a missing
+  // prerequisite disables a still-visible row. Logical disappearance is an
+  // explicit setParameterApplicability() decision, never an overloaded meaning
+  // of the helper argument.
+  ParameterState checkboxProbeState;
+  bool checkboxPrerequisite = false;
+  CheckboxSemanticsProbe checkboxProbe(
+      [&checkboxProbeState]() { return checkboxProbeState; },
+      [&checkboxProbeState](const ParameterState &state, const QString &,
+                            const QString &) { checkboxProbeState = state; },
+      []() { return std::shared_ptr<colorscreen::image_data>(); }, nullptr,
+      false);
+  auto checkboxEnabled = [&checkboxPrerequisite](const ParameterState &) {
+    return checkboxPrerequisite;
+  };
+  QCheckBox *plainCheckbox = checkboxProbe.addCheckboxParameter(
+      QStringLiteral("Plain checkbox"),
+      [](const ParameterState &state) { return state.rparams.scan_mirror; },
+      [](ParameterState &state, bool value) { state.rparams.scan_mirror = value; },
+      checkboxEnabled);
+  QCheckBox *resetCheckbox = checkboxProbe.addCheckboxWithReset(
+      QStringLiteral("Reset checkbox"),
+      [](const ParameterState &state) { return state.scrToImg.final_mirror; },
+      [](ParameterState &state, bool value) { state.scrToImg.final_mirror = value; },
+      [](ParameterState &state) { state.scrToImg.final_mirror = false; },
+      checkboxEnabled);
+  checkboxProbe.updateUI();
+  if (plainCheckbox->isHidden() || resetCheckbox->isHidden() ||
+      plainCheckbox->isEnabled() || resetCheckbox->isEnabled())
+    return fail("checkbox enabledCheck still changed visibility semantics");
+  checkboxPrerequisite = true;
+  checkboxProbe.updateUI();
+  if (plainCheckbox->isHidden() || resetCheckbox->isHidden() ||
+      !plainCheckbox->isEnabled() || !resetCheckbox->isEnabled())
+    return fail("checkbox enabledCheck did not restore enablement");
 
   // Focus analysis is now a plain background helper. Missing input must fail
   // synchronously rather than depending on QObject/QThread signal delivery.
