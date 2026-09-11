@@ -1,0 +1,26 @@
+name: Agent registration follow-up source export
+on:
+  push:
+    branches: [agent/qtgui-registration-followup-stage]
+    paths: [.github/workflows/agent-registration-followup-source.yml]
+permissions:
+  contents: read
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Verify base revision
+        run: |
+          test "$(git rev-parse HEAD^)" = fcf58687463a055dfb888e456fde6c71e2e9bb6d
+      - name: Pack exact source
+        run: |
+          git archive --format=tar.gz --prefix=Color-Screen/ fcf58687463a055dfb888e456fde6c71e2e9bb6d > colorscreen-main-fcf58687.tar.gz
+          sha256sum colorscreen-main-fcf58687.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: colorscreen-main-fcf58687
+          path: colorscreen-main-fcf58687.tar.gz
+          compression-level: 0
