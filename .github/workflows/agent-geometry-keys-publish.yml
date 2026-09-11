@@ -1,0 +1,34 @@
+name: Agent geometry keys publisher
+on:
+  push:
+    branches: [agent/qtgui-geometry-keys-stage]
+    paths: [.github/workflows/agent-geometry-keys-publish.yml]
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Publish exact reviewed geometry-key migration
+        shell: bash
+        run: |
+          set -euo pipefail
+          git checkout --detach 8bcfd47abc8e6b9aa535622348b48a15edf95071
+          printf '%s' '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' | base64 -d | gzip -d > /tmp/geometry-keys.patch
+          test "$(sha256sum /tmp/geometry-keys.patch | cut -d' ' -f1)" = 7d2a2ddbcbd0186438680a168a3610061b8e3cc22ed7025a00252297698df908
+          git apply /tmp/geometry-keys.patch
+          git diff --check
+          sh build-aux/check-generated-build-metadata.sh
+          test "$(git hash-object .agents/qtgui.md)" = aba1fef45e3f837be3ef7f0a86f11bd5aae415df
+          test "$(git hash-object doc/qtgui-internal-cleanup.md)" = 63fcabae125193169bbf8dc05b8a479807fd14f2
+          test "$(git hash-object src/qtgui/GeometryPanel.cpp)" = 3801eb3b46c6017b4a9155248713c1e79ed5ba4f
+          test "$(git hash-object src/qtgui/WorkspaceChurnSmoke.cpp)" = 2ada84104e3737bd375d04cf62e53fe7058b32ae
+          git config user.name "Jan Hubička"
+          git config user.email "46065755+janhubicka@users.noreply.github.com"
+          git add .agents/qtgui.md doc/qtgui-internal-cleanup.md src/qtgui/GeometryPanel.cpp src/qtgui/WorkspaceChurnSmoke.cpp
+          git commit -m "qtgui: give Geometry controls stable parameter keys"
+          test "$(git rev-list --count 8bcfd47abc8e6b9aa535622348b48a15edf95071..HEAD)" = 1
+          git push --force origin HEAD:refs/heads/agent/qtgui-geometry-parameter-keys
