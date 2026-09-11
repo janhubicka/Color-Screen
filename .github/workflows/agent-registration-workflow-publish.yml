@@ -1,0 +1,62 @@
+name: Agent registration workflow publisher
+on:
+  push:
+    branches: [agent/qtgui-registration-workflow-stage]
+    paths: [.github/workflows/agent-registration-workflow-publish.yml]
+permissions:
+  contents: write
+  packages: read
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    container:
+      image: ghcr.io/janhubicka/color-screen-ci:ubuntu-24.04
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Publish exact reviewed registration workflow change
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE=32dd528818e4fb35db3b7d3f94f8021ebe4a2347
+          FEATURE=agent/qtgui-registration-workflow-fallback
+          git merge-base --is-ancestor "$BASE" HEAD
+          base64 -d .agent-registration-workflow.patch.gz.b64 | gzip -d > /tmp/change.patch
+          echo '07e05336319ed18df8e39cf6e95a1a134b0256618f8e051734de57fad3befd96  /tmp/change.patch' | sha256sum -c -
+          git checkout -B "$FEATURE" "$BASE"
+          git apply --index /tmp/change.patch
+          cat > /tmp/expected-files <<'EOF'
+          .agents/qtgui.md
+          doc/qtgui-internal-cleanup.md
+          doc/qtgui-workflow-roadmap.md
+          src/libcolorscreen/include/solver-parameters.h
+          src/libcolorscreen/solver.C
+          src/libcolorscreen/unittests.C
+          src/qtgui/CapturePanel.cpp
+          src/qtgui/CapturePanel.h
+          src/qtgui/FinetuneMisregisteredWorker.cpp
+          src/qtgui/FinetuneMisregisteredWorker.h
+          src/qtgui/GeometryPanel.cpp
+          src/qtgui/GeometryPanel.h
+          src/qtgui/MainWindow.cpp
+          src/qtgui/ScreenPanel.cpp
+          src/qtgui/ScreenPanel.h
+          src/qtgui/WorkspaceChurnSmoke.cpp
+          EOF
+          git diff --cached --name-only | sort > /tmp/actual-files
+          diff -u /tmp/expected-files /tmp/actual-files
+          git diff --cached --check
+          sh build-aux/check-generated-build-metadata.sh
+          CXXFLAGS='-O2 -g -Wall -Wextra' CFLAGS='-O2 -g -Wall -Wextra' \
+            ./configure --enable-checking --disable-static-link
+          make -C src/libcolorscreen -j"$(nproc)" unittests
+          ./src/libcolorscreen/unittests registration_prune
+          git config user.name 'ChatGPT Agent'
+          git config user.email 'noreply@openai.com'
+          git commit -m 'qtgui: improve registration workflow and lens bootstrap'
+          test "$(git rev-parse HEAD^)" = "$BASE"
+          git push --force-with-lease origin "$FEATURE"
