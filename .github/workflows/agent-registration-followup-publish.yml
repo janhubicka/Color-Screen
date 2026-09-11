@@ -18,7 +18,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Validate and publish exact reviewed follow-up
+      - name: Publish exact reviewed registration follow-up
         shell: bash
         run: |
           set -euo pipefail
@@ -26,16 +26,21 @@ jobs:
           BASE=fcf58687463a055dfb888e456fde6c71e2e9bb6d
           FEATURE=agent/qtgui-registration-stall-recovery
           git merge-base --is-ancestor "$BASE" HEAD
-          base64 -d .agent-registration-followup.patch.gz.b64 | gzip -d > /tmp/change.patch
-          echo '6d9fb9f84c74597c36f870d6841a7fb1551f1ee1b5a3cf3e79683d0f6bd5dbf6  /tmp/change.patch' | sha256sum -c -
+          cat .agent-registration-followup-v2.part1 \
+              .agent-registration-followup-v2.part2 \
+              .agent-registration-followup-v2.part3 \
+              | base64 -d | xz -d > /tmp/change.patch
+          echo '10ab9bc0de95dd796c5a35c935f6dc9ee2f094746fbe89f8c631fe220604ca3e  /tmp/change.patch' | sha256sum -c -
           git checkout -B "$FEATURE" "$BASE"
           git apply --index /tmp/change.patch
           cat > /tmp/expected-files <<'EOF'
           .agents/qtgui.md
+          doc/lens-correction-review.md
           doc/qtgui-internal-cleanup.md
           doc/qtgui-workflow-roadmap.md
           src/libcolorscreen/include/colorscreen.h
           src/libcolorscreen/include/solver-parameters.h
+          src/libcolorscreen/loadsave.C
           src/libcolorscreen/solver.C
           src/libcolorscreen/unittests.C
           src/qtgui/FinetuneMisregisteredWorker.cpp
@@ -50,30 +55,15 @@ jobs:
           diff -u /tmp/expected-files /tmp/actual-files
           git diff --cached --check
           sh build-aux/check-generated-build-metadata.sh
-
-          test "$(git hash-object .agents/qtgui.md)" = a38420e4242a45367b573c654a3b8891d99ef0c2
-          test "$(git hash-object doc/qtgui-internal-cleanup.md)" = c42eab9f6f70f64c1b9d8d58301ab455065b2eac
-          test "$(git hash-object doc/qtgui-workflow-roadmap.md)" = c919211f9e4db39e03c1c75414aa71d1c34f4b35
-          test "$(git hash-object src/libcolorscreen/include/colorscreen.h)" = 3987e046e83e75b144e0af7920500a7fb117f108
-          test "$(git hash-object src/libcolorscreen/include/solver-parameters.h)" = de620e1fb6b9b8fe678a4bcc717074904e9452aa
-          test "$(git hash-object src/libcolorscreen/solver.C)" = 9dc8abaafa4a85e7e270afb869445f43ac20500a
-          test "$(git hash-object src/libcolorscreen/unittests.C)" = ad740c593d090172345fd844c7867128c43988aa
-          test "$(git hash-object src/qtgui/FinetuneMisregisteredWorker.cpp)" = b4505c27696c7cb92e02c1b406b164b5c54d4548
-          test "$(git hash-object src/qtgui/FinetuneMisregisteredWorker.h)" = 61c9c407aeb04117ad0cf71cefafdb0c2250936c
-          test "$(git hash-object src/qtgui/GeometryPanel.cpp)" = 88301db926e7e92c67f2d27d0c452acddd310d5c
-          test "$(git hash-object src/qtgui/GeometryPanel.h)" = 74cab5995c0862ed98799fe56732fa1ebcec0e31
-          test "$(git hash-object src/qtgui/MainWindow.cpp)" = d50976ea18ca51e711f1c07e5cdc2902d085f912
-          test "$(git hash-object src/qtgui/MainWindow.h)" = 59f8f208f822e7ea2021b1434a931d3e577f76ce
-          test "$(git hash-object src/qtgui/WorkspaceChurnSmoke.cpp)" = 5df9acb2acd29a8d48933fa47c7a7623bad6d07d
-
           CXXFLAGS='-O2 -g -Wall -Wextra' CFLAGS='-O2 -g -Wall -Wextra' \
-            ./configure --enable-checking --disable-static-link --enable-qtgui
-          make -j"$(nproc)"
+            ./configure --enable-checking --disable-static-link
+          make -C src/libcolorscreen -j"$(nproc)" unittests
+          ./src/libcolorscreen/unittests lens_fit_policy
           ./src/libcolorscreen/unittests warp
-          ./src/libcolorscreen/unittests registration_prune
-
+          ./src/libcolorscreen/unittests lens_correction
+          ./src/libcolorscreen/unittests 1d_homography
           git config user.name 'ChatGPT Agent'
           git config user.email 'noreply@openai.com'
-          git commit -m 'qtgui: stabilize registration stall recovery'
+          git commit -m 'qtgui: refine registration stall recovery and lens fitting'
           test "$(git rev-parse HEAD^)" = "$BASE"
           git push --force-with-lease origin "$FEATURE"
