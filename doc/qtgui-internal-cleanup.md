@@ -300,7 +300,12 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   such as `Denoise Mode`, `Strength`, `Patch Radius`, and `Search Radius`.
   Workspace churn drives the two real `Strength` spin boxes back-to-back and
   verifies that one Undo reverts only the later stage; this catches regression
-  to visible-text merge identity rather than merely checking metadata.
+  to visible-text merge identity rather than merely checking metadata. Geometry
+  is the second complete panel migration: persistent fit policy, scanner/camera
+  geometry, and final-orientation controls use `geometry.*` keys. Panel-local
+  **Auto fit geometry** and **Nonlinear corrections** request/presentation state
+  deliberately remain unkeyed; a parameter key must identify saved document
+  state rather than merely every widget produced by a parameter helper.
 - Prefer `QSignalBlocker` for temporary signal suppression. The first P1 cleanup
   converts the central `ParameterPanel` synchronization helpers and the simple
   refresh/update pairs in Capture, Screen, Geometry, Image Layer, Tiles, Color,

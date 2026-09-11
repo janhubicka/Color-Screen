@@ -420,6 +420,10 @@ QWidget *colorSpectralChartRow = inspector->findChild<QWidget *>(
     QStringLiteral("ColorSpectralChartRow"));
 QCheckBox *finalMirrorCheck = inspector->findChild<QCheckBox *>(
     QStringLiteral("GeometryFinalMirrorCheck"));
+QCheckBox *geometryAutoFitCheck = inspector->findChild<QCheckBox *>(
+    QStringLiteral("autoSolverBox"));
+QCheckBox *geometryNonlinearCheck = inspector->findChild<QCheckBox *>(
+    QStringLiteral("nonlinearBox"));
 QWidget *mtfUseMeasuredRow =
     mtfUseMeasured ? mtfUseMeasured->parentWidget() : nullptr;
 const bool hasMtfMeasurements =
@@ -706,6 +710,38 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
           return;
         }
         first->applyState(checkboxSemanticsBaseline);
+
+        // Geometry is the next complete stable-key panel after Screen. Only
+        // controls backed by ParameterState receive keys: Auto fit and the
+        // nonlinear fit-request toggle are panel/operation state and must not
+        // pretend to be persistent document parameters.
+        const QStringList geometryParameterKeys = {
+            QStringLiteral("geometry.fit.optimize_lens"),
+            QStringLiteral("geometry.fit.lens_center_distance"),
+            QStringLiteral("geometry.fit.optimize_tilt"),
+            QStringLiteral("geometry.scanner_type"),
+            QStringLiteral("geometry.final.rotation"),
+            QStringLiteral("geometry.final.mirror")};
+        for (const QString &key : geometryParameterKeys) {
+          if (!hasParameterKey(key)) {
+            fail(QStringLiteral(
+                     "Workspace churn lost Geometry parameter key %1")
+                     .arg(key));
+            return;
+          }
+        }
+        if (finalMirrorCheck->property("parameterKey").toString() !=
+                QStringLiteral("geometry.final.mirror") ||
+            !findParameterSpinBox(
+                QStringLiteral("geometry.fit.lens_center_distance")) ||
+            !findParameterSpinBox(QStringLiteral("geometry.final.rotation")) ||
+            !geometryAutoFitCheck || !geometryNonlinearCheck ||
+            geometryAutoFitCheck->property("parameterKey").isValid() ||
+            geometryNonlinearCheck->property("parameterKey").isValid()) {
+          fail(QStringLiteral(
+              "Geometry stable keys crossed the document/UI-state boundary"));
+          return;
+        }
 
         if (!redStripWidth || !greenStripWidth || !screenTypeCombo ||
             redStripWidth->property("parameterKey").toString() !=

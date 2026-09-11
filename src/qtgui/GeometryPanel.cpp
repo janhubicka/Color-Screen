@@ -165,11 +165,13 @@ void GeometryPanel::setupUi() {
       QStringLiteral("GeometryOptimizationMessage"));
   m_form->addRow(m_optimizationMessageLabel);
 
-  m_lensCb = addCheckboxWithReset("Optimize lens correction",
+  m_lensCb = addCheckboxWithReset(
+      "Optimize lens correction",
       [](const ParameterState &s){ return s.solver.optimize_lens; },
       [](ParameterState &s, bool v){ s.solver.optimize_lens = v; },
       [](ParameterState &s){ s.scrToImg.lens_correction = colorscreen::lens_warp_correction_parameters(); },
-      nullptr, "Include lens distortion parameters in the geometry fit.");
+      nullptr, "Include lens distortion parameters in the geometry fit.",
+      QStringLiteral("geometry.fit.optimize_lens"));
   connect(m_lensCb, &QCheckBox::toggled, this, triggerIfAuto);
 
   addDoubleParameter("Lens center distance", 0.0, 100.0,
@@ -184,18 +186,21 @@ void GeometryPanel::setupUi() {
       "preset (0.5) keeps the center in the central half of the capture; 1 "
       "allows it anywhere inside the image, and values above 1 allow it "
       "proportionally outside the image. Useful when a scanner image is a "
-      "crop far from the scanner lens optical axis.");
+      "crop far from the scanner lens optical axis.",
+      QStringLiteral("geometry.fit.lens_center_distance"));
 
   m_lensMessageLabel = new QLabel();
   configureDynamicStatusLabel(
       m_lensMessageLabel, QStringLiteral("GeometryLensMessage"));
   m_form->addRow(m_lensMessageLabel);
 
-  m_tiltCb = addCheckboxWithReset("Optimize tilt",
+  m_tiltCb = addCheckboxWithReset(
+      "Optimize tilt",
       [](const ParameterState &s){ return s.solver.optimize_tilt; },
       [](ParameterState &s, bool v){ s.solver.optimize_tilt = v; },
       [](ParameterState &s){ s.scrToImg.tilt_x = 0; s.scrToImg.tilt_y = 0; },
-      nullptr, "Include perspective tilt parameters in the geometry fit.");
+      nullptr, "Include perspective tilt parameters in the geometry fit.",
+      QStringLiteral("geometry.fit.optimize_tilt"));
   connect(m_tiltCb, &QCheckBox::toggled, this, triggerIfAuto);
 
   m_tiltMessageLabel = new QLabel();
@@ -219,10 +224,14 @@ void GeometryPanel::setupUi() {
       m_nonlinearMessageLabel, QStringLiteral("GeometryNonlinearMessage"));
   m_form->addRow(m_nonlinearMessageLabel);
 
-  addEnumParameter("Scanner/camera geometry", pretty_scanner_type_names,
+  addEnumParameter(
+      "Scanner/camera geometry", pretty_scanner_type_names,
       [](const ParameterState &s){ return (int)s.scrToImg.scanner_type; },
       [](ParameterState &s, int v){ s.scrToImg.scanner_type = (colorscreen::scanner_type)v; },
-      nullptr, "Select the physical movement model of your scanner or camera rig. This defines how the perspective and lens distortions affects the image.");
+      nullptr,
+      "Select the physical movement model of your scanner or camera rig. "
+      "This defines how the perspective and lens distortions affects the image.",
+      QStringLiteral("geometry.scanner_type"));
 
   addSeparator("Final image orientation");
   auto hasFinalGeometry = [](const ParameterState &s) {
@@ -235,14 +244,16 @@ void GeometryPanel::setupUi() {
       1.0, hasFinalGeometry, false,
       "Continuous rotation in degrees in the libcolorscreen final plane. "
       "Unlike scan rotation this is not restricted to 90-degree steps and is "
-      "saved in the parameter file.");
+      "saved in the parameter file.",
+      QStringLiteral("geometry.final.rotation"));
   QCheckBox *finalMirrorCheck = addCheckboxParameter(
       "Mirror final image",
       [](const ParameterState &s) { return s.scrToImg.final_mirror; },
       [](ParameterState &s, bool v) { s.scrToImg.final_mirror = v; },
       hasFinalGeometry,
       "Mirror the final-coordinate image horizontally before Final rotation. "
-      "This is part of geometry and is saved in the parameter file.");
+      "This is part of geometry and is saved in the parameter file.",
+      QStringLiteral("geometry.final.mirror"));
   finalMirrorCheck->setObjectName(QStringLiteral("GeometryFinalMirrorCheck"));
 
   // Ensure Finetune widget is separate from the geometry-fit group
