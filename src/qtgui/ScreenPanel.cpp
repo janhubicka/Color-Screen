@@ -279,6 +279,17 @@ void ScreenPanel::setupUi() {
       "screen type to be selected first.");
   detectButton->setObjectName(QStringLiteral("ScreenDetectButton"));
 
+  QPushButton *swapColorsButton = addButtonParameter(
+      "", "Swap screen colors", [this]() { emit alternateColorsRequested(); },
+      [](const ParameterState &state) {
+        return screen_has_regular_geometry_p(state.scrToImg.type) &&
+               screen_geometry_configured_p(state.scrToImg);
+      },
+      "Swap the symmetric screen-color assignment if the reconstructed colors "
+      "are implausible. This updates the screen coordinate interpretation and "
+      "stored registration points together.");
+  swapColorsButton->setObjectName(QStringLiteral("ScreenSwapColorsButton"));
+
   auto *detectionHint = new QLabel(this);
   detectionHint->setObjectName(QStringLiteral("ScreenDetectionHint"));
   detectionHint->setWordWrap(true);

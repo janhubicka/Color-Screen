@@ -22,6 +22,8 @@ signals:
   // Request discovery/refinement of a regular screen lattice. Stochastic
   // screen-colour detection is handled by the screen-detection render modes.
   void autodetectRequested();
+  // Request the alternate symmetric colour assignment for a configured lattice.
+  void alternateColorsRequested();
 
 private:
   void setupUi();

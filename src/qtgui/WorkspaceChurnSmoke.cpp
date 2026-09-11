@@ -4,6 +4,7 @@
 #include "ImageViewWindow.h"
 #include "MainWindow.h"
 #include "MultiLineTabWidget.h"
+#include "ScreenPanel.h"
 #include "WorkspaceWindow.h"
 
 #include <QAction>
@@ -384,6 +385,10 @@ QPushButton *mtfFitButton = inspector->findChild<QPushButton *>(
     QStringLiteral("MtfFitButton"));
 QPushButton *detectCoordinatesButton = inspector->findChild<QPushButton *>(
     QStringLiteral("DetectScreenCoordinatesButton"));
+QPushButton *screenSwapColorsButton = inspector->findChild<QPushButton *>(
+    QStringLiteral("ScreenSwapColorsButton"));
+QCheckBox *showRegistrationPointsBox = inspector->findChild<QCheckBox *>(
+    QStringLiteral("showRegistrationPointsBox"));
 QLabel *geometryOptimizationMessage = inspector->findChild<QLabel *>(
     QStringLiteral("GeometryOptimizationMessage"));
 QLabel *geometryLensMessage = inspector->findChild<QLabel *>(
@@ -920,6 +925,94 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         }
         first->applyState(coordinateGuardBaseline);
         first->statusBar()->clearMessage();
+
+        // Detect Screen now owns the regular-screen workflow. The old Capture
+        // "try luck" duplicate must stay gone, while screen-colour correction
+        // belongs next to Detect screen. Once geometry is current and the
+        // reconstruction mode is already selected, Workflow should explain
+        // point visibility/editing rather than asking the user to select that
+        // same mode again.
+        QPushButton *legacyTryLuck = nullptr;
+        for (QPushButton *button : inspector->findChildren<QPushButton *>()) {
+          if (button && button->text() ==
+                            QStringLiteral("Autodetect regular screen")) {
+            legacyTryLuck = button;
+            break;
+          }
+        }
+        if (legacyTryLuck || !screenSwapColorsButton ||
+            !showRegistrationPointsBox || !nextStepSummary ||
+            !first->m_screenPanel ||
+            !first->m_screenPanel->isAncestorOf(screenSwapColorsButton)) {
+          fail(QStringLiteral(
+              "Workspace churn lost the consolidated screen-registration workflow controls"));
+          return;
+        }
+
+        const ParameterState workflowBaseline = first->documentStateSnapshot();
+        const auto savedGeometryFitBaseline = first->m_geometryFitBaseline;
+        const auto savedGeometryFitFailure = first->m_geometryFitFailureInputs;
+        const auto savedGeometryFitPending = first->m_geometryFitPendingInputs;
+        const auto savedGeometryFitPendingMesh =
+            first->m_geometryFitPendingComputeMesh;
+        const auto savedRenderType = first->m_renderTypeParams.type;
+        const bool savedRegistrationVisibility =
+            first->m_imageWidget->registrationPointsVisible();
+
+        ParameterState workflowReady = workflowBaseline;
+        workflowReady.rparams.capture_type =
+            colorscreen::render_parameters::capture_transparency;
+        workflowReady.scrToImg.type = colorscreen::Paget;
+        workflowReady.scrToImg.center = {50, 50};
+        workflowReady.scrToImg.coordinate1 = {6, 0};
+        workflowReady.scrToImg.coordinate2 = {0, 6};
+        workflowReady.scrToImg.mesh_trans = nullptr;
+        workflowReady.solver.points.clear();
+        workflowReady.solver.add_point(
+            {40, 40}, {-1, -1}, colorscreen::solver_parameters::green);
+        workflowReady.solver.add_point(
+            {60, 40}, {1, -1}, colorscreen::solver_parameters::green);
+        workflowReady.solver.add_point(
+            {40, 60}, {-1, 1}, colorscreen::solver_parameters::green);
+        first->applyState(workflowReady);
+        first->m_geometryFitPendingInputs.reset();
+        first->m_geometryFitPendingComputeMesh.reset();
+        first->m_geometryFitFailureInputs.reset();
+        first->m_geometryFitBaseline = first->documentStateSnapshot();
+        first->m_renderTypeParams.type = colorscreen::render_type_interpolated;
+        first->m_imageWidget->setShowRegistrationPoints(false);
+        first->updateWorkflowSummary();
+
+        const QString hiddenPointGuidance = nextStepSummary->text();
+        if (hiddenPointGuidance.contains(QStringLiteral("choose Mode")) ||
+            !hiddenPointGuidance.contains(
+                QStringLiteral("Show Registration Points")) ||
+            !hiddenPointGuidance.contains(QStringLiteral("Select (S)")) ||
+            !hiddenPointGuidance.contains(QStringLiteral("Add Point (A)")) ||
+            !hiddenPointGuidance.contains(QStringLiteral("Swap screen colors")) ||
+            !screenSwapColorsButton->isEnabled()) {
+          fail(QStringLiteral(
+              "Workflow did not recognize the already-selected reconstruction mode or explain registration editing"));
+          return;
+        }
+
+        first->m_imageWidget->setShowRegistrationPoints(true);
+        QCoreApplication::processEvents();
+        if (!nextStepSummary->text().contains(QStringLiteral("hide it"))) {
+          fail(QStringLiteral(
+              "Workflow did not refresh registration-point visibility guidance"));
+          return;
+        }
+
+        first->m_geometryFitBaseline = savedGeometryFitBaseline;
+        first->m_geometryFitFailureInputs = savedGeometryFitFailure;
+        first->m_geometryFitPendingInputs = savedGeometryFitPending;
+        first->m_geometryFitPendingComputeMesh = savedGeometryFitPendingMesh;
+        first->m_renderTypeParams.type = savedRenderType;
+        first->applyState(workflowBaseline);
+        first->m_imageWidget->setShowRegistrationPoints(
+            savedRegistrationVisibility);
+        first->updateWorkflowSummary();
 
         // Exercise undo identity directly. Two edits deliberately use the
         // same human description: different keys must keep them separate,

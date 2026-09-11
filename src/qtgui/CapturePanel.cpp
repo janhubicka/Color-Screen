@@ -731,24 +731,6 @@ void CapturePanel::setupUi()
         }
     });
     
-    addButtonParameter("Try luck", "Autodetect regular screen", 
-        [this]() { emit autodetectRequested(); },
-        [this](const ParameterState &s) {
-            auto img = m_imageGetter();
-            if (!img)
-                return false;
-            const auto capture = s.rparams.get_capture_type(img.get());
-            if (!colorscreen::render_parameters::capture_has_screen_p(capture))
-              return false;
-            if (colorscreen::render_parameters::
-                    capture_requires_regular_screen_p(capture))
-              return colorscreen::screen_has_regular_geometry_p(
-                  s.scrToImg.type);
-            return colorscreen::screen_has_regular_geometry_p(s.scrToImg.type)
-                   || (s.scrToImg.type == colorscreen::NoScreen
-                       && img->has_rgb());
-        });
-
     // Initial update
     updateInfoLabels(m_stateGetter());
 

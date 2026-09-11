@@ -237,6 +237,29 @@ axis lock and coordinate-finetune actions are similarly scoped to the active
 manual tool. This keeps the normal path — autodetect, inspect/refine, add control
 points, fit/autosolve — visually linear while retaining a usable fallback.
 
+### Automatic registration obscured the result and could stall before lens fitting
+
+The combined **Detect screen** path used to arm **Add Point** after finding the
+initial lattice. Add Point deliberately turns the green registration overlay on,
+so a successful automatic run could finish on a reconstructed colour image that
+was almost completely covered by points. Detection now leaves the current canvas
+tool and overlay visibility alone. Workflow instead explains how to show/hide
+points and use Select/Add Point, recognizes an already-selected reconstruction
+mode, and points to **Screen -> Swap screen colors**. The redundant Digital
+Capture "try luck" detector is gone, and the swap action now lives with Screen
+detection rather than Geometry.
+
+Large lens-distorted scans also exposed a bootstrap problem: ordinary flood-fill
+can stall while the trusted point cloud is still too local for global lens
+parameters to be identifiable. Full-image automatic discovery may now make one
+private nonlinear-mesh pass when lens fitting is requested but lacks coverage.
+The mesh is only a search aid. Newly discovered points stay private until an
+ordinary/lens solve succeeds; only that speculative suffix is pruned against the
+final mapping, coverage is checked again, and the global model is re-solved. A
+failed bootstrap publishes neither the temporary mesh nor its speculative points.
+User-selected nonlinear correction and selected-area point discovery keep their
+previous semantics.
+
 ### Profile auto-optimization retriggered on every state refresh
 
 `ProfilePanel::onParametersRefreshed()` said it auto-triggered when profile spots
