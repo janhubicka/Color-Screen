@@ -22,6 +22,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # The staged payload is split only to stay below connector write limits.
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           BASE=fcf58687463a055dfb888e456fde6c71e2e9bb6d
           FEATURE=agent/qtgui-registration-stall-recovery
