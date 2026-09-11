@@ -10,6 +10,7 @@
 #include "matrix.h"
 namespace colorscreen
 {
+struct image_data;
 struct solver_parameters
 {
   DLL_PUBLIC_EXP
@@ -85,6 +86,14 @@ struct solver_parameters
   DLL_PUBLIC_EXP bool
   lens_optimization_sufficient (enum scr_type type, int width, int height,
                                 enum scanner_type scanner) const;
+
+  /* Remove points FIRST_POINT and later whose image position no longer agrees
+     with PARAM within MAX_DISPLACEMENT screen units.  Earlier points are
+     preserved as trusted anchors.  Return the number removed.  */
+  DLL_PUBLIC_EXP size_t
+  prune_points_outside_mapping_tolerance (
+      const scr_to_img_parameters &param, const image_data &img,
+      size_t first_point, coord_t max_displacement);
 
   /* Return true if normalized lens parameters P are conservative enough for
      an automatically inferred model.  This is solver policy, not a DNG

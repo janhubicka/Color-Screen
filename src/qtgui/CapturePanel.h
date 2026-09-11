@@ -28,7 +28,6 @@ signals:
     void measureRequested();
     void flatFieldRequested();
     void detachBacklightRequested(QWidget *w);
-    void autodetectRequested();
 
 public:
   void reattachBacklight(QWidget *w);

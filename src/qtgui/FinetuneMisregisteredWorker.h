@@ -13,6 +13,14 @@ namespace colorscreen {
 class image_data;
 }
 
+/** Incrementally discover registration points and keep geometry synchronized.
+
+    Ordinary runs publish accepted point/geometry batches progressively. When
+    full-image discovery stalls before an enabled lens fit has sufficient scan
+    coverage, a run without user-requested nonlinear correction may use one
+    private nonlinear mesh as a discovery bootstrap. That speculative suffix is
+    published only after it survives an ordinary/lens re-solve and residual
+    pruning; the temporary mesh itself is never published. */
 class FinetuneMisregisteredWorker : public QObject {
   Q_OBJECT
 public:
@@ -23,7 +31,8 @@ public:
                               colorscreen::int_image_area area,
                               std::shared_ptr<colorscreen::progress_info> progress,
                               colorscreen::finetune_area_parameters fparams,
-                              bool computeMesh = false);
+                              bool computeMesh = false,
+                              bool allowNonlinearBootstrap = false);
 
 public slots:
   void run();
@@ -44,4 +53,5 @@ private:
   std::shared_ptr<colorscreen::progress_info> m_progress;
   colorscreen::finetune_area_parameters m_fparams;
   bool m_computeMesh;
+  bool m_allowNonlinearBootstrap;
 };

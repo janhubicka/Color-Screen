@@ -1090,6 +1090,8 @@ void MainWindow::setupUi() {
           &MainWindow::removeProgress);
   connect(m_screenPanel, &ScreenPanel::autodetectRequested, this,
           &MainWindow::onAutodetectScreen);
+  connect(m_screenPanel, &ScreenPanel::alternateColorsRequested, this,
+          &MainWindow::onAlternateColorsRequested);
 
   connect(m_colorPanel, &ColorPanel::progressStarted, this,
           &MainWindow::addProgress);
@@ -1169,8 +1171,6 @@ void MainWindow::setupUi() {
           &MainWindow::onMeasureRequested);
   connect(m_capturePanel, &CapturePanel::flatFieldRequested, this,
           &MainWindow::onFlatFieldRequested);
-  connect(m_capturePanel, &CapturePanel::autodetectRequested, this,
-          &MainWindow::onAutodetectScreen);
 
   connect(m_imageWidget, &ImageWidget::interactionModeChanged, this,
           [this](ImageWidget::InteractionMode mode) {
@@ -1383,8 +1383,6 @@ void MainWindow::setupUi() {
           });
   connect(m_geometryPanel, &GeometryPanel::autodetectCoordinatesRequested, this,
           &MainWindow::onAutodetectCoordinatesRequested);
-  connect(m_geometryPanel, &GeometryPanel::alternateColorsRequested, this,
-          &MainWindow::onAlternateColorsRequested);
   connect(m_geometryPanel, &GeometryPanel::optimizeCoordinatesRequested, this,
           &MainWindow::onOptimizeCoordinatesRequested);
 
@@ -1823,6 +1821,8 @@ void MainWindow::createToolbar() {
           &MainWindow::updateRegistrationActions);
   connect(m_imageWidget, &ImageWidget::registrationPointsVisibilityChanged,
           this, &MainWindow::updateRegistrationActions);
+  connect(m_imageWidget, &ImageWidget::registrationPointsVisibilityChanged,
+          this, [this](bool) { updateWorkflowSummary(); });
   connect(m_imageWidget, &ImageWidget::pointAdded, this,
           &MainWindow::onPointAdded);
   connect(m_imageWidget, &ImageWidget::profileSpotRemoveRequested, this,
@@ -2268,6 +2268,7 @@ void MainWindow::onModeChanged(int index) {
                                         &m_detectParams, &m_renderTypeParams,
                                         &m_solverParams);
       }
+      updateWorkflowSummary();
     }
   }
 }
@@ -3464,6 +3465,9 @@ void MainWindow::setInspectorImageWidget(ImageWidget *imageWidget) {
     m_inspectorImageConnections.push_back(
         connect(target, &ImageWidget::registrationPointsVisibilityChanged, this,
                 &MainWindow::updateRegistrationActions));
+    m_inspectorImageConnections.push_back(connect(
+        target, &ImageWidget::registrationPointsVisibilityChanged, this,
+        [this](bool) { updateWorkflowSummary(); }));
     if (m_registrationPointsAction) {
       m_inspectorImageConnections.push_back(connect(
           target, &ImageWidget::registrationPointsVisibilityChanged,
@@ -4340,6 +4344,14 @@ void MainWindow::updateWorkflowSummary() {
   const bool geometryConfigured =
       colorscreen::screen_geometry_configured_p(m_scrToImgParams);
   const bool stochasticScreen = colorscreen::stochastic_screen_p(type);
+  const bool reconstructionModeSelected =
+      m_renderTypeParams.type == colorscreen::render_type_interpolated ||
+      m_renderTypeParams.type == colorscreen::render_type_predictive ||
+      m_renderTypeParams.type == colorscreen::render_type_realistic ||
+      m_renderTypeParams.type == colorscreen::render_type_combined;
+  const ImageWidget *workflowImage = inspectorImageWidget();
+  const bool registrationPointsVisible =
+      workflowImage && workflowImage->registrationPointsVisible();
 
   QString captureName = tr("Unknown");
   const int captureIndex = static_cast<int>(capture);
@@ -4499,11 +4511,27 @@ void MainWindow::updateWorkflowSummary() {
   } else if (regularScreen && m_geometryFitPendingInputs) {
     nextStep = tr("Next: Geometry fit is running…");
   } else if (regularScreen && fitCurrent) {
-    nextStep = tr(
-        "Next: reconstruct — choose Mode → Image layer + screen filter (or "
-        "Image layer + screen filter demosaiced with detail recovery) and "
-        "inspect the image. If the reconstructed colours line up cleanly, "
-        "the geometry is good.");
+    const QString pointGuidance = registrationPointsVisible
+        ? tr("The green registration overlay is visible; hide it with "
+             "Registration → Show Registration Points (or Geometry → Show "
+             "registration points) when you want an unobstructed image.")
+        : tr("Show the control points with Registration → Show Registration "
+             "Points (or Geometry → Show registration points) when you want "
+             "to inspect them.");
+    const QString editGuidance = tr(
+        "Use Select (S) to inspect/move points and Add Point (A) for missing "
+        "ones. If the reconstructed screen colours are swapped, use Screen → "
+        "Swap screen colors.");
+    if (reconstructionModeSelected) {
+      nextStep = tr("Next: inspect registration. %1 %2 When alignment is clean, "
+                    "continue with Sharpness/Color.")
+                     .arg(pointGuidance, editGuidance);
+    } else {
+      nextStep = tr(
+          "Next: reconstruct — choose Mode → Image layer + screen filter (or "
+          "Image layer + screen filter demosaiced with detail recovery). %1 %2")
+                     .arg(pointGuidance, editGuidance);
+    }
   } else if (colorDetection && regularScreen) {
     nextStep = tr(
         "Next: choose either Geometry-based reconstruction or screen-colour "
@@ -6345,7 +6373,7 @@ void MainWindow::onAutomaticallyAddPointsRequested(const colorscreen::finetune_a
   // Create worker and thread
   FinetuneMisregisteredWorker *worker = new FinetuneMisregisteredWorker(
       m_solverParams, m_rparams, m_scrToImgParams, m_scan, crop, progress,
-      params, m_geometryPanel->isNonlinearEnabled());
+      params, m_geometryPanel->isNonlinearEnabled(), true);
   QThread *thread = new QThread(this);
   worker->moveToThread(thread);
   trackBackgroundThread(thread);
@@ -6760,8 +6788,6 @@ void MainWindow::startCoordinateAutodetection(bool addPointsAfterDetection) {
     // Switch before applyState refreshes the canvas with accepted geometry.
     m_renderTypeParams.type = colorscreen::render_type_interpolated;
     changeParameters(newState, "Autodetect Coordinates");
-    if (m_addPointAction)
-      m_addPointAction->setChecked(true);
     m_imageWidget->update();
     statusBar()->showMessage(tr("Autodetect coordinates finished"), 3000);
 

@@ -83,6 +83,41 @@ solver_parameters::lens_optimization_sufficient (enum scr_type type, int width,
          && lens_coverage_sufficient (width, height, scanner);
 }
 
+/* Prune a newly added point suffix against an accepted mapping.
+
+   FIRST_POINT splits trusted anchors from a speculative tail, for example a
+   batch discovered using a temporary nonlinear bootstrap.  Measure the same
+   image-to-screen displacement used by finetune_misregistered_area so its
+   acceptance threshold remains meaningful after returning to the ordinary
+   global model.  */
+size_t
+solver_parameters::prune_points_outside_mapping_tolerance (
+    const scr_to_img_parameters &param, const image_data &img,
+    size_t first_point, coord_t max_displacement)
+{
+  if (first_point >= points.size () || !my_isfinite (max_displacement)
+      || max_displacement < 0 || !screen_geometry_configured_p (param))
+    return 0;
+
+  scr_to_img map;
+  if (!map.set_parameters (param, img))
+    return 0;
+
+  size_t removed = 0;
+  for (size_t i = points.size (); i-- > first_point;)
+    {
+      const solver_point_t &point = points[i];
+      const point_t mapped = map.to_scr (point.img);
+      const coord_t displacement = mapped.dist_from (point.scr);
+      if (!my_isfinite (displacement) || displacement >= max_displacement)
+        {
+          remove_point (i);
+          removed++;
+        }
+    }
+  return removed;
+}
+
 /* Resolve configured lens-center DISTANCE.  Zero selects the automatic
    policy, which currently preserves the historical [-0.5,1.5] search box.
    Return a negative value for invalid configuration.  */

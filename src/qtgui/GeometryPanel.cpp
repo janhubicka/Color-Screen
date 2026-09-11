@@ -90,10 +90,6 @@ void GeometryPanel::setupUi() {
   m_autodetectCoordinatesButton->setObjectName(
       QStringLiteral("DetectScreenCoordinatesButton"));
   
-  addButtonParameter("Correction", "Swap screen colors", [this]() {
-      emit alternateColorsRequested();
-  }, hasConfiguredGeometry, "Swap the symmetric screen-color assignment if the reconstructed colors are implausible.");
-
   addButtonParameter("Step 2", "Optimize coordinates", [this]() {
       emit optimizeCoordinatesRequested();
   }, hasConfiguredGeometry, "Refine the detected screen coordinate system using the image data.");

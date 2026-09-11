@@ -506,7 +506,30 @@ Automatic **Detect screen coordinates** follows the same reference-frame rule: i
 is disabled/refused as soon as any control point exists. The combined **Detect
 screen** command must then reuse the current coordinate system and proceed directly
 to adding/refining points; if points exist without valid geometry, refuse rather
-than silently establishing a new incompatible basis.
+than silently establishing a new incompatible basis. Successful automatic
+coordinate detection selects a reconstruction-capable image mode but must not arm
+**Add Point** or force the registration overlay visible. Point visibility is an
+independent view choice exposed by **Registration -> Show Registration Points**
+and the Geometry checkbox; point editing remains explicit through **Select (S)**
+and **Add Point (A)**. The workflow summary must recognize when reconstruction is
+already selected instead of asking the operator to select it again. **Swap screen
+colors** belongs in the Screen stage next to detection; do not duplicate a second
+"try luck" detector in Digital Capture.
+
+Automatic full-image point discovery may use one conservative recovery step when
+the ordinary global mapping stalls before lens fitting has enough point coverage.
+If lens optimization is requested, persistent nonlinear correction is off, and
+there are enough trusted points to constrain a mesh, the worker may build a
+**temporary** nonlinear mesh and use it for exactly one additional discovery pass.
+The mesh is never published. The enlarged cloud is accepted only if it now meets
+the global lens-coverage requirement; the worker then discards the mesh, solves
+the ordinary/lens model, prunes only the speculative suffix whose screen-space
+residual exceeds the normal discovery tolerance, verifies coverage again, and
+re-solves without nonlinear correction. Any failed check discards that speculative
+suffix and retains the already published ordinary points/geometry. Explicit user
+selection of nonlinear correction keeps its existing persistent-mesh behavior and
+does not enter this recovery path.
+
 `Lock axes` and coordinate finetuning actions are contextual: they are visible
 only while `Screen coordinates` is active, and are enabled only after the two-click
 bootstrap has produced a valid basis. Registration-point Select/Add tools remain

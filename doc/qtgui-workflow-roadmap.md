@@ -156,18 +156,42 @@ the original tool with its pending anchor intact. Wheel zoom remains available.
 Right-click may additionally cancel an unfinished anchor where it has no competing
 tool meaning; Escape remains the universal cancellation key.
 
-The expected registration path is **autodetect first**. If coordinate detection
-fails on an otherwise regular screen, `Screen coordinates` is the explicit
-manual fallback: click the green origin dot, click its neighboring green dot in
-the +X direction (the pair is committed as one undoable setup step), optionally
-fine-tune/optimize that linear basis, then begin
-adding registration points. Screen coordinates are the reference frame of every
-stored control point, so automatic **Detect screen coordinates** is disabled once
-any point exists. Re-running **Detect screen** with existing points reuses the
-current coordinates and goes directly to finding/refining points; it must never
-replace the center/axes underneath those points. If points somehow exist without
-valid geometry, restore compatible coordinates or delete the points before
-redetection. Once an accepted geometry fit (or nonlinear mesh) is based on those
+The expected registration path is **autodetect first**. Successful **Detect
+screen** already selects an appropriate image-layer + screen-filter reconstruction
+view, so the Workflow summary must advance to inspection instead of repeating
+"choose Mode". Automatic detection also leaves the current registration-overlay
+visibility and canvas tool alone: it must not switch to Add Point simply because
+it found points. Workflow guidance should teach the next useful controls instead:
+**Registration -> Show Registration Points** (also available in Geometry) to
+show/hide the green overlay, **Select (S)** to inspect or move points, and **Add
+Point (A)** for missing points. **Swap screen colors** is a Screen-stage correction
+and belongs beside Detect screen; the older duplicate "try luck" detector in
+Digital Capture should not return.
+
+If coordinate detection fails on an otherwise regular screen, `Screen coordinates`
+is the explicit manual fallback: click the green origin dot, click its neighboring
+green dot in the +X direction (the pair is committed as one undoable setup step),
+optionally fine-tune/optimize that linear basis, then begin adding registration
+points. Screen coordinates are the reference frame of every stored control point,
+so automatic **Detect screen coordinates** is disabled once any point exists.
+Re-running **Detect screen** with existing points reuses the current coordinates
+and goes directly to finding/refining points; it must never replace the center/axes
+underneath those points. If points somehow exist without valid geometry, restore
+compatible coordinates or delete the points before redetection.
+
+There is one internal recovery exception for difficult lens-distorted scans. If
+normal automatic point growth stalls before the cloud spans enough of the scan to
+fit a global lens model, the worker may construct a temporary nonlinear mesh from
+the trusted cloud and use it for one extra discovery pass. This mesh is only a
+search aid: it is discarded before publication, the enlarged cloud must first meet
+the lens-fit coverage threshold, and the accepted result is re-solved with ordinary
+global geometry plus lens correction. Points contributed by the temporary pass
+are then pruned against that final map using the normal screen-space discovery
+tolerance and the global model is solved once more. If coverage or either solve
+fails, the speculative points are dropped. An explicit user request for nonlinear
+geometry remains a separate persistent mode.
+
+Once an accepted geometry fit (or user-requested nonlinear mesh) is based on those
 control points, the base-coordinate tool disappears rather than offering two
 competing ways to edit the same geometry. Its axis-lock and coordinate-finetune
 controls are contextual and appear only while that tool is active. Stochastic/no-
