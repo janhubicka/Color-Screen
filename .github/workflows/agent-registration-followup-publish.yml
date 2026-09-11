@@ -29,6 +29,7 @@ jobs:
           cat .agent-registration-followup-v2.part1 \
               .agent-registration-followup-v2.part2 \
               .agent-registration-followup-v2.part3 \
+              .agent-registration-followup-v2.part4 \
               | base64 -d | xz -d > /tmp/change.patch
           echo '10ab9bc0de95dd796c5a35c935f6dc9ee2f094746fbe89f8c631fe220604ca3e  /tmp/change.patch' | sha256sum -c -
           git checkout -B "$FEATURE" "$BASE"
