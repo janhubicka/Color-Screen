@@ -1,0 +1,26 @@
+name: Agent registration workflow source export
+on:
+  push:
+    branches: [agent/qtgui-registration-workflow-stage]
+    paths: [.github/workflows/agent-registration-workflow-source.yml]
+permissions:
+  contents: read
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Verify base revision
+        run: |
+          test "$(git rev-parse HEAD^)" = 32dd528818e4fb35db3b7d3f94f8021ebe4a2347
+      - name: Pack exact source
+        run: |
+          git archive --format=tar.gz --prefix=Color-Screen/ 32dd528818e4fb35db3b7d3f94f8021ebe4a2347 > colorscreen-main-32dd5288.tar.gz
+          sha256sum colorscreen-main-32dd5288.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: colorscreen-main-32dd5288
+          path: colorscreen-main-32dd5288.tar.gz
+          compression-level: 0
