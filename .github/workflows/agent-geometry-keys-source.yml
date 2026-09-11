@@ -1,0 +1,25 @@
+name: Agent geometry keys source export
+on:
+  push:
+    branches: [agent/qtgui-geometry-keys-stage]
+    paths: [.github/workflows/agent-geometry-keys-source.yml]
+permissions:
+  contents: read
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Verify base revision
+        run: |
+          test "$(git rev-parse HEAD^)" = 8bcfd47abc8e6b9aa535622348b48a15edf95071
+      - name: Pack exact source
+        run: |
+          git archive --format=tar.gz --prefix=Color-Screen/ 8bcfd47abc8e6b9aa535622348b48a15edf95071 > colorscreen-main-8bcfd47a.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: colorscreen-main-8bcfd47a
+          path: colorscreen-main-8bcfd47a.tar.gz
+          compression-level: 0
