@@ -22,6 +22,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           BASE=32dd528818e4fb35db3b7d3f94f8021ebe4a2347
           FEATURE=agent/qtgui-registration-workflow-fallback
           git merge-base --is-ancestor "$BASE" HEAD
