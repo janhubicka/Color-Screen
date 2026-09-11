@@ -90,9 +90,19 @@ void GeometryPanel::setupUi() {
   m_autodetectCoordinatesButton->setObjectName(
       QStringLiteral("DetectScreenCoordinatesButton"));
   
-  addButtonParameter("Step 2", "Optimize coordinates", [this]() {
-      emit optimizeCoordinatesRequested();
-  }, hasConfiguredGeometry, "Refine the detected screen coordinate system using the image data.");
+  m_optimizeCoordinatesButton = addButtonParameter(
+      "Step 2", "Optimize coordinates", [this]() {
+        emit optimizeCoordinatesRequested();
+      },
+      [](const ParameterState &state) {
+        return colorscreen::screen_geometry_configured_p(state.scrToImg) &&
+               state.solver.points.empty();
+      },
+      "Refine the detected screen coordinate system using the image data. "
+      "Disabled once registration points exist because those points are "
+      "expressed in the current coordinate system.");
+  m_optimizeCoordinatesButton->setObjectName(
+      QStringLiteral("OptimizeScreenCoordinatesButton"));
 
   addButtonParameter("Step 3", "Add registration points", [this]() {
       emit automaticallyAddPointsRequested(m_finetuneAreaParams);
@@ -169,6 +179,28 @@ void GeometryPanel::setupUi() {
       nullptr, "Include lens distortion parameters in the geometry fit.",
       QStringLiteral("geometry.fit.optimize_lens"));
   connect(m_lensCb, &QCheckBox::toggled, this, triggerIfAuto);
+
+  std::map<int, QString> lensFitModels = {
+      {colorscreen::solver_parameters::lens_fit_standard,
+       "Standard radial (recommended)"},
+      {colorscreen::solver_parameters::lens_fit_full,
+       "Full radial polynomial"}};
+  QComboBox *lensFitModel = addEnumParameter(
+      "Lens model", lensFitModels,
+      [](const ParameterState &s) { return (int)s.solver.lens_fit_model; },
+      [](ParameterState &s, int v) {
+        s.solver.lens_fit_model =
+            (colorscreen::solver_parameters::lens_fit_model_t)v;
+      },
+      [](const ParameterState &s) { return s.solver.optimize_lens; },
+      "Standard fits only the leading radial distortion term and is much less "
+      "likely to overfit incomplete registration coverage. Full enables all "
+      "radial polynomial terms and is intended for lenses whose residual "
+      "distortion cannot be described by the standard model.",
+      QStringLiteral("geometry.fit.lens_model"));
+  lensFitModel->setObjectName(QStringLiteral("GeometryLensModelCombo"));
+  connect(lensFitModel, QOverload<int>::of(&QComboBox::currentIndexChanged),
+          this, [triggerIfAuto](int) { triggerIfAuto(); });
 
   addDoubleParameter("Lens center distance", 0.0, 100.0,
       [](const ParameterState &s){ return (double)s.solver.lens_center_distance; },
@@ -349,6 +381,9 @@ void GeometryPanel::updateRegistrationPointInfo(const ParameterState &state) {
   // reinterpret them. Keep this guard in the incremental update path too.
   if (m_autodetectCoordinatesButton)
     m_autodetectCoordinatesButton->setEnabled(numPoints == 0);
+  if (m_optimizeCoordinatesButton)
+    m_optimizeCoordinatesButton->setEnabled(
+        numPoints == 0 && colorscreen::screen_geometry_configured_p(state.scrToImg));
 
   if (m_showRegistrationPointsBox) {
       m_showRegistrationPointsBox->setText(tr("Show registration points"));

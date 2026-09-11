@@ -615,6 +615,8 @@ private:
   QLabel *m_workflowCalibrationLabel = nullptr;
   QLabel *m_workflowProfileLabel = nullptr;
   QLabel *m_workflowNextStepLabel = nullptr;
+  bool m_registrationPointDiscoveryRunning = false;
+  std::weak_ptr<colorscreen::progress_info> m_registrationPointDiscoveryProgress;
 
   QToolBar *m_toolbar;        // New toolbar
   QComboBox *m_modeComboBox;  // Mode selector

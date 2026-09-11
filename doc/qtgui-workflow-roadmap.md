@@ -173,23 +173,40 @@ is the explicit manual fallback: click the green origin dot, click its neighbori
 green dot in the +X direction (the pair is committed as one undoable setup step),
 optionally fine-tune/optimize that linear basis, then begin adding registration
 points. Screen coordinates are the reference frame of every stored control point,
-so automatic **Detect screen coordinates** is disabled once any point exists.
-Re-running **Detect screen** with existing points reuses the current coordinates
+so automatic **Detect screen coordinates** and **Optimize coordinates** are disabled once any point exists.
+The canvas `Screen coordinates` tool follows the same rule: once control points own
+that reference frame, base-coordinate editing must not reinterpret them. Re-running
+**Detect screen** with existing points reuses the current coordinates
 and goes directly to finding/refining points; it must never replace the center/axes
 underneath those points. If points somehow exist without valid geometry, restore
 compatible coordinates or delete the points before redetection.
 
-There is one internal recovery exception for difficult lens-distorted scans. If
-normal automatic point growth stalls before the cloud spans enough of the scan to
-fit a global lens model, the worker may construct a temporary nonlinear mesh from
-the trusted cloud and use it for one extra discovery pass. This mesh is only a
-search aid: it is discarded before publication, the enlarged cloud must first meet
-the lens-fit coverage threshold, and the accepted result is re-solved with ordinary
-global geometry plus lens correction. Points contributed by the temporary pass
-are then pruned against that final map using the normal screen-space discovery
-tolerance and the global model is solved once more. If coverage or either solve
-fails, the speculative points are dropped. An explicit user request for nonlinear
-geometry remains a separate persistent mode.
+Difficult scans use process-specific recovery instead of one generic nonlinear
+bootstrap. For ordinary/Paget-like regular screens, if automatic point growth
+stalls before the normal lens-coverage heuristic is met, Color-Screen may force a
+**Standard radial** lens fit from the current cloud and continue discovery from
+that global map. Only the coverage gate is relaxed: the normal point-count,
+deformation-envelope and identifiability protections still apply. The forced fit
+uses only the leading radial shape coefficient, never the high-order polynomial,
+and another forced attempt is permitted only after new points were actually found.
+
+For Dufaycolor, the physical screen is integrated into flexible film, so the final
+registration is expected to need local deformation. Start with nonlinear correction
+off; when the global model can no longer find new points, enable nonlinear
+correction persistently, reflect that in Geometry, and continue detection with the
+mesh. Do not revert to the global model at the end.
+
+While this progressive full-image discovery is running, Workflow should remain
+stable rather than rewriting itself for every published point batch. Its useful
+message is operational: show/hide the green registration overlay to judge progress,
+and press Stop once coverage is sufficient or immediately if points start following
+the wrong geometry.
+
+Automatic lens fitting offers **Standard radial** (default, only the leading free
+radial coefficient) and **Full radial polynomial** (`kr1..kr3`). Full is explicit
+opt-in for lenses whose low-order fit leaves systematic residual distortion; it is
+not a generic accuracy switch because the higher-order coefficients are much easier
+to overfit.
 
 Once an accepted geometry fit (or user-requested nonlinear mesh) is based on those
 control points, the base-coordinate tool disappears rather than offering two

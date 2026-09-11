@@ -587,6 +587,10 @@ save_csp (FILE *f, const scr_to_img_parameters *param, const scr_detect_paramete
       if (fprintf (f, "solver_optimize_lens: %s\n",
                    bool_names[(int)sparam->optimize_lens])
               < 0
+          || fprintf (f, "solver_lens_fit_model: %s\n",
+                      solver_parameters::lens_fit_model_names[
+                          (int)sparam->lens_fit_model])
+                 < 0
           || fprintf (f, "solver_lens_center_distance: %.17g\n",
                       (double)sparam->lens_center_distance)
                  < 0
@@ -1977,6 +1981,22 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam,
               *error = "error parsing solver_optimize_lens";
               return false;
             }
+        }
+      else if (!strcmp (buf, "solver_lens_fit_model"))
+        {
+          get_keyword (f, buf2);
+          int j;
+          for (j = 0; j < solver_parameters::max_lens_fit_model; j++)
+            if (!strcmp (buf2, solver_parameters::lens_fit_model_names[j]))
+              break;
+          if (j == solver_parameters::max_lens_fit_model)
+            {
+              *error = "error parsing solver_lens_fit_model";
+              return false;
+            }
+          if (sparam)
+            sparam->lens_fit_model
+                = (enum solver_parameters::lens_fit_model_t)j;
         }
       else if (!strcmp (buf, "solver_lens_center_distance"))
         {

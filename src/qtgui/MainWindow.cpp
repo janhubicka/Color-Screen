@@ -4404,7 +4404,10 @@ void MainWindow::updateWorkflowSummary() {
     const QString prefix =
         colorDetection ? tr("Registration: optional geometry")
                        : tr("Registration: geometry");
-    if (!geometryConfigured) {
+    if (m_registrationPointDiscoveryRunning) {
+      registration = tr("%1 — automatic point discovery is running")
+                         .arg(prefix);
+    } else if (!geometryConfigured) {
       if (pointCount > 0) {
         registration = tr(
             "%1 — geometry not configured; %2 existing control point(s) "
@@ -4508,6 +4511,13 @@ void MainWindow::updateWorkflowSummary() {
         "coordinates.");
   } else if (regularScreen && !geometryConfigured) {
     nextStep = tr("Next: Geometry — detect screen coordinates.");
+  } else if (regularScreen && m_registrationPointDiscoveryRunning) {
+    nextStep = tr(
+        "Registration point discovery is running. Toggle Registration → Show "
+        "Registration Points (or Geometry → Show registration points) to "
+        "watch the green control-point overlay. Use Stop when coverage is "
+        "good enough, or immediately if the detector starts following the "
+        "wrong geometry.");
   } else if (regularScreen && m_geometryFitPendingInputs) {
     nextStep = tr("Next: Geometry fit is running…");
   } else if (regularScreen && fitCurrent) {
@@ -5527,6 +5537,8 @@ bool MainWindow::screenCoordinateToolAvailable() const {
   if (!colorscreen::render_parameters::capture_has_screen_p(capture) ||
       !colorscreen::screen_has_regular_geometry_p(m_scrToImgParams.type))
     return false;
+  if (m_solverParams.n_points() > 0)
+    return false;
   if (m_scrToImgParams.mesh_trans ||
       (m_geometryPanel && m_geometryPanel->isNonlinearEnabled()))
     return false;
@@ -6369,6 +6381,9 @@ void MainWindow::onAutomaticallyAddPointsRequested(const colorscreen::finetune_a
   colorscreen::sub_task task(progress.get());
   addUserVisibleProgress(progress, tr("Automatically add points"),
                          ProgressAction::Stop);
+  m_registrationPointDiscoveryRunning = true;
+  m_registrationPointDiscoveryProgress = progress;
+  updateWorkflowSummary();
 
   // Create worker and thread
   FinetuneMisregisteredWorker *worker = new FinetuneMisregisteredWorker(
@@ -6431,8 +6446,16 @@ void MainWindow::onAutomaticallyAddPointsRequested(const colorscreen::finetune_a
           }, Qt::BlockingQueuedConnection);
   connect(worker, &FinetuneMisregisteredWorker::finished, this,
           [this, progress](bool success) {
-            if (!m_closing)
+            if (!m_closing) {
+              const auto currentDiscovery =
+                  m_registrationPointDiscoveryProgress.lock();
+              if (currentDiscovery == progress) {
+                m_registrationPointDiscoveryRunning = false;
+                m_registrationPointDiscoveryProgress.reset();
+              }
               removeProgress(progress);
+              updateWorkflowSummary();
+            }
 
             if (!m_closing && !success &&
                 (!progress || !progress->pool_cancel())) {

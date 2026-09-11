@@ -1887,6 +1887,8 @@ do_test_homography (scr_to_img_parameters &param, int width, int height,
     }
   solver_parameters sparam;
   sparam.optimize_lens = lens_correction;
+  if (lens_correction)
+    sparam.lens_fit_model = solver_parameters::lens_fit_full;
   sparam.lens_center_distance = lens_center_distance;
   int xstep = (width + 99) / 11;
   int ystep = (height + 99) / 10;
@@ -2035,6 +2037,92 @@ test_homography (bool lens_correction, bool joly, coord_t epsilon)
         }
     }
   return ok;
+}
+
+/* Verify the automatic lens-complexity policy and the explicit stalled-search
+   coverage override.  Standard fitting must never invent the higher-order
+   radial terms, while a forced recovery fit may bypass spatial coverage but
+   still needs the normal minimum point count and physical/identifiability
+   safeguards.  */
+static bool
+test_lens_fit_policy ()
+{
+  image_data img;
+  if (!img.set_dimensions (1024, 1024))
+    return false;
+
+  scr_to_img_parameters truth;
+  truth.type = Paget;
+  truth.scanner_type = fixed_lens;
+  truth.center = {300, 300};
+  truth.coordinate1 = {5, (coord_t)1.2};
+  truth.coordinate2 = {(coord_t)-1.4, (coord_t)5.2};
+  truth.lens_correction.center = {(coord_t)0.46, (coord_t)0.54};
+  truth.lens_correction.kr[1] = (coord_t)0.08;
+  if (!truth.lens_correction.normalize ())
+    return false;
+
+  scr_to_img truth_map;
+  if (!truth_map.set_parameters (truth, img))
+    return false;
+
+  solver_parameters global;
+  global.lens_fit_model = solver_parameters::lens_fit_standard;
+  for (int y = 0; y <= 10; y++)
+    for (int x = 0; x <= 10; x++)
+      {
+        point_t image = {(coord_t)(x * 1023 / 10),
+                         (coord_t)(y * 1023 / 10)};
+        global.add_point (image, truth_map.to_scr (image),
+                          solver_parameters::green);
+      }
+
+  scr_to_img_parameters fitted;
+  fitted.type = truth.type;
+  fitted.scanner_type = truth.scanner_type;
+  const coord_t error = solver (&fitted, img, global);
+  if (!(error >= 0 && error < 1e29) || fitted.lens_correction.is_noop ()
+      || fitted.lens_correction.kr[2] != 0
+      || fitted.lens_correction.kr[3] != 0)
+    {
+      fprintf (stderr,
+               "Standard lens fit did not stay low-order or failed to fit\n");
+      return false;
+    }
+
+  solver_parameters local;
+  local.lens_fit_model = solver_parameters::lens_fit_standard;
+  for (int y = 0; y < 10; y++)
+    for (int x = 0; x < 10; x++)
+      {
+        point_t image = {(coord_t)(40 + x * 38),
+                         (coord_t)(40 + y * 38)};
+        local.add_point (image, truth_map.to_scr (image),
+                         solver_parameters::green);
+      }
+  if (local.lens_coverage_sufficient (img.width, img.height, fixed_lens))
+    {
+      fprintf (stderr, "Local lens-policy test unexpectedly has global coverage\n");
+      return false;
+    }
+
+  scr_to_img_parameters gated, forced;
+  gated.type = forced.type = truth.type;
+  gated.scanner_type = forced.scanner_type = truth.scanner_type;
+  const coord_t gated_error = solver (&gated, img, local);
+  const coord_t forced_error = solver (&forced, img, local, nullptr, true);
+  if (!(gated_error >= 0 && gated_error < 1e29)
+      || !(forced_error >= 0 && forced_error < 1e29)
+      || !gated.lens_correction.is_noop ()
+      || forced.lens_correction.is_noop ()
+      || forced.lens_correction.kr[2] != 0
+      || forced.lens_correction.kr[3] != 0)
+    {
+      fprintf (stderr,
+               "Forced low-order lens recovery did not bypass coverage safely\n");
+      return false;
+    }
+  return true;
 }
 
 /* Verify that REPORT contains a successful detector statistics record and that
@@ -5855,6 +5943,7 @@ test_lens_warp ()
     /* Solver configuration must round-trip, while old project files which do
        not contain the new keyword keep the automatic value zero.  */
     solver_parameters saved_solver;
+    saved_solver.lens_fit_model = solver_parameters::lens_fit_full;
     saved_solver.lens_center_distance = 3.25;
     FILE *project = tmpfile ();
     solver_parameters loaded_solver;
@@ -5869,6 +5958,7 @@ test_lens_warp ()
     if (project)
       fclose (project);
     if (!project_loaded || project_error
+        || loaded_solver.lens_fit_model != solver_parameters::lens_fit_full
         || loaded_solver.lens_center_distance != 3.25)
       {
         fprintf (stderr, "Lens-center distance project round trip failed%s%s\n",
@@ -5876,10 +5966,12 @@ test_lens_warp ()
                  project_error ? project_error : "");
         ok = false;
       }
-    if (solver_parameters ().lens_center_distance != 0
+    if (solver_parameters ().lens_fit_model
+            != solver_parameters::lens_fit_standard
+        || solver_parameters ().lens_center_distance != 0
         || solver_parameters::effective_lens_center_distance (0) != 2)
       {
-        fprintf (stderr, "Automatic lens-center distance default changed\n");
+        fprintf (stderr, "Automatic lens fitting defaults changed\n");
         ok = false;
       }
   }
@@ -5930,58 +6022,6 @@ test_lens_warp ()
   }
 
   return ok;
-}
-
-/* A nonlinear discovery pass may contribute only a speculative suffix of
-   registration points.  Verify that final-model pruning removes bad suffix
-   points without touching the trusted anchors before FIRST_POINT.  */
-static bool
-test_registration_bootstrap_prune ()
-{
-  image_data img;
-  if (!img.set_dimensions (200, 160))
-    return false;
-
-  scr_to_img_parameters geometry;
-  geometry.type = Paget;
-  geometry.center = {100, 80};
-  geometry.coordinate1 = {5, 0};
-  geometry.coordinate2 = {0, 5};
-
-  scr_to_img map;
-  if (!map.set_parameters (geometry, img))
-    return false;
-
-  solver_parameters points;
-  const point_t anchor1 = {70, 60};
-  const point_t anchor2 = {130, 100};
-  const point_t accepted = {120, 60};
-  const point_t rejected = {60, 110};
-  /* Trusted prefix points are never candidates for pruning, even if their
-     residual happens to exceed the speculative-tail threshold.  */
-  points.add_point (anchor1,
-                    map.to_scr (anchor1) + point_t{0.20, 0.0},
-                    solver_parameters::green);
-  points.add_point (anchor2, map.to_scr (anchor2), solver_parameters::green);
-  points.add_point (accepted,
-                    map.to_scr (accepted) + point_t{0.02, -0.01},
-                    solver_parameters::green);
-  points.add_point (rejected,
-                    map.to_scr (rejected) + point_t{0.20, 0.0},
-                    solver_parameters::green);
-
-  const size_t removed = points.prune_points_outside_mapping_tolerance (
-      geometry, img, 2, 0.05);
-  if (removed != 1 || points.n_points () != 3
-      || points.points[0].img != anchor1 || points.points[1].img != anchor2
-      || points.points[2].img != accepted)
-    {
-      fprintf (stderr,
-               "Registration bootstrap pruning did not preserve trusted "
-               "anchors/accepted suffix points\n");
-      return false;
-    }
-  return true;
 }
 
 /* Test the simulated photographic darkroom process.
@@ -9109,8 +9149,8 @@ main (int argc, char **argv)
       [] () { return test_mtf_deconvolution (); } },
     { "homography", "homography tests", [] () { return (bool)test_homography (false, false, 0.000001); } },
     { "warp", "lens warp tests", [] () { return test_lens_warp (); } },
-    { "registration_prune", "registration bootstrap pruning tests",
-      [] () { return test_registration_bootstrap_prune (); } },
+    { "lens_fit_policy", "lens fitting complexity and recovery policy tests",
+      [] () { return test_lens_fit_policy (); } },
     { "lens_correction", "lens correction tests", [] () { return (bool)test_homography (true, false, 0.15); } },
     { "1d_homography", "1d homography and lens correction tests", [] () { return (bool)test_homography (true, true, 0.15); } },
     { "discovery", "screen discovery tests", [] () { return (bool)test_discovery (1.8); } },

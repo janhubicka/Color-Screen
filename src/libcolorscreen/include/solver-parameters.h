@@ -15,14 +15,16 @@ struct solver_parameters
 {
   DLL_PUBLIC_EXP
   solver_parameters ()
-      : points (), optimize_lens (true), lens_center_distance (0),
-        optimize_tilt (true), weighted (false), center ({0, 0})
+      : points (), optimize_lens (true), lens_fit_model (lens_fit_standard),
+        lens_center_distance (0), optimize_tilt (true), weighted (false),
+        center ({0, 0})
   {
   }
   DLL_PUBLIC_EXP void
   copy_without_points (const solver_parameters &other)
   {
     optimize_lens = other.optimize_lens;
+    lens_fit_model = other.lens_fit_model;
     lens_center_distance = other.lens_center_distance;
     optimize_tilt = other.optimize_tilt;
     weighted = other.weighted;
@@ -33,6 +35,20 @@ struct solver_parameters
       - image coordinates (img_x, img_y)
       - screen coordinats (scr_x, scr_y)
       - color (only used for visualization.  */
+
+
+  /* Automatic radial-lens model complexity.  STANDARD optimizes only the
+     leading radial shape coefficient; this is the robust default for most
+     lenses and for recovery fits made from incomplete registration coverage.
+     FULL enables all three free radial shape coefficients and should be used
+     only when the low-order model leaves systematic residual distortion.  */
+  enum lens_fit_model_t
+  {
+    lens_fit_standard,
+    lens_fit_full,
+    max_lens_fit_model
+  };
+  static const char *const lens_fit_model_names[(int)max_lens_fit_model];
 
   enum point_color
   {
@@ -87,14 +103,6 @@ struct solver_parameters
   lens_optimization_sufficient (enum scr_type type, int width, int height,
                                 enum scanner_type scanner) const;
 
-  /* Remove points FIRST_POINT and later whose image position no longer agrees
-     with PARAM within MAX_DISPLACEMENT screen units.  Earlier points are
-     preserved as trusted anchors.  Return the number removed.  */
-  DLL_PUBLIC_EXP size_t
-  prune_points_outside_mapping_tolerance (
-      const scr_to_img_parameters &param, const image_data &img,
-      size_t first_point, coord_t max_displacement);
-
   /* Return true if normalized lens parameters P are conservative enough for
      an automatically inferred model.  This is solver policy, not a DNG
      validity requirement, and is never applied to imported/manual profiles.  */
@@ -128,6 +136,10 @@ struct solver_parameters
      solver().  The Jacobian check rejects a fitted lens model whose effect can
      be absorbed by refitting the homography.  */
   bool optimize_lens;
+  /* Complexity used by automatic lens fitting.  Existing/imported lens
+     profiles may contain all DNG radial coefficients regardless of this
+     operation setting.  */
+  enum lens_fit_model_t lens_fit_model;
   /* Maximum normalized distance of an automatically fitted lens center from
      image center.  Zero means automatic.  Positive D constrains each fitted
      coordinate to 0.5 +/- D/2, so D=1 stays inside the image and D>1 may
@@ -209,6 +221,7 @@ struct solver_parameters
   bool operator== (const solver_parameters &other) const
   {
     return optimize_lens == other.optimize_lens &&
+           lens_fit_model == other.lens_fit_model &&
            lens_center_distance == other.lens_center_distance &&
            optimize_tilt == other.optimize_tilt &&
            weighted == other.weighted &&

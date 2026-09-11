@@ -23,6 +23,9 @@ namespace colorscreen
 {
 const char *const solver_parameters::point_color_names[(int)max_point_color]
     = { "red", "green", "blue" };
+const char *const
+solver_parameters::lens_fit_model_names[(int)max_lens_fit_model]
+    = { "standard", "full" };
 
 /* Return true when registration points cover enough of the scan to constrain
    a global radial lens model.  Point count is checked separately.
@@ -81,41 +84,6 @@ solver_parameters::lens_optimization_sufficient (enum scr_type type, int width,
 {
   return (int)n_points () >= min_lens_points (type)
          && lens_coverage_sufficient (width, height, scanner);
-}
-
-/* Prune a newly added point suffix against an accepted mapping.
-
-   FIRST_POINT splits trusted anchors from a speculative tail, for example a
-   batch discovered using a temporary nonlinear bootstrap.  Measure the same
-   image-to-screen displacement used by finetune_misregistered_area so its
-   acceptance threshold remains meaningful after returning to the ordinary
-   global model.  */
-size_t
-solver_parameters::prune_points_outside_mapping_tolerance (
-    const scr_to_img_parameters &param, const image_data &img,
-    size_t first_point, coord_t max_displacement)
-{
-  if (first_point >= points.size () || !my_isfinite (max_displacement)
-      || max_displacement < 0 || !screen_geometry_configured_p (param))
-    return 0;
-
-  scr_to_img map;
-  if (!map.set_parameters (param, img))
-    return 0;
-
-  size_t removed = 0;
-  for (size_t i = points.size (); i-- > first_point;)
-    {
-      const solver_point_t &point = points[i];
-      const point_t mapped = map.to_scr (point.img);
-      const coord_t displacement = mapped.dist_from (point.scr);
-      if (!my_isfinite (displacement) || displacement >= max_displacement)
-        {
-          remove_point (i);
-          removed++;
-        }
-    }
-  return removed;
 }
 
 /* Resolve configured lens-center DISTANCE.  Zero selects the automatic
@@ -465,11 +433,21 @@ public:
     return is_fixed_lens (m_param.scanner_type) ? 2 : 1;
   }
 
+  /* Return number of free radial shape coefficients.  The normalized DNG
+     model has three possible shape terms, but the standard automatic fit uses
+     only kr1.  High-order kr2/kr3 are deliberately opt-in because incomplete
+     scan coverage makes them much easier to overfit.  */
+  int
+  num_radial_coefficients () const
+  {
+    return m_sparam.lens_fit_model == solver_parameters::lens_fit_full ? 3 : 1;
+  }
+
   /* Return total number of parameters to optimize.  */
   int
   num_values () const
   {
-    return num_coordinates () + 3;
+    return num_coordinates () + num_radial_coefficients ();
   }
   std::array<coord_t, 5> m_start;
   coord_t *start = m_start.data ();
@@ -533,7 +511,7 @@ public:
     /* Coefficient boxes are only a coarse numerical guard.  The physically
        meaningful bound is imposed on the resulting normalized radial map.  */
     constexpr coord_t range [3] = {0.15, 0.05, 0.01};
-    for (int i = n, j = 0; i < n + 3; i++, j++)
+    for (int i = n, j = 0; i < n + num_radial_coefficients (); i++, j++)
       {
         if (vals[i] < (coord_t)-range[j] * scale_kr)
           vals[i] = (coord_t)-range[j] * scale_kr;
@@ -728,8 +706,11 @@ public:
       abort ();
     lens->kr[0] = 1;
     lens->kr[1] = vals[n] * (1 / scale_kr);
-    lens->kr[2] = vals[n + 1] * (1 / scale_kr);
-    lens->kr[3] = vals[n + 2] * (1 / scale_kr);
+    if (num_radial_coefficients () == 3)
+      {
+        lens->kr[2] = vals[n + 1] * (1 / scale_kr);
+        lens->kr[3] = vals[n + 2] * (1 / scale_kr);
+      }
     if (!lens->is_monotone ())
       {
         if (colorscreen_checking)
@@ -881,7 +862,8 @@ simple_solver (scr_to_img_parameters *param, const image_data &img_data,
 
 coord_t
 solver (scr_to_img_parameters *param,const  image_data &img_data,
-        const solver_parameters &sparam, progress_info *progress)
+        const solver_parameters &sparam, progress_info *progress,
+        bool force_lens_without_coverage)
 {
   /* 3 points may be enough for strips; we only solve homography on 1d.  */
   if ((int)sparam.n_points () < solver_parameters::min_points (param->type))
@@ -892,11 +874,13 @@ solver (scr_to_img_parameters *param,const  image_data &img_data,
   /* Lens correction is global.  Point count alone is unsafe: a dense local
      cloud can leave center and high-order radial terms unconstrained while
      still extrapolating across the complete scan.  */
+  const bool lens_point_count_sufficient
+      = (int)sparam.n_points () >= solver_parameters::min_lens_points (param->type);
   const bool optimize_lens
-      = sparam.optimize_lens
-        && sparam.lens_optimization_sufficient (
-               param->type, img_data.width, img_data.height,
-               param->scanner_type);
+      = sparam.optimize_lens && lens_point_count_sufficient
+        && (force_lens_without_coverage
+            || sparam.lens_coverage_sufficient (
+                   img_data.width, img_data.height, param->scanner_type));
   bool optimize_rotation = sparam.optimize_tilt && ((int)sparam.n_points () > solver_parameters::min_perspective_points (param->type));
 
   if (optimize_lens)
@@ -925,24 +909,10 @@ solver (scr_to_img_parameters *param,const  image_data &img_data,
       if (use_multifit)
 	gsl_multifit<coord_t, lens_solver> (s, "optimizing lens correction (multifit)",
 				       progress);
-      int n = s.num_coordinates ();
-      if (is_fixed_lens (param->scanner_type))
-        param->lens_correction.center = { s.start[0], s.start[1] };
-      else if (param->scanner_type == lens_move_horizontally)
-        param->lens_correction.center = { 0, s.start[0] };
-      else if (param->scanner_type == lens_move_vertically)
-        param->lens_correction.center = { s.start[0], 0 };
-      param->lens_correction.kr[0] = 1;
-      param->lens_correction.kr[1] = s.start[n] * (1 / lens_solver::scale_kr);
-      param->lens_correction.kr[2]
-          = s.start[n + 1] * (1 / lens_solver::scale_kr);
-      param->lens_correction.kr[3]
-          = s.start[n + 2] * (1 / lens_solver::scale_kr);
-      if (!param->lens_correction.normalize ()
-          || !solver_parameters::lens_candidate_reasonable_p (
-                 param->lens_correction, param->scanner_type,
-                 sparam.lens_center_distance))
+      lens_warp_correction_parameters fitted_lens;
+      if (!s.lens_from_values (s.start, &fitted_lens))
         return 1e30;
+      param->lens_correction = fitted_lens;
       const lens_identifiability_diagnostics identifiability
           = s.identifiability ();
       if (!identifiability.identifiable_p ())

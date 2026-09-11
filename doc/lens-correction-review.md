@@ -14,7 +14,9 @@ Stage 4 rejects lens solutions that are not identifiable after the best
 homography has been refitted. Stage 5 makes that variable-projection structure
 explicit in the implementation: the outer nonlinear state contains only lens
 parameters and every trial solves a fresh best homography without an initial
-homography guess.
+homography guess. Stage 6 separates the robust default low-order radial fit from
+an explicit full polynomial mode so high-order terms are never enabled merely
+because more flexibility lowers a local residual.
 
 ## Scope
 
@@ -82,6 +84,8 @@ axis before applying the remaining one-dimensional lens geometry.
 | LS-004 | Fixed | The automatic optical-center search range is configurable. `solver_lens_center_distance=0` selects the automatic policy; positive `D` permits each fitted normalized center coordinate in `0.5-D/2 .. 0.5+D/2`, so `D=1` stays inside the image and larger values permit off-image centers. |
 | LS-005 | Fixed | Lens candidates now need an identifiable profiled residual Jacobian. Finite-difference lens perturbations refit the best homography before residuals are compared, then a scaled SVD rejects lens directions that can be absorbed by projective geometry. |
 | LS-006 | Fixed | The variable-projection structure is explicit and state-safe: `lens_solver` holds the input geometry read-only, constructs every trial lens in a local parameter object, and solves `H*(L)` from the correspondences with no homography starting guess. |
+| LS-007 | Fixed | Automatic fitting has two complexity modes. `standard` optimizes only the leading free radial term (`kr1`) and is the default; `full` explicitly enables `kr1..kr3`. Existing/imported profiles may still contain all DNG coefficients regardless of the fit mode. |
+| LS-008 | Fixed | Registration stall recovery can force a Standard lens fit before the ordinary spatial-coverage gate is met. It bypasses coverage only; minimum point count, deformation bounds and profiled-Jacobian identifiability remain mandatory. |
 | TEST-001 | Fixed | The lens test used a fixed `(500,500)` center for all nominal test cases and normalized a second warp from already-warped source corners. |
 | TEST-002 | Fixed | A hand-calculated polynomial check was incorrectly described as an Adobe DNG worked example. It is retained as a synthetic formula check. |
 | TEST-003 | Fixed | Twelve source coordinates emitted by the executed Adobe DNG SDK Build 2652 are frozen in `test_lens_warp()` and compared directly with Color-Screen output. |
@@ -153,6 +157,20 @@ small point cloud, low-order radial distortion is easily absorbed by that
 homography and the high-order terms/optical center are poorly identified.
 A very small local residual can therefore extrapolate to a very large global
 deformation. Point count does not cure this conditioning problem.
+
+Model complexity is now part of that safety policy. The default **Standard
+radial** fit has one free shape coefficient (`kr1` before normalization); it is
+adequate for ordinary barrel/pincushion correction and has far less freedom to
+extrapolate wildly from an uneven cloud. **Full radial polynomial** restores all
+three free shape terms (`kr1`, `kr2`, `kr3`) and is explicit opt-in for lenses
+whose standard-fit residuals show systematic higher-order structure. The full
+mode is not automatically selected by registration or by a low residual alone.
+
+For progressive registration only, a stalled non-Dufay point sweep may request a
+forced Standard fit before the 50% coverage threshold is reached. This does not
+weaken the minimum point count, physical envelope or identifiability test; it only
+removes the circular dependency where lens correction needs wider coverage while
+wider coverage cannot be discovered until lens correction is active.
 
 The implemented conservative gate is:
 

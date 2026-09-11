@@ -516,19 +516,35 @@ already selected instead of asking the operator to select it again. **Swap scree
 colors** belongs in the Screen stage next to detection; do not duplicate a second
 "try luck" detector in Digital Capture.
 
-Automatic full-image point discovery may use one conservative recovery step when
-the ordinary global mapping stalls before lens fitting has enough point coverage.
-If lens optimization is requested, persistent nonlinear correction is off, and
-there are enough trusted points to constrain a mesh, the worker may build a
-**temporary** nonlinear mesh and use it for exactly one additional discovery pass.
-The mesh is never published. The enlarged cloud is accepted only if it now meets
-the global lens-coverage requirement; the worker then discards the mesh, solves
-the ordinary/lens model, prunes only the speculative suffix whose screen-space
-residual exceeds the normal discovery tolerance, verifies coverage again, and
-re-solves without nonlinear correction. Any failed check discards that speculative
-suffix and retains the already published ordinary points/geometry. Explicit user
-selection of nonlinear correction keeps its existing persistent-mesh behavior and
-does not enter this recovery path.
+Automatic full-image point discovery has process-specific stall recovery. For
+non-Dufay regular screens, keep the model global: when ordinary growth stalls
+before the usual lens-coverage heuristic is satisfied, an enabled lens fit may be
+forced once from the current point cloud and discovery continues from that mapping.
+The forced recovery always uses the **Standard radial** lens model and bypasses only
+the coverage gate; minimum point count, conservative deformation bounds and the
+profiled-Jacobian identifiability check remain mandatory. Never enable the full
+high-order lens polynomial merely to make registration advance. A later ordinary
+solve may refine the lens again once global coverage is available.
+
+Dufay is different because the screen is integrated into flexible film. Start its
+automatic sweep with nonlinear correction off; when the global model stops finding
+new points and enough anchors exist for a mesh, promote nonlinear correction to the
+persistent document geometry, update the Geometry checkbox, and continue discovery
+with that mesh. Do not switch it back off at completion. Selected-area point
+discovery retains the user's current model and does not run either automatic stall
+recovery path.
+
+Automatic lens fitting itself has two complexity modes. **Standard radial** is the
+default and fits only the leading free radial shape coefficient (`kr1` after the
+edge-scale gauge); this is the normal choice and the only mode used by stalled
+registration recovery. **Full radial polynomial** explicitly opts into `kr1`,
+`kr2`, and `kr3` for lenses whose low-order residuals genuinely require the extra
+shape freedom. Keep the high-order mode opt-in: it is much easier for sparse or
+uneven control points to produce a locally excellent but globally distorted fit.
+
+Once registration points exist, both panel-level **Detect screen coordinates** /
+**Optimize coordinates** and the canvas `Screen coordinates` editor stay unavailable:
+those points are expressed in the existing basis and must not be silently reinterpreted.
 
 `Lock axes` and coordinate finetuning actions are contextual: they are visible
 only while `Screen coordinates` is active, and are enabled only after the two-click

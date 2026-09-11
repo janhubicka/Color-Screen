@@ -249,16 +249,32 @@ mode, and points to **Screen -> Swap screen colors**. The redundant Digital
 Capture "try luck" detector is gone, and the swap action now lives with Screen
 detection rather than Geometry.
 
-Large lens-distorted scans also exposed a bootstrap problem: ordinary flood-fill
-can stall while the trusted point cloud is still too local for global lens
-parameters to be identifiable. Full-image automatic discovery may now make one
-private nonlinear-mesh pass when lens fitting is requested but lacks coverage.
-The mesh is only a search aid. Newly discovered points stay private until an
-ordinary/lens solve succeeds; only that speculative suffix is pruned against the
-final mapping, coverage is checked again, and the global model is re-solved. A
-failed bootstrap publishes neither the temporary mesh nor its speculative points.
-User-selected nonlinear correction and selected-area point discovery keep their
-previous semantics.
+Large lens-distorted scans also exposed a chicken-and-egg problem: ordinary
+point growth can stall before the cloud spans enough of the image for the normal
+lens-coverage heuristic, while lens correction is exactly what is needed to reach
+the missing regions. Full-image discovery now resolves this without a temporary
+mesh on ordinary/Paget-like screens. If lens fitting is enabled, enough points
+exist, and growth stalls with insufficient coverage, the worker forces a
+**Standard radial** lens fit and continues discovery from that global mapping. The
+forced solve bypasses only spatial coverage; point count, deformation envelope and
+identifiability checks still protect publication. It may be repeated only after
+new points have actually enlarged the cloud.
+
+Dufay follows the physical material instead: it starts with nonlinear correction
+off, but once ordinary growth stalls the worker promotes a nonlinear mesh to the
+persistent document geometry and continues registration with it. The Geometry UI
+therefore becomes nonlinear at the same moment and remains so after the operation.
+Selected-area discovery does not auto-promote either recovery mode. While the
+full-image worker runs, Workflow intentionally stops narrating every point-count
+change and shows one stable instruction: toggle the green registration overlay to
+watch progress and use Stop once coverage is good enough or geometry starts going
+wrong.
+
+Lens fitting now has two explicit complexity modes. **Standard radial** is the
+default and optimizes only `kr1`; **Full radial polynomial** retains all three free
+radial terms (`kr1..kr3`) for lenses which demonstrably need them. Stall recovery
+always uses Standard, preventing high-order coefficients from manufacturing a
+locally good but globally distorted rescue fit.
 
 ### Profile auto-optimization retriggered on every state refresh
 
@@ -324,8 +340,9 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   Workspace churn drives the two real `Strength` spin boxes back-to-back and
   verifies that one Undo reverts only the later stage; this catches regression
   to visible-text merge identity rather than merely checking metadata. Geometry
-  is the second complete panel migration: persistent fit policy, scanner/camera
-  geometry, and final-orientation controls use `geometry.*` keys. Panel-local
+  is the second complete panel migration: persistent fit policy (including the
+  Standard/Full lens-model choice), scanner/camera geometry, and final-orientation
+  controls use `geometry.*` keys. Panel-local
   **Auto fit geometry** and **Nonlinear corrections** request/presentation state
   deliberately remain unkeyed; a parameter key must identify saved document
   state rather than merely every widget produced by a parameter helper.

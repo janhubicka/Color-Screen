@@ -385,6 +385,8 @@ QPushButton *mtfFitButton = inspector->findChild<QPushButton *>(
     QStringLiteral("MtfFitButton"));
 QPushButton *detectCoordinatesButton = inspector->findChild<QPushButton *>(
     QStringLiteral("DetectScreenCoordinatesButton"));
+QPushButton *optimizeCoordinatesButton = inspector->findChild<QPushButton *>(
+    QStringLiteral("OptimizeScreenCoordinatesButton"));
 QPushButton *screenSwapColorsButton = inspector->findChild<QPushButton *>(
     QStringLiteral("ScreenSwapColorsButton"));
 QCheckBox *showRegistrationPointsBox = inspector->findChild<QCheckBox *>(
@@ -429,6 +431,8 @@ QCheckBox *geometryAutoFitCheck = inspector->findChild<QCheckBox *>(
     QStringLiteral("autoSolverBox"));
 QCheckBox *geometryNonlinearCheck = inspector->findChild<QCheckBox *>(
     QStringLiteral("nonlinearBox"));
+QComboBox *geometryLensModelCombo = inspector->findChild<QComboBox *>(
+    QStringLiteral("GeometryLensModelCombo"));
 QWidget *mtfUseMeasuredRow =
     mtfUseMeasured ? mtfUseMeasured->parentWidget() : nullptr;
 const bool hasMtfMeasurements =
@@ -722,6 +726,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         // pretend to be persistent document parameters.
         const QStringList geometryParameterKeys = {
             QStringLiteral("geometry.fit.optimize_lens"),
+            QStringLiteral("geometry.fit.lens_model"),
             QStringLiteral("geometry.fit.lens_center_distance"),
             QStringLiteral("geometry.fit.optimize_tilt"),
             QStringLiteral("geometry.scanner_type"),
@@ -740,6 +745,9 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
             !findParameterSpinBox(
                 QStringLiteral("geometry.fit.lens_center_distance")) ||
             !findParameterSpinBox(QStringLiteral("geometry.final.rotation")) ||
+            !geometryLensModelCombo || geometryLensModelCombo->count() != 2 ||
+            geometryLensModelCombo->property("parameterKey").toString() !=
+                QStringLiteral("geometry.fit.lens_model") ||
             !geometryAutoFitCheck || !geometryNonlinearCheck ||
             geometryAutoFitCheck->property("parameterKey").isValid() ||
             geometryNonlinearCheck->property("parameterKey").isValid()) {
@@ -903,18 +911,20 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         ParameterState coordinateNoPoints = coordinateGuardBaseline;
         coordinateNoPoints.solver.points.clear();
         first->applyState(coordinateNoPoints);
-        if (!detectCoordinatesButton->isEnabled()) {
+        if (!detectCoordinatesButton->isEnabled() ||
+            !optimizeCoordinatesButton->isEnabled()) {
           fail(QStringLiteral(
-              "Detect screen coordinates stayed disabled with no control points"));
+              "Screen-coordinate setup stayed disabled with no control points"));
           return;
         }
         ParameterState coordinateWithPoint = coordinateNoPoints;
         coordinateWithPoint.solver.add_point(
             {10, 10}, {0, 0}, colorscreen::solver_parameters::green);
         first->applyState(coordinateWithPoint);
-        if (detectCoordinatesButton->isEnabled()) {
+        if (detectCoordinatesButton->isEnabled() ||
+            optimizeCoordinatesButton->isEnabled()) {
           fail(QStringLiteral(
-              "Detect screen coordinates remained enabled with control points"));
+              "Screen-coordinate setup remained enabled with control points"));
           return;
         }
         first->onAutodetectCoordinatesRequested();
@@ -1003,6 +1013,26 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
               "Workflow did not refresh registration-point visibility guidance"));
           return;
         }
+
+        // During progressive full-image point discovery the workflow must not
+        // churn through point counts/freshness messages. Keep one stable
+        // instruction: expose the overlay when useful and Stop if coverage is
+        // already sufficient or the detector starts following bad geometry.
+        first->m_registrationPointDiscoveryRunning = true;
+        first->updateWorkflowSummary();
+        const QString runningGuidance = nextStepSummary->text();
+        first->m_imageWidget->setShowRegistrationPoints(false);
+        QCoreApplication::processEvents();
+        first->updateWorkflowSummary();
+        if (!runningGuidance.contains(QStringLiteral("Show Registration Points")) ||
+            !runningGuidance.contains(QStringLiteral("Stop")) ||
+            !runningGuidance.contains(QStringLiteral("wrong geometry")) ||
+            nextStepSummary->text() != runningGuidance) {
+          fail(QStringLiteral(
+              "Workflow guidance churned during progressive registration discovery"));
+          return;
+        }
+        first->m_registrationPointDiscoveryRunning = false;
 
         first->m_geometryFitBaseline = savedGeometryFitBaseline;
         first->m_geometryFitFailureInputs = savedGeometryFitFailure;
