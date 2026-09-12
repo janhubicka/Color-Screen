@@ -516,19 +516,21 @@ already selected instead of asking the operator to select it again. **Swap scree
 colors** belongs in the Screen stage next to detection; do not duplicate a second
 "try luck" detector in Digital Capture.
 
-Automatic full-image point discovery may use one conservative recovery step when
-the ordinary global mapping stalls before lens fitting has enough point coverage.
-If lens optimization is requested, persistent nonlinear correction is off, and
-there are enough trusted points to constrain a mesh, the worker may build a
-**temporary** nonlinear mesh and use it for exactly one additional discovery pass.
-The mesh is never published. The enlarged cloud is accepted only if it now meets
-the global lens-coverage requirement; the worker then discards the mesh, solves
-the ordinary/lens model, prunes only the speculative suffix whose screen-space
-residual exceeds the normal discovery tolerance, verifies coverage again, and
-re-solves without nonlinear correction. Any failed check discards that speculative
-suffix and retains the already published ordinary points/geometry. Explicit user
-selection of nonlinear correction keeps its existing persistent-mesh behavior and
-does not enter this recovery path.
+Automatic full-image point discovery has process-aware stall recovery. For
+non-integrated regular screens, when lens optimization is requested and minimum
+point count is already satisfied but coverage is still below the conservative
+automatic threshold, the worker may force one **Standard radial** lens solve and
+continue discovery. The coverage bypass is narrow: it does not bypass point count,
+monotonicity/deformation limits, optical-center bounds, or the projected-Jacobian
+identifiability test. It never silently upgrades to the Full radial polynomial.
+
+For integrated Dufaycolor film, start without nonlinear correction. On the first
+genuine stall, promote nonlinear correction persistently, publish the mesh so the
+Geometry checkbox reflects it, and continue point discovery; do not revert to the
+linear/global model afterwards. Selected-area registration work does not use these
+automatic stall recoveries. During full-image discovery, keep Workflow text stable
+and tell the operator to toggle registration-point visibility to inspect progress
+and use Stop when the result is good enough or starts following a wrong geometry.
 
 `Lock axes` and coordinate finetuning actions are contextual: they are visible
 only while `Screen coordinates` is active, and are enabled only after the two-click

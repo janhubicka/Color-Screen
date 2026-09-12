@@ -385,6 +385,8 @@ QPushButton *mtfFitButton = inspector->findChild<QPushButton *>(
     QStringLiteral("MtfFitButton"));
 QPushButton *detectCoordinatesButton = inspector->findChild<QPushButton *>(
     QStringLiteral("DetectScreenCoordinatesButton"));
+QPushButton *optimizeCoordinatesButton = inspector->findChild<QPushButton *>(
+    QStringLiteral("OptimizeScreenCoordinatesButton"));
 QPushButton *screenSwapColorsButton = inspector->findChild<QPushButton *>(
     QStringLiteral("ScreenSwapColorsButton"));
 QCheckBox *showRegistrationPointsBox = inspector->findChild<QCheckBox *>(
@@ -722,6 +724,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         // pretend to be persistent document parameters.
         const QStringList geometryParameterKeys = {
             QStringLiteral("geometry.fit.optimize_lens"),
+            QStringLiteral("geometry.fit.lens_model"),
             QStringLiteral("geometry.fit.lens_center_distance"),
             QStringLiteral("geometry.fit.optimize_tilt"),
             QStringLiteral("geometry.scanner_type"),
@@ -941,6 +944,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
           }
         }
         if (legacyTryLuck || !screenSwapColorsButton ||
+            !detectCoordinatesButton || !optimizeCoordinatesButton ||
             !showRegistrationPointsBox || !nextStepSummary ||
             !first->m_screenPanel ||
             !first->m_screenPanel->isAncestorOf(screenSwapColorsButton)) {
@@ -975,6 +979,12 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         workflowReady.solver.add_point(
             {40, 60}, {-1, 1}, colorscreen::solver_parameters::green);
         first->applyState(workflowReady);
+        if (detectCoordinatesButton->isEnabled() ||
+            optimizeCoordinatesButton->isEnabled()) {
+          fail(QStringLiteral(
+              "Screen-coordinate detection/refinement stayed enabled after control points existed"));
+          return;
+        }
         first->m_geometryFitPendingInputs.reset();
         first->m_geometryFitPendingComputeMesh.reset();
         first->m_geometryFitFailureInputs.reset();
@@ -995,6 +1005,29 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
               "Workflow did not recognize the already-selected reconstruction mode or explain registration editing"));
           return;
         }
+
+        first->m_registrationPointDiscoveryRunning = true;
+        first->updateWorkflowSummary();
+        const QString runningGuidance = nextStepSummary->text();
+        const QString runningRegistration = registrationSummary->text();
+        if (!runningGuidance.contains(QStringLiteral("Toggle Registration")) ||
+            !runningGuidance.contains(QStringLiteral("Press Stop"))) {
+          fail(QStringLiteral(
+              "Workflow did not switch to stable automatic-registration guidance"));
+          return;
+        }
+        first->m_solverParams.add_point(
+            {80, 80}, {2, 2}, colorscreen::solver_parameters::green);
+        first->updateWorkflowSummary();
+        if (nextStepSummary->text() != runningGuidance ||
+            registrationSummary->text() != runningRegistration) {
+          fail(QStringLiteral(
+              "Workflow churned while automatic registration published points"));
+          return;
+        }
+        first->m_solverParams = workflowReady.solver;
+        first->m_registrationPointDiscoveryRunning = false;
+        first->updateWorkflowSummary();
 
         first->m_imageWidget->setShowRegistrationPoints(true);
         QCoreApplication::processEvents();

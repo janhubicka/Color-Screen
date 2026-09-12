@@ -83,6 +83,7 @@ private:
 
   QCheckBox *m_showRegistrationPointsBox = nullptr;
   QPushButton *m_autodetectCoordinatesButton = nullptr;
+  QPushButton *m_optimizeCoordinatesButton = nullptr;
   QPushButton *m_optimizeButton = nullptr;
   QCheckBox *m_autoOptimizeBox = nullptr;
   QCheckBox *m_lensCb = nullptr;

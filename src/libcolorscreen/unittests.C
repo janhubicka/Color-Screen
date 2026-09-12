@@ -1873,7 +1873,9 @@ compare_scr_to_img (const char *test_name, scr_to_img_parameters & param,
 bool
 do_test_homography (scr_to_img_parameters &param, int width, int height,
                     bool lens_correction, coord_t epsilon,
-                    coord_t lens_center_distance = 0)
+                    coord_t lens_center_distance = 0,
+                    solver_parameters::lens_fit_model_t lens_fit_model
+                        = solver_parameters::lens_fit_full)
 {
   scr_to_img map;
   image_data img;
@@ -1887,6 +1889,7 @@ do_test_homography (scr_to_img_parameters &param, int width, int height,
     }
   solver_parameters sparam;
   sparam.optimize_lens = lens_correction;
+  sparam.lens_fit_model = lens_fit_model;
   sparam.lens_center_distance = lens_center_distance;
   int xstep = (width + 99) / 11;
   int ystep = (height + 99) / 10;
@@ -1988,6 +1991,23 @@ test_homography (bool lens_correction, bool joly, coord_t epsilon)
       param.lens_correction.center = {1.8, 0.6};
       ok &= do_test_homography (param, 1024, 1024, true, epsilon, 4);
       param.lens_correction.center = saved_center;
+    }
+
+  /* The default Standard model deliberately has only one free radial shape
+     coefficient after edge normalization. Verify that it recovers an ordinary
+     low-order distortion without inventing higher-order curvature. */
+  if (lens_correction && !joly)
+    {
+      scr_to_img_parameters standard_truth = param;
+      standard_truth.scanner_type = fixed_lens;
+      standard_truth.lens_correction = lens_warp_correction_parameters ();
+      standard_truth.lens_correction.center = {0.43, 0.57};
+      standard_truth.lens_correction.kr[1] = 0.035;
+      if (!standard_truth.lens_correction.normalize ())
+        return false;
+      ok &= do_test_homography (
+          standard_truth, 1024, 1024, true, epsilon, 0,
+          solver_parameters::lens_fit_standard);
     }
 
   /* Lens optimization is a variable-projection problem: only lens coordinates
@@ -5772,6 +5792,8 @@ test_lens_warp ()
         }
 
     if (local.lens_optimization_sufficient (Paget, 1000, 1000, fixed_lens)
+        || !local.lens_optimization_sufficient (Paget, 1000, 1000, fixed_lens,
+                                                true)
         || !global.lens_optimization_sufficient (Paget, 1000, 1000,
                                                  fixed_lens)
         || !horizontal.lens_optimization_sufficient (
@@ -5852,9 +5874,11 @@ test_lens_warp ()
         ok = false;
       }
 
-    /* Solver configuration must round-trip, while old project files which do
-       not contain the new keyword keep the automatic value zero.  */
+    /* Solver configuration must round-trip. Fresh solver state uses the safer
+       Standard lens model, while old project files which predate the explicit
+       model keyword retain the historical Full solver when re-fitted. */
     solver_parameters saved_solver;
+    saved_solver.lens_fit_model = solver_parameters::lens_fit_full;
     saved_solver.lens_center_distance = 3.25;
     FILE *project = tmpfile ();
     solver_parameters loaded_solver;
@@ -5869,6 +5893,7 @@ test_lens_warp ()
     if (project)
       fclose (project);
     if (!project_loaded || project_error
+        || loaded_solver.lens_fit_model != solver_parameters::lens_fit_full
         || loaded_solver.lens_center_distance != 3.25)
       {
         fprintf (stderr, "Lens-center distance project round trip failed%s%s\n",
@@ -5876,10 +5901,43 @@ test_lens_warp ()
                  project_error ? project_error : "");
         ok = false;
       }
-    if (solver_parameters ().lens_center_distance != 0
+    if (solver_parameters ().lens_fit_model
+            != solver_parameters::lens_fit_standard
+        || solver_parameters ().lens_center_distance != 0
         || solver_parameters::effective_lens_center_distance (0) != 2)
       {
-        fprintf (stderr, "Automatic lens-center distance default changed\n");
+        fprintf (stderr, "Fresh lens-solver defaults changed\n");
+        ok = false;
+      }
+
+    FILE *new_project = tmpfile ();
+    FILE *legacy_project = tmpfile ();
+    solver_parameters legacy_solver;
+    const char *legacy_error = nullptr;
+    bool legacy_loaded = false;
+    if (new_project && legacy_project
+        && save_csp (new_project, nullptr, nullptr, nullptr, &saved_solver)
+        && !fseek (new_project, 0, SEEK_SET))
+      {
+        char line[1024];
+        while (fgets (line, sizeof (line), new_project))
+          if (strncmp (line, "solver_lens_fit_model:",
+                       strlen ("solver_lens_fit_model:")))
+            fputs (line, legacy_project);
+        if (!fseek (legacy_project, 0, SEEK_SET))
+          legacy_loaded = load_csp (legacy_project, nullptr, nullptr, nullptr,
+                                    &legacy_solver, &legacy_error);
+      }
+    if (new_project)
+      fclose (new_project);
+    if (legacy_project)
+      fclose (legacy_project);
+    if (!legacy_loaded || legacy_error
+        || legacy_solver.lens_fit_model != solver_parameters::lens_fit_full)
+      {
+        fprintf (stderr, "Legacy lens-fit model compatibility failed%s%s\n",
+                 legacy_error ? ": " : "",
+                 legacy_error ? legacy_error : "");
         ok = false;
       }
   }
@@ -5930,58 +5988,6 @@ test_lens_warp ()
   }
 
   return ok;
-}
-
-/* A nonlinear discovery pass may contribute only a speculative suffix of
-   registration points.  Verify that final-model pruning removes bad suffix
-   points without touching the trusted anchors before FIRST_POINT.  */
-static bool
-test_registration_bootstrap_prune ()
-{
-  image_data img;
-  if (!img.set_dimensions (200, 160))
-    return false;
-
-  scr_to_img_parameters geometry;
-  geometry.type = Paget;
-  geometry.center = {100, 80};
-  geometry.coordinate1 = {5, 0};
-  geometry.coordinate2 = {0, 5};
-
-  scr_to_img map;
-  if (!map.set_parameters (geometry, img))
-    return false;
-
-  solver_parameters points;
-  const point_t anchor1 = {70, 60};
-  const point_t anchor2 = {130, 100};
-  const point_t accepted = {120, 60};
-  const point_t rejected = {60, 110};
-  /* Trusted prefix points are never candidates for pruning, even if their
-     residual happens to exceed the speculative-tail threshold.  */
-  points.add_point (anchor1,
-                    map.to_scr (anchor1) + point_t{0.20, 0.0},
-                    solver_parameters::green);
-  points.add_point (anchor2, map.to_scr (anchor2), solver_parameters::green);
-  points.add_point (accepted,
-                    map.to_scr (accepted) + point_t{0.02, -0.01},
-                    solver_parameters::green);
-  points.add_point (rejected,
-                    map.to_scr (rejected) + point_t{0.20, 0.0},
-                    solver_parameters::green);
-
-  const size_t removed = points.prune_points_outside_mapping_tolerance (
-      geometry, img, 2, 0.05);
-  if (removed != 1 || points.n_points () != 3
-      || points.points[0].img != anchor1 || points.points[1].img != anchor2
-      || points.points[2].img != accepted)
-    {
-      fprintf (stderr,
-               "Registration bootstrap pruning did not preserve trusted "
-               "anchors/accepted suffix points\n");
-      return false;
-    }
-  return true;
 }
 
 /* Test the simulated photographic darkroom process.
@@ -9109,8 +9115,6 @@ main (int argc, char **argv)
       [] () { return test_mtf_deconvolution (); } },
     { "homography", "homography tests", [] () { return (bool)test_homography (false, false, 0.000001); } },
     { "warp", "lens warp tests", [] () { return test_lens_warp (); } },
-    { "registration_prune", "registration bootstrap pruning tests",
-      [] () { return test_registration_bootstrap_prune (); } },
     { "lens_correction", "lens correction tests", [] () { return (bool)test_homography (true, false, 0.15); } },
     { "1d_homography", "1d homography and lens correction tests", [] () { return (bool)test_homography (true, true, 0.15); } },
     { "discovery", "screen discovery tests", [] () { return (bool)test_discovery (1.8); } },

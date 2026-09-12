@@ -587,6 +587,10 @@ save_csp (FILE *f, const scr_to_img_parameters *param, const scr_detect_paramete
       if (fprintf (f, "solver_optimize_lens: %s\n",
                    bool_names[(int)sparam->optimize_lens])
               < 0
+          || fprintf (f, "solver_lens_fit_model: %s\n",
+                      solver_parameters::lens_fit_model_names[
+                          (int)sparam->lens_fit_model])
+                 < 0
           || fprintf (f, "solver_lens_center_distance: %.17g\n",
                       (double)sparam->lens_center_distance)
                  < 0
@@ -844,6 +848,7 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam,
   int measurement = -1;
   bool first_control_point = true;
   bool resampling_kernel_seen = false;
+  bool lens_fit_model_seen = false;
   if (fread (buf, 1, strlen (HEADER), f) < 0
       || memcmp (buf, HEADER, strlen (HEADER)))
     {
@@ -1978,6 +1983,23 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam,
               return false;
             }
         }
+      else if (!strcmp (buf, "solver_lens_fit_model"))
+        {
+          lens_fit_model_seen = true;
+          get_keyword (f, buf2);
+          int model;
+          for (model = 0; model < solver_parameters::max_lens_fit_model; model++)
+            if (!strcmp (buf2, solver_parameters::lens_fit_model_names[model]))
+              break;
+          if (model == solver_parameters::max_lens_fit_model)
+            {
+              *error = "unknown solver_lens_fit_model";
+              return false;
+            }
+          if (sparam)
+            sparam->lens_fit_model
+                = static_cast<solver_parameters::lens_fit_model_t> (model);
+        }
       else if (!strcmp (buf, "solver_lens_center_distance"))
         {
           coord_t distance;
@@ -2601,6 +2623,12 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam,
      keeping Lanczos 3 as the faster default for newly created projects.  */
   if (rparam && !resampling_kernel_seen)
     rparam->sharpen.resampling = sharpen_parameters::lanczos8_resampling;
+  /* Older project files predate the explicit lens-model choice and therefore
+     used the historical full three-term solver. Preserve that behavior when
+     re-fitting an old project, while newly constructed solver parameters use
+     the safer Standard model. */
+  if (sparam && !lens_fit_model_seen)
+    sparam->lens_fit_model = solver_parameters::lens_fit_full;
   return true;
 }
 } // namespace colorscreen

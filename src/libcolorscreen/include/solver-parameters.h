@@ -13,16 +13,27 @@ namespace colorscreen
 struct image_data;
 struct solver_parameters
 {
+  enum lens_fit_model_t
+  {
+    lens_fit_standard = 0,
+    lens_fit_full,
+    max_lens_fit_model
+  };
+  static constexpr const char *lens_fit_model_names[max_lens_fit_model]
+      = { "standard", "full" };
+
   DLL_PUBLIC_EXP
   solver_parameters ()
-      : points (), optimize_lens (true), lens_center_distance (0),
-        optimize_tilt (true), weighted (false), center ({0, 0})
+      : points (), optimize_lens (true), lens_fit_model (lens_fit_standard),
+        lens_center_distance (0), optimize_tilt (true), weighted (false),
+        center ({0, 0})
   {
   }
   DLL_PUBLIC_EXP void
   copy_without_points (const solver_parameters &other)
   {
     optimize_lens = other.optimize_lens;
+    lens_fit_model = other.lens_fit_model;
     lens_center_distance = other.lens_center_distance;
     optimize_tilt = other.optimize_tilt;
     weighted = other.weighted;
@@ -81,19 +92,14 @@ struct solver_parameters
   lens_coverage_sufficient (int width, int height,
                             enum scanner_type scanner) const;
 
-  /* Return true if both point count and coverage permit automatic lens
-     fitting for TYPE and SCANNER.  */
+  /* Return true if point count and, normally, scan coverage permit automatic
+     lens fitting for TYPE and SCANNER. IGNORE_COVERAGE is reserved for the
+     one conservative stalled-discovery retry; it never bypasses point count
+     or the post-fit physical/identifiability checks. */
   DLL_PUBLIC_EXP bool
   lens_optimization_sufficient (enum scr_type type, int width, int height,
-                                enum scanner_type scanner) const;
-
-  /* Remove points FIRST_POINT and later whose image position no longer agrees
-     with PARAM within MAX_DISPLACEMENT screen units.  Earlier points are
-     preserved as trusted anchors.  Return the number removed.  */
-  DLL_PUBLIC_EXP size_t
-  prune_points_outside_mapping_tolerance (
-      const scr_to_img_parameters &param, const image_data &img,
-      size_t first_point, coord_t max_displacement);
+                                enum scanner_type scanner,
+                                bool ignore_coverage = false) const;
 
   /* Return true if normalized lens parameters P are conservative enough for
      an automatically inferred model.  This is solver policy, not a DNG
@@ -128,6 +134,12 @@ struct solver_parameters
      solver().  The Jacobian check rejects a fitted lens model whose effect can
      be absorbed by refitting the homography.  */
   bool optimize_lens;
+  /* Complexity of the automatically fitted radial model. Standard is the
+     conservative default and fits only the first radial shape coefficient
+     after removing the edge-scale gauge. Full fits all three DNG radial shape
+     coefficients and is explicit opt-in because higher orders need broad,
+     well-conditioned coverage. */
+  enum lens_fit_model_t lens_fit_model;
   /* Maximum normalized distance of an automatically fitted lens center from
      image center.  Zero means automatic.  Positive D constrains each fitted
      coordinate to 0.5 +/- D/2, so D=1 stays inside the image and D>1 may
@@ -209,6 +221,7 @@ struct solver_parameters
   bool operator== (const solver_parameters &other) const
   {
     return optimize_lens == other.optimize_lens &&
+           lens_fit_model == other.lens_fit_model &&
            lens_center_distance == other.lens_center_distance &&
            optimize_tilt == other.optimize_tilt &&
            weighted == other.weighted &&

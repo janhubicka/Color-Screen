@@ -14,7 +14,9 @@ Stage 4 rejects lens solutions that are not identifiable after the best
 homography has been refitted. Stage 5 makes that variable-projection structure
 explicit in the implementation: the outer nonlinear state contains only lens
 parameters and every trial solves a fresh best homography without an initial
-homography guess.
+homography guess. Stage 6 separates the automatic radial fit into a conservative
+Standard model and an explicit Full polynomial so routine scans do not acquire
+unnecessary high-order curvature.
 
 ## Scope
 
@@ -82,6 +84,7 @@ axis before applying the remaining one-dimensional lens geometry.
 | LS-004 | Fixed | The automatic optical-center search range is configurable. `solver_lens_center_distance=0` selects the automatic policy; positive `D` permits each fitted normalized center coordinate in `0.5-D/2 .. 0.5+D/2`, so `D=1` stays inside the image and larger values permit off-image centers. |
 | LS-005 | Fixed | Lens candidates now need an identifiable profiled residual Jacobian. Finite-difference lens perturbations refit the best homography before residuals are compared, then a scaled SVD rejects lens directions that can be absorbed by projective geometry. |
 | LS-006 | Fixed | The variable-projection structure is explicit and state-safe: `lens_solver` holds the input geometry read-only, constructs every trial lens in a local parameter object, and solves `H*(L)` from the correspondences with no homography starting guess. |
+| LS-007 | Fixed | Automatic lens fitting defaults to **Standard radial**, with one free radial shape coefficient after edge-scale normalization. **Full radial polynomial** restores all three DNG radial shape coefficients and is explicit opt-in. Stalled full-image registration may bypass only the coverage heuristic for one Standard fit; all other solver safety checks remain active. |
 | TEST-001 | Fixed | The lens test used a fixed `(500,500)` center for all nominal test cases and normalized a second warp from already-warped source corners. |
 | TEST-002 | Fixed | A hand-calculated polynomial check was incorrectly described as an Adobe DNG worked example. It is retained as a synthetic formula check. |
 | TEST-003 | Fixed | Twelve source coordinates emitted by the executed Adobe DNG SDK Build 2652 are frozen in `test_lens_warp()` and compared directly with Color-Screen output. |
@@ -154,8 +157,13 @@ homography and the high-order terms/optical center are poorly identified.
 A very small local residual can therefore extrapolate to a very large global
 deformation. Point count does not cure this conditioning problem.
 
-The implemented conservative gate is:
+The implemented conservative policy is:
 
+* default automatic fitting to **Standard radial**, which optimizes only the
+  first radial shape coefficient after the edge-scale gauge is removed;
+* expose **Full radial polynomial** as an explicit saved solver choice which
+  optimizes all three radial shape coefficients; automatic stall recovery never
+  selects it;
 * retain the existing minimum point count (100 for ordinary screens, 200 for
   vertical-strip screens);
 * require the central 90% of point coordinates to span at least 50% of the
@@ -173,8 +181,13 @@ The implemented conservative gate is:
 These values are intentionally generous and remain provisional. They are not
 claimed physical limits and are not applied when merely loading or retaining a
 valid DNG/manual profile. They only decide whether an **automatically inferred**
-lens solution is safe enough to install. If spatial coverage is insufficient,
-lens optimization is skipped and any existing lens profile remains active.
+lens solution is safe enough to install. Normally, insufficient spatial coverage
+skips lens optimization and preserves any existing profile. The one exception is
+full-image registration after ordinary point growth has genuinely stalled: with
+minimum point count already met, the worker may retry the **Standard radial** model
+once while ignoring only the coverage heuristic. The deformation envelope, center
+bounds, monotonicity and identifiability checks still decide whether that result is
+installed.
 
 The center-distance control is intentionally a Color-Screen solver extension,
 not a statement about portable DNG profiles. It is useful for flatbed/film

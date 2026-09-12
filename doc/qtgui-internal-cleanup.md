@@ -250,15 +250,22 @@ Capture "try luck" detector is gone, and the swap action now lives with Screen
 detection rather than Geometry.
 
 Large lens-distorted scans also exposed a bootstrap problem: ordinary flood-fill
-can stall while the trusted point cloud is still too local for global lens
-parameters to be identifiable. Full-image automatic discovery may now make one
-private nonlinear-mesh pass when lens fitting is requested but lacks coverage.
-The mesh is only a search aid. Newly discovered points stay private until an
-ordinary/lens solve succeeds; only that speculative suffix is pruned against the
-final mapping, coverage is checked again, and the global model is re-solved. A
-failed bootstrap publishes neither the temporary mesh nor its speculative points.
-User-selected nonlinear correction and selected-area point discovery keep their
-previous semantics.
+can stall while the trusted point cloud is still below the conservative global
+lens-coverage heuristic. The recovery no longer invents a temporary local mesh
+for those screens. If minimum point count is already satisfied, full-image
+automatic discovery may force one **Standard radial** lens solve despite missing
+coverage and then continue point growth from that global correction. The normal
+physical envelope and profiled-Jacobian identifiability checks remain mandatory;
+automatic recovery never enables the Full radial polynomial.
+
+Dufaycolor follows a different rule because the screen is integrated into film:
+ordinary registration starts without a mesh, but the first genuine stall promotes
+nonlinear correction persistently and continues discovery with it. The GUI checkbox
+therefore becomes checked when that mesh is published and remains checked. Selected-
+area point discovery keeps its previous semantics. While the full-image worker is
+running, Workflow deliberately shows one stable instruction: toggle registration
+points to inspect progress and use Stop when coverage is sufficient or geometry
+starts to drift, rather than rewriting the guide after every progressive batch.
 
 ### Profile auto-optimization retriggered on every state refresh
 

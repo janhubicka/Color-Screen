@@ -3,6 +3,7 @@
 #include "FinetuneImagesPanel.h"
 #include <QSignalBlocker>
 #include <QCheckBox>
+#include <QComboBox>
 #include <QPushButton>
 #include <QHBoxLayout>
 #include <QFormLayout>
@@ -77,6 +78,10 @@ void GeometryPanel::setupUi() {
   auto hasConfiguredGeometry = [](const ParameterState &s) {
       return colorscreen::screen_geometry_configured_p(s.scrToImg);
   };
+  auto canEditScreenCoordinates = [hasConfiguredGeometry](
+                                      const ParameterState &s) {
+    return hasConfiguredGeometry(s) && s.solver.points.empty();
+  };
 
   m_autodetectCoordinatesButton = addButtonParameter(
       "Step 1", "Detect screen coordinates", [this]() {
@@ -90,9 +95,16 @@ void GeometryPanel::setupUi() {
   m_autodetectCoordinatesButton->setObjectName(
       QStringLiteral("DetectScreenCoordinatesButton"));
   
-  addButtonParameter("Step 2", "Optimize coordinates", [this]() {
-      emit optimizeCoordinatesRequested();
-  }, hasConfiguredGeometry, "Refine the detected screen coordinate system using the image data.");
+  m_optimizeCoordinatesButton = addButtonParameter(
+      "Step 2", "Optimize coordinates", [this]() {
+        emit optimizeCoordinatesRequested();
+      },
+      canEditScreenCoordinates,
+      "Refine the detected screen coordinate system using the image data. "
+      "Disabled once registration points exist because those points are "
+      "expressed in the current screen coordinate system.");
+  m_optimizeCoordinatesButton->setObjectName(
+      QStringLiteral("OptimizeScreenCoordinatesButton"));
 
   addButtonParameter("Step 3", "Add registration points", [this]() {
       emit automaticallyAddPointsRequested(m_finetuneAreaParams);
@@ -169,6 +181,30 @@ void GeometryPanel::setupUi() {
       nullptr, "Include lens distortion parameters in the geometry fit.",
       QStringLiteral("geometry.fit.optimize_lens"));
   connect(m_lensCb, &QCheckBox::toggled, this, triggerIfAuto);
+
+  const std::map<int, QString> lensModelNames = {
+      {colorscreen::solver_parameters::lens_fit_standard,
+       tr("Standard radial (recommended)")},
+      {colorscreen::solver_parameters::lens_fit_full,
+       tr("Full radial polynomial")}};
+  QComboBox *lensModelCombo = addEnumParameter(
+      tr("Lens model"), lensModelNames,
+      [](const ParameterState &s) {
+        return static_cast<int>(s.solver.lens_fit_model);
+      },
+      [](ParameterState &s, int v) {
+        s.solver.lens_fit_model =
+            static_cast<colorscreen::solver_parameters::lens_fit_model_t>(v);
+      },
+      [](const ParameterState &s) { return s.solver.optimize_lens; },
+      tr("Standard radial fits only the first radial shape coefficient after "
+         "removing overall scale. It is the safer default for ordinary lenses. "
+         "Full radial polynomial fits all three DNG radial shape coefficients "
+         "and should be used only when broad registration coverage supports "
+         "the extra degrees of freedom."),
+      QStringLiteral("geometry.fit.lens_model"));
+  connect(lensModelCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+          this, [triggerIfAuto](int) { triggerIfAuto(); });
 
   addDoubleParameter("Lens center distance", 0.0, 100.0,
       [](const ParameterState &s){ return (double)s.solver.lens_center_distance; },

@@ -173,23 +173,28 @@ is the explicit manual fallback: click the green origin dot, click its neighbori
 green dot in the +X direction (the pair is committed as one undoable setup step),
 optionally fine-tune/optimize that linear basis, then begin adding registration
 points. Screen coordinates are the reference frame of every stored control point,
-so automatic **Detect screen coordinates** is disabled once any point exists.
+so automatic **Detect screen coordinates** and **Optimize coordinates** are
+disabled once any point exists.
 Re-running **Detect screen** with existing points reuses the current coordinates
 and goes directly to finding/refining points; it must never replace the center/axes
 underneath those points. If points somehow exist without valid geometry, restore
 compatible coordinates or delete the points before redetection.
 
-There is one internal recovery exception for difficult lens-distorted scans. If
-normal automatic point growth stalls before the cloud spans enough of the scan to
-fit a global lens model, the worker may construct a temporary nonlinear mesh from
-the trusted cloud and use it for one extra discovery pass. This mesh is only a
-search aid: it is discarded before publication, the enlarged cloud must first meet
-the lens-fit coverage threshold, and the accepted result is re-solved with ordinary
-global geometry plus lens correction. Points contributed by the temporary pass
-are then pruned against that final map using the normal screen-space discovery
-tolerance and the global model is solved once more. If coverage or either solve
-fails, the speculative points are dropped. An explicit user request for nonlinear
-geometry remains a separate persistent mode.
+Automatic point growth has two process-aware stall recoveries. For ordinary
+regular screens, if lens correction is requested and there are already enough
+points for the lens solver but the conservative coverage heuristic is the only
+thing suppressing it, the worker may force one **Standard radial** lens fit and
+continue discovery from that global map. This bypasses coverage only: minimum
+point count, bounded deformation, monotonicity and projected-Jacobian
+identifiability still apply. Automatic recovery never turns on the Full radial
+polynomial.
+
+Dufaycolor is different because its screen is integrated into flexible film. Its
+first genuine ordinary-registration stall promotes nonlinear correction to the
+persistent geometry, checks the Geometry checkbox through the resulting mesh, and
+continues point discovery with that mesh. It is not switched back off afterwards.
+The manual/selected-area point operation does not perform either automatic stall
+recovery.
 
 Once an accepted geometry fit (or user-requested nonlinear mesh) is based on those
 control points, the base-coordinate tool disappears rather than offering two

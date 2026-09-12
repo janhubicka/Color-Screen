@@ -837,6 +837,10 @@ private:
   std::optional<ParameterState> m_geometryFitPendingInputs;
   std::optional<bool> m_geometryFitPendingComputeMesh;
   std::optional<ParameterState> m_geometryFitFailureInputs;
+  // Full-image progressive point discovery owns a stable Workflow message.
+  // Individual point/geometry batches may arrive rapidly, but the guide should
+  // not churn while the Stop action remains the meaningful user decision.
+  bool m_registrationPointDiscoveryRunning = false;
 
   // Session-local MTF model-fit provenance shared by all Sharpness views.
   std::optional<colorscreen::mtf_parameters> m_mtfFitBaseline;
