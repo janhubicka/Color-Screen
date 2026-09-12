@@ -855,10 +855,20 @@ simple_solver (scr_to_img_parameters *param, const image_data &img_data,
 }
 
 
+/* Determine geometry and lens warp using the normal lens-coverage safety gate.
+   Keep this overload out of line so existing users retain the historical
+   four-argument exported symbol.  */
+coord_t
+solver (scr_to_img_parameters *param, const image_data &img_data,
+        const solver_parameters &sparam, progress_info *progress)
+{
+  return solver (param, img_data, sparam, progress, false);
+}
+
 /* Determine geometry and lens warp.  PARAM is updated with results.
    IMG_DATA is the source image.  SPARAM contains solver points.
-   PROGRESS is used for progress reporting.  */
-
+   PROGRESS is used for progress reporting.  IGNORE_LENS_COVERAGE is reserved
+   for callers that deliberately apply a process-specific bootstrap policy.  */
 coord_t
 solver (scr_to_img_parameters *param,const  image_data &img_data,
         const solver_parameters &sparam, progress_info *progress,

@@ -262,8 +262,11 @@ DLL_PUBLIC rgbdata analyze_color_proportions (
 
 DLL_PUBLIC coord_t solver (scr_to_img_parameters *param, const image_data &img_data,
                            const solver_parameters &sparam,
-                           progress_info *progress = NULL,
-                           bool ignore_lens_coverage = false);
+                           progress_info *progress = NULL);
+DLL_PUBLIC coord_t solver (scr_to_img_parameters *param, const image_data &img_data,
+                           const solver_parameters &sparam,
+                           progress_info *progress,
+                           bool ignore_lens_coverage);
 DLL_PUBLIC std::unique_ptr<mesh> solver_mesh (const scr_to_img_parameters *param,
                                               const image_data &img_data,
                                               const solver_parameters &sparam,
