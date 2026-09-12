@@ -23,21 +23,31 @@ jobs:
         with:
           ref: agent/qtgui-registration-stall-lens-policy
           fetch-depth: 0
-      - name: Build and obtain workspace-smoke backtrace
+      - name: Build and obtain compact workspace-smoke diagnostics
         shell: bash
         run: |
           set -euo pipefail
           CXXFLAGS='-O2 -g -Wall -Wextra' CFLAGS='-O2 -g -Wall -Wextra' \
             ./configure --enable-checking --enable-qtgui --disable-static-link
           make -j"$(nproc)"
+          set +e
           gdb --batch --return-child-result \
             -ex 'set pagination off' \
             -ex 'set print thread-events off' \
             -ex 'set env QT_QPA_PLATFORM offscreen' \
             -ex run \
-            -ex 'thread apply all bt full' \
+            -ex 'bt 40' \
             --args ./src/qtgui/colorscreen-qt \
               --smoke-test 60000 --smoke-test-expect-windows 2 \
               --smoke-test-workspace-churn \
               "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif" \
-              "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
+              "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif" \
+              > /tmp/gdb.log 2>&1
+          rc=$?
+          set -e
+          echo "gdb/smoke exit code: $rc"
+          echo '===== relevant diagnostics ====='
+          grep -n -E 'Program received signal|SIG[A-Z]+|WorkspaceChurnSmoke|workspace churn|workspace smoke|Could not|stayed |FAILED|FAIL|AddressSanitizer|assert' /tmp/gdb.log || true
+          echo '===== final 180 lines ====='
+          tail -n 180 /tmp/gdb.log
+          exit "$rc"
