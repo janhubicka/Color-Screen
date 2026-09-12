@@ -1,0 +1,71 @@
+name: Agent registration stall lens policy publisher
+on:
+  push:
+    branches: [agent/qtgui-registration-followup-stage]
+    paths: [.github/workflows/agent-registration-stall-lens-policy-publish.yml]
+permissions:
+  contents: write
+  packages: read
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    container:
+      image: ghcr.io/janhubicka/color-screen-ci:ubuntu-24.04
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Publish exact reviewed registration/lens policy
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          BASE=fcf58687463a055dfb888e456fde6c71e2e9bb6d
+          FEATURE=agent/qtgui-registration-stall-lens-policy
+          git fetch origin main
+          test "$(git rev-parse origin/main)" = "$BASE"
+          cat .agent-registration-stall-lens-policy.part0{0,1,2,3,4,5} \
+            | base64 -d | gzip -d > /tmp/change.patch
+          echo '87d9a257fe306bab126cd00ecce93e98cf817f2878ed4246a89115e2d5b9545b  /tmp/change.patch' \
+            | sha256sum -c -
+          git checkout -B "$FEATURE" "$BASE"
+          git apply --index /tmp/change.patch
+          cat > /tmp/expected-files <<'EOF'
+          .agents/qtgui.md
+          doc/lens-correction-review.md
+          doc/qtgui-internal-cleanup.md
+          doc/qtgui-workflow-roadmap.md
+          src/libcolorscreen/include/colorscreen.h
+          src/libcolorscreen/include/solver-parameters.h
+          src/libcolorscreen/loadsave.C
+          src/libcolorscreen/solver.C
+          src/libcolorscreen/unittests.C
+          src/qtgui/FinetuneMisregisteredWorker.cpp
+          src/qtgui/FinetuneMisregisteredWorker.h
+          src/qtgui/GeometryPanel.cpp
+          src/qtgui/GeometryPanel.h
+          src/qtgui/MainWindow.cpp
+          src/qtgui/MainWindow.h
+          src/qtgui/WorkspaceChurnSmoke.cpp
+          EOF
+          git diff --cached --name-only | sort > /tmp/actual-files
+          diff -u /tmp/expected-files /tmp/actual-files
+          git diff --cached --check
+          sh build-aux/check-generated-build-metadata.sh
+          CXXFLAGS='-O2 -g -Wall -Wextra' CFLAGS='-O2 -g -Wall -Wextra' \
+            ./configure --enable-checking --enable-qtgui --disable-static-link
+          make -j"$(nproc)"
+          ./src/libcolorscreen/unittests warp lens_correction
+          QT_QPA_PLATFORM=offscreen ./src/qtgui/colorscreen-qt \
+            --smoke-test 60000 --smoke-test-expect-windows 2 \
+            --smoke-test-workspace-churn \
+            "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif" \
+            "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif"
+          git config user.name 'ChatGPT Agent'
+          git config user.email 'noreply@openai.com'
+          git commit -m 'qtgui: harden stalled registration and lens fitting'
+          test "$(git rev-parse HEAD^)" = "$BASE"
+          git push --force-with-lease origin "$FEATURE"
