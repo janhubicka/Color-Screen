@@ -1,53 +1,93 @@
-name: Agent registration stall lens policy debugger
+name: Agent registration stall lens policy ABI publisher
 on:
   push:
     branches: [agent/qtgui-registration-followup-stage]
     paths: [.github/workflows/agent-registration-stall-lens-policy-publish.yml]
 permissions:
-  contents: read
-  packages: read
-env:
-  LC_ALL: C.UTF-8
-  LANG: C.UTF-8
-  PATH: /usr/lib/qt6/libexec:/usr/lib/x86_64-linux-gnu/qt6/libexec:/usr/lib/qt6/bin:/usr/lib/x86_64-linux-gnu/qt6/bin:/usr/lib64/qt6/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+  contents: write
 jobs:
-  debug-smoke:
+  publish:
     runs-on: ubuntu-24.04
-    container:
-      image: ghcr.io/janhubicka/color-screen-ci:ubuntu-24.04
-      credentials:
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
         with:
           ref: agent/qtgui-registration-stall-lens-policy
           fetch-depth: 0
-      - name: Build and obtain compact workspace-smoke diagnostics
+      - name: Preserve legacy solver ABI
         shell: bash
         run: |
           set -euo pipefail
-          CXXFLAGS='-O2 -g -Wall -Wextra' CFLAGS='-O2 -g -Wall -Wextra' \
-            ./configure --enable-checking --enable-qtgui --disable-static-link
-          make -j"$(nproc)"
-          set +e
-          gdb --batch --return-child-result \
-            -ex 'set pagination off' \
-            -ex 'set print thread-events off' \
-            -ex 'set env QT_QPA_PLATFORM offscreen' \
-            -ex run \
-            -ex 'bt 40' \
-            --args ./src/qtgui/colorscreen-qt \
-              --smoke-test 60000 --smoke-test-expect-windows 2 \
-              --smoke-test-workspace-churn \
-              "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif" \
-              "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif" \
-              > /tmp/gdb.log 2>&1
-          rc=$?
-          set -e
-          echo "gdb/smoke exit code: $rc"
-          echo '===== relevant diagnostics ====='
-          grep -n -E 'Program received signal|SIG[A-Z]+|WorkspaceChurnSmoke|workspace churn|workspace smoke|Could not|stayed |FAILED|FAIL|AddressSanitizer|assert' /tmp/gdb.log || true
-          echo '===== final 180 lines ====='
-          tail -n 180 /tmp/gdb.log
-          exit "$rc"
+          EXPECTED_HEAD=68026b6205e07ccc8e08df77e81a4235e40f88f3
+          EXPECTED_BASE=fcf58687463a055dfb888e456fde6c71e2e9bb6d
+          FEATURE=agent/qtgui-registration-stall-lens-policy
+          git fetch origin main "$FEATURE"
+          test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD"
+          test "$(git rev-parse origin/main)" = "$EXPECTED_BASE"
+          python3 - <<'PY'
+          from pathlib import Path
+
+          header = Path('src/libcolorscreen/include/colorscreen.h')
+          text = header.read_text()
+          old = '''DLL_PUBLIC coord_t solver (scr_to_img_parameters *param, const image_data &img_data,
+                           const solver_parameters &sparam,
+                           progress_info *progress = NULL,
+                           bool ignore_lens_coverage = false);
+'''
+          new = '''DLL_PUBLIC coord_t solver (scr_to_img_parameters *param, const image_data &img_data,
+                           const solver_parameters &sparam,
+                           progress_info *progress = NULL);
+DLL_PUBLIC coord_t solver (scr_to_img_parameters *param, const image_data &img_data,
+                           const solver_parameters &sparam,
+                           progress_info *progress,
+                           bool ignore_lens_coverage);
+'''
+          if text.count(old) != 1:
+              raise SystemExit('unexpected public solver declaration')
+          header.write_text(text.replace(old, new))
+
+          source = Path('src/libcolorscreen/solver.C')
+          text = source.read_text()
+          marker = '''/* Determine geometry and lens warp.  PARAM is updated with results.
+   IMG_DATA is the source image.  SPARAM contains solver points.
+   PROGRESS is used for progress reporting.  */
+
+coord_t
+solver (scr_to_img_parameters *param,const  image_data &img_data,
+        const solver_parameters &sparam, progress_info *progress,
+        bool ignore_lens_coverage)
+'''
+          replacement = '''/* Determine geometry and lens warp using the normal lens-coverage safety gate.
+   Keep this overload out of line so existing users retain the historical
+   four-argument exported symbol.  */
+coord_t
+solver (scr_to_img_parameters *param, const image_data &img_data,
+        const solver_parameters &sparam, progress_info *progress)
+{
+  return solver (param, img_data, sparam, progress, false);
+}
+
+/* Determine geometry and lens warp.  PARAM is updated with results.
+   IMG_DATA is the source image.  SPARAM contains solver points.
+   PROGRESS is used for progress reporting.  IGNORE_LENS_COVERAGE is reserved
+   for callers that deliberately apply a process-specific bootstrap policy.  */
+coord_t
+solver (scr_to_img_parameters *param,const  image_data &img_data,
+        const solver_parameters &sparam, progress_info *progress,
+        bool ignore_lens_coverage)
+'''
+          if text.count(marker) != 1:
+              raise SystemExit('unexpected solver definition')
+          source.write_text(text.replace(marker, replacement))
+          PY
+          printf '%s\n' \
+            src/libcolorscreen/include/colorscreen.h \
+            src/libcolorscreen/solver.C > /tmp/expected-files
+          git diff --name-only | sort > /tmp/actual-files
+          diff -u /tmp/expected-files /tmp/actual-files
+          git diff --check
+          sh build-aux/check-generated-build-metadata.sh
+          git config user.name 'ChatGPT Agent'
+          git config user.email 'noreply@openai.com'
+          git add src/libcolorscreen/include/colorscreen.h src/libcolorscreen/solver.C
+          git commit -m 'libcolorscreen: preserve legacy solver ABI' -m 'Keep the historical four-argument solver entry point as a real exported symbol and expose the registration bootstrap coverage override only through an explicit five-argument overload.'
+          git push origin HEAD:"$FEATURE"
