@@ -25,63 +25,22 @@ jobs:
           test "$(git rev-parse origin/main)" = "$EXPECTED_BASE"
           python3 - <<'PY'
           from pathlib import Path
-
           header = Path('src/libcolorscreen/include/colorscreen.h')
           text = header.read_text()
-          old = '''DLL_PUBLIC coord_t solver (scr_to_img_parameters *param, const image_data &img_data,
-                           const solver_parameters &sparam,
-                           progress_info *progress = NULL,
-                           bool ignore_lens_coverage = false);
-'''
-          new = '''DLL_PUBLIC coord_t solver (scr_to_img_parameters *param, const image_data &img_data,
-                           const solver_parameters &sparam,
-                           progress_info *progress = NULL);
-DLL_PUBLIC coord_t solver (scr_to_img_parameters *param, const image_data &img_data,
-                           const solver_parameters &sparam,
-                           progress_info *progress,
-                           bool ignore_lens_coverage);
-'''
+          old = "DLL_PUBLIC coord_t solver (scr_to_img_parameters *param, const image_data &img_data,\n                           const solver_parameters &sparam,\n                           progress_info *progress = NULL,\n                           bool ignore_lens_coverage = false);\n"
+          new = "DLL_PUBLIC coord_t solver (scr_to_img_parameters *param, const image_data &img_data,\n                           const solver_parameters &sparam,\n                           progress_info *progress = NULL);\nDLL_PUBLIC coord_t solver (scr_to_img_parameters *param, const image_data &img_data,\n                           const solver_parameters &sparam,\n                           progress_info *progress,\n                           bool ignore_lens_coverage);\n"
           if text.count(old) != 1:
               raise SystemExit('unexpected public solver declaration')
           header.write_text(text.replace(old, new))
-
           source = Path('src/libcolorscreen/solver.C')
           text = source.read_text()
-          marker = '''/* Determine geometry and lens warp.  PARAM is updated with results.
-   IMG_DATA is the source image.  SPARAM contains solver points.
-   PROGRESS is used for progress reporting.  */
-
-coord_t
-solver (scr_to_img_parameters *param,const  image_data &img_data,
-        const solver_parameters &sparam, progress_info *progress,
-        bool ignore_lens_coverage)
-'''
-          replacement = '''/* Determine geometry and lens warp using the normal lens-coverage safety gate.
-   Keep this overload out of line so existing users retain the historical
-   four-argument exported symbol.  */
-coord_t
-solver (scr_to_img_parameters *param, const image_data &img_data,
-        const solver_parameters &sparam, progress_info *progress)
-{
-  return solver (param, img_data, sparam, progress, false);
-}
-
-/* Determine geometry and lens warp.  PARAM is updated with results.
-   IMG_DATA is the source image.  SPARAM contains solver points.
-   PROGRESS is used for progress reporting.  IGNORE_LENS_COVERAGE is reserved
-   for callers that deliberately apply a process-specific bootstrap policy.  */
-coord_t
-solver (scr_to_img_parameters *param,const  image_data &img_data,
-        const solver_parameters &sparam, progress_info *progress,
-        bool ignore_lens_coverage)
-'''
+          marker = "/* Determine geometry and lens warp.  PARAM is updated with results.\n   IMG_DATA is the source image.  SPARAM contains solver points.\n   PROGRESS is used for progress reporting.  */\n\ncoord_t\nsolver (scr_to_img_parameters *param,const  image_data &img_data,\n        const solver_parameters &sparam, progress_info *progress,\n        bool ignore_lens_coverage)\n"
+          replacement = "/* Determine geometry and lens warp using the normal lens-coverage safety gate.\n   Keep this overload out of line so existing users retain the historical\n   four-argument exported symbol.  */\ncoord_t\nsolver (scr_to_img_parameters *param, const image_data &img_data,\n        const solver_parameters &sparam, progress_info *progress)\n{\n  return solver (param, img_data, sparam, progress, false);\n}\n\n/* Determine geometry and lens warp.  PARAM is updated with results.\n   IMG_DATA is the source image.  SPARAM contains solver points.\n   PROGRESS is used for progress reporting.  IGNORE_LENS_COVERAGE is reserved\n   for callers that deliberately apply a process-specific bootstrap policy.  */\ncoord_t\nsolver (scr_to_img_parameters *param,const  image_data &img_data,\n        const solver_parameters &sparam, progress_info *progress,\n        bool ignore_lens_coverage)\n"
           if text.count(marker) != 1:
               raise SystemExit('unexpected solver definition')
           source.write_text(text.replace(marker, replacement))
           PY
-          printf '%s\n' \
-            src/libcolorscreen/include/colorscreen.h \
-            src/libcolorscreen/solver.C > /tmp/expected-files
+          printf '%s\n' src/libcolorscreen/include/colorscreen.h src/libcolorscreen/solver.C > /tmp/expected-files
           git diff --name-only | sort > /tmp/actual-files
           diff -u /tmp/expected-files /tmp/actual-files
           git diff --check
