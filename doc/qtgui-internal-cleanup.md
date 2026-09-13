@@ -251,11 +251,14 @@ detection rather than Geometry.
 
 Large lens-distorted scans also exposed a bootstrap problem: ordinary flood-fill
 can stall while the trusted point cloud is still too local for global lens
-parameters to be identifiable. Full-image automatic discovery may now make one
-private nonlinear-mesh pass when lens fitting is requested but lacks coverage.
-The mesh is only a search aid. Newly discovered points stay private until an
-ordinary/lens solve succeeds; only that speculative suffix is pruned against the
-final mapping, coverage is checked again, and the global model is re-solved. A
+parameters to be identifiable. Full-image automatic discovery now uses one
+private recovery pass when lens fitting is requested but lacks coverage. For
+non-Dufay screens it first forces a conservative two-term radial lens fit from
+the trusted points; Dufay-like screens retain the temporary nonlinear mesh
+because their film geometry eventually needs that model. Either provisional map
+is only a search aid. Newly discovered points stay private until an ordinary
+lens solve succeeds; only that speculative suffix is pruned against the final
+mapping, coverage is checked again, and the global model is re-solved. A
 failed bootstrap publishes neither the temporary mesh nor its speculative points.
 User-selected nonlinear correction and selected-area point discovery keep their
 previous semantics.

@@ -5938,6 +5938,14 @@ test_lens_warp ()
 static bool
 test_registration_bootstrap_prune ()
 {
+  if (solver_parameters::min_lens_bootstrap_points (Paget) != 30
+      || solver_parameters::min_lens_bootstrap_points (WarnerPowrie) != 60
+      || solver_parameters::min_lens_bootstrap_points (Joly) != 60)
+    {
+      fprintf (stderr, "Registration lens-bootstrap point policy mismatch\n");
+      return false;
+    }
+
   image_data img;
   if (!img.set_dimensions (200, 160))
     return false;
