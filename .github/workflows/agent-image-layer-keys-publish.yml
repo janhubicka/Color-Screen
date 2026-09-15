@@ -1,0 +1,41 @@
+name: Agent publish image layer parameter keys
+
+on:
+  push:
+    branches:
+      - agent/image-layer-keys-source-stage
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify carrier and prepare patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(sha256sum .agent-image-layer-parameter-keys.patch.gz.b64 | cut -d' ' -f1)" = "a655a1a0e6c43d603350e7c2b6684d1174544d2b3ded322e0824f8de7d0da164"
+          base64 -d .agent-image-layer-parameter-keys.patch.gz.b64 | gzip -d > /tmp/image-layer-keys.patch
+          test "$(sha256sum /tmp/image-layer-keys.patch | cut -d' ' -f1)" = "92b876984ce08d4137f667a4f9e225054d6ff89030f051d435d5b9cc515ccdf7"
+      - name: Apply reviewed patch to exact current main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          test "$(git rev-parse origin/main)" = "7206490bbaa4c7cc29bfca56065f8742b03222ba"
+          git checkout -B agent/qtgui-image-layer-parameter-keys 7206490bbaa4c7cc29bfca56065f8742b03222ba
+          git apply --index /tmp/image-layer-keys.patch
+          test "$(git diff --cached --name-only | sort)" = "$(printf '%s\n' .agents/qtgui.md doc/qtgui-internal-cleanup.md src/qtgui/ImageLayerPanel.cpp src/qtgui/WorkspaceChurnSmoke.cpp | sort)"
+          git diff --cached --check
+          sh build-aux/check-generated-build-metadata.sh
+      - name: Commit and push feature branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "Jan Hubicka"
+          git config user.email "46065755+janhubicka@users.noreply.github.com"
+          git commit -m "qtgui: give Image Layer controls stable parameter keys" -m "Complete the stable parameter-key migration for Image Layer. The simulated/native source choice and six RGB mixing parameters now use image_layer.* keys, so Undo merge identity no longer depends on translated captions.\n\nKeep Set by dark area, Set by neutral area and Set by infrared channel deliberately unkeyed because they launch operations rather than storing independent document parameters. Give the first two buttons object names so the workspace smoke can enforce that ownership boundary alongside the persistent key set.\n\nWorkspace churn now verifies all seven saved Image Layer keys, all six keyed numeric controls, the custom source checkbox key, and that all three operation buttons remain outside parameter identity. Documentation records Image Layer as the third complete panel migration after Screen and Geometry.\n\nValidation: git diff --check and the generated Qt build-metadata audit pass on the exact main base 7206490bbaa4c7cc29bfca56065f8742b03222ba."
+          git push --force-with-lease origin HEAD:refs/heads/agent/qtgui-image-layer-parameter-keys
