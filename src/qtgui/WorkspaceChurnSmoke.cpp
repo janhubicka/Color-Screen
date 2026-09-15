@@ -403,6 +403,10 @@ QSplitter *documentMainSplitter = first->findChild<QSplitter *>(
     QStringLiteral("DocumentMainSplitter"));
 QToolButton *scannerCameraToggle = inspector->findChild<QToolButton *>(
     QStringLiteral("ScannerCameraPropertiesToggle"));
+QPushButton *imageLayerDarkAreaButton = inspector->findChild<QPushButton *>(
+    QStringLiteral("ImageLayerSetByDarkAreaButton"));
+QPushButton *imageLayerNeutralAreaButton = inspector->findChild<QPushButton *>(
+    QStringLiteral("ImageLayerSetByNeutralAreaButton"));
 QPushButton *imageLayerInfraredButton = inspector->findChild<QPushButton *>(
     QStringLiteral("ImageLayerSetByInfraredButton"));
 QToolButton *imageLayerToggle = inspector->findChild<QToolButton *>(
@@ -747,6 +751,53 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
             geometryNonlinearCheck->property("parameterKey").isValid()) {
           fail(QStringLiteral(
               "Geometry stable keys crossed the document/UI-state boundary"));
+          return;
+        }
+
+        // Image Layer is another complete stable-key panel. Its source choice
+        // and RGB-mix values are saved ParameterState; the three area/channel
+        // buttons merely launch operations and must stay outside Undo identity.
+        const QStringList imageLayerParameterKeys = {
+            QStringLiteral("image_layer.use_simulated_rgb"),
+            QStringLiteral("image_layer.mix_dark.red"),
+            QStringLiteral("image_layer.mix_dark.green"),
+            QStringLiteral("image_layer.mix_dark.blue"),
+            QStringLiteral("image_layer.mix.red"),
+            QStringLiteral("image_layer.mix.green"),
+            QStringLiteral("image_layer.mix.blue")};
+        for (const QString &key : imageLayerParameterKeys) {
+          if (!hasParameterKey(key)) {
+            fail(QStringLiteral(
+                     "Workspace churn lost Image Layer parameter key %1")
+                     .arg(key));
+            return;
+          }
+        }
+        const QStringList imageLayerNumericKeys = {
+            QStringLiteral("image_layer.mix_dark.red"),
+            QStringLiteral("image_layer.mix_dark.green"),
+            QStringLiteral("image_layer.mix_dark.blue"),
+            QStringLiteral("image_layer.mix.red"),
+            QStringLiteral("image_layer.mix.green"),
+            QStringLiteral("image_layer.mix.blue")};
+        for (const QString &key : imageLayerNumericKeys) {
+          if (!findParameterSpinBox(key)) {
+            fail(QStringLiteral(
+                     "Workspace churn lost keyed Image Layer numeric control %1")
+                     .arg(key));
+            return;
+          }
+        }
+        if (!imageLayerSourceChoice ||
+            imageLayerSourceChoice->property("parameterKey").toString() !=
+                QStringLiteral("image_layer.use_simulated_rgb") ||
+            !imageLayerDarkAreaButton || !imageLayerNeutralAreaButton ||
+            !imageLayerInfraredButton ||
+            imageLayerDarkAreaButton->property("parameterKey").isValid() ||
+            imageLayerNeutralAreaButton->property("parameterKey").isValid() ||
+            imageLayerInfraredButton->property("parameterKey").isValid()) {
+          fail(QStringLiteral(
+              "Image Layer stable keys crossed the document/operation-state boundary"));
           return;
         }
 
