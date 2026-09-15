@@ -1,0 +1,23 @@
+name: Agent image layer keys source export
+
+on:
+  push:
+    branches:
+      - agent/image-layer-keys-source-stage
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 7206490bbaa4c7cc29bfca56065f8742b03222ba
+      - name: Verify base revision
+        run: test "$(git rev-parse HEAD)" = "7206490bbaa4c7cc29bfca56065f8742b03222ba"
+      - name: Pack exact source
+        run: tar --exclude=.git -czf /tmp/colorscreen-main-7206490b.tar.gz .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: colorscreen-main-7206490b
+          path: /tmp/colorscreen-main-7206490b.tar.gz
+          retention-days: 1
