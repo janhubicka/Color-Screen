@@ -3,15 +3,24 @@
 
 set -e
 
-test_object=./nikon-rgbi-mtf-test.lo
-test_program=./nikon-rgbi-mtf-test${EXEEXT}
+test_builddir=./nikon-rgbi-mtf-test.tmp
+test_object="$test_builddir/nikon-rgbi-mtf-test.lo"
+test_program="$test_builddir/nikon-rgbi-mtf-test${EXEEXT}"
 
 cleanup ()
 {
     "$top_builddir/libtool" --mode=clean rm -f "$test_object" "$test_program" \
         >/dev/null 2>&1 || rm -f "$test_object" "$test_program"
+    rm -rf "$test_builddir"
 }
 trap cleanup EXIT HUP INT TERM
+
+# This test and unittests.test both compile temporary libtool objects while
+# Automake runs the test suite in parallel.  Keep this helper in its own build
+# directory so either test's libtool cleanup cannot remove the other's .libs
+# directory while the compiler is still writing an object file.
+rm -rf "$test_builddir"
+mkdir -p "$test_builddir"
 
 "$top_builddir/libtool" --tag=CXX --mode=compile \
     $CXX $CPPFLAGS $CXXFLAGS -std=c++17 -DLIBCOLORSCREEN \
