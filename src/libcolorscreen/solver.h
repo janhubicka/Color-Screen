@@ -24,6 +24,15 @@ nodiscard_attr coord_t simple_solver (scr_to_img_parameters *param, const image_
                        const solver_parameters &sparam,
                        progress_info *progress = nullptr);
 
+/* Determine geometry while allowing a deliberately conservative lens fit to
+   bootstrap automatic point discovery before the normal global-coverage gate
+   is satisfied. This fits only the two lower-order free radial terms. The
+   caller must treat the result as provisional and validate newly found points
+   with an ordinary solver pass before publishing them. */
+nodiscard_attr DLL_PUBLIC coord_t bootstrap_lens_solver (
+    scr_to_img_parameters *param, const image_data &img_data,
+    const solver_parameters &sparam, progress_info *progress = nullptr);
+
 /* Optimize screen colors using detected color patches.
    PARAM determines the screen type and detection parameters.
    REDS, GREENS, BLUES are arrays of detected color patches.

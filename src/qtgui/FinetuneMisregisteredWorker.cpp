@@ -1,6 +1,7 @@
 #include "FinetuneMisregisteredWorker.h"
 #include "../libcolorscreen/include/finetune.h"
 #include "../libcolorscreen/include/mesh.h"
+#include "../libcolorscreen/solver.h"
 #include <QElapsedTimer>
 
 FinetuneMisregisteredWorker::FinetuneMisregisteredWorker(
@@ -11,15 +12,15 @@ FinetuneMisregisteredWorker::FinetuneMisregisteredWorker(
     colorscreen::int_image_area area,
     std::shared_ptr<colorscreen::progress_info> progress,
     colorscreen::finetune_area_parameters fparams,
-    bool computeMesh, bool allowNonlinearBootstrap)
+    bool computeMesh, bool allowRegistrationBootstrap)
     : m_solverParams(solverParams), m_rparams(rparams), m_scrToImg(scrToImg),
       m_scan(scan), m_area(area), m_progress(progress), m_fparams(fparams),
       m_computeMesh(computeMesh),
-      m_allowNonlinearBootstrap(allowNonlinearBootstrap) {}
+      m_allowRegistrationBootstrap(allowRegistrationBootstrap) {}
 
 void FinetuneMisregisteredWorker::run() {
   // Work on local snapshots. Point batches are progressively published to the
-  // GUI, while speculative nonlinear-bootstrap points stay local until they
+  // GUI, while speculative bootstrap points stay local until they
   // have been validated against the final ordinary/lens mapping.
   colorscreen::solver_parameters localSolver = m_solverParams;
   colorscreen::scr_to_img_parameters localScrToImg = m_scrToImg;
@@ -162,54 +163,80 @@ void FinetuneMisregisteredWorker::run() {
     }
 
     // A compact point cloud may be locally well registered but still too small
-    // to identify global lens distortion. In that case the ordinary map can
-    // stall before discovery reaches the image edges. Use one temporary mesh
-    // only as a search bootstrap, then require the enlarged cloud to support a
-    // normal lens fit and validate the speculative suffix against that fit.
+    // to identify global lens distortion. If discovery stalls before it reaches
+    // the image edges, ordinary screen geometries first try a deliberately
+    // low-order lens fit from the trusted points even though the broad-coverage
+    // gate is not yet met. Dufay-like screens retain the temporary nonlinear
+    // search aid because their film geometry eventually requires that model.
+    // Either provisional map is used for one discovery pass only; acceptance
+    // still requires the ordinary global lens fit and speculative-point pruning.
     const bool lensCoverageMissing =
         localSolver.optimize_lens &&
         !localSolver.lens_optimization_sufficient(
             localScrToImg.type, m_scan->width, m_scan->height,
             localScrToImg.scanner_type);
+    const bool dufayLikeBootstrap =
+        colorscreen::dufay_like_screen_p(localScrToImg.type);
+    const bool enoughBootstrapPoints =
+        dufayLikeBootstrap
+            ? (int)localSolver.n_points() >
+                  colorscreen::solver_parameters::min_mesh_points(
+                      localScrToImg.type)
+            : (int)localSolver.n_points() >=
+                  colorscreen::solver_parameters::min_lens_bootstrap_points(
+                      localScrToImg.type);
     const bool canBootstrap =
-        stalled && m_allowNonlinearBootstrap && !m_computeMesh &&
+        stalled && m_allowRegistrationBootstrap && !m_computeMesh &&
         !localScrToImg.mesh_trans && lensCoverageMissing &&
-        (int)localSolver.n_points() >
-            colorscreen::solver_parameters::min_mesh_points(
-                localScrToImg.type);
+        enoughBootstrapPoints;
 
     if (!cancelled() && canBootstrap) {
-      // Make all ordinary discoveries visible before the speculative pass and
-      // synchronize any interactive edits back into our local point set.
       publishAndSync();
       pointsAtLastUpdate = localSolver.points.size();
       lastUpdateTime.restart();
 
-      // The blocking point refresh may have picked up interactive additions.
-      // Do not bootstrap if those edits already made the global lens model
-      // identifiable, or if they left too few anchors to constrain a mesh.
+      const bool refreshedDufayLike =
+          colorscreen::dufay_like_screen_p(localScrToImg.type);
+      const bool refreshedPointCountSufficient =
+          refreshedDufayLike
+              ? (int)localSolver.n_points() >
+                    colorscreen::solver_parameters::min_mesh_points(
+                        localScrToImg.type)
+              : (int)localSolver.n_points() >=
+                  colorscreen::solver_parameters::min_lens_bootstrap_points(
+                      localScrToImg.type);
       const bool bootstrapStillNeeded =
           !cancelled() && localSolver.optimize_lens &&
           !localScrToImg.mesh_trans &&
           !localSolver.lens_optimization_sufficient(
               localScrToImg.type, m_scan->width, m_scan->height,
               localScrToImg.scanner_type) &&
-          (int)localSolver.n_points() >
-              colorscreen::solver_parameters::min_mesh_points(
-                  localScrToImg.type);
+          refreshedPointCountSufficient;
       if (bootstrapStillNeeded) {
         const colorscreen::solver_parameters preBootstrapSolver = localSolver;
-        const colorscreen::scr_to_img_parameters preBootstrapGeometry =
-            localScrToImg;
+        const colorscreen::scr_to_img_parameters preBootstrapGeometry = localScrToImg;
         const size_t bootstrapFirstPoint = localSolver.points.size();
 
-        colorscreen::scr_to_img_parameters bootstrapGeometry =
-            preBootstrapGeometry;
+        colorscreen::scr_to_img_parameters bootstrapGeometry = preBootstrapGeometry;
         bootstrapGeometry.mesh_trans = nullptr;
 
+        bool provisionalMappingReady = false;
+        if (refreshedDufayLike) {
+          provisionalMappingReady =
+              solveGeometry(bootstrapGeometry, localSolver, true, nullptr);
+        } else {
+          const auto previousLens = bootstrapGeometry.lens_correction;
+          const colorscreen::coord_t bootstrapError =
+              colorscreen::bootstrap_lens_solver(
+                  &bootstrapGeometry, *m_scan, localSolver, m_progress.get());
+          provisionalMappingReady =
+              !cancelled() && colorscreen::my_isfinite(bootstrapError) &&
+              bootstrapError < 1e29 &&
+              !(bootstrapGeometry.lens_correction == previousLens);
+        }
+
         bool bootstrapAccepted = false;
-        if (solveGeometry(bootstrapGeometry, localSolver, true, nullptr) &&
-            !cancelled()) {
+        if (provisionalMappingReady && !cancelled()) {
           const bool found = colorscreen::finetune_misregistered_area(
               &localSolver, m_rparams, bootstrapGeometry, *m_scan, m_area,
               m_fparams, m_progress.get());
@@ -219,8 +246,7 @@ void FinetuneMisregisteredWorker::run() {
               localSolver.lens_optimization_sufficient(
                   preBootstrapGeometry.type, m_scan->width, m_scan->height,
                   preBootstrapGeometry.scanner_type)) {
-            colorscreen::scr_to_img_parameters finalGeometry =
-                preBootstrapGeometry;
+            colorscreen::scr_to_img_parameters finalGeometry = preBootstrapGeometry;
             finalGeometry.mesh_trans = nullptr;
             colorscreen::coord_t error = 0;
             if (solveGeometry(finalGeometry, localSolver, false, &error) &&
@@ -229,8 +255,6 @@ void FinetuneMisregisteredWorker::run() {
                   finalGeometry, *m_scan, bootstrapFirstPoint,
                   m_fparams.max_displacement);
 
-              // Pruning must not destroy the coverage that justified fitting a
-              // global lens model. If it does, discard the speculative pass.
               if (localSolver.points.size() > bootstrapFirstPoint &&
                   localSolver.lens_optimization_sufficient(
                       finalGeometry.type, m_scan->width, m_scan->height,

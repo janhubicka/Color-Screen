@@ -90,9 +90,19 @@ void GeometryPanel::setupUi() {
   m_autodetectCoordinatesButton->setObjectName(
       QStringLiteral("DetectScreenCoordinatesButton"));
   
-  addButtonParameter("Step 2", "Optimize coordinates", [this]() {
-      emit optimizeCoordinatesRequested();
-  }, hasConfiguredGeometry, "Refine the detected screen coordinate system using the image data.");
+  QPushButton *optimizeCoordinatesButton = addButtonParameter(
+      "Step 2", "Optimize coordinates", [this]() {
+        emit optimizeCoordinatesRequested();
+      },
+      [hasConfiguredGeometry](const ParameterState &state) {
+        return hasConfiguredGeometry(state) && state.solver.points.empty();
+      },
+      "Refine the detected screen coordinate system using the image data. "
+      "This is disabled once control points exist because they are expressed "
+      "in the current screen coordinate system; delete the points before "
+      "changing that coordinate system.");
+  optimizeCoordinatesButton->setObjectName(
+      QStringLiteral("OptimizeScreenCoordinatesButton"));
 
   addButtonParameter("Step 3", "Add registration points", [this]() {
       emit automaticallyAddPointsRequested(m_finetuneAreaParams);

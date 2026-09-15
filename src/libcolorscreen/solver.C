@@ -444,9 +444,11 @@ class lens_solver
 {
 public:
   lens_solver (scr_to_img_parameters &param, const image_data &img_data,
-               const solver_parameters &sparam, progress_info *progress)
+               const solver_parameters &sparam, progress_info *progress,
+               int radial_terms = 3)
       : m_param (param), m_img_data (img_data), m_sparam (sparam),
-        m_progress (progress), m_start{ (coord_t)0.5, (coord_t)0.5, (coord_t)0, (coord_t)0, (coord_t)0 }
+        m_progress (progress), m_radial_terms (std::clamp (radial_terms, 1, 3)),
+        m_start{ (coord_t)0.5, (coord_t)0.5, (coord_t)0, (coord_t)0, (coord_t)0 }
   {
     if (num_coordinates () == 1)
       m_start[1] = 0;
@@ -455,6 +457,7 @@ public:
   const image_data &m_img_data;
   const solver_parameters &m_sparam;
   progress_info *m_progress;
+  int m_radial_terms;
   static constexpr coord_t scale_kr = 128;
   static constexpr coord_t bad_value = 100000000;
 
@@ -469,7 +472,7 @@ public:
   int
   num_values () const
   {
-    return num_coordinates () + 3;
+    return num_coordinates () + m_radial_terms;
   }
   std::array<coord_t, 5> m_start;
   coord_t *start = m_start.data ();
@@ -533,7 +536,7 @@ public:
     /* Coefficient boxes are only a coarse numerical guard.  The physically
        meaningful bound is imposed on the resulting normalized radial map.  */
     constexpr coord_t range [3] = {0.15, 0.05, 0.01};
-    for (int i = n, j = 0; i < n + 3; i++, j++)
+    for (int i = n, j = 0; j < m_radial_terms; i++, j++)
       {
         if (vals[i] < (coord_t)-range[j] * scale_kr)
           vals[i] = (coord_t)-range[j] * scale_kr;
@@ -728,8 +731,10 @@ public:
       abort ();
     lens->kr[0] = 1;
     lens->kr[1] = vals[n] * (1 / scale_kr);
-    lens->kr[2] = vals[n + 1] * (1 / scale_kr);
-    lens->kr[3] = vals[n + 2] * (1 / scale_kr);
+    lens->kr[2]
+        = m_radial_terms >= 2 ? vals[n + 1] * (1 / scale_kr) : 0;
+    lens->kr[3]
+        = m_radial_terms >= 3 ? vals[n + 2] * (1 / scale_kr) : 0;
     if (!lens->is_monotone ())
       {
         if (colorscreen_checking)
@@ -879,9 +884,10 @@ simple_solver (scr_to_img_parameters *param, const image_data &img_data,
    IMG_DATA is the source image.  SPARAM contains solver points.
    PROGRESS is used for progress reporting.  */
 
-coord_t
-solver (scr_to_img_parameters *param,const  image_data &img_data,
-        const solver_parameters &sparam, progress_info *progress)
+static coord_t
+solver_impl (scr_to_img_parameters *param, const image_data &img_data,
+             const solver_parameters &sparam, progress_info *progress,
+             bool force_lens_coverage, int radial_terms)
 {
   /* 3 points may be enough for strips; we only solve homography on 1d.  */
   if ((int)sparam.n_points () < solver_parameters::min_points (param->type))
@@ -892,11 +898,20 @@ solver (scr_to_img_parameters *param,const  image_data &img_data,
   /* Lens correction is global.  Point count alone is unsafe: a dense local
      cloud can leave center and high-order radial terms unconstrained while
      still extrapolating across the complete scan.  */
+  /* The normal solver requires broad scan coverage. Automatic point
+     discovery has one exceptional provisional pass: after it stalls, the GUI
+     may force a low-order lens model from a type-specific minimum of trusted
+     correspondences solely to reach more of the scan. Identifiability and
+     physical-envelope checks remain mandatory, and the GUI must rerun the
+     ordinary solver before accepting speculative points. */
   const bool optimize_lens
       = sparam.optimize_lens
-        && sparam.lens_optimization_sufficient (
-               param->type, img_data.width, img_data.height,
-               param->scanner_type);
+        && (force_lens_coverage
+                ? (int)sparam.n_points ()
+                      >= solver_parameters::min_lens_bootstrap_points (param->type)
+                : sparam.lens_optimization_sufficient (
+                      param->type, img_data.width, img_data.height,
+                      param->scanner_type));
   bool optimize_rotation = sparam.optimize_tilt && ((int)sparam.n_points () > solver_parameters::min_perspective_points (param->type));
 
   if (optimize_lens)
@@ -908,7 +923,7 @@ solver (scr_to_img_parameters *param,const  image_data &img_data,
          identity) is safer than installing an arbitrary compensating warp.  */
       const lens_warp_correction_parameters previous_lens
           = param->lens_correction;
-      lens_solver s (*param, img_data, sparam, progress);
+      lens_solver s (*param, img_data, sparam, progress, radial_terms);
       bool use_early_multifit = false;
       bool use_simplex = true;
       bool use_gsl_simplex = false;
@@ -935,9 +950,13 @@ solver (scr_to_img_parameters *param,const  image_data &img_data,
       param->lens_correction.kr[0] = 1;
       param->lens_correction.kr[1] = s.start[n] * (1 / lens_solver::scale_kr);
       param->lens_correction.kr[2]
-          = s.start[n + 1] * (1 / lens_solver::scale_kr);
+          = radial_terms >= 2
+                ? s.start[n + 1] * (1 / lens_solver::scale_kr)
+                : 0;
       param->lens_correction.kr[3]
-          = s.start[n + 2] * (1 / lens_solver::scale_kr);
+          = radial_terms >= 3
+                ? s.start[n + 2] * (1 / lens_solver::scale_kr)
+                : 0;
       if (!param->lens_correction.normalize ()
           || !solver_parameters::lens_candidate_reasonable_p (
                  param->lens_correction, param->scanner_type,
@@ -965,6 +984,22 @@ solver (scr_to_img_parameters *param,const  image_data &img_data,
                  (sparam.weighted ? homography::solve_image_weights : 0)
                      | (optimize_rotation ? homography::solve_rotation : 0),
                  true);
+}
+
+coord_t
+solver (scr_to_img_parameters *param, const image_data &img_data,
+        const solver_parameters &sparam, progress_info *progress)
+{
+  return solver_impl (param, img_data, sparam, progress, false, 3);
+}
+
+coord_t
+bootstrap_lens_solver (scr_to_img_parameters *param,
+                       const image_data &img_data,
+                       const solver_parameters &sparam,
+                       progress_info *progress)
+{
+  return solver_impl (param, img_data, sparam, progress, true, 2);
 }
 
 #if 0

@@ -73,6 +73,12 @@ struct solver_parameters
   {
     return screen_with_vertical_strips_p (type) ? 200 : 100;
   }
+  /* Minimal trusted point count for the provisional low-order lens
+     bootstrap used only to extend stalled automatic registration.  */
+  static int min_lens_bootstrap_points (enum scr_type type)
+  {
+    return screen_with_vertical_strips_p (type) ? 60 : 30;
+  }
   /* Lens distortion is global.  Return true if registration points cover
      enough of the relevant scan axes to constrain automatic lens fitting.
      Point count is checked separately.  */

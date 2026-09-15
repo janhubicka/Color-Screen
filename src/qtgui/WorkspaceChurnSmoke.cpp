@@ -385,6 +385,8 @@ QPushButton *mtfFitButton = inspector->findChild<QPushButton *>(
     QStringLiteral("MtfFitButton"));
 QPushButton *detectCoordinatesButton = inspector->findChild<QPushButton *>(
     QStringLiteral("DetectScreenCoordinatesButton"));
+QPushButton *optimizeCoordinatesButton = inspector->findChild<QPushButton *>(
+    QStringLiteral("OptimizeScreenCoordinatesButton"));
 QPushButton *screenSwapColorsButton = inspector->findChild<QPushButton *>(
     QStringLiteral("ScreenSwapColorsButton"));
 QCheckBox *showRegistrationPointsBox = inspector->findChild<QCheckBox *>(
@@ -903,18 +905,21 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         ParameterState coordinateNoPoints = coordinateGuardBaseline;
         coordinateNoPoints.solver.points.clear();
         first->applyState(coordinateNoPoints);
-        if (!detectCoordinatesButton->isEnabled()) {
+        if (!detectCoordinatesButton || !optimizeCoordinatesButton ||
+            !detectCoordinatesButton->isEnabled() ||
+            !optimizeCoordinatesButton->isEnabled()) {
           fail(QStringLiteral(
-              "Detect screen coordinates stayed disabled with no control points"));
+              "Coordinate setup stayed disabled with no control points"));
           return;
         }
         ParameterState coordinateWithPoint = coordinateNoPoints;
         coordinateWithPoint.solver.add_point(
             {10, 10}, {0, 0}, colorscreen::solver_parameters::green);
         first->applyState(coordinateWithPoint);
-        if (detectCoordinatesButton->isEnabled()) {
+        if (detectCoordinatesButton->isEnabled() ||
+            optimizeCoordinatesButton->isEnabled()) {
           fail(QStringLiteral(
-              "Detect screen coordinates remained enabled with control points"));
+              "Coordinate setup remained enabled with control points"));
           return;
         }
         first->onAutodetectCoordinatesRequested();
