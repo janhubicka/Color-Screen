@@ -29,7 +29,7 @@ nodiscard_attr coord_t simple_solver (scr_to_img_parameters *param, const image_
    is satisfied. This fits only the two lower-order free radial terms. The
    caller must treat the result as provisional and validate newly found points
    with an ordinary solver pass before publishing them. */
-nodiscard_attr coord_t bootstrap_lens_solver (
+nodiscard_attr DLL_PUBLIC coord_t bootstrap_lens_solver (
     scr_to_img_parameters *param, const image_data &img_data,
     const solver_parameters &sparam, progress_info *progress = nullptr);
 
