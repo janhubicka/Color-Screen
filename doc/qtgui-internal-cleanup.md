@@ -331,7 +331,11 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   geometry, and final-orientation controls use `geometry.*` keys. Panel-local
   **Auto fit geometry** and **Nonlinear corrections** request/presentation state
   deliberately remain unkeyed; a parameter key must identify saved document
-  state rather than merely every widget produced by a parameter helper.
+  state rather than merely every widget produced by a parameter helper. Image
+  Layer is the third complete migration: the simulated/native source choice and
+  six RGB mixing values use `image_layer.*` keys, while Set by dark area, Set by
+  neutral area, and Set by infrared channel remain unkeyed operation controls.
+  Workspace churn checks both sides of that ownership boundary.
 - Prefer `QSignalBlocker` for temporary signal suppression. The first P1 cleanup
   converts the central `ParameterPanel` synchronization helpers and the simple
   refresh/update pairs in Capture, Screen, Geometry, Image Layer, Tiles, Color,

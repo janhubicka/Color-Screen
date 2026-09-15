@@ -15,6 +15,8 @@ void ImageLayerPanel::setupUi() {
   m_ignoreInfraredCheck = new QCheckBox(tr("Use simulated RGB image layer"), this);
   m_ignoreInfraredCheck->setObjectName(
       QStringLiteral("ImageLayerUseSimulatedRgbCheck"));
+  m_ignoreInfraredCheck->setProperty(
+      "parameterKey", QStringLiteral("image_layer.use_simulated_rgb"));
   m_ignoreInfraredCheck->setToolTip(
       tr("When the capture contains both RGB and a native grayscale/infrared "
          "channel, use a weighted RGB simulation as the image layer instead. "
@@ -31,7 +33,7 @@ void ImageLayerPanel::setupUi() {
     s.rparams.ignore_infrared = checked;
     m_stateSetter(s, tr("Use simulated RGB image layer %1")
                         .arg(checked ? tr("on") : tr("off")),
-                  QString());
+                  QStringLiteral("image_layer.use_simulated_rgb"));
   });
 
   QToolButton *simulatedSectionToggle =
@@ -58,19 +60,22 @@ void ImageLayerPanel::setupUi() {
       tr("Mix dark (red)"), -3.0, 1.0, 1, 4, "", "",
       [](const ParameterState &s) { return s.rparams.mix_dark.red; },
       [](ParameterState &s, double v) { s.rparams.mix_dark.red = v; },
-      3.0, enableSimulated, false);
+      3.0, enableSimulated, false, QString(),
+      QStringLiteral("image_layer.mix_dark.red"));
 
   addSliderParameter(
       tr("Mix dark (green)"), -3.0, 1.0, 1, 4, "", "",
       [](const ParameterState &s) { return s.rparams.mix_dark.green; },
       [](ParameterState &s, double v) { s.rparams.mix_dark.green = v; },
-      3.0, enableSimulated, false);
+      3.0, enableSimulated, false, QString(),
+      QStringLiteral("image_layer.mix_dark.green"));
 
   addSliderParameter(
       tr("Mix dark (blue)"), -3.0, 1.0, 1, 4, "", "",
       [](const ParameterState &s) { return s.rparams.mix_dark.blue; },
       [](ParameterState &s, double v) { s.rparams.mix_dark.blue = v; },
-      3.0, enableSimulated, false);
+      3.0, enableSimulated, false, QString(),
+      QStringLiteral("image_layer.mix_dark.blue"));
 
   // Dark Area Button
   m_setDarkAreaBtn = addToggleButtonParameter(
@@ -78,24 +83,29 @@ void ImageLayerPanel::setupUi() {
       [this](bool) { emit darkAreaRequested(); },
       nullptr,
       enableSimulated);
+  m_setDarkAreaBtn->setObjectName(
+      QStringLiteral("ImageLayerSetByDarkAreaButton"));
 
   addSliderParameter(
       tr("Mix red"), -10.0, 10.0, 1, 2, "", "",
       [](const ParameterState &s) { return s.rparams.mix_red; },
       [](ParameterState &s, double v) { s.rparams.mix_red = v; },
-      1.0, enableSimulated, false);
+      1.0, enableSimulated, false, QString(),
+      QStringLiteral("image_layer.mix.red"));
 
   addSliderParameter(
       tr("Mix green"), -10.0, 10.0, 1, 2, "", "",
       [](const ParameterState &s) { return s.rparams.mix_green; },
       [](ParameterState &s, double v) { s.rparams.mix_green = v; },
-      1.0, enableSimulated, false);
+      1.0, enableSimulated, false, QString(),
+      QStringLiteral("image_layer.mix.green"));
 
   addSliderParameter(
       tr("Mix blue"), -10.0, 10.0, 1, 2, "", "",
       [](const ParameterState &s) { return s.rparams.mix_blue; },
       [](ParameterState &s, double v) { s.rparams.mix_blue = v; },
-      1.0, enableSimulated, false);
+      1.0, enableSimulated, false, QString(),
+      QStringLiteral("image_layer.mix.blue"));
 
   // Neutral Area Button
   m_setNeutralAreaBtn = addToggleButtonParameter(
@@ -103,6 +113,8 @@ void ImageLayerPanel::setupUi() {
       [this](bool) { emit neutralAreaRequested(); },
       nullptr,
       enableSimulated);
+  m_setNeutralAreaBtn->setObjectName(
+      QStringLiteral("ImageLayerSetByNeutralAreaButton"));
 
   // Infrared Area Button
   m_setInfraredAreaBtn = addToggleButtonParameter(
