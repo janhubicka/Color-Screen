@@ -42,6 +42,7 @@ set(SOURCES
     WorkspaceWindow.cpp
     ImageViewWindow.cpp
     MainWindow.cpp
+    InitialSetupGuideDialog.cpp
     ImageWidget.cpp
     NavigationView.cpp
     Renderer.cpp
@@ -75,6 +76,7 @@ set(HEADERS
     WorkspaceWindow.h
     ImageViewWindow.h
     MainWindow.h
+    InitialSetupGuideDialog.h
     ImageWidget.h
     Renderer.h
     NavigationView.h
