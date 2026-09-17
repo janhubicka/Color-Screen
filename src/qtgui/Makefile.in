@@ -646,7 +646,7 @@ MOC_SOURCES = \
 
 EXTRA_DIST = ColorScreenApplication.h DocumentLifecycleSmoke.h \
 	WorkspaceChurnSmoke.h WorkspaceWindow.h ImageViewWindow.h \
-	ImageWidget.h CapturePanel.h MainWindow.h \
+	ImageWidget.h CapturePanel.h MainWindow.h ChangeParametersCommand.h \
 	InitialSetupGuideDialog.h MTFChartWidget.h \
 	DeformationChartWidget.h FinetuneImagesPanel.h \
 	BacklightChartWidget.h ColorUtils.h NavigationView.h \

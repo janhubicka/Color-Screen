@@ -76,6 +76,7 @@ set(HEADERS
     WorkspaceWindow.h
     ImageViewWindow.h
     MainWindow.h
+    ChangeParametersCommand.h
     InitialSetupGuideDialog.h
     ImageWidget.h
     Renderer.h

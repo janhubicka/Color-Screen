@@ -1,4 +1,5 @@
 #include "MainWindow.h"
+#include "ChangeParametersCommand.h"
 #include "../libcolorscreen/include/base.h"
 #include "../libcolorscreen/include/finetune.h"
 #include "../libcolorscreen/include/histogram.h"
@@ -34,7 +35,6 @@
 #include <QColorSpace>
 #include <QCoreApplication>
 #include <QComboBox>
-#include <QDateTime> // Added QDateTime include
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QDir>
@@ -74,7 +74,6 @@
 #include <QTimer>
 #include <QToolBar>
 #include <QToolButton>
-#include <QUndoCommand>
 #include <QUndoStack>
 #include <QVBoxLayout>
 #include <QWindow>
@@ -84,69 +83,6 @@
 #include <exception>
 #include <string>
 #include <utility>
-
-// Undo/Redo Implementation
-
-/** Undo command that captures a full ParameterState snapshot before and after
-   a change. Successive commands with the same stable parameter key within a
-   500 ms window merge so one slider drag produces one entry. During gradual
-   migration, an empty key falls back to the historical description-based
-   identity. Human-visible Undo text is always kept separate from the key. */
-class ChangeParametersCommand : public QUndoCommand {
-public:
-  ChangeParametersCommand(MainWindow *window, const ParameterState &oldState,
-                          const ParameterState &newState,
-                          const QString &description = QString(),
-                          const QString &parameterKey = QString())
-      : m_window(window), m_oldState(oldState), m_newState(newState),
-        m_mergeKey(parameterKey.isEmpty() ? description : parameterKey) {
-    setText(description.isEmpty() ? "Change Parameters" : description);
-    m_timestamp = QDateTime::currentMSecsSinceEpoch();
-  }
-
-  int id() const override {
-    // Qt never attempts to merge commands whose id is -1. Calls without a
-    // parameter key or legacy description are conservative one-shot edits.
-    return m_mergeKey.isEmpty() ? -1 : 1;
-  }
-
-  bool mergeWith(const QUndoCommand *other) override {
-    if (other->id() != id())
-      return false;
-
-    const ChangeParametersCommand *cmd =
-        static_cast<const ChangeParametersCommand *>(other);
-
-    // QUndoStack uses id() only as a coarse filter. The stable key, not the
-    // translated/display label, determines whether two updates are one edit.
-    if (cmd->m_mergeKey != m_mergeKey)
-      return false;
-
-    // Only merge adjacent updates from the same edit gesture.  Also reject a
-    // negative delta in case the wall clock is adjusted between commands.
-    qint64 timeDiff = cmd->m_timestamp - m_timestamp;
-    if (timeDiff < 0 || timeDiff > 500) {
-      return false; // Don't merge - create separate undo step
-    }
-
-    // Merge: update our newState to the newer command's newState
-    // This allows slider dragging to be one undo operation
-    m_newState = cmd->m_newState;
-    m_timestamp = cmd->m_timestamp; // Update timestamp for next merge check
-    return true;
-  }
-
-  void undo() override { m_window->applyState(m_oldState); }
-
-  void redo() override { m_window->applyState(m_newState); }
-
-private:
-  MainWindow *m_window;
-  ParameterState m_oldState;
-  ParameterState m_newState;
-  QString m_mergeKey;
-  qint64 m_timestamp; // Timestamp for merge window
-};
 
 Q_DECLARE_METATYPE(MainWindow::SolverRequestData)
 Q_DECLARE_METATYPE(MainWindow::ColorOptimizerRequestData)
