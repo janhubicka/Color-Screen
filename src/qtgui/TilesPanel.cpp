@@ -12,6 +12,15 @@
 #include <QVBoxLayout>
 #include <QFrame>
 
+namespace {
+
+/** Return the stable document-parameter key for one stitched tile field. */
+QString tileParameterKey(int x, int y, const QString &field) {
+  return QStringLiteral("tiles.%1.%2.%3").arg(x).arg(y).arg(field);
+}
+
+} // namespace
+
 TilesPanel::TilesPanel(StateGetter stateGetter, StateSetter stateSetter,
                        ImageGetter imageGetter, QWidget *parent)
     : ParameterPanel(stateGetter, stateSetter, imageGetter, parent) {
@@ -28,7 +37,7 @@ void TilesPanel::setupUi() {
 
   addSeparator(tr("Tile adjustments"));
 
-  addSliderParameter(
+  m_exposureRow = addSliderParameter(
       tr("Exposure"), 0.01, 10.0, 100, 3, "", "",
       [this](const ParameterState &s) -> double {
         auto img = m_imageGetter();
@@ -48,9 +57,15 @@ void TilesPanel::setupUi() {
         int y = m_currentTileIndex / w;
         s.rparams.get_tile_adjustment(x, y).exposure = (colorscreen::luminosity_t)v;
       },
-      2.0, nullptr, -1, "Brightness adjustment for the selected tile. Use this to compensate for variations in illumination during capture.");
+      2.0, nullptr, -1,
+      "Brightness adjustment for the selected tile. Use this to compensate for "
+      "variations in illumination during capture.",
+      QString(), false, std::nullopt, [this]() {
+        return tileParameterKey(currentTileX(), currentTileY(),
+                                QStringLiteral("exposure"));
+      });
 
-  addSliderParameter(
+  m_darkPointRow = addSliderParameter(
       tr("Dark point"), -0.1, 0.5, 1000, 4, "", "",
       [this](const ParameterState &s) -> double {
         auto img = m_imageGetter();
@@ -70,7 +85,13 @@ void TilesPanel::setupUi() {
         int y = m_currentTileIndex / w;
         s.rparams.get_tile_adjustment(x, y).dark_point = (colorscreen::luminosity_t)v;
       },
-      3.0, nullptr, -1, "Black level adjustment for the selected tile. Use this to unify the black point across stitched tiles.");
+      3.0, nullptr, -1,
+      "Black level adjustment for the selected tile. Use this to unify the "
+      "black point across stitched tiles.",
+      QString(), false, std::nullopt, [this]() {
+        return tileParameterKey(currentTileX(), currentTileY(),
+                                QStringLiteral("dark_point"));
+      });
 }
 
 void TilesPanel::updateForNewImage() {
@@ -125,6 +146,10 @@ void TilesPanel::rebuildTileGrid() {
 
       // 1. Selector button (Radio button behavior)
       auto *selBtn = new QPushButton(tileWidget);
+      selBtn->setObjectName(
+          QStringLiteral("TileSelector_%1_%2").arg(gx).arg(gy));
+      selBtn->setProperty("tileX", gx);
+      selBtn->setProperty("tileY", gy);
       selBtn->setCheckable(true);
       // Golden ratio: e.g. ~ 72x44
       selBtn->setMinimumSize(72, 44);
@@ -148,6 +173,13 @@ void TilesPanel::rebuildTileGrid() {
 
       // 2. Enable checkbox (overlaid in bottom right)
       auto *enBtn = new QCheckBox(tileWidget);
+      enBtn->setObjectName(
+          QStringLiteral("TileEnabled_%1_%2").arg(gx).arg(gy));
+      const QString enabledParameterKey =
+          tileParameterKey(gx, gy, QStringLiteral("enabled"));
+      enBtn->setProperty("parameterKey", enabledParameterKey);
+      enBtn->setProperty("tileX", gx);
+      enBtn->setProperty("tileY", gy);
       enBtn->setToolTip(tr("Enable/Disable tile %1, %2").arg(gx).arg(gy));
       // Give it no text
       enBtn->setText("");
@@ -160,12 +192,13 @@ void TilesPanel::rebuildTileGrid() {
       m_tileChecks[gy][gx] = enBtn;
 
       // enBtn is a QCheckBox, so its toggled signal passes a boolean
-      connect(enBtn, &QCheckBox::toggled, this, [this, gx, gy](bool checked) {
-        ParameterState s = m_stateGetter();
-        s.rparams.get_tile_adjustment(gx, gy).enabled = checked;
-        m_stateSetter(s, tr("Toggle tile %1,%2").arg(gx).arg(gy),
-                      QString());
-      });
+      connect(enBtn, &QCheckBox::toggled, this,
+              [this, gx, gy, enabledParameterKey](bool checked) {
+                ParameterState s = m_stateGetter();
+                s.rparams.get_tile_adjustment(gx, gy).enabled = checked;
+                m_stateSetter(s, tr("Toggle tile %1,%2").arg(gx).arg(gy),
+                              enabledParameterKey);
+              });
 
       gridLayout->addWidget(tileWidget, gy, gx);
     }

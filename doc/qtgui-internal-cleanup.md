@@ -335,7 +335,15 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   Layer is the third complete migration: the simulated/native source choice and
   six RGB mixing values use `image_layer.*` keys, while Set by dark area, Set by
   neutral area, and Set by infrared channel remain unkeyed operation controls.
-  Workspace churn checks both sides of that ownership boundary.
+  Tiles is the fourth complete migration and exercises a different invariant:
+  its shared Exposure/Dark point editors change saved target with the selected
+  stitch tile, so `ParameterKeyGetter` resolves them to coordinate-specific
+  `tiles.<x>.<y>.*` keys at edit time. Per-tile enable checkboxes use the same
+  namespace, while the current-tile selector remains unkeyed presentation
+  state. The beta smoke edits Exposure on two tiles back-to-back and verifies
+  that one Undo restores only the second tile, then the next Undo restores the
+  first. Workspace churn continues to check the other document/operation-state
+  ownership boundaries.
 - Prefer `QSignalBlocker` for temporary signal suppression. The first P1 cleanup
   converts the central `ParameterPanel` synchronization helpers and the simple
   refresh/update pairs in Capture, Screen, Geometry, Image Layer, Tiles, Color,

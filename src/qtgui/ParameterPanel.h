@@ -30,6 +30,7 @@ public:
   using StateSetter = std::function<void(const ParameterState &, const QString &,
                                          const QString &)>;
   using ImageGetter = std::function<std::shared_ptr<colorscreen::image_data>()>;
+  using ParameterKeyGetter = std::function<QString()>;
 
   explicit ParameterPanel(StateGetter stateGetter, StateSetter stateSetter,
                           ImageGetter imageGetter, QWidget *parent = nullptr,
@@ -64,7 +65,10 @@ protected:
     precision). decimals: precision for SpinBox. SPECIALMINIMUMVALUE is an
     optional stored sentinel below MIN, such as 0 meaning not configured.
     It gets one separate slider/spinbox position and is never confused with
-    the first explicit numeric value.
+    the first explicit numeric value. PARAMETERKEYGETTER is for the unusual
+    case where one editor targets different saved parameters as panel selection
+    changes; it must return the complete logical key for the current target.
+    Do not combine it with a static PARAMETERKEY or default/reset presentation.
   */
   QWidget *addSliderParameter(
       const QString &label, double min, double max, double scale, int decimals,
@@ -75,7 +79,8 @@ protected:
       bool logarithmic = false, const QString &tooltip = QString(),
       const QString &parameterKey = QString(),
       bool showDefaultReset = false,
-      std::optional<double> specialMinimumValue = std::nullopt);
+      std::optional<double> specialMinimumValue = std::nullopt,
+      ParameterKeyGetter parameterKeyGetter = nullptr);
 
   /*
     Adds a slider parameter row (Slider + SpinBox) that does not participate in state.
