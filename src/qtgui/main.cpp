@@ -384,8 +384,9 @@ bool runBetaInvariantSmoke() {
     return fail("tile keys crossed the document/selection-state boundary");
 
   const double tile0Before = exposure->value();
-  const double tile0After =
-      tile0Before <= 9.98 ? tile0Before + 0.01 : tile0Before - 0.01;
+  const colorscreen::luminosity_t tile0After =
+      static_cast<colorscreen::luminosity_t>(
+          tile0Before <= 9.98 ? tile0Before + 0.01 : tile0Before - 0.01);
   exposure->setValue(tile0After);
 
   tile1Selector->setChecked(true);
@@ -397,8 +398,9 @@ bool runBetaInvariantSmoke() {
     return fail("tile selector did not retarget the shared editor key");
 
   const double tile1Before = exposure->value();
-  const double tile1After =
-      tile1Before <= 9.96 ? tile1Before + 0.02 : tile1Before - 0.02;
+  const colorscreen::luminosity_t tile1After =
+      static_cast<colorscreen::luminosity_t>(
+          tile1Before <= 9.96 ? tile1Before + 0.02 : tile1Before - 0.02);
   exposure->setValue(tile1After);
 
   const ParameterState afterTileEdits = window.documentStateSnapshot();
