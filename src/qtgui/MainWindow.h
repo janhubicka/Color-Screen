@@ -298,7 +298,7 @@ public:
   /** Shared document-level measured-MTF fit provenance used by every
       Sharpness panel, including external slanted-edge reference views. */
   QString mtfCalibrationSummary() const;
-  bool mtfModelFitRunning() const { return m_mtfFitRunning; }
+  bool mtfModelFitRunning() const { return m_mtfFit.running; }
   /** Start one measured-MTF model fit from an immutable dialog/document
       snapshot. The fit is a document final-result operation shared by every
       Sharpness panel. */
@@ -861,14 +861,26 @@ private:
   GeometryFitState m_geometryFit;
 
   // Session-local MTF model-fit provenance shared by all Sharpness views.
-  std::optional<colorscreen::mtf_parameters> m_mtfFitBaseline;
-  std::optional<colorscreen::mtf_parameters> m_mtfFitPendingInputs;
-  std::optional<colorscreen::mtf_parameters> m_mtfFitFailureInputs;
-  double m_mtfFitRms = -1;
-  bool m_mtfFitRunning = false;
-  // Request identity prevents a cancelled old fit from clearing provenance for
-  // a newer fit after parameter/image replacement.
-  std::weak_ptr<colorscreen::progress_info> m_mtfFitProgress;
+  struct MtfFitState {
+    std::optional<colorscreen::mtf_parameters> baseline;
+    std::optional<colorscreen::mtf_parameters> pendingInputs;
+    std::optional<colorscreen::mtf_parameters> failureInputs;
+    double rms = -1;
+    bool running = false;
+    // Request identity prevents a cancelled old fit from clearing provenance
+    // for a newer fit after parameter/image replacement.
+    std::weak_ptr<colorscreen::progress_info> progress;
+
+    void clear() {
+      baseline.reset();
+      pendingInputs.reset();
+      failureInputs.reset();
+      rms = -1;
+      running = false;
+      progress.reset();
+    }
+  };
+  MtfFitState m_mtfFit;
   
   // One-shot background threads that intentionally publish intermediate
   // results (misregistered finetune, adaptive sharpening, etc.).

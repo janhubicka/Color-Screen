@@ -782,7 +782,7 @@ void MainWindow::setupUi() {
   // Create Sharpness Panel
   MtfCalibrationCallbacks mtfCalibration;
   mtfCalibration.summary = [this]() { return mtfCalibrationSummary(); };
-  mtfCalibration.fitAvailable = [this]() { return !m_mtfFitRunning; };
+  mtfCalibration.fitAvailable = [this]() { return !m_mtfFit.running; };
   mtfCalibration.fitRequested =
       [this](const ParameterState &baseline,
              const colorscreen::mtf_parameters &input,
@@ -3865,23 +3865,23 @@ QString MainWindow::mtfCalibrationSummary() const {
                         .arg(count)
                         .arg(count == 1 ? QString() : QStringLiteral("s"));
   const bool fitCurrent =
-      m_mtfFitBaseline && m_mtfFitBaseline->fit_inputs_equal_p(mtf);
+      m_mtfFit.baseline && m_mtfFit.baseline->fit_inputs_equal_p(mtf);
   const bool failureCurrent =
-      m_mtfFitFailureInputs && m_mtfFitFailureInputs->fit_inputs_equal_p(mtf);
-  if (m_mtfFitRunning) {
-    if (m_mtfFitPendingInputs && !m_mtfFitPendingInputs->equal_p(mtf))
+      m_mtfFit.failureInputs && m_mtfFit.failureInputs->fit_inputs_equal_p(mtf);
+  if (m_mtfFit.running) {
+    if (m_mtfFit.pendingInputs && !m_mtfFit.pendingInputs->equal_p(mtf))
       summary += tr(" • fit inputs changed — result will be discarded");
     else
       summary += tr(" • fitting model…");
   } else if (fitCurrent) {
     summary += tr(" • model current");
-    if (m_mtfFitRms >= 0)
-      summary += tr(" • RMS %1 pp").arg(m_mtfFitRms, 0, 'g', 4);
+    if (m_mtfFit.rms >= 0)
+      summary += tr(" • RMS %1 pp").arg(m_mtfFit.rms, 0, 'g', 4);
     if (failureCurrent)
       summary += tr(" • last refit failed");
   } else if (failureCurrent) {
     summary += tr(" • fit failed — adjust settings and retry");
-  } else if (m_mtfFitBaseline) {
+  } else if (m_mtfFit.baseline) {
     summary += tr(" • model stale — refit");
   } else {
     summary += tr(" • ready to fit/validate model");
@@ -3900,7 +3900,7 @@ bool MainWindow::requestMtfModelFit(
     const ParameterState &baseline, const colorscreen::mtf_parameters &input,
     const colorscreen::mtf_estimation_options &options, int flags,
     QWidget *resultParent) {
-  if (m_closing || m_mtfFitRunning || getCurrentState() != baseline)
+  if (m_closing || m_mtfFit.running || getCurrentState() != baseline)
     return false;
 
   const colorscreen::mtf_parameters baselineMtf =
@@ -3912,31 +3912,31 @@ bool MainWindow::requestMtfModelFit(
   operation.description = tr("Fitting measured MTF model");
   operation.progressTitle = tr("MTF model fit");
   operation.prerequisites = [this, baseline]() {
-    return !m_mtfFitRunning && getCurrentState() == baseline;
+    return !m_mtfFit.running && getCurrentState() == baseline;
   };
   operation.onStart = [this, baselineMtf, result](
                           std::shared_ptr<colorscreen::progress_info> progress) {
-    m_mtfFitRunning = true;
-    m_mtfFitPendingInputs = baselineMtf;
-    m_mtfFitFailureInputs.reset();
-    m_mtfFitProgress = progress;
+    m_mtfFit.running = true;
+    m_mtfFit.pendingInputs = baselineMtf;
+    m_mtfFit.failureInputs.reset();
+    m_mtfFit.progress = progress;
     result->progress = std::move(progress);
     refreshMtfCalibrationPresentation();
   };
   operation.resultValid = [this, baseline, result]() {
     return result->progress &&
-           m_mtfFitProgress.lock() == result->progress &&
+           m_mtfFit.progress.lock() == result->progress &&
            getCurrentState() == baseline && !result->cancelled;
   };
   operation.applyResult = [this, baselineMtf, result,
                            guardedResultParent]() {
     // Only the request that still owns document fit provenance reaches here.
-    m_mtfFitRunning = false;
-    m_mtfFitPendingInputs.reset();
-    m_mtfFitProgress.reset();
+    m_mtfFit.running = false;
+    m_mtfFit.pendingInputs.reset();
+    m_mtfFit.progress.reset();
 
     if (result->objective < 0 || !result->error.empty()) {
-      m_mtfFitFailureInputs = baselineMtf;
+      m_mtfFit.failureInputs = baselineMtf;
       refreshMtfCalibrationPresentation();
       auto *box = new QMessageBox(
           QMessageBox::Warning, tr("MTF model fit"),
@@ -3956,9 +3956,9 @@ bool MainWindow::requestMtfModelFit(
     const double rms = result->observations
                            ? std::sqrt(result->objective / result->observations)
                            : 0.0;
-    m_mtfFitBaseline = fitted;
-    m_mtfFitFailureInputs.reset();
-    m_mtfFitRms = rms;
+    m_mtfFit.baseline = fitted;
+    m_mtfFit.failureInputs.reset();
+    m_mtfFit.rms = rms;
 
     ParameterState updated = getCurrentState();
     updated.rparams.sharpen.scanner_mtf = fitted;
@@ -3998,11 +3998,11 @@ bool MainWindow::requestMtfModelFit(
     // Parameter/image replacement may reset the fit and start another request
     // before this cancelled worker returns. Request identity prevents that old
     // completion from clearing the new fit's provenance or enabled state.
-    if (!result->progress || m_mtfFitProgress.lock() != result->progress)
+    if (!result->progress || m_mtfFit.progress.lock() != result->progress)
       return;
-    m_mtfFitProgress.reset();
-    m_mtfFitRunning = false;
-    m_mtfFitPendingInputs.reset();
+    m_mtfFit.progress.reset();
+    m_mtfFit.running = false;
+    m_mtfFit.pendingInputs.reset();
     refreshMtfCalibrationPresentation();
   };
 
@@ -5831,12 +5831,7 @@ bool MainWindow::loadParameterFile(const QString &fileName) {
 
   // Successful external parameter load establishes a new calibration context.
   m_geometryFit.clear();
-  m_mtfFitBaseline.reset();
-  m_mtfFitPendingInputs.reset();
-  m_mtfFitFailureInputs.reset();
-  m_mtfFitRms = -1;
-  m_mtfFitRunning = false;
-  m_mtfFitProgress.reset();
+  m_mtfFit.clear();
   m_colorOptimizerQueue.cancelAll();
   m_profileCalibration.clear();
 

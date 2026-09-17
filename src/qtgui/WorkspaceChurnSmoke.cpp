@@ -2186,7 +2186,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         state->mtfFitUndoIndex = first->m_undoStack->index();
         if (!first->requestMtfModelFit(state->mtfFitBaseline, state->mtfFitInput,
                                       state->mtfFitOptions, 0) ||
-            !first->m_mtfFitRunning || first->m_mtfFitProgress.expired()) {
+            !first->m_mtfFit.running || first->m_mtfFit.progress.expired()) {
           fail(QStringLiteral("Measured-MTF model fit did not start as a document operation"));
           return;
         }
@@ -2208,7 +2208,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
       }
 
       case 208: {
-        if (first->m_mtfFitRunning ||
+        if (first->m_mtfFit.running ||
             first->m_oneShotOperationQueue.hasActiveTasks()) {
           retryOrFail(QStringLiteral("Measured-MTF model fit did not finish"));
           return;
@@ -2217,9 +2217,9 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
             QStringLiteral("MtfFitResultDialog"));
         if (!resultDialog || first->getCurrentState() != state->mtfFitExpected ||
             first->m_undoStack->index() != state->mtfFitUndoIndex + 1 ||
-            !first->m_mtfFitBaseline ||
-            !first->m_mtfFitBaseline->fit_inputs_equal_p(state->mtfFitInput) ||
-            first->m_mtfFitRms < 0 ||
+            !first->m_mtfFit.baseline ||
+            !first->m_mtfFit.baseline->fit_inputs_equal_p(state->mtfFitInput) ||
+            first->m_mtfFit.rms < 0 ||
             !first->mtfCalibrationSummary().contains(QStringLiteral("model current"))) {
           fail(QStringLiteral("Successful measured-MTF fit lost state, provenance, or Undo"));
           return;
@@ -2247,7 +2247,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
           fail(QStringLiteral("Could not start stale measured-MTF fit smoke"));
           return;
         }
-        state->mtfFitCancelledProgress = first->m_mtfFitProgress.lock();
+        state->mtfFitCancelledProgress = first->m_mtfFit.progress.lock();
         ParameterState edited = state->mtfFitBaseline;
         edited.rparams.brightness += 0.125;
         first->applyState(edited);
@@ -2262,7 +2262,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
       }
 
       case 209: {
-        if (first->m_mtfFitRunning ||
+        if (first->m_mtfFit.running ||
             first->m_oneShotOperationQueue.hasActiveTasks()) {
           retryOrFail(QStringLiteral("Cancelled measured-MTF fit did not clean up"));
           return;
@@ -2293,7 +2293,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
       }
 
       case 210: {
-        if (first->m_mtfFitRunning ||
+        if (first->m_mtfFit.running ||
             first->m_oneShotOperationQueue.hasActiveTasks()) {
           retryOrFail(QStringLiteral("Failed measured-MTF fit did not settle"));
           return;
@@ -2302,8 +2302,8 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
             QStringLiteral("MtfFitErrorDialog"));
         if (!errorDialog || first->getCurrentState() != state->mtfFitBaseline ||
             first->m_undoStack->index() != state->mtfFitUndoIndex ||
-            !first->m_mtfFitFailureInputs ||
-            !first->m_mtfFitFailureInputs->fit_inputs_equal_p(
+            !first->m_mtfFit.failureInputs ||
+            !first->m_mtfFit.failureInputs->fit_inputs_equal_p(
                 state->mtfFitBaseline.rparams.sharpen.scanner_mtf) ||
             !first->mtfCalibrationSummary().contains(QStringLiteral("fit failed"))) {
           fail(QStringLiteral("Failed measured-MTF fit changed state or lost failure provenance"));
@@ -2341,7 +2341,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         first->applyState(state->mtfFitBaseline);
         auto *staleDialog = first->m_sharpnessPanel->findChild<QMessageBox *>(
             QStringLiteral("MtfFitStaleDialog"));
-        if (!staleDialog || first->m_mtfFitRunning ||
+        if (!staleDialog || first->m_mtfFit.running ||
             first->m_oneShotOperationQueue.hasActiveTasks()) {
           fail(QStringLiteral("Stale measured-MTF setup dialog started background work"));
           return;
@@ -2355,7 +2355,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
           fail(QStringLiteral("Could not start measured-MTF supersession smoke"));
           return;
         }
-        auto fitProgress = first->m_mtfFitProgress.lock();
+        auto fitProgress = first->m_mtfFit.progress.lock();
         MainWindow::OneShotOperation replacement;
         replacement.description = QStringLiteral("Supersede MTF model fit smoke");
         first->runOneShotOperation(std::move(replacement),
@@ -2369,7 +2369,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
       }
 
       case 211: {
-        if (first->m_mtfFitRunning ||
+        if (first->m_mtfFit.running ||
             first->m_oneShotOperationQueue.hasActiveTasks()) {
           retryOrFail(QStringLiteral("Superseded measured-MTF fit did not clean up"));
           return;
