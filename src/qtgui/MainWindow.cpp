@@ -61,6 +61,7 @@
 #include <QPushButton>
 #include <QScreen>
 #include <QSettings>
+#include <QSignalBlocker>
 #include <QSizeGrip>
 #include <QSizePolicy>
 #include <QSplitter>
@@ -1909,7 +1910,7 @@ void MainWindow::updateCoordinateSpaceControls() {
   const bool hasFinal = stitched ||
       (m_scan && colorscreen::screen_geometry_configured_p(m_scrToImgParams));
 
-  m_coordinateComboBox->blockSignals(true);
+  QSignalBlocker coordinateSignalBlocker(m_coordinateComboBox);
   m_coordinateComboBox->clear();
   if (!stitched)
     m_coordinateComboBox->addItem(tr("Scan coordinates"),
@@ -1932,7 +1933,7 @@ void MainWindow::updateCoordinateSpaceControls() {
   if (index >= 0)
     m_coordinateComboBox->setCurrentIndex(index);
   m_coordinateComboBox->setEnabled(m_coordinateComboBox->count() > 1);
-  m_coordinateComboBox->blockSignals(false);
+  coordinateSignalBlocker.unblock();
 
   const bool finalCoordinates =
       current == colorscreen::render_final_coordinates;
