@@ -15,9 +15,9 @@ class ChangeParametersCommand final : public QUndoCommand {
 public:
   /** Capture OLDSTATE and NEWSTATE for one undoable document edit. */
   ChangeParametersCommand(MainWindow *window, const ParameterState &oldState,
-                const ParameterState &newState,
-                const QString &description = QString(),
-                const QString &parameterKey = QString())
+                          const ParameterState &newState,
+                          const QString &description = QString(),
+                          const QString &parameterKey = QString())
       : m_window(window), m_oldState(oldState), m_newState(newState),
         m_mergeKey(parameterKey.isEmpty() ? description : parameterKey),
         m_timestamp(QDateTime::currentMSecsSinceEpoch()) {
