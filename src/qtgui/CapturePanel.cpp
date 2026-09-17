@@ -103,6 +103,8 @@ void CapturePanel::setupUi()
     // historical color-screen restoration is meaningful for this document.
     m_captureTypeCombo = new QComboBox();
     m_captureTypeCombo->setObjectName(QStringLiteral("CaptureTypeCombo"));
+    m_captureTypeCombo->setProperty("parameterKey",
+                                    QStringLiteral("capture.type"));
     m_captureTypeCombo->setSizeAdjustPolicy(
         QComboBox::AdjustToMinimumContentsLengthWithIcon);
     m_captureTypeCombo->setMinimumContentsLength(18);
@@ -130,7 +132,7 @@ void CapturePanel::setupUi()
         if (capture != colorscreen::render_parameters::capture_unknown &&
             !colorscreen::render_parameters::capture_has_screen_p(capture))
           state.scrToImg.type = colorscreen::NoScreen;
-      }, "Capture type");
+      }, "Capture type", QStringLiteral("capture.type"));
     });
 
     // Demosaic (Enum) + Reload
@@ -140,6 +142,9 @@ void CapturePanel::setupUi()
     demosaicHLayout->setSpacing(5);
 
     m_demosaicCombo = new QComboBox();
+    m_demosaicCombo->setObjectName(QStringLiteral("CaptureDemosaicCombo"));
+    m_demosaicCombo->setProperty("parameterKey",
+                                 QStringLiteral("capture.demosaic"));
     m_demosaicCombo->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
     m_demosaicCombo->setMinimumContentsLength(10);
     m_demosaicCombo->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
@@ -160,7 +165,12 @@ void CapturePanel::setupUi()
 
     connect(m_demosaicCombo, QOverload<int>::of(&QComboBox::activated), this, [this](int index) {
         int val = m_demosaicCombo->itemData(index).toInt();
-        applyChange([val](ParameterState &s) { s.rparams.demosaic = (colorscreen::image_data::demosaicing_t)val; }, "Demosaic");
+        applyChange(
+            [val](ParameterState &s) {
+              s.rparams.demosaic =
+                  (colorscreen::image_data::demosaicing_t)val;
+            },
+            "Demosaic", QStringLiteral("capture.demosaic"));
     });
 
     connect(m_reloadDemosaicBtn, &QPushButton::clicked, this, [this]() {
@@ -310,28 +320,39 @@ void CapturePanel::setupUi()
     m_form->addRow("Sensor presets", presets);
 
     // 13. Sensor width (Slider)
-    // We need to store this widget to update it
+    // Sensor width is a derived presentation of the saved pixel-pitch
+    // parameter, so it deliberately shares the same stable parameter key.
+    const QString pixelPitchKey = QStringLiteral("capture.mtf.pixel_pitch");
     QWidget *sensorWidthSlider = addSlider(
         "Sensor width", 0.0, 1000.0, 10.0, 2, "mm", "unknown",
         0.0,
-        [this](double v) {
+        [this, pixelPitchKey](double v) {
             auto img = m_imageGetter();
             int divisor = (img && m_assumeRotationBox->isChecked() && img->height > 0) ? img->height : (img ? img->width : 0);
             if (img && divisor > 0 && v > 0) {
                 double pitch = (v * 1000.0) / divisor;
                 applyChange([pitch](ParameterState &s) {
                     s.rparams.sharpen.scanner_mtf.pixel_pitch = pitch;
-                }, "Sensor width");
+                }, "Sensor width", pixelPitchKey);
             } else if (v == 0) {
                 applyChange([](ParameterState &s) {
                     s.rparams.sharpen.scanner_mtf.pixel_pitch = 0;
-                }, "Sensor width");
+                }, "Sensor width", pixelPitchKey);
             }
         }
     );
+    sensorWidthSlider->setObjectName(QStringLiteral("CaptureSensorWidthField"));
+    sensorWidthSlider->setProperty("parameterKey", pixelPitchKey);
+    if (QSlider *slider = sensorWidthSlider->findChild<QSlider *>())
+      slider->setProperty("parameterKey", pixelPitchKey);
+    if (QDoubleSpinBox *spin =
+            sensorWidthSlider->findChild<QDoubleSpinBox *>())
+      spin->setProperty("parameterKey", pixelPitchKey);
 
     // 13b. Rotation assumption
     m_assumeRotationBox = new QCheckBox("Assume 90 degrees rotation");
+    m_assumeRotationBox->setObjectName(
+        QStringLiteral("CaptureAssumeRotationCheck"));
     m_form->addRow("", m_assumeRotationBox);
     connect(m_assumeRotationBox, &QCheckBox::toggled, this, [this]() {
         updateUI();
