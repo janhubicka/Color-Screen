@@ -1,0 +1,22 @@
+name: Agent key-audit source export
+on:
+  push:
+    branches:
+      - agent/qtgui-key-audit-stage-20260917
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ccd87fbb83202c442d4b2c318718b7e5d1e64561
+          fetch-depth: 0
+      - name: Verify exact revision
+        run: test "$(git rev-parse HEAD)" = ccd87fbb83202c442d4b2c318718b7e5d1e64561
+      - name: Pack exact source
+        run: git archive --format=tar.gz --prefix=Color-Screen/ -o /tmp/colorscreen-main-ccd87fbb.tar.gz HEAD
+      - uses: actions/upload-artifact@v4
+        with:
+          name: colorscreen-main-ccd87fbb
+          path: /tmp/colorscreen-main-ccd87fbb.tar.gz
+          if-no-files-found: error
