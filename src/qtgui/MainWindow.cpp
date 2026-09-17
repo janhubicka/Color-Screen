@@ -19,6 +19,7 @@
 #include "GeometryPanel.h"
 #include "GeometrySolverWorker.h"
 #include "ImageWidget.h"
+#include "InitialSetupGuideDialog.h"
 #include "NavigationView.h"
 #include "RenderDialog.h"
 #include "ScreenPanel.h"
@@ -334,234 +335,6 @@ bool focusAnalysisUsesMonochromeInput(const colorscreen::image_data &scan) {
         + std::max((long double)0, sumG2 / samples - meanG * meanG);
   return variance < (long double)5e-5;
 }
-/** Small extensible guide shown after an image is opened without parameter
-    data.  Later setup recommendations can be added as more rows without
-    changing the load/reload orchestration. */
-class InitialSetupGuideDialog final : public QDialog {
-public:
-  explicit InitialSetupGuideDialog(QWidget *parent, bool suggestCaptureType,
-                                   bool looksMonochrome, bool suggestBayer,
-                                   bool suggestFStop,
-                                   bool suggestPitch, bool suggestFill,
-                                   bool suggestDPI, bool suggestWavelengths,
-                                   const colorscreen::image_data *scan)
-      : QDialog(parent) {
-    setWindowTitle(tr("Suggested image setup"));
-    setModal(true);
-
-    auto *layout = new QVBoxLayout(this);
-
-    if (suggestCaptureType) {
-      auto *intro = new QLabel(
-          tr("Choose what kind of material this image captures. The capture "
-             "type determines which restoration workflow is applicable."),
-          this);
-      intro->setWordWrap(true);
-      layout->addWidget(intro);
-
-      m_captureType = new QComboBox(this);
-      m_captureType->setObjectName(QStringLiteral("InitialCaptureTypeCombo"));
-      for (int i = 0; i < (int)colorscreen::render_parameters::capture_max;
-           ++i) {
-        const auto capture = static_cast<decltype(
-            colorscreen::render_parameters::capture_unknown)>(i);
-        bool show = capture == colorscreen::render_parameters::capture_unknown;
-        if (looksMonochrome) {
-          // RGB may only be a Bayer-container detail here. Offer the
-          // monochrome-through-screen paths, which reconstruct a regular
-          // screen geometrically, but not RGB screen-color detection paths.
-          show = show ||
-                 capture == colorscreen::render_parameters::capture_transparency ||
-                 capture == colorscreen::render_parameters::capture_negative ||
-                 capture == colorscreen::render_parameters::capture_plain_image;
-        } else if (scan) {
-          show = show ||
-                 colorscreen::render_parameters::capture_type_compatible_p(
-                     capture, scan);
-        }
-        if (show) {
-          const auto &property =
-              colorscreen::render_parameters::capture_properties[i];
-          m_captureType->addItem(QString::fromUtf8(property.pretty_name), i);
-          if (property.help && property.help[0])
-            m_captureType->setItemData(
-                m_captureType->count() - 1, QString::fromUtf8(property.help),
-                Qt::ToolTipRole);
-        }
-      }
-      m_captureType->setCurrentIndex(
-          m_captureType->findData(
-              (int)colorscreen::render_parameters::capture_unknown));
-      m_captureType->setToolTip(
-          tr("Choose Unknown if you are not sure yet. Color-Screen will keep "
-             "the restoration workflow conservative until this is known."));
-      layout->addWidget(m_captureType);
-
-      if (suggestBayer || suggestFStop || suggestPitch || suggestFill
-          || suggestDPI || suggestWavelengths) {
-        auto *line = new QFrame(this);
-        line->setFrameShape(QFrame::HLine);
-        line->setFrameShadow(QFrame::Sunken);
-        layout->addWidget(line);
-      }
-    }
-    
-    if (suggestBayer) {
-      auto *intro = new QLabel(
-          tr("This appears to be a monochromatic capture made with a Bayer-filter camera."),
-          this);
-      intro->setWordWrap(true);
-      layout->addWidget(intro);
-
-      m_monochromeBayer =
-          new QCheckBox(tr("Reload with Bayer-filter compensation"), this);
-      m_monochromeBayer->setChecked(true);
-      layout->addWidget(m_monochromeBayer);
-      
-      if (suggestFStop || suggestPitch || suggestFill || suggestDPI
-          || suggestWavelengths) {
-        auto *line = new QFrame(this);
-        line->setFrameShape(QFrame::HLine);
-        line->setFrameShadow(QFrame::Sunken);
-        layout->addWidget(line);
-      }
-    }
-    
-    if (suggestFStop || suggestPitch || suggestFill || suggestDPI
-          || suggestWavelengths) {
-      auto *intro2 = new QLabel(
-          tr("The following capture parameters were automatically detected:"), this);
-      intro2->setWordWrap(true);
-      layout->addWidget(intro2);
-    }
-    
-    if (suggestFStop) {
-      m_fstop = new QCheckBox(tr("Set nominal f-stop to f/%1").arg(scan->f_stop, 0, 'f', 1), this);
-      m_fstop->setChecked(true);
-      layout->addWidget(m_fstop);
-    }
-    
-    if (suggestPitch) {
-      int divisor = scan->width > 0 ? scan->width : 1;
-      double sensorWidth = divisor * scan->pixel_pitch / 1000.0;
-      QString sensorName = getSensorName(sensorWidth);
-      m_pitch = new QCheckBox(tr("Set sensor pixel pitch to %1 μm (Sensor size: %2)").arg(scan->pixel_pitch, 0, 'f', 2).arg(sensorName), this);
-      m_pitch->setChecked(true);
-      layout->addWidget(m_pitch);
-    }
-    
-    if (suggestFill) {
-      m_fill = new QCheckBox(tr("Set sensor fill factor to %1").arg(scan->sensor_fill_factor, 0, 'f', 3), this);
-      m_fill->setChecked(true);
-      layout->addWidget(m_fill);
-    }
-    
-    if (suggestDPI) {
-      m_dpi = new QCheckBox(tr("Set image resolution to %1 PPI").arg(scan->xdpi, 0, 'f', 1), this);
-      m_dpi->setChecked(true);
-      layout->addWidget(m_dpi);
-    }
-
-    if (suggestWavelengths) {
-      QStringList values;
-      static const char *channelNames[] = {"R", "G", "B", "IR"};
-      for (int c = 0; c < 4; ++c) {
-        const bool present = c < 3 ? scan->has_rgb()
-                                   : scan->has_grayscale_or_ir();
-        const double wavelength = scan->wavelengths[c];
-        if (!present || !colorscreen::my_isfinite(wavelength)
-            || wavelength <= 0)
-          continue;
-        if (scan->has_rgb())
-          values << QString("%1 %2 nm")
-                        .arg(channelNames[c])
-                        .arg(wavelength, 0, 'f', 0);
-        else
-          values << QString("%1 nm").arg(wavelength, 0, 'f', 0);
-      }
-      m_wavelengths = new QCheckBox(
-          scan->has_rgb()
-              ? tr("Set detected channel wavelengths: %1").arg(values.join(", "))
-              : tr("Set capture wavelength to %1").arg(values.join(", ")),
-          this);
-      m_wavelengths->setChecked(true);
-      layout->addWidget(m_wavelengths);
-    }
-
-    auto *buttons = new QDialogButtonBox(
-        QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
-    buttons->button(QDialogButtonBox::Ok)->setText(suggestBayer ? tr("Apply and reload") : tr("Apply"));
-    buttons->button(QDialogButtonBox::Cancel)->setText(tr("Not now"));
-    connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
-    connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
-    layout->addWidget(buttons);
-  }
-
-  /** Return the capture type selected by the operator. */
-  auto selectedCaptureType() const {
-    if (!m_captureType)
-      return colorscreen::render_parameters::capture_unknown;
-    return static_cast<decltype(colorscreen::render_parameters::capture_unknown)>(
-        m_captureType->currentData().toInt());
-  }
-
-  /** Return whether compensated monochrome Bayer loading was selected. */
-  bool useMonochromeBayerCorrection() const {
-    return m_monochromeBayer && m_monochromeBayer->isChecked();
-  }
-  
-  bool useFStop() const {
-    return m_fstop && m_fstop->isChecked();
-  }
-  
-  bool usePixelPitch() const {
-    return m_pitch && m_pitch->isChecked();
-  }
-
-  bool useFillFactor() const {
-    return m_fill && m_fill->isChecked();
-  }
-  
-  bool useDPI() const {
-    return m_dpi && m_dpi->isChecked();
-  }
-
-  bool useWavelengths() const {
-    return m_wavelengths && m_wavelengths->isChecked();
-  }
-
-private:
-  QString getSensorName(double width_mm) const {
-    struct Preset { const char* name; double w; };
-    Preset presets[] = {
-        {"PhaseOne 54.0mm", 54.0},
-        {"PhaseOne 53.7mm", 53.7},
-        {"PhaseOne 53.4mm", 53.4},
-        {"Medium Format 43.8mm", 43.8},
-        {"Full Frame (36mm)", 36.0},
-        {"APS-H (28.3mm)", 28.3},
-        {"APS-C (23.0mm)", 23.0},
-        {"Micro Four Thirds (17.3mm)", 17.3},
-        {"1-inch (13.2mm)", 13.2},
-        {"1/1.7-inch (7.6mm)", 7.6},
-        {"1/2.5-inch (5.76mm)", 5.76}
-    };
-    for (const auto& p : presets) {
-        if (std::abs(width_mm - p.w) < 1.0)
-            return QString::fromUtf8(p.name);
-    }
-    return tr("Unknown, %1 mm width").arg(width_mm, 0, 'f', 1);
-  }
-
-  QComboBox *m_captureType = nullptr;
-  QCheckBox *m_monochromeBayer = nullptr;
-  QCheckBox *m_fstop = nullptr;
-  QCheckBox *m_pitch = nullptr;
-  QCheckBox *m_fill = nullptr;
-  QCheckBox *m_dpi = nullptr;
-  QCheckBox *m_wavelengths = nullptr;
-};
-
 } // namespace
 
 /** Return the one status bar belonging to the current top-level window. */
@@ -4263,26 +4036,26 @@ QString MainWindow::profileCalibrationSummary() const {
 
   const ColorOptimizerRequestData current{
       m_scrToImgParams, m_rparams, m_profileSpots};
-  const bool fitCurrent = m_profileCalibrationBaseline &&
-      !profileCalibrationInputsDiffer(*m_profileCalibrationBaseline, current);
-  const bool failureCurrent = m_profileCalibrationFailureInputs &&
-      !profileCalibrationInputsDiffer(*m_profileCalibrationFailureInputs, current);
+  const bool fitCurrent = m_profileCalibration.baseline &&
+      !profileCalibrationInputsDiffer(*m_profileCalibration.baseline, current);
+  const bool failureCurrent = m_profileCalibration.failureInputs &&
+      !profileCalibrationInputsDiffer(*m_profileCalibration.failureInputs, current);
 
   QString summary =
       tr("Profile: optional matrix correction • %1 calibration spots")
           .arg(count);
-  if (m_profileCalibrationPendingInputs) {
+  if (m_profileCalibration.pendingInputs) {
     summary += tr(" • optimizing…");
   } else if (fitCurrent) {
     summary += tr(" • calibration current");
-    if (m_profileCalibrationAverageDeltaE >= 0)
+    if (m_profileCalibration.averageDeltaE >= 0)
       summary += tr(" • avg ΔE₂₀₀₀ %1")
-          .arg(m_profileCalibrationAverageDeltaE, 0, 'f', 2);
+          .arg(m_profileCalibration.averageDeltaE, 0, 'f', 2);
     if (failureCurrent)
       summary += tr(" • last retry failed");
   } else if (failureCurrent) {
     summary += tr(" • optimization failed — adjust inputs and retry");
-  } else if (m_profileCalibrationBaseline) {
+  } else if (m_profileCalibration.baseline) {
     summary += tr(" • calibration stale — reoptimize");
   } else if (savedCalibration) {
     summary += tr(" • saved calibration present — provenance not verified");
@@ -4318,14 +4091,14 @@ void MainWindow::updateWorkflowSummary() {
     m_solverQueue.cancelAll();
   }
 
-  if (m_profileCalibrationPendingInputs) {
+  if (m_profileCalibration.pendingInputs) {
     const ColorOptimizerRequestData currentProfileInputs{
         m_scrToImgParams, m_rparams, m_profileSpots};
-    if (profileCalibrationInputsDiffer(*m_profileCalibrationPendingInputs,
+    if (profileCalibrationInputsDiffer(*m_profileCalibration.pendingInputs,
                                        currentProfileInputs)) {
       // As with geometry, reset first because cancellation can synchronously
       // drive progress/UI callbacks.
-      m_profileCalibrationPendingInputs.reset();
+      m_profileCalibration.pendingInputs.reset();
       m_colorOptimizerQueue.cancelAll();
     }
   }
@@ -6068,10 +5841,7 @@ bool MainWindow::loadParameterFile(const QString &fileName) {
   m_mtfFitRunning = false;
   m_mtfFitProgress.reset();
   m_colorOptimizerQueue.cancelAll();
-  m_profileCalibrationBaseline.reset();
-  m_profileCalibrationPendingInputs.reset();
-  m_profileCalibrationFailureInputs.reset();
-  m_profileCalibrationAverageDeltaE = -1;
+  m_profileCalibration.clear();
 
   // Update UI/Renderer
   if (m_scan) {
@@ -7465,8 +7235,8 @@ void MainWindow::onColorOptimizeRequested(bool /*autoMode*/) {
   // newer request still supersedes an older TaskQueue job, while unrelated
   // edits invalidate even the newest request before it can publish.
   ColorOptimizerRequestData d{m_scrToImgParams, m_rparams, state.profileSpots};
-  m_profileCalibrationPendingInputs = d;
-  m_profileCalibrationFailureInputs.reset();
+  m_profileCalibration.pendingInputs = d;
+  m_profileCalibration.failureInputs.reset();
   updateWorkflowSummary();
   m_colorOptimizerQueue.requestRender(QVariant::fromValue(d));
 }
@@ -7481,7 +7251,7 @@ void MainWindow::onTriggerColorOptimize(
       !userData.canConvert<ColorOptimizerRequestData>()) {
     const bool current = m_colorOptimizerQueue.reportFinished(reqId, false);
     if (current) {
-      m_profileCalibrationPendingInputs.reset();
+      m_profileCalibration.pendingInputs.reset();
       updateWorkflowSummary();
     }
     return;
@@ -7513,11 +7283,11 @@ void MainWindow::onColorOptimizerFinished(
 
   const ColorOptimizerRequestData now{
       m_scrToImgParams, m_rparams, m_profileSpots};
-  const bool inputsStillCurrent = m_profileCalibrationPendingInputs &&
-      !profileCalibrationInputsDiffer(*m_profileCalibrationPendingInputs, now);
+  const bool inputsStillCurrent = m_profileCalibration.pendingInputs &&
+      !profileCalibrationInputsDiffer(*m_profileCalibration.pendingInputs, now);
   const std::optional<ColorOptimizerRequestData> completedInputs =
-      m_profileCalibrationPendingInputs;
-  m_profileCalibrationPendingInputs.reset();
+      m_profileCalibration.pendingInputs;
+  m_profileCalibration.pendingInputs.reset();
 
   if (cancelled || !inputsStillCurrent) {
     updateWorkflowSummary();
@@ -7525,14 +7295,14 @@ void MainWindow::onColorOptimizerFinished(
   }
 
   if (success) {
-    m_profileCalibrationBaseline = completedInputs;
-    m_profileCalibrationFailureInputs.reset();
-    m_profileCalibrationAverageDeltaE = -1;
+    m_profileCalibration.baseline = completedInputs;
+    m_profileCalibration.failureInputs.reset();
+    m_profileCalibration.averageDeltaE = -1;
     if (!results.empty()) {
       double total = 0;
       for (const auto &match : results)
         total += match.deltaE;
-      m_profileCalibrationAverageDeltaE = total / results.size();
+      m_profileCalibration.averageDeltaE = total / results.size();
     }
 
     ParameterState newState = getCurrentState();
@@ -7550,7 +7320,7 @@ void MainWindow::onColorOptimizerFinished(
       m_imageWidget->update();
     }
   } else {
-    m_profileCalibrationFailureInputs = completedInputs;
+    m_profileCalibration.failureInputs = completedInputs;
     statusBar()->showMessage(tr("Color optimization failed"), 4000);
   }
   updateWorkflowSummary();
