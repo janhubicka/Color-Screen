@@ -1,0 +1,187 @@
+diff --git a/.agents/qtgui.md b/.agents/qtgui.md
+index b065fe6..5ceab89 100644
+--- a/.agents/qtgui.md
++++ b/.agents/qtgui.md
+@@ -297,7 +297,7 @@ addSliderParameter(
+ 
+ - **Getter Lambda**: Returns the current value from the `ParameterState`.
+ - **Setter Lambda**: Modifies the `ParameterState` with the new value.
+-- **`applyChange`**: Behind the scenes, the helper methods call `applyChange`, which triggers a global state update and UI refresh. Stateful helpers accept an optional stable, untranslated `parameterKey`; use it for new or actively maintained controls so Undo merging and Reset/default metadata do not depend on the visible label. Keys identify the complete processing role, not just the caption: controls in different stages that intentionally share text (for example the Screen panel's pre- and post-demosaic `Strength` controls) must have different keys. The Screen panel provides a complete example under `screen.*`, Geometry follows under `geometry.*`, and Image Layer uses `image_layer.*`. Do not assign keys to panel-local operation/presentation toggles merely because they use a `ParameterPanel` helper; Geometry's Auto fit/nonlinear-request toggles and Image Layer's Set-by-area/channel buttons are intentionally unkeyed because they are not saved `ParameterState`. Keyed numeric helpers can opt into the standard default presentation: the label becomes semibold and a small Reset control appears only while the value differs from a fresh `ParameterState` default. Reset remains a separate undo gesture. Preserve explicit sentinel values such as `0 = not configured/process default`: when a sentinel lies below the ordinary numeric interval, pass it as the helper's separate special minimum instead of clamping it to the first explicit value. Screen geometry follows the same rule: fresh `scr_to_img_parameters` have zero coordinate vectors, meaning geometry has not been established. `screen_has_regular_geometry_p(type)` says only that the selected process has a regular lattice; code that consumes screen/final coordinates must use `screen_geometry_configured_p(params)` (and still handle `scr_to_img::set_parameters()` failure). Detection/discovery code is the intentional exception because it establishes the mapping.
++- **`applyChange`**: Behind the scenes, the helper methods call `applyChange`, which triggers a global state update and UI refresh. Stateful helpers accept an optional stable, untranslated `parameterKey`; use it for new or actively maintained controls so Undo merging and Reset/default metadata do not depend on the visible label. Keys identify the complete processing role, not just the caption: controls in different stages that intentionally share text (for example the Screen panel's pre- and post-demosaic `Strength` controls) must have different keys. The Screen panel provides a complete example under `screen.*`, Geometry follows under `geometry.*`, Image Layer uses `image_layer.*`, and Digital Capture uses `capture.*` for its saved selectors and numeric parameters; its derived Sensor width control shares the underlying `capture.mtf.pixel_pitch` key. Do not assign keys to panel-local operation/presentation controls merely because they live in a `ParameterPanel`; Geometry's Auto fit/nonlinear-request toggles, Image Layer's Set-by-area/channel buttons, and Capture's metadata Use/reload/measure/preset controls are intentionally unkeyed because they are not independent saved `ParameterState` parameters. Keyed numeric helpers can opt into the standard default presentation: the label becomes semibold and a small Reset control appears only while the value differs from a fresh `ParameterState` default. Reset remains a separate undo gesture. Preserve explicit sentinel values such as `0 = not configured/process default`: when a sentinel lies below the ordinary numeric interval, pass it as the helper's separate special minimum instead of clamping it to the first explicit value. Screen geometry follows the same rule: fresh `scr_to_img_parameters` have zero coordinate vectors, meaning geometry has not been established. `screen_has_regular_geometry_p(type)` says only that the selected process has a regular lattice; code that consumes screen/final coordinates must use `screen_geometry_configured_p(params)` (and still handle `scr_to_img::set_parameters()` failure). Detection/discovery code is the intentional exception because it establishes the mapping.
+ 
+ ---
+ 
+diff --git a/doc/qtgui-internal-cleanup.md b/doc/qtgui-internal-cleanup.md
+index c2b2e49..20c85d9 100644
+--- a/doc/qtgui-internal-cleanup.md
++++ b/doc/qtgui-internal-cleanup.md
+@@ -335,7 +335,15 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
+   Layer is the third complete migration: the simulated/native source choice and
+   six RGB mixing values use `image_layer.*` keys, while Set by dark area, Set by
+   neutral area, and Set by infrared channel remain unkeyed operation controls.
+-  Workspace churn checks both sides of that ownership boundary.
++  Digital Capture is the fourth complete migration: its custom Capture type and
++  Demosaic selectors now use `capture.type` and `capture.demosaic`, alongside the
++  existing keyed gamma/scanner-MTF numeric controls. The derived Sensor width
++  slider shares `capture.mtf.pixel_pitch`, because both widgets edit the same saved
++  value. Metadata Use buttons, reload, measurement, presets, crop, and pure
++  presentation controls remain deliberately unkeyed because they are operations
++  rather than independent saved parameters. Workspace churn checks the custom
++  selectors, derived-key ownership, the unkeyed rotation-assumption presentation
++  toggle, and the existing Capture default/reset metadata.
+ - Prefer `QSignalBlocker` for temporary signal suppression. The first P1 cleanup
+   converts the central `ParameterPanel` synchronization helpers and the simple
+   refresh/update pairs in Capture, Screen, Geometry, Image Layer, Tiles, Color,
+diff --git a/src/qtgui/CapturePanel.cpp b/src/qtgui/CapturePanel.cpp
+index bc32e97..6da6053 100644
+--- a/src/qtgui/CapturePanel.cpp
++++ b/src/qtgui/CapturePanel.cpp
+@@ -103,6 +103,8 @@ void CapturePanel::setupUi()
+     // historical color-screen restoration is meaningful for this document.
+     m_captureTypeCombo = new QComboBox();
+     m_captureTypeCombo->setObjectName(QStringLiteral("CaptureTypeCombo"));
++    m_captureTypeCombo->setProperty("parameterKey",
++                                    QStringLiteral("capture.type"));
+     m_captureTypeCombo->setSizeAdjustPolicy(
+         QComboBox::AdjustToMinimumContentsLengthWithIcon);
+     m_captureTypeCombo->setMinimumContentsLength(18);
+@@ -130,7 +132,7 @@ void CapturePanel::setupUi()
+         if (capture != colorscreen::render_parameters::capture_unknown &&
+             !colorscreen::render_parameters::capture_has_screen_p(capture))
+           state.scrToImg.type = colorscreen::NoScreen;
+-      }, "Capture type");
++      }, "Capture type", QStringLiteral("capture.type"));
+     });
+ 
+     // Demosaic (Enum) + Reload
+@@ -140,6 +142,9 @@ void CapturePanel::setupUi()
+     demosaicHLayout->setSpacing(5);
+ 
+     m_demosaicCombo = new QComboBox();
++    m_demosaicCombo->setObjectName(QStringLiteral("CaptureDemosaicCombo"));
++    m_demosaicCombo->setProperty("parameterKey",
++                                 QStringLiteral("capture.demosaic"));
+     m_demosaicCombo->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+     m_demosaicCombo->setMinimumContentsLength(10);
+     m_demosaicCombo->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+@@ -160,7 +165,12 @@ void CapturePanel::setupUi()
+ 
+     connect(m_demosaicCombo, QOverload<int>::of(&QComboBox::activated), this, [this](int index) {
+         int val = m_demosaicCombo->itemData(index).toInt();
+-        applyChange([val](ParameterState &s) { s.rparams.demosaic = (colorscreen::image_data::demosaicing_t)val; }, "Demosaic");
++        applyChange(
++            [val](ParameterState &s) {
++              s.rparams.demosaic =
++                  (colorscreen::image_data::demosaicing_t)val;
++            },
++            "Demosaic", QStringLiteral("capture.demosaic"));
+     });
+ 
+     connect(m_reloadDemosaicBtn, &QPushButton::clicked, this, [this]() {
+@@ -310,28 +320,39 @@ void CapturePanel::setupUi()
+     m_form->addRow("Sensor presets", presets);
+ 
+     // 13. Sensor width (Slider)
+-    // We need to store this widget to update it
++    // Sensor width is a derived presentation of the saved pixel-pitch
++    // parameter, so it deliberately shares the same stable parameter key.
++    const QString pixelPitchKey = QStringLiteral("capture.mtf.pixel_pitch");
+     QWidget *sensorWidthSlider = addSlider(
+         "Sensor width", 0.0, 1000.0, 10.0, 2, "mm", "unknown",
+         0.0,
+-        [this](double v) {
++        [this, pixelPitchKey](double v) {
+             auto img = m_imageGetter();
+             int divisor = (img && m_assumeRotationBox->isChecked() && img->height > 0) ? img->height : (img ? img->width : 0);
+             if (img && divisor > 0 && v > 0) {
+                 double pitch = (v * 1000.0) / divisor;
+                 applyChange([pitch](ParameterState &s) {
+                     s.rparams.sharpen.scanner_mtf.pixel_pitch = pitch;
+-                }, "Sensor width");
++                }, "Sensor width", pixelPitchKey);
+             } else if (v == 0) {
+                 applyChange([](ParameterState &s) {
+                     s.rparams.sharpen.scanner_mtf.pixel_pitch = 0;
+-                }, "Sensor width");
++                }, "Sensor width", pixelPitchKey);
+             }
+         }
+     );
++    sensorWidthSlider->setObjectName(QStringLiteral("CaptureSensorWidthField"));
++    sensorWidthSlider->setProperty("parameterKey", pixelPitchKey);
++    if (QSlider *slider = sensorWidthSlider->findChild<QSlider *>())
++      slider->setProperty("parameterKey", pixelPitchKey);
++    if (QDoubleSpinBox *spin =
++            sensorWidthSlider->findChild<QDoubleSpinBox *>())
++      spin->setProperty("parameterKey", pixelPitchKey);
+ 
+     // 13b. Rotation assumption
+     m_assumeRotationBox = new QCheckBox("Assume 90 degrees rotation");
++    m_assumeRotationBox->setObjectName(
++        QStringLiteral("CaptureAssumeRotationCheck"));
+     m_form->addRow("", m_assumeRotationBox);
+     connect(m_assumeRotationBox, &QCheckBox::toggled, this, [this]() {
+         updateUI();
+diff --git a/src/qtgui/WorkspaceChurnSmoke.cpp b/src/qtgui/WorkspaceChurnSmoke.cpp
+index 247239a..0319d5d 100644
+--- a/src/qtgui/WorkspaceChurnSmoke.cpp
++++ b/src/qtgui/WorkspaceChurnSmoke.cpp
+@@ -306,6 +306,12 @@ QLabel *nextStepSummary = inspector->findChild<QLabel *>(
+     QStringLiteral("WorkflowNextStepSummary"));
+ QComboBox *captureTypeCombo = inspector->findChild<QComboBox *>(
+     QStringLiteral("CaptureTypeCombo"));
++QComboBox *captureDemosaicCombo = inspector->findChild<QComboBox *>(
++    QStringLiteral("CaptureDemosaicCombo"));
++QWidget *captureSensorWidthField = inspector->findChild<QWidget *>(
++    QStringLiteral("CaptureSensorWidthField"));
++QCheckBox *captureAssumeRotationCheck = inspector->findChild<QCheckBox *>(
++    QStringLiteral("CaptureAssumeRotationCheck"));
+ bool captureChoicesCompatible = captureTypeCombo != nullptr;
+ if (captureTypeCombo && first->sharedImageData()) {
+   for (int i = 0; i < captureTypeCombo->count(); ++i) {
+@@ -914,6 +920,45 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
+         }
+         first->applyState(screenUndoBaseline);
+ 
++        // Digital Capture is the fourth complete stable-key panel. The two
++        // custom saved-state selectors carry the same metadata as helper-made
++        // controls; metadata-use/reload/measure/preset controls remain
++        // operations rather than independent document parameters.
++        const QStringList captureParameterKeys = {
++            QStringLiteral("capture.type"),
++            QStringLiteral("capture.demosaic"),
++            QStringLiteral("capture.gamma"),
++            QStringLiteral("capture.mtf.scan_dpi"),
++            QStringLiteral("capture.mtf.f_stop"),
++            QStringLiteral("capture.mtf.pixel_pitch"),
++            QStringLiteral("capture.mtf.sensor_fill_factor"),
++            QStringLiteral("capture.mtf.wavelength.red"),
++            QStringLiteral("capture.mtf.wavelength.green"),
++            QStringLiteral("capture.mtf.wavelength.blue"),
++            QStringLiteral("capture.mtf.wavelength.scalar")};
++        for (const QString &key : captureParameterKeys) {
++          if (!hasParameterKey(key)) {
++            fail(QStringLiteral(
++                     "Workspace churn lost Capture parameter key %1")
++                     .arg(key));
++            return;
++          }
++        }
++        if (!captureTypeCombo || !captureDemosaicCombo ||
++            !captureSensorWidthField || !captureAssumeRotationCheck ||
++            captureTypeCombo->property("parameterKey").toString() !=
++                QStringLiteral("capture.type") ||
++            captureDemosaicCombo->property("parameterKey").toString() !=
++                QStringLiteral("capture.demosaic") ||
++            captureSensorWidthField->property("parameterKey").toString() !=
++                QStringLiteral("capture.mtf.pixel_pitch") ||
++            !captureAssumeRotationCheck->property("parameterKey")
++                 .toString().isEmpty()) {
++          fail(QStringLiteral(
++              "Workspace churn lost Capture key ownership metadata"));
++          return;
++        }
++
+         const QStringList captureDefaultKeys = {
+             QStringLiteral("capture.gamma"),
+             QStringLiteral("capture.mtf.scan_dpi"),
