@@ -814,13 +814,25 @@ private:
   ColorOptimizerWorker *m_colorOptimizerWorker = nullptr;
   QThread *m_colorOptimizerThread = nullptr;
   TaskQueue m_colorOptimizerQueue;
-  // Session-local profile-fit provenance. The persisted matrix remains usable,
-  // but is only called current when an accepted optimizer result matches the
-  // current geometry, color inputs, and calibration spots.
-  std::optional<ColorOptimizerRequestData> m_profileCalibrationBaseline;
-  std::optional<ColorOptimizerRequestData> m_profileCalibrationPendingInputs;
-  std::optional<ColorOptimizerRequestData> m_profileCalibrationFailureInputs;
-  double m_profileCalibrationAverageDeltaE = -1;
+  // Session-local profile-fit provenance. Keep the request snapshots and the
+  // accepted-fit diagnostic together so their lifecycle cannot drift apart.
+  // The persisted matrix remains usable, but is only called current when an
+  // accepted optimizer result matches geometry, color inputs and calibration
+  // spots.
+  struct ProfileCalibrationState {
+    std::optional<ColorOptimizerRequestData> baseline;
+    std::optional<ColorOptimizerRequestData> pendingInputs;
+    std::optional<ColorOptimizerRequestData> failureInputs;
+    double averageDeltaE = -1;
+
+    void clear() {
+      baseline.reset();
+      pendingInputs.reset();
+      failureInputs.reset();
+      averageDeltaE = -1;
+    }
+  };
+  ProfileCalibrationState m_profileCalibration;
   // std::shared_ptr<colorscreen::progress_info> m_solverProgress; // Removed, now handled by queue request
   
   // Solver Queue

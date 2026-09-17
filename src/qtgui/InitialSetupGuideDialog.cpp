@@ -1,0 +1,233 @@
+#include "InitialSetupGuideDialog.h"
+
+#include "../libcolorscreen/include/base.h"
+#include "../libcolorscreen/include/imagedata.h"
+
+#include <QCheckBox>
+#include <QComboBox>
+#include <QDialogButtonBox>
+#include <QFrame>
+#include <QLabel>
+#include <QPushButton>
+#include <QStringList>
+#include <QVBoxLayout>
+
+#include <cmath>
+
+InitialSetupGuideDialog::InitialSetupGuideDialog(
+    QWidget *parent, bool suggestCaptureType, bool looksMonochrome,
+    bool suggestBayer, bool suggestFStop, bool suggestPitch, bool suggestFill,
+    bool suggestDPI, bool suggestWavelengths,
+    const colorscreen::image_data *scan)
+    : QDialog(parent) {
+  setWindowTitle(tr("Suggested image setup"));
+  setModal(true);
+
+  auto *layout = new QVBoxLayout(this);
+
+  if (suggestCaptureType) {
+    auto *intro = new QLabel(
+        tr("Choose what kind of material this image captures. The capture "
+           "type determines which restoration workflow is applicable."),
+        this);
+    intro->setWordWrap(true);
+    layout->addWidget(intro);
+
+    m_captureType = new QComboBox(this);
+    m_captureType->setObjectName(QStringLiteral("InitialCaptureTypeCombo"));
+    for (int i = 0; i < (int)colorscreen::render_parameters::capture_max; ++i) {
+      const auto capture = static_cast<CaptureType>(i);
+      bool show = capture == colorscreen::render_parameters::capture_unknown;
+      if (looksMonochrome) {
+        // RGB may only be a Bayer-container detail here. Offer the
+        // monochrome-through-screen paths, which reconstruct a regular screen
+        // geometrically, but not RGB screen-color detection paths.
+        show = show ||
+               capture == colorscreen::render_parameters::capture_transparency ||
+               capture == colorscreen::render_parameters::capture_negative ||
+               capture == colorscreen::render_parameters::capture_plain_image;
+      } else if (scan) {
+        show = show ||
+               colorscreen::render_parameters::capture_type_compatible_p(
+                   capture, scan);
+      }
+      if (show) {
+        const auto &property =
+            colorscreen::render_parameters::capture_properties[i];
+        m_captureType->addItem(QString::fromUtf8(property.pretty_name), i);
+        if (property.help && property.help[0])
+          m_captureType->setItemData(m_captureType->count() - 1,
+                                     QString::fromUtf8(property.help),
+                                     Qt::ToolTipRole);
+      }
+    }
+    m_captureType->setCurrentIndex(m_captureType->findData(
+        (int)colorscreen::render_parameters::capture_unknown));
+    m_captureType->setToolTip(
+        tr("Choose Unknown if you are not sure yet. Color-Screen will keep "
+           "the restoration workflow conservative until this is known."));
+    layout->addWidget(m_captureType);
+
+    if (suggestBayer || suggestFStop || suggestPitch || suggestFill ||
+        suggestDPI || suggestWavelengths) {
+      auto *line = new QFrame(this);
+      line->setFrameShape(QFrame::HLine);
+      line->setFrameShadow(QFrame::Sunken);
+      layout->addWidget(line);
+    }
+  }
+
+  if (suggestBayer) {
+    auto *intro = new QLabel(
+        tr("This appears to be a monochromatic capture made with a Bayer-filter camera."),
+        this);
+    intro->setWordWrap(true);
+    layout->addWidget(intro);
+
+    m_monochromeBayer =
+        new QCheckBox(tr("Reload with Bayer-filter compensation"), this);
+    m_monochromeBayer->setChecked(true);
+    layout->addWidget(m_monochromeBayer);
+
+    if (suggestFStop || suggestPitch || suggestFill || suggestDPI ||
+        suggestWavelengths) {
+      auto *line = new QFrame(this);
+      line->setFrameShape(QFrame::HLine);
+      line->setFrameShadow(QFrame::Sunken);
+      layout->addWidget(line);
+    }
+  }
+
+  if (suggestFStop || suggestPitch || suggestFill || suggestDPI ||
+      suggestWavelengths) {
+    auto *intro = new QLabel(
+        tr("The following capture parameters were automatically detected:"),
+        this);
+    intro->setWordWrap(true);
+    layout->addWidget(intro);
+  }
+
+  if (suggestFStop) {
+    m_fstop = new QCheckBox(
+        tr("Set nominal f-stop to f/%1").arg(scan->f_stop, 0, 'f', 1), this);
+    m_fstop->setChecked(true);
+    layout->addWidget(m_fstop);
+  }
+
+  if (suggestPitch) {
+    int divisor = scan->width > 0 ? scan->width : 1;
+    double sensorWidth = divisor * scan->pixel_pitch / 1000.0;
+    QString sensorName = getSensorName(sensorWidth);
+    m_pitch = new QCheckBox(
+        tr("Set sensor pixel pitch to %1 μm (Sensor size: %2)")
+            .arg(scan->pixel_pitch, 0, 'f', 2)
+            .arg(sensorName),
+        this);
+    m_pitch->setChecked(true);
+    layout->addWidget(m_pitch);
+  }
+
+  if (suggestFill) {
+    m_fill = new QCheckBox(
+        tr("Set sensor fill factor to %1")
+            .arg(scan->sensor_fill_factor, 0, 'f', 3),
+        this);
+    m_fill->setChecked(true);
+    layout->addWidget(m_fill);
+  }
+
+  if (suggestDPI) {
+    m_dpi = new QCheckBox(
+        tr("Set image resolution to %1 PPI").arg(scan->xdpi, 0, 'f', 1), this);
+    m_dpi->setChecked(true);
+    layout->addWidget(m_dpi);
+  }
+
+  if (suggestWavelengths) {
+    QStringList values;
+    static const char *channelNames[] = {"R", "G", "B", "IR"};
+    for (int c = 0; c < 4; ++c) {
+      const bool present = c < 3 ? scan->has_rgb() : scan->has_grayscale_or_ir();
+      const double wavelength = scan->wavelengths[c];
+      if (!present || !colorscreen::my_isfinite(wavelength) || wavelength <= 0)
+        continue;
+      if (scan->has_rgb())
+        values << QString("%1 %2 nm")
+                      .arg(channelNames[c])
+                      .arg(wavelength, 0, 'f', 0);
+      else
+        values << QString("%1 nm").arg(wavelength, 0, 'f', 0);
+    }
+    m_wavelengths = new QCheckBox(
+        scan->has_rgb()
+            ? tr("Set detected channel wavelengths: %1").arg(values.join(", "))
+            : tr("Set capture wavelength to %1").arg(values.join(", ")),
+        this);
+    m_wavelengths->setChecked(true);
+    layout->addWidget(m_wavelengths);
+  }
+
+  auto *buttons = new QDialogButtonBox(
+      QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
+  buttons->button(QDialogButtonBox::Ok)
+      ->setText(suggestBayer ? tr("Apply and reload") : tr("Apply"));
+  buttons->button(QDialogButtonBox::Cancel)->setText(tr("Not now"));
+  connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
+  connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
+  layout->addWidget(buttons);
+}
+
+InitialSetupGuideDialog::CaptureType
+InitialSetupGuideDialog::selectedCaptureType() const {
+  if (!m_captureType)
+    return colorscreen::render_parameters::capture_unknown;
+  return static_cast<CaptureType>(m_captureType->currentData().toInt());
+}
+
+bool InitialSetupGuideDialog::useMonochromeBayerCorrection() const {
+  return m_monochromeBayer && m_monochromeBayer->isChecked();
+}
+
+bool InitialSetupGuideDialog::useFStop() const {
+  return m_fstop && m_fstop->isChecked();
+}
+
+bool InitialSetupGuideDialog::usePixelPitch() const {
+  return m_pitch && m_pitch->isChecked();
+}
+
+bool InitialSetupGuideDialog::useFillFactor() const {
+  return m_fill && m_fill->isChecked();
+}
+
+bool InitialSetupGuideDialog::useDPI() const {
+  return m_dpi && m_dpi->isChecked();
+}
+
+bool InitialSetupGuideDialog::useWavelengths() const {
+  return m_wavelengths && m_wavelengths->isChecked();
+}
+
+QString InitialSetupGuideDialog::getSensorName(double widthMm) const {
+  struct Preset {
+    const char *name;
+    double width;
+  };
+  const Preset presets[] = {
+      {"PhaseOne 54.0mm", 54.0},
+      {"PhaseOne 53.7mm", 53.7},
+      {"PhaseOne 53.4mm", 53.4},
+      {"Medium Format 43.8mm", 43.8},
+      {"Full Frame (36mm)", 36.0},
+      {"APS-H (28.3mm)", 28.3},
+      {"APS-C (23.0mm)", 23.0},
+      {"Micro Four Thirds (17.3mm)", 17.3},
+      {"1-inch (13.2mm)", 13.2},
+      {"1/1.7-inch (7.6mm)", 7.6},
+      {"1/2.5-inch (5.76mm)", 5.76},
+  };
+  for (const auto &preset : presets)
+    if (std::abs(widthMm - preset.width) < 1.0)
+      return QString::fromUtf8(preset.name);
+  return tr("Unknown, %1 mm width").arg(widthMm, 0, 'f', 1);
+}

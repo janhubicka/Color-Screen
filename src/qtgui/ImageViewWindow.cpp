@@ -639,7 +639,7 @@ void ImageViewWindow::rebuildModeList() {
   using namespace colorscreen;
 
   const int previousType = static_cast<int>(m_renderTypeParams.type);
-  m_modeComboBox->blockSignals(true);
+  QSignalBlocker modeSignalBlocker(m_modeComboBox);
   m_modeComboBox->clear();
 
   for (int i = 0; i < render_type_max; ++i) {
@@ -686,7 +686,7 @@ void ImageViewWindow::rebuildModeList() {
   }
   if (index >= 0)
     m_modeComboBox->setCurrentIndex(index);
-  m_modeComboBox->blockSignals(false);
+  modeSignalBlocker.unblock();
 }
 
 /** Synchronize controls owned either by this view or by the shared document. */
