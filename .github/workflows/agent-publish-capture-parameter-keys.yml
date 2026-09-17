@@ -1,0 +1,44 @@
+name: Agent publish Capture parameter keys
+on:
+  push:
+    branches:
+      - agent/qtgui-key-audit-stage-20260917
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/qtgui-key-audit-stage-20260917
+          fetch-depth: 0
+      - name: Preserve and verify reviewed patch
+        run: |
+          cp .agent-capture-parameter-keys.patch /tmp/capture.patch
+          echo '3674590b0c3ef1c6bc7238a2d341032e7f19f4b04f307972ef3f45b7dab6312a  /tmp/capture.patch' | sha256sum -c -
+      - name: Apply to exact reviewed main
+        run: |
+          git fetch origin main
+          test "$(git rev-parse origin/main)" = ccd87fbb83202c442d4b2c318718b7e5d1e64561
+          git switch --detach ccd87fbb83202c442d4b2c318718b7e5d1e64561
+          git switch -c agent/qtgui-capture-parameter-keys
+          git apply --check /tmp/capture.patch
+          git apply /tmp/capture.patch
+      - name: Verify reviewed tree
+        run: |
+          test "$(git diff --name-only | sort | tr '\n' ' ')" = '.agents/qtgui.md doc/qtgui-internal-cleanup.md src/qtgui/CapturePanel.cpp src/qtgui/WorkspaceChurnSmoke.cpp '
+          git diff --check
+          sh build-aux/check-generated-build-metadata.sh
+          test "$(git hash-object src/qtgui/CapturePanel.cpp)" = 6da60537ed5ae89769910ef823b4d291cef7ba8d
+          test "$(git hash-object src/qtgui/WorkspaceChurnSmoke.cpp)" = 0319d5d72b041d6d149a67bdaa704d7a0567ed91
+          test "$(git hash-object .agents/qtgui.md)" = 5ceab8926d8bf74d14742299fa5fbbe72c2bcae4
+          test "$(git hash-object doc/qtgui-internal-cleanup.md)" = 20c85d9dcd9650f3d4febde20feca4a93aad92cb
+      - name: Commit and push clean feature branch
+        run: |
+          git config user.name 'OpenAI agent'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .agents/qtgui.md doc/qtgui-internal-cleanup.md src/qtgui/CapturePanel.cpp src/qtgui/WorkspaceChurnSmoke.cpp
+          git commit -m 'qtgui: finish Capture stable parameter keys'
+          test "$(git rev-list --count ccd87fbb83202c442d4b2c318718b7e5d1e64561..HEAD)" = 1
+          git push origin HEAD:refs/heads/agent/qtgui-capture-parameter-keys
