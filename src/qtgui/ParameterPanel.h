@@ -178,6 +178,10 @@ protected:
       std::function<bool(const ParameterState &)> enabledCheck = nullptr,
       const QString &tooltip = QString());
 
+  /** Add three optionally linked RGB editors. PARAMETERKEY is a base key;
+      non-empty keys are expanded to .red/.green/.blue for the actual
+      saved channels. The Link channels checkbox is presentation state and
+      deliberately remains unkeyed. */
   void addCorrelatedRGBParameter(
       const QString &label, double min, double max, double scale, int decimals,
       const QString &suffix,

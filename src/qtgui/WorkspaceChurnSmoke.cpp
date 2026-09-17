@@ -306,6 +306,24 @@ QLabel *nextStepSummary = inspector->findChild<QLabel *>(
     QStringLiteral("WorkflowNextStepSummary"));
 QComboBox *captureTypeCombo = inspector->findChild<QComboBox *>(
     QStringLiteral("CaptureTypeCombo"));
+QComboBox *captureDemosaicCombo = inspector->findChild<QComboBox *>(
+    QStringLiteral("CaptureDemosaicCombo"));
+QWidget *captureSensorWidthField = inspector->findChild<QWidget *>(
+    QStringLiteral("CaptureSensorWidthField"));
+QCheckBox *captureAssumeRotationCheck = inspector->findChild<QCheckBox *>(
+    QStringLiteral("CaptureAssumeRotationCheck"));
+QPushButton *colorNeutralAreaButton = inspector->findChild<QPushButton *>(
+    QStringLiteral("ColorNeutralAreaButton"));
+QPushButton *colorAutoLevelsButton = inspector->findChild<QPushButton *>(
+    QStringLiteral("ColorAutoLevelsButton"));
+QComboBox *colorSpectraModeCombo = inspector->findChild<QComboBox *>(
+    QStringLiteral("ColorSpectraModeCombo"));
+QComboBox *colorToneCurveCoordinateCombo = inspector->findChild<QComboBox *>(
+    QStringLiteral("ColorToneCurveCoordinateCombo"));
+QWidget *colorObserverWhitepointField = inspector->findChild<QWidget *>(
+    QStringLiteral("ColorObserverWhitepointField"));
+QWidget *colorToneCurveWidget = inspector->findChild<QWidget *>(
+    QStringLiteral("ColorToneCurveWidget"));
 bool captureChoicesCompatible = captureTypeCombo != nullptr;
 if (captureTypeCombo && first->sharedImageData()) {
   for (int i = 0; i < captureTypeCombo->count(); ++i) {
@@ -913,6 +931,89 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
           return;
         }
         first->applyState(screenUndoBaseline);
+
+
+        // Capture's custom selectors and derived Sensor width editor are saved
+        // document state. Rotation assumption is presentation state only.
+        const QStringList captureParameterKeys = {
+            QStringLiteral("capture.type"),
+            QStringLiteral("capture.demosaic"),
+            QStringLiteral("capture.gamma"),
+            QStringLiteral("capture.mtf.scan_dpi"),
+            QStringLiteral("capture.mtf.f_stop"),
+            QStringLiteral("capture.mtf.pixel_pitch"),
+            QStringLiteral("capture.mtf.sensor_fill_factor"),
+            QStringLiteral("capture.mtf.wavelength.red"),
+            QStringLiteral("capture.mtf.wavelength.green"),
+            QStringLiteral("capture.mtf.wavelength.blue"),
+            QStringLiteral("capture.mtf.wavelength.scalar")};
+        for (const QString &key : captureParameterKeys) {
+          if (!hasParameterKey(key)) {
+            fail(QStringLiteral("Workspace churn lost Capture parameter key %1")
+                     .arg(key));
+            return;
+          }
+        }
+        if (!captureTypeCombo || !captureDemosaicCombo ||
+            !captureSensorWidthField || !captureAssumeRotationCheck ||
+            captureTypeCombo->property("parameterKey").toString() !=
+                QStringLiteral("capture.type") ||
+            captureDemosaicCombo->property("parameterKey").toString() !=
+                QStringLiteral("capture.demosaic") ||
+            captureSensorWidthField->property("parameterKey").toString() !=
+                QStringLiteral("capture.mtf.pixel_pitch") ||
+            !captureAssumeRotationCheck->property("parameterKey")
+                 .toString().isEmpty()) {
+          fail(QStringLiteral(
+              "Workspace churn lost Capture key ownership metadata"));
+          return;
+        }
+
+        // Color is a complete stable-key migration. Correlated dye controls
+        // expose one key per saved RGB channel; chart/view selectors and area
+        // actions remain presentation/operation state.
+        const QStringList colorParameterKeys = {
+            QStringLiteral("color.process.black"),
+            QStringLiteral("color.process.presaturation"),
+            QStringLiteral("color.process.white_balance.red"),
+            QStringLiteral("color.process.white_balance.green"),
+            QStringLiteral("color.process.white_balance.blue"),
+            QStringLiteral("color.backlight.intensity"),
+            QStringLiteral("color.backlight.temperature"),
+            QStringLiteral("color.dyes.model"),
+            QStringLiteral("color.dyes.age.red"),
+            QStringLiteral("color.dyes.age.green"),
+            QStringLiteral("color.dyes.age.blue"),
+            QStringLiteral("color.dyes.density.red"),
+            QStringLiteral("color.dyes.density.green"),
+            QStringLiteral("color.dyes.density.blue"),
+            QStringLiteral("color.viewing.dye_balance"),
+            QStringLiteral("color.viewing.observer_whitepoint"),
+            QStringLiteral("color.final.saturation"),
+            QStringLiteral("color.final.tone_curve"),
+            QStringLiteral("color.final.tone_curve_control_points")};
+        for (const QString &key : colorParameterKeys) {
+          if (!hasParameterKey(key)) {
+            fail(QStringLiteral("Workspace churn lost Color parameter key %1")
+                     .arg(key));
+            return;
+          }
+        }
+        if (!colorObserverWhitepointField || !colorToneCurveWidget ||
+            !colorNeutralAreaButton || !colorAutoLevelsButton ||
+            !colorSpectraModeCombo || !colorToneCurveCoordinateCombo ||
+            colorObserverWhitepointField->property("parameterKey").toString() !=
+                QStringLiteral("color.viewing.observer_whitepoint") ||
+            colorToneCurveWidget->property("parameterKey").toString() !=
+                QStringLiteral("color.final.tone_curve_control_points") ||
+            !colorNeutralAreaButton->property("parameterKey").toString().isEmpty() ||
+            !colorAutoLevelsButton->property("parameterKey").toString().isEmpty() ||
+            !colorSpectraModeCombo->property("parameterKey").toString().isEmpty() ||
+            !colorToneCurveCoordinateCombo->property("parameterKey")
+                 .toString().isEmpty()) {
+          fail(QStringLiteral("Workspace churn crossed the Color saved-state/presentation boundary"));
+          return;
+        }
 
         const QStringList captureDefaultKeys = {
             QStringLiteral("capture.gamma"),

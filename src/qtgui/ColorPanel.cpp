@@ -79,33 +79,38 @@ void ColorPanel::setupUi() {
       "Black", 0, 1, 1, 4, "", "",
       [](const ParameterState &s) { return s.rparams.dark_point; },
       [](ParameterState &s, double v) { s.rparams.dark_point = v; }, 3.0,
-      nullptr, false, "Scanner or camera dark point. This value is subtracted from the scan before processing.");
+      nullptr, false, "Scanner or camera dark point. This value is subtracted from the scan before processing.",
+      QStringLiteral("color.process.black"));
 
   // Presaturation
   addSliderParameter(
       "Presaturation", 0, 100, 1, 2, "", "",
       [](const ParameterState &s) { return s.rparams.presaturation; },
       [](ParameterState &s, double v) { s.rparams.presaturation = v; }, 3.0, 
-      nullptr, false, "Increase saturation of the scan before applying the color model. Useful for quick preview of colors before sharpness is configured correctly.");
+      nullptr, false, "Increase saturation of the scan before applying the color model. Useful for quick preview of colors before sharpness is configured correctly.",
+      QStringLiteral("color.process.presaturation"));
 
   // White Balance
   addSliderParameter(
       "White balance red", 0, 10, 100, 2, "", "",
       [](const ParameterState &s) { return s.rparams.white_balance.red; },
       [](ParameterState &s, double v) { s.rparams.white_balance.red = v; }, 3.0,
-      nullptr, false, "Adjust the white balance by scaling the individual process red channel.");
+      nullptr, false, "Adjust the white balance by scaling the individual process red channel.",
+      QStringLiteral("color.process.white_balance.red"));
 
   addSliderParameter(
       "White balance green", 0, 10, 100, 2, "", "",
       [](const ParameterState &s) { return s.rparams.white_balance.green; },
       [](ParameterState &s, double v) { s.rparams.white_balance.green = v; }, 3.0,
-      nullptr, false, "Adjust the white balance by scaling the individual process green channel.");
+      nullptr, false, "Adjust the white balance by scaling the individual process green channel.",
+      QStringLiteral("color.process.white_balance.green"));
 
   addSliderParameter(
       "White balance blue", 0, 10, 100, 2, "", "",
       [](const ParameterState &s) { return s.rparams.white_balance.blue; },
       [](ParameterState &s, double v) { s.rparams.white_balance.blue = v; }, 3.0,
-      nullptr, false, "Adjust the white balance by scaling the individual process blue channel.");
+      nullptr, false, "Adjust the white balance by scaling the individual process blue channel.",
+      QStringLiteral("color.process.white_balance.blue"));
 
   // Neutral Area Button
   m_setNeutralAreaBtn = addToggleButtonParameter(
@@ -113,6 +118,7 @@ void ColorPanel::setupUi() {
       [this](bool) { emit neutralAreaRequested(); },
       nullptr, [this](const ParameterState &) { return m_imageGetter() != nullptr; },
       "Pick a neutral gray area in the image to automatically set the white balance.");
+  m_setNeutralAreaBtn->setObjectName(QStringLiteral("ColorNeutralAreaButton"));
 
   m_currentGroupForm = nullptr; // End Adjustments section
 
@@ -123,7 +129,8 @@ void ColorPanel::setupUi() {
       "Backlight intensity", 0, 65535, 1, 2, "", "",
       [](const ParameterState &s) { return s.rparams.brightness; },
       [](ParameterState &s, double v) { s.rparams.brightness = v; }, 3.0,
-      nullptr, true, "Overall brightness of the backlight. Affects the intensity of the viewing light source.");
+      nullptr, true, "Overall brightness of the backlight. Affects the intensity of the viewing light source.",
+      QStringLiteral("color.backlight.intensity"));
 
   // Auto Levels Button
   m_setAutoLevelsBtn = addToggleButtonParameter(
@@ -131,13 +138,15 @@ void ColorPanel::setupUi() {
       [this](bool) { emit autoLevelsRequested(); },
       nullptr, [this](const ParameterState &) { return m_imageGetter() != nullptr; },
       "Pick the brightest points in the image to automatically set the backlight intensity.");
+  m_setAutoLevelsBtn->setObjectName(QStringLiteral("ColorAutoLevelsButton"));
 
   // Backlight temperature
   addSliderParameter(
       "Backlight temperature", 2500, 25000, 1, 0, "K", "",
       [](const ParameterState &s) { return s.rparams.backlight_temperature; },
       [](ParameterState &s, double v) { s.rparams.backlight_temperature = v; },
-      3.0, nullptr, false, "Color temperature of the backlight in Kelvin. Higher values are bluer (daylight), lower values are yellower (tungsten).");
+      3.0, nullptr, false, "Color temperature of the backlight in Kelvin. Higher values are bluer (daylight), lower values are yellower (tungsten).",
+      QStringLiteral("color.backlight.temperature"));
 
   m_currentGroupForm = nullptr; // End Backlight section
   auto historicalCaptureApplicable = [this](const ParameterState &state) {
@@ -175,7 +184,8 @@ void ColorPanel::setupUi() {
       "Dyes", dyes,
       [](const ParameterState &s) { return (int)s.rparams.color_model; },
       [](ParameterState &s, int v) { s.rparams.color_model = (color_model)v; },
-      nullptr, "Select the physical color process model used for the original transparency or negative.");
+      nullptr, "Select the physical color process model used for the original transparency or negative.",
+      QStringLiteral("color.dyes.model"));
 
   // Add Tooltips
   for (int i = 0; i < dyesCombo->count(); ++i) {
@@ -192,6 +202,7 @@ void ColorPanel::setupUi() {
 
   // Mode Selector
   m_spectraMode = new QComboBox();
+  m_spectraMode->setObjectName(QStringLiteral("ColorSpectraModeCombo"));
   m_spectraMode->addItem("Transmittance", 0);
   m_spectraMode->addItem("Absorbance (0-4)", 1);
   connect(m_spectraMode, QOverload<int>::of(&QComboBox::currentIndexChanged),
@@ -245,14 +256,16 @@ void ColorPanel::setupUi() {
         return render_parameters::color_model_properties[s.rparams.color_model]
                    .flags &
                render_parameters::SUPPORTS_AGING;
-      }, "Simulates the aging (fading) of the screen dyes. 0% is new, 100% is fully aged.");
+      }, "Simulates the aging (fading) of the screen dyes. 0% is new, 100% is fully aged.",
+      QStringLiteral("color.dyes.age"));
 
   addCorrelatedRGBParameter(
       "dye density", 0.0, 1000.0, 1.0, 0, "%",
       [](const ParameterState &s) { return s.rparams.dye_density * 100.0; },
       [](ParameterState &s, const colorscreen::rgbdata &v) {
         s.rparams.dye_density = v / 100.0;
-      }, nullptr, "Adjust the physical density (concentration) of the screen dyes.");
+      }, nullptr, "Adjust the physical density (concentration) of the screen dyes.",
+      QStringLiteral("color.dyes.density"));
 
   m_currentGroupForm = nullptr; // End Screen dyes section
   // Separator
@@ -304,11 +317,15 @@ void ColorPanel::setupUi() {
       [](const ParameterState &s) { return (int)s.rparams.dye_balance; },
       [](ParameterState &s, int v) {
         s.rparams.dye_balance = (render_parameters::dye_balance_t)v;
-      }, nullptr, "Algorithm used to balance the colors of the screen dyes to a neutral gray.");
+      }, nullptr, "Algorithm used to balance the colors of the screen dyes to a neutral gray.",
+      QStringLiteral("color.viewing.dye_balance"));
 
   // Observer Whitepoint
   {
     QWidget *wrapper = new QWidget();
+    wrapper->setObjectName(QStringLiteral("ColorObserverWhitepointField"));
+    wrapper->setProperty("parameterKey",
+                         QStringLiteral("color.viewing.observer_whitepoint"));
     QHBoxLayout *hLayout = new QHBoxLayout(wrapper);
     hLayout->setContentsMargins(0, 5, 0, 5); // Add some vertical breathing room
 
@@ -320,6 +337,9 @@ void ColorPanel::setupUi() {
     hLayout->addSpacing(40);
 
     CIEChartWidget *cieChart = new CIEChartWidget();
+    cieChart->setObjectName(QStringLiteral("ColorObserverWhitepointChart"));
+    cieChart->setProperty("parameterKey",
+                          QStringLiteral("color.viewing.observer_whitepoint"));
     cieChart->setFixedHeight(200); // Reasonable height
     cieChart->setFixedWidth(
         200); // Also fix width to keep aspect sensible or let it expand?
@@ -343,7 +363,8 @@ void ColorPanel::setupUi() {
             [this](double x, double y) {
               applyChange([x, y](ParameterState &s) {
                 s.rparams.observer_whitepoint = colorscreen::xy_t(x, y);
-              });
+              }, "Observer whitepoint",
+              QStringLiteral("color.viewing.observer_whitepoint"));
             });
 
     // Update from state
@@ -369,7 +390,8 @@ void ColorPanel::setupUi() {
       "Saturation", 0, 10, 100, 2, "", "",
       [](const ParameterState &s) { return s.rparams.saturation; },
       [](ParameterState &s, double v) { s.rparams.saturation = v; }, 3.0,
-      nullptr, false, "Final saturation adjustment of the output image.");
+      nullptr, false, "Final saturation adjustment of the output image.",
+      QStringLiteral("color.final.saturation"));
 
   // Tone curve
   addEnumParameter (
@@ -378,13 +400,20 @@ void ColorPanel::setupUi() {
       [](const ParameterState &s) { return (int)s.rparams.output_tone_curve; },
       [](ParameterState &s, int v) {
 	s.rparams.output_tone_curve = (tone_curve::tone_curves)v;
-      }, nullptr, "Select the contrast curve applied to the final output.");
+      }, nullptr, "Select the contrast curve applied to the final output.",
+      QStringLiteral("color.final.tone_curve"));
 
   // Tone Curve Widget
   m_toneCurveWidget = new ToneCurveWidget();
+  m_toneCurveWidget->setObjectName(QStringLiteral("ColorToneCurveWidget"));
+  m_toneCurveWidget->setProperty(
+      "parameterKey",
+      QStringLiteral("color.final.tone_curve_control_points"));
   m_toneCurveWidget->setMinimumHeight(250);
   
   m_toneCurveCoordCombo = new QComboBox();
+  m_toneCurveCoordCombo->setObjectName(
+      QStringLiteral("ColorToneCurveCoordinateCombo"));
   m_toneCurveCoordCombo->addItem("Linear", static_cast<int>(ToneCurveWidget::CoordinateType::Linear));
   m_toneCurveCoordCombo->addItem("Gamma 2.2", static_cast<int>(ToneCurveWidget::CoordinateType::Gamma22));
   m_toneCurveCoordCombo->addItem("Logarithm", static_cast<int>(ToneCurveWidget::CoordinateType::Log));
@@ -397,7 +426,8 @@ void ColorPanel::setupUi() {
   connect(m_toneCurveWidget, &ToneCurveWidget::controlPointsChanged, this, [this](const std::vector<point_t> &points) {
       applyChange([points](ParameterState &s) {
           s.rparams.output_tone_curve_control_points = points;
-      });
+      }, "Tone curve control points",
+      QStringLiteral("color.final.tone_curve_control_points"));
   });
 
   QWidget *tcContent = new QWidget();

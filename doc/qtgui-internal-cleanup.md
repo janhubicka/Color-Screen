@@ -344,6 +344,7 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   that one Undo restores only the second tile, then the next Undo restores the
   first. Workspace churn continues to check the other document/operation-state
   ownership boundaries.
+- Subsequent complete stable-key migrations are Digital Capture (fifth), Contact Copy (sixth), and Color (seventh). Capture's derived Sensor width shares the pixel-pitch identity while its rotation assumption remains presentation-only. Contact Copy gives each H&D editing surface its own gesture identity. Color adds `color.*` keys for every saved editor, including custom whitepoint/tone-curve widgets. Correlated RGB controls expand their base key to per-channel `.red/.green/.blue` identities; Link channels and Color's area/chart-view controls remain deliberately unkeyed. Workspace and beta-invariant smoke cover both the complete Color key set and the helper's per-channel Undo identity.
 - Prefer `QSignalBlocker` for temporary signal suppression. The first P1 cleanup
   converts the central `ParameterPanel` synchronization helpers and the simple
   refresh/update pairs in Capture, Screen, Geometry, Image Layer, Tiles, Color,
