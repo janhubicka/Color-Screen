@@ -1249,17 +1249,24 @@ void ParameterPanel::addCorrelatedRGBParameter(
   // 1. Link Checkbox
   QCheckBox *linkCheck = new QCheckBox("Link channels");
   linkCheck->setChecked(true);
-  setParameterKey(linkCheck, parameterKey);
 
-  // 2. Three channels
+  // 2. Three saved channels. One visible RGB editor represents three
+  // independent saved values when linking is disabled, so merge identity
+  // must follow the channel rather than the compound helper.
   struct Channel {
     QSlider *slider;
     QDoubleSpinBox *spin;
   };
   std::vector<Channel> channels;
   QStringList names = {"Red", "Green", "Blue"};
+  std::vector<QString> channelParameterKeys;
 
   for (int i = 0; i < 3; ++i) {
+    const QString channelParameterKey =
+        parameterKey.isEmpty()
+            ? QString()
+            : parameterKey + QStringLiteral(".") + names[i].toLower();
+    channelParameterKeys.push_back(channelParameterKey);
     QWidget *container = new QWidget();
     QHBoxLayout *hLayout = new QHBoxLayout(container);
     hLayout->setContentsMargins(0, 0, 0, 0);
@@ -1278,9 +1285,9 @@ void ParameterPanel::addCorrelatedRGBParameter(
       spin->setToolTip(tooltip);
     }
 
-    setParameterKey(container, parameterKey);
-    setParameterKey(slider, parameterKey);
-    setParameterKey(spin, parameterKey);
+    setParameterKey(container, channelParameterKey);
+    setParameterKey(slider, channelParameterKey);
+    setParameterKey(spin, channelParameterKey);
 
     hLayout->addWidget(slider, 1);
     hLayout->addWidget(spin, 0);
@@ -1314,9 +1321,9 @@ void ParameterPanel::addCorrelatedRGBParameter(
     m_form->addRow("", linkCheck);
 
   // Interaction Logic
-  auto handleValueChange = [this, channels, linkCheck, getter, setter,
-                            scale, label, parameterKey](int changedIdx,
-                                                       double newVal) {
+  auto handleValueChange = [this, channels, channelParameterKeys, linkCheck,
+                            getter, setter, scale, label](int changedIdx,
+                                                          double newVal) {
     ParameterState s = m_stateGetter();
     colorscreen::rgbdata current = getter(s);
     double oldVal = current[changedIdx];
@@ -1334,7 +1341,7 @@ void ParameterPanel::addCorrelatedRGBParameter(
     }
 
     applyChange([setter, next](ParameterState &state) { setter(state, next); },
-                label, parameterKey);
+                label, channelParameterKeys[changedIdx]);
 
     // Optimistic UI update for linked sliders
     if (linkCheck->isChecked()) {

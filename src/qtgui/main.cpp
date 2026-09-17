@@ -40,6 +40,7 @@
 #include <QPalette>
 #include <QPushButton>
 #include <QSettings>
+#include <QStringList>
 #include <QStatusBar>
 #include <QStyleFactory>
 #include <QTabBar>
@@ -73,6 +74,7 @@ public:
   using ParameterPanel::ParameterPanel;
   using ParameterPanel::addCheckboxParameter;
   using ParameterPanel::addCheckboxWithReset;
+  using ParameterPanel::addCorrelatedRGBParameter;
   using ParameterPanel::addSeparator;
   using ParameterPanel::setParameterApplicability;
 };
@@ -197,6 +199,57 @@ bool runBetaInvariantSmoke() {
       !sectionGroup->property("parameterApplicable").toBool() ||
       !sectionRow->isHidden())
     return fail("restored section applicability resurrected collapsed content");
+
+
+  // Linked RGB controls are one visual helper but three saved parameters.
+  // Different channels need different Undo merge identities, while Link
+  // channels itself is presentation-only and must never acquire one.
+  ParameterState rgbProbeState;
+  QStringList rgbAppliedKeys;
+  CheckboxSemanticsProbe rgbProbe(
+      [&rgbProbeState]() { return rgbProbeState; },
+      [&rgbProbeState, &rgbAppliedKeys](const ParameterState &state,
+                                        const QString &, const QString &key) {
+        rgbProbeState = state;
+        rgbAppliedKeys.append(key);
+      },
+      []() { return std::shared_ptr<colorscreen::image_data>(); }, nullptr,
+      false);
+  rgbProbe.addCorrelatedRGBParameter(
+      QStringLiteral("Probe RGB"), -10.0, 110.0, 1.0, 0,
+      QStringLiteral("%"),
+      [](const ParameterState &state) { return state.rparams.age * 100.0; },
+      [](ParameterState &state, const colorscreen::rgbdata &value) {
+        state.rparams.age = value / 100.0;
+      },
+      nullptr, QString(), QStringLiteral("probe.rgb"));
+  rgbProbe.updateUI();
+  auto findRgbSpin = [&rgbProbe](const QString &key) {
+    const QList<QDoubleSpinBox *> spins =
+        rgbProbe.findChildren<QDoubleSpinBox *>();
+    for (QDoubleSpinBox *spin : spins)
+      if (spin && spin->property("parameterKey").toString() == key)
+        return spin;
+    return static_cast<QDoubleSpinBox *>(nullptr);
+  };
+  QDoubleSpinBox *redRgb = findRgbSpin(QStringLiteral("probe.rgb.red"));
+  QDoubleSpinBox *greenRgb = findRgbSpin(QStringLiteral("probe.rgb.green"));
+  QDoubleSpinBox *blueRgb = findRgbSpin(QStringLiteral("probe.rgb.blue"));
+  const QList<QCheckBox *> rgbChecks = rgbProbe.findChildren<QCheckBox *>();
+  if (!redRgb || !greenRgb || !blueRgb || rgbChecks.size() != 1 ||
+      !rgbChecks.constFirst()->property("parameterKey").toString().isEmpty())
+    return fail("correlated RGB helper lost channel/presentation key ownership");
+  rgbChecks.constFirst()->setChecked(false);
+  const auto nextRgbValue = [](double value) {
+    return value < 109.0 ? value + 1.0 : value - 1.0;
+  };
+  rgbAppliedKeys.clear();
+  redRgb->setValue(nextRgbValue(redRgb->value()));
+  greenRgb->setValue(nextRgbValue(greenRgb->value()));
+  if (rgbAppliedKeys.size() != 2 ||
+      rgbAppliedKeys[0] != QStringLiteral("probe.rgb.red") ||
+      rgbAppliedKeys[1] != QStringLiteral("probe.rgb.green"))
+    return fail("correlated RGB helper merged identity across saved channels");
 
   // Focus analysis is now a plain background helper. Missing input must fail
   // synchronously rather than depending on QObject/QThread signal delivery.
