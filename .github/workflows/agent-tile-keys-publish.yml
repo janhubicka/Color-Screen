@@ -1,0 +1,61 @@
+name: Agent publish tile parameter keys
+on:
+  push:
+    branches:
+      - agent/qtgui-tile-keys-stage
+    paths:
+      - .github/workflows/agent-tile-keys-publish.yml
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Preserve reviewed patch
+        run: cp .agent-tile-parameter-keys.patch.gz.b64 "$RUNNER_TEMP/patch.gz.b64"
+      - name: Reconstruct exact reviewed tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          test "$(git rev-parse origin/main)" = ccd87fbb83202c442d4b2c318718b7e5d1e64561
+          git checkout --detach ccd87fbb83202c442d4b2c318718b7e5d1e64561
+          base64 -d "$RUNNER_TEMP/patch.gz.b64" | gzip -dc > "$RUNNER_TEMP/tile-keys.patch"
+          echo '10a061c31cf19d91f97043f784f378843412d83810fcedda9b678fbacb67ba4b  '"$RUNNER_TEMP/tile-keys.patch" | sha256sum -c -
+          git apply --check "$RUNNER_TEMP/tile-keys.patch"
+          git apply "$RUNNER_TEMP/tile-keys.patch"
+          expected=$(printf '%s\n' \
+            .agents/qtgui.md \
+            doc/qtgui-internal-cleanup.md \
+            src/qtgui/ParameterPanel.cpp \
+            src/qtgui/ParameterPanel.h \
+            src/qtgui/TilesPanel.cpp \
+            src/qtgui/main.cpp | sort)
+          actual=$(git diff --name-only | sort)
+          test "$actual" = "$expected"
+          cat > "$RUNNER_TEMP/hashes" <<'EOF'
+          7d76b20370b7b116a9b96281aa695c5bdaf21b720d2caafa4158a7b410c9202b  .agents/qtgui.md
+          e2a9b2aad73fafea18e12614493a8d34bdd21f003b87f76c359f612f2674ea65  doc/qtgui-internal-cleanup.md
+          37a76031be474c3156666c2282075601fd59e46d5b05dbe01caece9b02dcdfda  src/qtgui/ParameterPanel.cpp
+          22b50f584554d7f3dc210b07f0fb57e8e51fe933f179067f3518e8f9023801eb  src/qtgui/ParameterPanel.h
+          bf7d4576828605c50a04f0edda00cbd0cf611c185ba19140990ed8d73b7db858  src/qtgui/TilesPanel.cpp
+          507cd5d6873aff9c4d49a8f259865b570c2e5fe6f75ac94e47f4bf6b7d42fb8e  src/qtgui/main.cpp
+          EOF
+          sha256sum -c "$RUNNER_TEMP/hashes"
+          git diff --check
+          sh build-aux/check-generated-build-metadata.sh
+      - name: Publish one clean feature commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'OpenAI Agent'
+          git config user.email 'agent@example.invalid'
+          git add .agents/qtgui.md doc/qtgui-internal-cleanup.md \
+            src/qtgui/ParameterPanel.cpp src/qtgui/ParameterPanel.h \
+            src/qtgui/TilesPanel.cpp src/qtgui/main.cpp
+          git commit -m 'qtgui: give tile adjustments target-aware parameter keys'
+          test "$(git rev-list --count ccd87fbb83202c442d4b2c318718b7e5d1e64561..HEAD)" = 1
+          git push origin HEAD:refs/heads/agent/qtgui-tile-parameter-keys
