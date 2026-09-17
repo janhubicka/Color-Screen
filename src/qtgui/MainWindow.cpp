@@ -4263,26 +4263,26 @@ QString MainWindow::profileCalibrationSummary() const {
 
   const ColorOptimizerRequestData current{
       m_scrToImgParams, m_rparams, m_profileSpots};
-  const bool fitCurrent = m_profileCalibrationBaseline &&
-      !profileCalibrationInputsDiffer(*m_profileCalibrationBaseline, current);
-  const bool failureCurrent = m_profileCalibrationFailureInputs &&
-      !profileCalibrationInputsDiffer(*m_profileCalibrationFailureInputs, current);
+  const bool fitCurrent = m_profileCalibration.baseline &&
+      !profileCalibrationInputsDiffer(*m_profileCalibration.baseline, current);
+  const bool failureCurrent = m_profileCalibration.failureInputs &&
+      !profileCalibrationInputsDiffer(*m_profileCalibration.failureInputs, current);
 
   QString summary =
       tr("Profile: optional matrix correction • %1 calibration spots")
           .arg(count);
-  if (m_profileCalibrationPendingInputs) {
+  if (m_profileCalibration.pendingInputs) {
     summary += tr(" • optimizing…");
   } else if (fitCurrent) {
     summary += tr(" • calibration current");
-    if (m_profileCalibrationAverageDeltaE >= 0)
+    if (m_profileCalibration.averageDeltaE >= 0)
       summary += tr(" • avg ΔE₂₀₀₀ %1")
-          .arg(m_profileCalibrationAverageDeltaE, 0, 'f', 2);
+          .arg(m_profileCalibration.averageDeltaE, 0, 'f', 2);
     if (failureCurrent)
       summary += tr(" • last retry failed");
   } else if (failureCurrent) {
     summary += tr(" • optimization failed — adjust inputs and retry");
-  } else if (m_profileCalibrationBaseline) {
+  } else if (m_profileCalibration.baseline) {
     summary += tr(" • calibration stale — reoptimize");
   } else if (savedCalibration) {
     summary += tr(" • saved calibration present — provenance not verified");
@@ -4318,14 +4318,14 @@ void MainWindow::updateWorkflowSummary() {
     m_solverQueue.cancelAll();
   }
 
-  if (m_profileCalibrationPendingInputs) {
+  if (m_profileCalibration.pendingInputs) {
     const ColorOptimizerRequestData currentProfileInputs{
         m_scrToImgParams, m_rparams, m_profileSpots};
-    if (profileCalibrationInputsDiffer(*m_profileCalibrationPendingInputs,
+    if (profileCalibrationInputsDiffer(*m_profileCalibration.pendingInputs,
                                        currentProfileInputs)) {
       // As with geometry, reset first because cancellation can synchronously
       // drive progress/UI callbacks.
-      m_profileCalibrationPendingInputs.reset();
+      m_profileCalibration.pendingInputs.reset();
       m_colorOptimizerQueue.cancelAll();
     }
   }
@@ -6068,10 +6068,7 @@ bool MainWindow::loadParameterFile(const QString &fileName) {
   m_mtfFitRunning = false;
   m_mtfFitProgress.reset();
   m_colorOptimizerQueue.cancelAll();
-  m_profileCalibrationBaseline.reset();
-  m_profileCalibrationPendingInputs.reset();
-  m_profileCalibrationFailureInputs.reset();
-  m_profileCalibrationAverageDeltaE = -1;
+  m_profileCalibration.clear();
 
   // Update UI/Renderer
   if (m_scan) {
@@ -7465,8 +7462,8 @@ void MainWindow::onColorOptimizeRequested(bool /*autoMode*/) {
   // newer request still supersedes an older TaskQueue job, while unrelated
   // edits invalidate even the newest request before it can publish.
   ColorOptimizerRequestData d{m_scrToImgParams, m_rparams, state.profileSpots};
-  m_profileCalibrationPendingInputs = d;
-  m_profileCalibrationFailureInputs.reset();
+  m_profileCalibration.pendingInputs = d;
+  m_profileCalibration.failureInputs.reset();
   updateWorkflowSummary();
   m_colorOptimizerQueue.requestRender(QVariant::fromValue(d));
 }
@@ -7481,7 +7478,7 @@ void MainWindow::onTriggerColorOptimize(
       !userData.canConvert<ColorOptimizerRequestData>()) {
     const bool current = m_colorOptimizerQueue.reportFinished(reqId, false);
     if (current) {
-      m_profileCalibrationPendingInputs.reset();
+      m_profileCalibration.pendingInputs.reset();
       updateWorkflowSummary();
     }
     return;
@@ -7513,11 +7510,11 @@ void MainWindow::onColorOptimizerFinished(
 
   const ColorOptimizerRequestData now{
       m_scrToImgParams, m_rparams, m_profileSpots};
-  const bool inputsStillCurrent = m_profileCalibrationPendingInputs &&
-      !profileCalibrationInputsDiffer(*m_profileCalibrationPendingInputs, now);
+  const bool inputsStillCurrent = m_profileCalibration.pendingInputs &&
+      !profileCalibrationInputsDiffer(*m_profileCalibration.pendingInputs, now);
   const std::optional<ColorOptimizerRequestData> completedInputs =
-      m_profileCalibrationPendingInputs;
-  m_profileCalibrationPendingInputs.reset();
+      m_profileCalibration.pendingInputs;
+  m_profileCalibration.pendingInputs.reset();
 
   if (cancelled || !inputsStillCurrent) {
     updateWorkflowSummary();
@@ -7525,14 +7522,14 @@ void MainWindow::onColorOptimizerFinished(
   }
 
   if (success) {
-    m_profileCalibrationBaseline = completedInputs;
-    m_profileCalibrationFailureInputs.reset();
-    m_profileCalibrationAverageDeltaE = -1;
+    m_profileCalibration.baseline = completedInputs;
+    m_profileCalibration.failureInputs.reset();
+    m_profileCalibration.averageDeltaE = -1;
     if (!results.empty()) {
       double total = 0;
       for (const auto &match : results)
         total += match.deltaE;
-      m_profileCalibrationAverageDeltaE = total / results.size();
+      m_profileCalibration.averageDeltaE = total / results.size();
     }
 
     ParameterState newState = getCurrentState();
@@ -7550,7 +7547,7 @@ void MainWindow::onColorOptimizerFinished(
       m_imageWidget->update();
     }
   } else {
-    m_profileCalibrationFailureInputs = completedInputs;
+    m_profileCalibration.failureInputs = completedInputs;
     statusBar()->showMessage(tr("Color optimization failed"), 4000);
   }
   updateWorkflowSummary();
