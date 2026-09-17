@@ -26,6 +26,7 @@
 #include <QVBoxLayout>
 #include <cmath>
 #include <limits>
+#include <optional>
 
 namespace {
 
@@ -35,6 +36,121 @@ constexpr auto parameterKeyProperty = "parameterKey";
 constexpr auto parameterModifiedProperty = "parameterModified";
 constexpr auto parameterSpecialStateValueProperty = "parameterSpecialStateValue";
 constexpr auto parameterSectionExpandedProperty = "parameterSectionExpanded";
+
+/** Shared conversion between a numeric value and its slider position.
+
+    Stateful and stateless parameter helpers must expose identical linear,
+    gamma, and logarithmic geometry. A separated stored sentinel reserves one
+    slider position below the regular range without changing that mapping. */
+class SliderValueMapping {
+public:
+  static constexpr int nonlinearSliderMaximum = 65535;
+
+  SliderValueMapping(double minimum, double maximum, double scale, double gamma,
+                     bool logarithmic,
+                     std::optional<double> specialMinimumValue = std::nullopt)
+      : m_minimum(minimum), m_maximum(maximum), m_scale(scale),
+        m_gamma(gamma), m_logarithmic(logarithmic),
+        m_hasSeparatedSpecialMinimum(specialMinimumValue.has_value() &&
+                                     *specialMinimumValue < minimum),
+        m_specialStateValue(specialMinimumValue.value_or(minimum)),
+        m_regularLinearSliderMin(static_cast<int>(minimum * scale)),
+        m_regularLinearSliderMax(static_cast<int>(maximum * scale)),
+        m_nonlinear(gamma != 1.0 || logarithmic),
+        m_regularSliderMin(m_nonlinear
+                               ? (m_hasSeparatedSpecialMinimum ? 1 : 0)
+                               : m_regularLinearSliderMin),
+        m_specialSliderPosition(m_nonlinear ? 0
+                                            : m_regularLinearSliderMin - 1) {
+    Q_ASSERT(scale > 0);
+    Q_ASSERT(!specialMinimumValue.has_value() ||
+             *specialMinimumValue <= minimum);
+  }
+
+  bool hasSeparatedSpecialMinimum() const {
+    return m_hasSeparatedSpecialMinimum;
+  }
+  double specialStateValue() const { return m_specialStateValue; }
+
+  int sliderMinimum() const {
+    if (m_nonlinear)
+      return 0;
+    return m_hasSeparatedSpecialMinimum ? m_specialSliderPosition
+                                        : m_regularLinearSliderMin;
+  }
+
+  int sliderMaximum() const {
+    return m_nonlinear ? nonlinearSliderMaximum : m_regularLinearSliderMax;
+  }
+
+  double sliderToValue(int sliderValue) const {
+    if (m_hasSeparatedSpecialMinimum &&
+        sliderValue == m_specialSliderPosition)
+      return m_specialStateValue;
+    if (!m_nonlinear)
+      return static_cast<double>(sliderValue) / m_scale;
+
+    const double t = static_cast<double>(sliderValue - m_regularSliderMin) /
+                     (nonlinearSliderMaximum - m_regularSliderMin);
+    if (m_logarithmic) {
+      if (m_minimum <= 0)
+        return std::pow(m_maximum + 1.0, t) - 1.0;
+      return m_minimum * std::pow(m_maximum / m_minimum, t);
+    }
+
+    return m_minimum +
+           (m_maximum - m_minimum) * std::pow(t, m_gamma);
+  }
+
+  int valueToSlider(double value) const {
+    if (m_hasSeparatedSpecialMinimum &&
+        qAbs(value - m_specialStateValue) <= 1e-12)
+      return m_specialSliderPosition;
+    if (!m_nonlinear) {
+      const int mapped = qRound(value * m_scale);
+      return m_hasSeparatedSpecialMinimum
+                 ? std::clamp(mapped, m_regularSliderMin,
+                              m_regularLinearSliderMax)
+                 : mapped;
+    }
+
+    double t = 0;
+    if (m_logarithmic) {
+      if (m_minimum <= 0) {
+        if (value > 0)
+          t = std::log(value + 1.0) / std::log(m_maximum + 1.0);
+      } else if (value > m_minimum) {
+        t = std::log(value / m_minimum) /
+            std::log(m_maximum / m_minimum);
+      }
+    } else {
+      const double ratio = (value - m_minimum) / (m_maximum - m_minimum);
+      if (ratio >= 1)
+        t = 1;
+      else if (ratio > 0)
+        t = std::pow(ratio, 1.0 / m_gamma);
+    }
+
+    return std::clamp(
+        qRound(t * (nonlinearSliderMaximum - m_regularSliderMin) +
+               m_regularSliderMin),
+        m_regularSliderMin, nonlinearSliderMaximum);
+  }
+
+private:
+  double m_minimum;
+  double m_maximum;
+  double m_scale;
+  double m_gamma;
+  bool m_logarithmic;
+  bool m_hasSeparatedSpecialMinimum;
+  double m_specialStateValue;
+  int m_regularLinearSliderMin;
+  int m_regularLinearSliderMax;
+  bool m_nonlinear;
+  int m_regularSliderMin;
+  int m_specialSliderPosition;
+};
 
 /** Attach stable machine-readable PARAMETERKEY metadata to WIDGET. */
 void setParameterKey(QWidget *widget, const QString &parameterKey) {
@@ -624,10 +740,11 @@ QWidget *ParameterPanel::addSliderParameter(
   const auto resolvedParameterKey = [parameterKey, parameterKeyGetter]() {
     return parameterKeyGetter ? parameterKeyGetter() : parameterKey;
   };
+  const SliderValueMapping valueMapping(min, max, scale, gamma, logarithmic,
+                                        specialMinimumValue);
   const bool hasSeparatedSpecialMinimum =
-      specialMinimumValue.has_value() && *specialMinimumValue < min;
-  const double specialStateValue =
-      specialMinimumValue.value_or(min);
+      valueMapping.hasSeparatedSpecialMinimum();
+  const double specialStateValue = valueMapping.specialStateValue();
 
   // Container: Slider + SpinBox
   QWidget *container = new QWidget();
@@ -638,23 +755,7 @@ QWidget *ParameterPanel::addSliderParameter(
   if (!tooltip.isEmpty())
     slider->setToolTip(tooltip);
 
-  // For non-linear, use fixed high resolution range
-  const int SLIDER_MAX = 65535;
-
-  const int regularLinearSliderMin = (int)(min * scale);
-  const int regularLinearSliderMax = (int)(max * scale);
-  const bool nonlinearSlider = gamma != 1.0 || logarithmic;
-  const int regularSliderMin =
-      nonlinearSlider ? (hasSeparatedSpecialMinimum ? 1 : 0)
-                      : regularLinearSliderMin;
-  const int specialSliderPosition =
-      nonlinearSlider ? 0 : regularLinearSliderMin - 1;
-  if (nonlinearSlider)
-    slider->setRange(0, SLIDER_MAX);
-  else
-    slider->setRange(hasSeparatedSpecialMinimum ? specialSliderPosition
-                                                : regularLinearSliderMin,
-                     regularLinearSliderMax);
+  slider->setRange(valueMapping.sliderMinimum(), valueMapping.sliderMaximum());
 
   auto *spin = new ParameterSliderSpinBox();
   if (hasSeparatedSpecialMinimum) {
@@ -701,85 +802,11 @@ QWidget *ParameterPanel::addSliderParameter(
                                   defaultValue, getter, setter, tolerance);
   }
 
-  // Helper to map Slider -> Value
-  auto sliderToValue =
-      [min, max, scale, gamma, SLIDER_MAX, logarithmic,
-       hasSeparatedSpecialMinimum, specialStateValue,
-       regularSliderMin, specialSliderPosition](int s) -> double {
-    if (hasSeparatedSpecialMinimum && s == specialSliderPosition)
-      return specialStateValue;
-    if (!logarithmic && gamma == 1.0)
-      return (double)s / scale;
-
-    const double t =
-        (double)(s - regularSliderMin) / (SLIDER_MAX - regularSliderMin);
-
-    if (logarithmic) {
-      if (min <= 0) {
-        // v = (max + 1)^t - 1
-        return std::pow(max + 1.0, t) - 1.0;
-      } else {
-        // v = min * (max/min)^t
-        return min * std::pow(max / min, t);
-      }
-    }
-
-    // v = min + (max-min) * t^gamma
-    return min + (max - min) * std::pow(t, gamma);
-  };
-
-  // Helper to map Value -> Slider
-  auto valueToSlider =
-      [min, max, scale, gamma, SLIDER_MAX, logarithmic,
-       hasSeparatedSpecialMinimum, specialStateValue, regularSliderMin,
-       regularLinearSliderMax, specialSliderPosition](double v) -> int {
-    if (hasSeparatedSpecialMinimum &&
-        qAbs(v - specialStateValue) <= 1e-12)
-      return specialSliderPosition;
-    if (!logarithmic && gamma == 1.0) {
-      const int mapped = qRound(v * scale);
-      return hasSeparatedSpecialMinimum
-                 ? std::clamp(mapped, regularSliderMin,
-                              regularLinearSliderMax)
-                 : mapped;
-    }
-
-    double t = 0;
-    if (logarithmic) {
-      if (min <= 0) {
-        // t = log(v + 1) / log(max + 1)
-        if (v <= 0)
-          t = 0;
-        else
-          t = std::log(v + 1.0) / std::log(max + 1.0);
-      } else {
-        // t = log(v/min) / log(max/min)
-        if (v <= min)
-          t = 0;
-        else
-          t = std::log(v / min) / std::log(max / min);
-      }
-    } else {
-      // t = ((v - min) / (max - min)) ^ (1/gamma)
-      double ratio = (v - min) / (max - min);
-      if (ratio <= 0)
-        t = 0;
-      else if (ratio >= 1)
-        t = 1;
-      else
-        t = std::pow(ratio, 1.0 / gamma);
-    }
-    return std::clamp(
-        (int)qRound(t * (SLIDER_MAX - regularSliderMin) +
-                    regularSliderMin),
-        regularSliderMin, SLIDER_MAX);
-  };
-
   // Synchronization
   connect(slider, &QSlider::valueChanged, this,
-          [this, spin, sliderToValue, setter, label,
+          [this, spin, valueMapping, setter, label,
            resolvedParameterKey](int val) {
-            double dVal = sliderToValue(val);
+            double dVal = valueMapping.sliderToValue(val);
             QSignalBlocker signalBlocker3(spin);
             spin->setValue(dVal);
             signalBlocker3.unblock();
@@ -790,9 +817,9 @@ QWidget *ParameterPanel::addSliderParameter(
           });
 
   connect(spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
-          [slider, valueToSlider](double val) {
+          [slider, valueMapping](double val) {
             QSignalBlocker signalBlocker4(slider);
-            slider->setValue(valueToSlider(val));
+            slider->setValue(valueMapping.valueToSlider(val));
             signalBlocker4.unblock();
           });
 
@@ -805,14 +832,14 @@ QWidget *ParameterPanel::addSliderParameter(
 
   // Updater: State -> UI
   m_paramUpdaters.push_back(
-      [slider, spin, getter, valueToSlider](const ParameterState &state) {
+      [slider, spin, getter, valueMapping](const ParameterState &state) {
         double val = getter(state);
         QSignalBlocker signalBlocker5(spin);
         spin->setValue(val);
         signalBlocker5.unblock();
 
         QSignalBlocker signalBlocker6(slider);
-        slider->setValue(valueToSlider(val));
+        slider->setValue(valueMapping.valueToSlider(val));
         signalBlocker6.unblock();
       });
 
@@ -865,16 +892,8 @@ QWidget* ParameterPanel::addSlider(
   if (!tooltip.isEmpty())
     slider->setToolTip(tooltip);
 
-  // For non-linear, use fixed high resolution range
-  const int SLIDER_MAX = 65535;
-
-  if (gamma != 1.0 || logarithmic) {
-    slider->setRange(0, SLIDER_MAX);
-  } else {
-    int minInt = min * scale;
-    int maxInt = max * scale;
-    slider->setRange(minInt, maxInt);
-  }
+  const SliderValueMapping valueMapping(min, max, scale, gamma, logarithmic);
+  slider->setRange(valueMapping.sliderMinimum(), valueMapping.sliderMaximum());
 
   QDoubleSpinBox *spin = new QDoubleSpinBox();
   spin->setRange(min, max);
@@ -894,66 +913,10 @@ QWidget* ParameterPanel::addSlider(
     m_form->addRow(label, container);
   }
 
-  // Helper to map Slider -> Value
-  auto sliderToValue = [min, max, scale, gamma, SLIDER_MAX,
-                        logarithmic](int s) -> double {
-    if (!logarithmic && gamma == 1.0)
-      return (double)s / scale;
-
-    double t = (double)s / SLIDER_MAX; // 0..1
-
-    if (logarithmic) {
-      if (min <= 0) {
-        // v = (max + 1)^t - 1
-        return std::pow(max + 1.0, t) - 1.0;
-      } else {
-        // v = min * (max/min)^t
-        return min * std::pow(max / min, t);
-      }
-    }
-
-    // v = min + (max-min) * t^gamma
-    return min + (max - min) * std::pow(t, gamma);
-  };
-
-  // Helper to map Value -> Slider
-  auto valueToSlider = [min, max, scale, gamma, SLIDER_MAX,
-                        logarithmic](double v) -> int {
-    if (!logarithmic && gamma == 1.0)
-      return qRound(v * scale);
-
-    double t = 0;
-    if (logarithmic) {
-      if (min <= 0) {
-        // t = log(v + 1) / log(max + 1)
-        if (v <= 0)
-          t = 0;
-        else
-          t = std::log(v + 1.0) / std::log(max + 1.0);
-      } else {
-        // t = log(v/min) / log(max/min)
-        if (v <= min)
-          t = 0;
-        else
-          t = std::log(v / min) / std::log(max / min);
-      }
-    } else {
-      // t = ((v - min) / (max - min)) ^ (1/gamma)
-      double ratio = (v - min) / (max - min);
-      if (ratio <= 0)
-        t = 0;
-      else if (ratio >= 1)
-        t = 1;
-      else
-        t = std::pow(ratio, 1.0 / gamma);
-    }
-    return std::clamp((int)qRound(t * SLIDER_MAX), 0, SLIDER_MAX);
-  };
-
   // Synchronization
   connect(slider, &QSlider::valueChanged, this,
-          [spin, sliderToValue, onChanged](int val) {
-            double dVal = sliderToValue(val);
+          [spin, valueMapping, onChanged](int val) {
+            double dVal = valueMapping.sliderToValue(val);
             QSignalBlocker signalBlocker7(spin);
             spin->setValue(dVal);
             signalBlocker7.unblock();
@@ -963,9 +926,9 @@ QWidget* ParameterPanel::addSlider(
           });
 
   connect(spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
-          [slider, valueToSlider, onChanged](double val) {
+          [slider, valueMapping, onChanged](double val) {
             QSignalBlocker signalBlocker8(slider);
-            slider->setValue(valueToSlider(val));
+            slider->setValue(valueMapping.valueToSlider(val));
             signalBlocker8.unblock();
 
             if (onChanged)
@@ -974,7 +937,7 @@ QWidget* ParameterPanel::addSlider(
 
   // Initial Value
   spin->setValue(initialValue);
-  slider->setValue(valueToSlider(initialValue));
+  slider->setValue(valueMapping.valueToSlider(initialValue));
 
   return container;
 }

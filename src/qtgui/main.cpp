@@ -40,6 +40,7 @@
 #include <QPalette>
 #include <QPushButton>
 #include <QSettings>
+#include <QSlider>
 #include <QStringList>
 #include <QStatusBar>
 #include <QStyleFactory>
@@ -76,6 +77,8 @@ public:
   using ParameterPanel::addCheckboxWithReset;
   using ParameterPanel::addCorrelatedRGBParameter;
   using ParameterPanel::addSeparator;
+  using ParameterPanel::addSlider;
+  using ParameterPanel::addSliderParameter;
   using ParameterPanel::setParameterApplicability;
 };
 
@@ -250,6 +253,103 @@ bool runBetaInvariantSmoke() {
       rgbAppliedKeys[0] != QStringLiteral("probe.rgb.red") ||
       rgbAppliedKeys[1] != QStringLiteral("probe.rgb.green"))
     return fail("correlated RGB helper merged identity across saved channels");
+
+  // Stateful and stateless sliders share one conversion utility. Exercise both
+  // wrappers at the same positions and values for every supported mapping mode
+  // so future changes cannot make their linear/gamma/log geometry diverge.
+  auto sliderMappingsAgree = [](double min, double max, double scale,
+                                double gamma, bool logarithmic) {
+    ParameterState state;
+    state.rparams.gamma = min;
+    double statelessValue = min;
+    CheckboxSemanticsProbe probe(
+        [&state]() { return state; },
+        [&state](const ParameterState &next, const QString &,
+                 const QString &) { state = next; },
+        []() { return std::shared_ptr<colorscreen::image_data>(); }, nullptr,
+        false);
+    QWidget *stateful = probe.addSliderParameter(
+        QStringLiteral("Stateful slider"), min, max, scale, 6, QString(),
+        QString(),
+        [](const ParameterState &current) { return current.rparams.gamma; },
+        [](ParameterState &current, double value) {
+          current.rparams.gamma = value;
+        },
+        gamma, nullptr, logarithmic);
+    QWidget *stateless = probe.addSlider(
+        QStringLiteral("Stateless slider"), min, max, scale, 6, QString(),
+        QString(), min,
+        [&statelessValue](double value) { statelessValue = value; }, gamma,
+        logarithmic);
+    probe.updateUI();
+
+    QSlider *statefulSlider = stateful ? stateful->findChild<QSlider *>() : nullptr;
+    QSlider *statelessSlider = stateless ? stateless->findChild<QSlider *>() : nullptr;
+    QDoubleSpinBox *statefulSpin =
+        stateful ? stateful->findChild<QDoubleSpinBox *>() : nullptr;
+    QDoubleSpinBox *statelessSpin =
+        stateless ? stateless->findChild<QDoubleSpinBox *>() : nullptr;
+    if (!statefulSlider || !statelessSlider || !statefulSpin || !statelessSpin ||
+        statefulSlider->minimum() != statelessSlider->minimum() ||
+        statefulSlider->maximum() != statelessSlider->maximum())
+      return false;
+
+    const int sliderMin = statefulSlider->minimum();
+    const int sliderMax = statefulSlider->maximum();
+    const int sliderMid = sliderMin + (sliderMax - sliderMin) / 2;
+    for (int position : {sliderMin, sliderMid, sliderMax}) {
+      statefulSlider->setValue(position);
+      statelessSlider->setValue(position);
+      if (qAbs(statefulSpin->value() - statelessSpin->value()) > 1e-6 ||
+          qAbs(state.rparams.gamma - statelessValue) > 1e-6)
+        return false;
+    }
+
+    for (double value : {min, min + (max - min) * 0.37, max}) {
+      statefulSpin->setValue(value);
+      statelessSpin->setValue(value);
+      if (statefulSlider->value() != statelessSlider->value())
+        return false;
+    }
+    return true;
+  };
+  if (!sliderMappingsAgree(-2.0, 3.0, 100.0, 1.0, false) ||
+      !sliderMappingsAgree(0.0, 100.0, 10.0, 2.5, false) ||
+      !sliderMappingsAgree(0.0, 1000.0, 10.0, 1.0, true) ||
+      !sliderMappingsAgree(0.1, 1000.0, 100.0, 1.0, true))
+    return fail("stateful/stateless slider mappings diverged");
+
+  ParameterState sentinelState;
+  sentinelState.rparams.gamma = 0.0;
+  CheckboxSemanticsProbe sentinelProbe(
+      [&sentinelState]() { return sentinelState; },
+      [&sentinelState](const ParameterState &next, const QString &,
+                       const QString &) { sentinelState = next; },
+      []() { return std::shared_ptr<colorscreen::image_data>(); }, nullptr,
+      false);
+  QWidget *sentinelField = sentinelProbe.addSliderParameter(
+      QStringLiteral("Sentinel slider"), 400.0, 1200.0, 1.0, 2, QString(),
+      QStringLiteral("automatic"),
+      [](const ParameterState &current) { return current.rparams.gamma; },
+      [](ParameterState &current, double value) {
+        current.rparams.gamma = value;
+      },
+      2.0, nullptr, false, QString(), QString(), false, 0.0);
+  sentinelProbe.updateUI();
+  QSlider *sentinelSlider =
+      sentinelField ? sentinelField->findChild<QSlider *>() : nullptr;
+  QDoubleSpinBox *sentinelSpin =
+      sentinelField ? sentinelField->findChild<QDoubleSpinBox *>() : nullptr;
+  if (!sentinelSlider || !sentinelSpin || sentinelSlider->minimum() != 0 ||
+      sentinelSlider->maximum() != 65535 || sentinelSlider->value() != 0 ||
+      sentinelSpin->value() != 0.0)
+    return fail("separated slider sentinel lost its reserved nonlinear position");
+  sentinelSlider->setValue(1);
+  if (qAbs(sentinelSpin->value() - 400.0) > 1e-6)
+    return fail("first regular nonlinear slider position no longer maps to minimum");
+  sentinelSpin->setValue(0.0);
+  if (sentinelSlider->value() != 0)
+    return fail("separated slider sentinel did not round-trip to reserved position");
 
   // Focus analysis is now a plain background helper. Missing input must fail
   // synchronously rather than depending on QObject/QThread signal delivery.
