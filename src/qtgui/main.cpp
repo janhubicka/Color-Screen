@@ -6,6 +6,7 @@
 #include "ImageWidget.h"
 #include "SharpnessPanel.h"
 #include "ToneCurveWidget.h"
+#include "TilesPanel.h"
 #include "CoordinateTransformer.h"
 #include "CoordinateOptimizationWorker.h"
 #include "DocumentLifecycleSmoke.h"
@@ -16,6 +17,7 @@
 #include "WorkspaceChurnSmoke.h"
 #include "WorkspaceWindow.h"
 #include "progress-info.h"
+#include "../libcolorscreen/include/stitch.h"
 
 #include <QAction>
 #include <QCheckBox>
@@ -25,6 +27,7 @@
 #include <QCoreApplication>
 #include <QDebug>
 #include <QDockWidget>
+#include <QDoubleSpinBox>
 #include <QFileInfo>
 #include <QIcon>
 #include <QImage>
@@ -48,6 +51,7 @@
 #include <QTransform>
 #include <QUndoStack>
 
+#include <cmath>
 #include <cstring>
 #include <functional>
 #include <memory>
@@ -323,6 +327,103 @@ bool runBetaInvariantSmoke() {
   undoStack->redo();
   if (window.documentStateSnapshot() != rotated)
     return fail("redo did not restore both independent user actions");
+
+  // Tiles deliberately reuse one pair of editors for the currently selected
+  // stitch tile. The parameter key must therefore include the tile coordinates:
+  // a fast edit on tile 0 followed by the same visible Exposure control on tile
+  // 1 is two independent Undo gestures, not one slider drag.
+  auto stitchedScan = std::make_shared<colorscreen::image_data>();
+  stitchedScan->stitch = new colorscreen::stitch_project();
+  stitchedScan->stitch->params.width = 2;
+  stitchedScan->stitch->params.height = 1;
+
+  ParameterState tileBaseline = window.documentStateSnapshot();
+  tileBaseline.rparams.set_tile_adjustments_dimensions(2, 1);
+  window.applySharedDocumentState(tileBaseline, QStringLiteral("Tile smoke setup"),
+                                  QStringLiteral("smoke.tiles.setup"));
+  undoStack->clear();
+
+  TilesPanel tiles(
+      [&window]() { return window.documentStateSnapshot(); },
+      [&window](const ParameterState &state, const QString &description,
+                const QString &parameterKey) {
+        window.applySharedDocumentState(state, description, parameterKey);
+      },
+      [stitchedScan]() { return stitchedScan; }, nullptr);
+  tiles.updateForNewImage();
+  tiles.updateUI();
+
+  auto findTileSpin = [&tiles](const QString &parameterKey) {
+    const QList<QDoubleSpinBox *> spins = tiles.findChildren<QDoubleSpinBox *>();
+    for (QDoubleSpinBox *spin : spins)
+      if (spin && spin->property("parameterKey").toString() == parameterKey)
+        return spin;
+    return static_cast<QDoubleSpinBox *>(nullptr);
+  };
+
+  auto *tile0Selector =
+      tiles.findChild<QPushButton *>(QStringLiteral("TileSelector_0_0"));
+  auto *tile1Selector =
+      tiles.findChild<QPushButton *>(QStringLiteral("TileSelector_1_0"));
+  auto *tile0Enabled =
+      tiles.findChild<QCheckBox *>(QStringLiteral("TileEnabled_0_0"));
+  auto *tile1Enabled =
+      tiles.findChild<QCheckBox *>(QStringLiteral("TileEnabled_1_0"));
+  QDoubleSpinBox *exposure =
+      findTileSpin(QStringLiteral("tiles.0.0.exposure"));
+  QDoubleSpinBox *darkPoint =
+      findTileSpin(QStringLiteral("tiles.0.0.dark_point"));
+  if (!tile0Selector || !tile1Selector || !tile0Enabled || !tile1Enabled ||
+      !exposure || !darkPoint ||
+      tile0Enabled->property("parameterKey").toString() !=
+          QStringLiteral("tiles.0.0.enabled") ||
+      tile1Enabled->property("parameterKey").toString() !=
+          QStringLiteral("tiles.1.0.enabled") ||
+      tile0Selector->property("parameterKey").isValid() ||
+      tile1Selector->property("parameterKey").isValid())
+    return fail("tile keys crossed the document/selection-state boundary");
+
+  const double tile0Before = exposure->value();
+  const double tile0After =
+      tile0Before <= 9.98 ? tile0Before + 0.01 : tile0Before - 0.01;
+  exposure->setValue(tile0After);
+
+  tile1Selector->setChecked(true);
+  if (!tile1Selector->isChecked() ||
+      exposure->property("parameterKey").toString() !=
+          QStringLiteral("tiles.1.0.exposure") ||
+      darkPoint->property("parameterKey").toString() !=
+          QStringLiteral("tiles.1.0.dark_point"))
+    return fail("tile selector did not retarget the shared editor key");
+
+  const double tile1Before = exposure->value();
+  const double tile1After =
+      tile1Before <= 9.96 ? tile1Before + 0.02 : tile1Before - 0.02;
+  exposure->setValue(tile1After);
+
+  const ParameterState afterTileEdits = window.documentStateSnapshot();
+  if (undoStack->count() != 2 ||
+      std::abs(afterTileEdits.rparams.get_tile_adjustment(0, 0).exposure -
+               tile0After) > 1e-8 ||
+      std::abs(afterTileEdits.rparams.get_tile_adjustment(1, 0).exposure -
+               tile1After) > 1e-8)
+    return fail("tile exposure edits did not produce two keyed document actions");
+
+  undoStack->undo();
+  const ParameterState afterTile1Undo = window.documentStateSnapshot();
+  if (std::abs(afterTile1Undo.rparams.get_tile_adjustment(0, 0).exposure -
+               tile0After) > 1e-8 ||
+      std::abs(afterTile1Undo.rparams.get_tile_adjustment(1, 0).exposure -
+               tile1Before) > 1e-8)
+    return fail("Undo merged one shared tile editor across different tiles");
+
+  undoStack->undo();
+  const ParameterState afterTile0Undo = window.documentStateSnapshot();
+  if (std::abs(afterTile0Undo.rparams.get_tile_adjustment(0, 0).exposure -
+               tile0Before) > 1e-8 ||
+      std::abs(afterTile0Undo.rparams.get_tile_adjustment(1, 0).exposure -
+               tile1Before) > 1e-8)
+    return fail("second tile Undo did not restore both exposure baselines");
 
   return true;
 }

@@ -614,9 +614,16 @@ QWidget *ParameterPanel::addSliderParameter(
     std::function<bool(const ParameterState &)> enabledCheck,
     bool logarithmic, const QString &tooltip,
     const QString &parameterKey, bool showDefaultReset,
-    std::optional<double> specialMinimumValue) {
+    std::optional<double> specialMinimumValue,
+    ParameterKeyGetter parameterKeyGetter) {
+  Q_ASSERT(parameterKey.isEmpty() || !parameterKeyGetter);
+  Q_ASSERT(!showDefaultReset || !parameterKeyGetter);
   Q_ASSERT(!specialMinimumValue.has_value() ||
            *specialMinimumValue <= min);
+
+  const auto resolvedParameterKey = [parameterKey, parameterKeyGetter]() {
+    return parameterKeyGetter ? parameterKeyGetter() : parameterKey;
+  };
   const bool hasSeparatedSpecialMinimum =
       specialMinimumValue.has_value() && *specialMinimumValue < min;
   const double specialStateValue =
@@ -663,9 +670,10 @@ QWidget *ParameterPanel::addSliderParameter(
   if (!specialValueText.isEmpty())
     spin->setSpecialValueText(specialValueText);
 
-  setParameterKey(container, parameterKey);
-  setParameterKey(slider, parameterKey);
-  setParameterKey(spin, parameterKey);
+  const QString initialParameterKey = resolvedParameterKey();
+  setParameterKey(container, initialParameterKey);
+  setParameterKey(slider, initialParameterKey);
+  setParameterKey(spin, initialParameterKey);
   if (specialMinimumValue.has_value()) {
     container->setProperty(parameterSpecialStateValueProperty,
                            *specialMinimumValue);
@@ -769,7 +777,8 @@ QWidget *ParameterPanel::addSliderParameter(
 
   // Synchronization
   connect(slider, &QSlider::valueChanged, this,
-          [this, spin, sliderToValue, setter, label, parameterKey](int val) {
+          [this, spin, sliderToValue, setter, label,
+           resolvedParameterKey](int val) {
             double dVal = sliderToValue(val);
             QSignalBlocker signalBlocker3(spin);
             spin->setValue(dVal);
@@ -777,7 +786,7 @@ QWidget *ParameterPanel::addSliderParameter(
 
             // Trigger update
             applyChange([setter, dVal](ParameterState &s) { setter(s, dVal); },
-                        label, parameterKey);
+                        label, resolvedParameterKey());
           });
 
   connect(spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
@@ -789,9 +798,9 @@ QWidget *ParameterPanel::addSliderParameter(
 
   // Change
   connect(spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
-          [this, setter, label, parameterKey](double val) {
+          [this, setter, label, resolvedParameterKey](double val) {
             applyChange([setter, val](ParameterState &s) { setter(s, val); },
-                        label, parameterKey);
+                        label, resolvedParameterKey());
           });
 
   // Updater: State -> UI
@@ -806,6 +815,18 @@ QWidget *ParameterPanel::addSliderParameter(
         slider->setValue(valueToSlider(val));
         signalBlocker6.unblock();
       });
+
+  // A context-dependent editor changes logical target without being rebuilt.
+  // Keep its metadata aligned with the key that will be used by the next edit.
+  if (parameterKeyGetter) {
+    m_widgetStateUpdaters.push_back(
+        [container, slider, spin, resolvedParameterKey]() {
+          const QString key = resolvedParameterKey();
+          setParameterKey(container, key);
+          setParameterKey(slider, key);
+          setParameterKey(spin, key);
+        });
+  }
 
   // Enable Update
   if (enabledCheck) {
