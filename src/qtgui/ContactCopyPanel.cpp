@@ -47,7 +47,8 @@ void ContactCopyPanel::setupUi() {
       "Contact copy simulation",
       [](const ParameterState &s) { return s.rparams.contact_copy.simulate; },
       [](ParameterState &s, bool v) { s.rparams.contact_copy.simulate = v; },
-      nullptr, "Enable physics-based simulation of photographic contact printing. This models the response of a photographic glass plate to the light transmitted through the digitized color screen.");
+      nullptr, "Enable physics-based simulation of photographic contact printing. This models the response of a photographic glass plate to the light transmitted through the digitized color screen.",
+      "contact_copy.simulate");
   simulationCheck->setObjectName(QStringLiteral("ContactCopySimulationCheck"));
 
   // Contact-copy parameters are specialist controls. Keep only the master
@@ -71,9 +72,13 @@ void ContactCopyPanel::setupUi() {
       QStringLiteral("Film characteristics"),
       QStringLiteral("ContactCopyFilmCharacteristicsGroup"));
   m_hdCurveWidget = new HDCurveWidget();
+  m_hdCurveWidget->setObjectName(QStringLiteral("ContactCopyHDCurveWidget"));
+  m_hdCurveWidget->setProperty("parameterKey",
+                               QStringLiteral("contact_copy.curve.graph"));
   
   QComboBox *modeCombo = new QComboBox();
   m_modeCombo = modeCombo;
+  modeCombo->setObjectName(QStringLiteral("ContactCopyDisplayModeCombo"));
   modeCombo->addItem("Exposure + Density (H&D)", (int)colorscreen::hd_axis_hd);
   modeCombo->addItem("Gamma 2.2", (int)colorscreen::hd_axis_gamma22);
   modeCombo->addItem("Gamma 1.0 (Linear)", (int)colorscreen::hd_axis_gamma10);
@@ -88,6 +93,7 @@ void ContactCopyPanel::setupUi() {
 
   QComboBox *presetCombo = new QComboBox();
   m_presetCombo = presetCombo;
+  presetCombo->setObjectName(QStringLiteral("ContactCopyPresetCombo"));
   presetCombo->addItem("Custom", -1);
   for (int i = 0; i < colorscreen::film_sensitivity::hd_curves_max; ++i) {
       presetCombo->addItem(QString::fromUtf8(colorscreen::film_sensitivity::hd_curves_properties[i].pretty_name), i);
@@ -136,19 +142,24 @@ void ContactCopyPanel::setupUi() {
           [params](ParameterState &s) {
               s.rparams.contact_copy.emulsion_characteristic_curve = params;
           },
-          "Modify emulsion curve"
+          "Modify emulsion curve", "contact_copy.curve.graph"
       );
       updateSpinBoxes();
   });
 
-  // Setup manual spinboxes for the points
-  auto createSpinBox = [this](QDoubleSpinBox*& spin) {
+  // Setup manual spinboxes for the points. Each coordinate is a separate user
+  // gesture even though every edit stores the complete characteristic curve.
+  auto createSpinBox = [this](QDoubleSpinBox*& spin,
+                              const QString &objectName,
+                              const QString &parameterKey) {
       spin = new QDoubleSpinBox();
+      spin->setObjectName(objectName);
+      spin->setProperty("parameterKey", parameterKey);
       spin->setRange(-10.0, 10.0);
       spin->setSingleStep(0.1);
       spin->setDecimals(2);
       
-      connect(spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double) {
+      connect(spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this, parameterKey](double) {
           if (m_updatingSpinBoxes) return;
           
           colorscreen::hd_curve_parameters p = m_hdCurveWidget->getParameters();
@@ -167,15 +178,27 @@ void ContactCopyPanel::setupUi() {
               [p](ParameterState &s) {
                   s.rparams.contact_copy.emulsion_characteristic_curve = p;
               },
-              "Modify emulsion curve"
+              "Modify emulsion curve", parameterKey
           );
       });
   };
 
-  createSpinBox(m_minXSpin); createSpinBox(m_minYSpin);
-  createSpinBox(m_linear1XSpin); createSpinBox(m_linear1YSpin);
-  createSpinBox(m_linear2XSpin); createSpinBox(m_linear2YSpin);
-  createSpinBox(m_maxXSpin); createSpinBox(m_maxYSpin);
+  createSpinBox(m_minXSpin, QStringLiteral("ContactCopyMinXSpin"),
+                QStringLiteral("contact_copy.curve.min.x"));
+  createSpinBox(m_minYSpin, QStringLiteral("ContactCopyMinYSpin"),
+                QStringLiteral("contact_copy.curve.min.y"));
+  createSpinBox(m_linear1XSpin, QStringLiteral("ContactCopyLinear1XSpin"),
+                QStringLiteral("contact_copy.curve.linear1.x"));
+  createSpinBox(m_linear1YSpin, QStringLiteral("ContactCopyLinear1YSpin"),
+                QStringLiteral("contact_copy.curve.linear1.y"));
+  createSpinBox(m_linear2XSpin, QStringLiteral("ContactCopyLinear2XSpin"),
+                QStringLiteral("contact_copy.curve.linear2.x"));
+  createSpinBox(m_linear2YSpin, QStringLiteral("ContactCopyLinear2YSpin"),
+                QStringLiteral("contact_copy.curve.linear2.y"));
+  createSpinBox(m_maxXSpin, QStringLiteral("ContactCopyMaxXSpin"),
+                QStringLiteral("contact_copy.curve.max.x"));
+  createSpinBox(m_maxYSpin, QStringLiteral("ContactCopyMaxYSpin"),
+                QStringLiteral("contact_copy.curve.max.y"));
   addSimulationSection(
       QStringLiteral("H&D Richards model parameters"),
       QStringLiteral("ContactCopyRichardsGroup"));
@@ -183,6 +206,7 @@ void ContactCopyPanel::setupUi() {
   auto addRichardsSlider = [this](const QString &label, const QString &tooltip, 
                                  std::function<double(const colorscreen::richards_curve_parameters &)> getter,
                                  std::function<void(colorscreen::richards_curve_parameters &, double)> setter,
+                                 const QString &parameterKey,
                                  double min = -10.0, double max = 10.0, bool logarithmic = false) {
       addSliderParameter(
           label, min, max, 100.0, 3, "", "",
@@ -195,7 +219,8 @@ void ContactCopyPanel::setupUi() {
               setter(rp_new, v);
               s.rparams.contact_copy.emulsion_characteristic_curve.adjust_richards(rp_old, rp_new);
           },
-          1.0, [](const ParameterState &s) { return s.rparams.contact_copy.simulate; }, logarithmic);
+          1.0, [](const ParameterState &s) { return s.rparams.contact_copy.simulate; },
+          logarithmic, tooltip, parameterKey);
       
       // Set tooltips on label and field
       QFormLayout *layout = m_currentGroupForm ? m_currentGroupForm : m_form;
@@ -208,15 +233,20 @@ void ContactCopyPanel::setupUi() {
   };
 
   addRichardsSlider("Minimal density (A)", "Lower asymptote (minimal density). Represents the base fog level.", 
-                    [](const auto& r) { return r.A; }, [](auto& r, double v) { r.A = v; });
+                    [](const auto& r) { return r.A; }, [](auto& r, double v) { r.A = v; },
+                    "contact_copy.curve.richards.min_density");
   addRichardsSlider("Maximal density (K)", "Upper asymptote (maximal density). Represents the saturation level.", 
-                    [](const auto& r) { return r.K; }, [](auto& r, double v) { r.K = v; });
+                    [](const auto& r) { return r.K; }, [](auto& r, double v) { r.K = v; },
+                    "contact_copy.curve.richards.max_density");
   addRichardsSlider("Slope (B)", "Growth rate (slope). Controls the steepness of the linear region.", 
-                    [](const auto& r) { return r.B; }, [](auto& r, double v) { r.B = v; }, -100.0, 100.0, false);
+                    [](const auto& r) { return r.B; }, [](auto& r, double v) { r.B = v; },
+                    "contact_copy.curve.richards.slope", -100.0, 100.0, false);
   addRichardsSlider("Offset (M)", "Horizontal offset. Center point of the linear region.", 
-                    [](const auto& r) { return r.M; }, [](auto& r, double v) { r.M = v; });
-  addRichardsSlider("Asymmetry (\u03BD)", "Asymmetry parameter. Controls where the curve inflection occurs (\u03BD=1 is symmetric).", 
-                    [](const auto& r) { return r.v; }, [](auto& r, double v) { r.v = v; }, 0.01, 10.0, true);
+                    [](const auto& r) { return r.M; }, [](auto& r, double v) { r.M = v; },
+                    "contact_copy.curve.richards.offset");
+  addRichardsSlider("Asymmetry (ν)", "Asymmetry parameter. Controls where the curve inflection occurs (ν=1 is symmetric).", 
+                    [](const auto& r) { return r.v; }, [](auto& r, double v) { r.v = v; },
+                    "contact_copy.curve.richards.asymmetry", 0.01, 10.0, true);
 
   addCheckboxParameter(
       "Inverse mode",
@@ -231,7 +261,8 @@ void ContactCopyPanel::setupUi() {
           std::swap(p.maxx, p.maxy);
           p.sort_by_x();
       },
-      [](const ParameterState &s) { return s.rparams.contact_copy.simulate; });
+      [](const ParameterState &s) { return s.rparams.contact_copy.simulate; },
+      QString(), "contact_copy.curve.inverse");
   
   QFormLayout *layout = m_currentGroupForm ? m_currentGroupForm : m_form;
   if (layout->count() >= 1) {
@@ -277,7 +308,8 @@ void ContactCopyPanel::setupUi() {
       "Preflash", 0.0, 100.0, 100.0, 2, "", "",
       [](const ParameterState &s) { return s.rparams.contact_copy.preflash; },
       [](ParameterState &s, double v) { s.rparams.contact_copy.preflash = v; },
-      1.0, [](const ParameterState &s) { return s.rparams.contact_copy.simulate; });
+      1.0, [](const ParameterState &s) { return s.rparams.contact_copy.simulate; },
+      false, QString(), "contact_copy.preflash");
   {
       QFormLayout *layout = m_currentGroupForm ? m_currentGroupForm : m_form;
       if (layout->count() >= 2) {
@@ -290,7 +322,8 @@ void ContactCopyPanel::setupUi() {
       "Enlarger exposure", 0.0, 100.0, 100.0, 2, "", "",
       [](const ParameterState &s) { return s.rparams.contact_copy.exposure; },
       [](ParameterState &s, double v) { s.rparams.contact_copy.exposure = v; },
-      3.0, [](const ParameterState &s) { return s.rparams.contact_copy.simulate; }, true);
+      3.0, [](const ParameterState &s) { return s.rparams.contact_copy.simulate; },
+      true, QString(), "contact_copy.exposure");
   {
       QFormLayout *layout = m_currentGroupForm ? m_currentGroupForm : m_form;
       if (layout->count() >= 2) {
@@ -303,7 +336,8 @@ void ContactCopyPanel::setupUi() {
       "Density boost", 0.0, 100.0, 100.0, 2, "", "",
       [](const ParameterState &s) { return s.rparams.contact_copy.boost; },
       [](ParameterState &s, double v) { s.rparams.contact_copy.boost = v; },
-      3.0, [](const ParameterState &s) { return s.rparams.contact_copy.simulate; });
+      3.0, [](const ParameterState &s) { return s.rparams.contact_copy.simulate; },
+      false, QString(), "contact_copy.density_boost");
   {
       QFormLayout *layout = m_currentGroupForm ? m_currentGroupForm : m_form;
       if (layout->count() >= 2) {
