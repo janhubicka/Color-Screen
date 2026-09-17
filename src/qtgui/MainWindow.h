@@ -845,10 +845,20 @@ private:
   // only after an accepted solver result, so loaded/manual geometry is never
   // incorrectly advertised as a current automatic fit. Pending input state is
   // also used as a publication gate when parameters change during a solve.
-  std::optional<ParameterState> m_geometryFitBaseline;
-  std::optional<ParameterState> m_geometryFitPendingInputs;
-  std::optional<bool> m_geometryFitPendingComputeMesh;
-  std::optional<ParameterState> m_geometryFitFailureInputs;
+  struct GeometryFitState {
+    std::optional<ParameterState> baseline;
+    std::optional<ParameterState> pendingInputs;
+    std::optional<bool> pendingComputeMesh;
+    std::optional<ParameterState> failureInputs;
+
+    void clear() {
+      baseline.reset();
+      pendingInputs.reset();
+      pendingComputeMesh.reset();
+      failureInputs.reset();
+    }
+  };
+  GeometryFitState m_geometryFit;
 
   // Session-local MTF model-fit provenance shared by all Sharpness views.
   std::optional<colorscreen::mtf_parameters> m_mtfFitBaseline;

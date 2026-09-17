@@ -1238,11 +1238,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         }
 
         const ParameterState workflowBaseline = first->documentStateSnapshot();
-        const auto savedGeometryFitBaseline = first->m_geometryFitBaseline;
-        const auto savedGeometryFitFailure = first->m_geometryFitFailureInputs;
-        const auto savedGeometryFitPending = first->m_geometryFitPendingInputs;
-        const auto savedGeometryFitPendingMesh =
-            first->m_geometryFitPendingComputeMesh;
+        const auto savedGeometryFit = first->m_geometryFit;
         const auto savedRenderType = first->m_renderTypeParams.type;
         const bool savedRegistrationVisibility =
             first->m_imageWidget->registrationPointsVisible();
@@ -1263,10 +1259,8 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         workflowReady.solver.add_point(
             {40, 60}, {-1, 1}, colorscreen::solver_parameters::green);
         first->applyState(workflowReady);
-        first->m_geometryFitPendingInputs.reset();
-        first->m_geometryFitPendingComputeMesh.reset();
-        first->m_geometryFitFailureInputs.reset();
-        first->m_geometryFitBaseline = first->documentStateSnapshot();
+        first->m_geometryFit.clear();
+        first->m_geometryFit.baseline = first->documentStateSnapshot();
         first->m_renderTypeParams.type = colorscreen::render_type_interpolated;
         first->m_imageWidget->setShowRegistrationPoints(false);
         first->updateWorkflowSummary();
@@ -1292,10 +1286,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
           return;
         }
 
-        first->m_geometryFitBaseline = savedGeometryFitBaseline;
-        first->m_geometryFitFailureInputs = savedGeometryFitFailure;
-        first->m_geometryFitPendingInputs = savedGeometryFitPending;
-        first->m_geometryFitPendingComputeMesh = savedGeometryFitPendingMesh;
+        first->m_geometryFit = savedGeometryFit;
         first->m_renderTypeParams.type = savedRenderType;
         first->applyState(workflowBaseline);
         first->m_imageWidget->setShowRegistrationPoints(

@@ -4079,15 +4079,15 @@ void MainWindow::updateWorkflowSummary() {
 
   const ParameterState currentState = getCurrentState();
   const bool pendingMeshModeChanged =
-      m_geometryFitPendingComputeMesh && m_geometryPanel &&
-      *m_geometryFitPendingComputeMesh != m_geometryPanel->isNonlinearEnabled();
-  if (m_geometryFitPendingInputs &&
-      (geometryFitInputsDiffer(*m_geometryFitPendingInputs, currentState) ||
+      m_geometryFit.pendingComputeMesh && m_geometryPanel &&
+      *m_geometryFit.pendingComputeMesh != m_geometryPanel->isNonlinearEnabled();
+  if (m_geometryFit.pendingInputs &&
+      (geometryFitInputsDiffer(*m_geometryFit.pendingInputs, currentState) ||
        pendingMeshModeChanged)) {
     // Reset first because cancelAll() may synchronously trigger progress/UI
     // callbacks that refresh this summary again.
-    m_geometryFitPendingInputs.reset();
-    m_geometryFitPendingComputeMesh.reset();
+    m_geometryFit.pendingInputs.reset();
+    m_geometryFit.pendingComputeMesh.reset();
     m_solverQueue.cancelAll();
   }
 
@@ -4202,11 +4202,11 @@ void MainWindow::updateWorkflowSummary() {
                          .arg(minimumPoints - pointCount);
     } else {
       registration = tr("%1 — %2 points").arg(prefix).arg(pointCount);
-      fitCurrent = m_geometryFitBaseline &&
-          !geometryFitInputsDiffer(*m_geometryFitBaseline, currentState);
-      failureCurrent = m_geometryFitFailureInputs &&
-          !geometryFitInputsDiffer(*m_geometryFitFailureInputs, currentState);
-      if (m_geometryFitPendingInputs) {
+      fitCurrent = m_geometryFit.baseline &&
+          !geometryFitInputsDiffer(*m_geometryFit.baseline, currentState);
+      failureCurrent = m_geometryFit.failureInputs &&
+          !geometryFitInputsDiffer(*m_geometryFit.failureInputs, currentState);
+      if (m_geometryFit.pendingInputs) {
         registration += tr(" • fitting geometry…");
       } else if (fitCurrent) {
         registration += tr(" • geometry fitted");
@@ -4214,7 +4214,7 @@ void MainWindow::updateWorkflowSummary() {
           registration += tr(" • last refit failed");
       } else if (failureCurrent) {
         registration += tr(" • fit failed — adjust points/settings and retry");
-      } else if (m_geometryFitBaseline) {
+      } else if (m_geometryFit.baseline) {
         registration += tr(" • geometry stale — refit");
       } else {
         registration += tr(" • ready to fit geometry");
@@ -4282,7 +4282,7 @@ void MainWindow::updateWorkflowSummary() {
         "coordinates.");
   } else if (regularScreen && !geometryConfigured) {
     nextStep = tr("Next: Geometry — detect screen coordinates.");
-  } else if (regularScreen && m_geometryFitPendingInputs) {
+  } else if (regularScreen && m_geometryFit.pendingInputs) {
     nextStep = tr("Next: Geometry fit is running…");
   } else if (regularScreen && fitCurrent) {
     const QString pointGuidance = registrationPointsVisible
@@ -4844,9 +4844,9 @@ void MainWindow::onOptimizeGeometry(bool autoChecked) {
   // The pending snapshot is both user-visible provenance and a second stale
   // result gate beyond TaskQueue's newest-request check. It catches edits to
   // points/geometry and the requested nonlinear mode while this solve runs.
-  m_geometryFitPendingInputs = getCurrentState();
-  m_geometryFitPendingComputeMesh = data.computeMesh;
-  m_geometryFitFailureInputs.reset();
+  m_geometryFit.pendingInputs = getCurrentState();
+  m_geometryFit.pendingComputeMesh = data.computeMesh;
+  m_geometryFit.failureInputs.reset();
   updateWorkflowSummary();
 
   // Request new solve task with captured data
@@ -4863,8 +4863,8 @@ void MainWindow::onTriggerSolve(
     const QVariant &userData) {
   if (!m_scan || !m_solverWorker || !userData.canConvert<SolverRequestData>()) {
     m_solverQueue.reportFinished(reqId, false);
-    m_geometryFitPendingInputs.reset();
-    m_geometryFitPendingComputeMesh.reset();
+    m_geometryFit.pendingInputs.reset();
+    m_geometryFit.pendingComputeMesh.reset();
     updateWorkflowSummary();
     return;
   }
@@ -4901,13 +4901,13 @@ void MainWindow::onSolverFinished(int reqId,
 
   const ParameterState now = getCurrentState();
   const bool meshModeStillCurrent =
-      m_geometryFitPendingComputeMesh && m_geometryPanel &&
-      *m_geometryFitPendingComputeMesh == m_geometryPanel->isNonlinearEnabled();
+      m_geometryFit.pendingComputeMesh && m_geometryPanel &&
+      *m_geometryFit.pendingComputeMesh == m_geometryPanel->isNonlinearEnabled();
   const bool inputsStillCurrent =
-      m_geometryFitPendingInputs && meshModeStillCurrent &&
-      !geometryFitInputsDiffer(*m_geometryFitPendingInputs, now);
-  m_geometryFitPendingInputs.reset();
-  m_geometryFitPendingComputeMesh.reset();
+      m_geometryFit.pendingInputs && meshModeStillCurrent &&
+      !geometryFitInputsDiffer(*m_geometryFit.pendingInputs, now);
+  m_geometryFit.pendingInputs.reset();
+  m_geometryFit.pendingComputeMesh.reset();
 
   if (cancelled || !inputsStillCurrent) {
     updateWorkflowSummary();
@@ -4918,11 +4918,11 @@ void MainWindow::onSolverFinished(int reqId,
     ParameterState newState = now;
     newState.scrToImg.merge_solver_solution(result);
     changeParameters(newState, "Optimize Geometry");
-    m_geometryFitBaseline = getCurrentState();
+    m_geometryFit.baseline = getCurrentState();
     updateScreenCoordinateToolPresentation();
-    m_geometryFitFailureInputs.reset();
+    m_geometryFit.failureInputs.reset();
   } else {
-    m_geometryFitFailureInputs = now;
+    m_geometryFit.failureInputs = now;
     QMessageBox::warning(this, "Optimization Failed",
                          "The geometry solver failed to find a solution.");
   }
@@ -5304,8 +5304,8 @@ bool MainWindow::screenCoordinateToolAvailable() const {
   if (m_scrToImgParams.mesh_trans ||
       (m_geometryPanel && m_geometryPanel->isNonlinearEnabled()))
     return false;
-  return !(m_geometryFitBaseline &&
-           screenGeometryMatchesFitBaseline(*m_geometryFitBaseline,
+  return !(m_geometryFit.baseline &&
+           screenGeometryMatchesFitBaseline(*m_geometryFit.baseline,
                                             getCurrentState()));
 }
 
@@ -5830,10 +5830,7 @@ bool MainWindow::loadParameterFile(const QString &fileName) {
   fclose(f);
 
   // Successful external parameter load establishes a new calibration context.
-  m_geometryFitBaseline.reset();
-  m_geometryFitPendingInputs.reset();
-  m_geometryFitPendingComputeMesh.reset();
-  m_geometryFitFailureInputs.reset();
+  m_geometryFit.clear();
   m_mtfFitBaseline.reset();
   m_mtfFitPendingInputs.reset();
   m_mtfFitFailureInputs.reset();
@@ -6081,9 +6078,9 @@ void MainWindow::onAutomaticallyAddPointsInAreaRequested(
                   changeParameters(
                       newState,
                       "Automatically add points to area (Geometry update)");
-                  m_geometryFitBaseline = getCurrentState();
+                  m_geometryFit.baseline = getCurrentState();
                   updateScreenCoordinateToolPresentation();
-                  m_geometryFitFailureInputs.reset();
+                  m_geometryFit.failureInputs.reset();
                   updateWorkflowSummary();
                 });
         connect(worker, &FinetuneMisregisteredWorker::requestCurrentPoints,
@@ -6188,9 +6185,9 @@ void MainWindow::onAutomaticallyAddPointsRequested(const colorscreen::finetune_a
             newState.scrToImg.merge_solver_solution(result);
             changeParameters(newState,
                              "Automatically add points (Geometry update)");
-            m_geometryFitBaseline = getCurrentState();
+            m_geometryFit.baseline = getCurrentState();
             updateScreenCoordinateToolPresentation();
-            m_geometryFitFailureInputs.reset();
+            m_geometryFit.failureInputs.reset();
             updateWorkflowSummary();
           });
   connect(worker, &FinetuneMisregisteredWorker::requestCurrentPoints, this,
