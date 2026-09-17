@@ -1,0 +1,25 @@
+name: Agent tile keys source export
+on:
+  push:
+    branches:
+      - agent/qtgui-tile-keys-stage
+    paths:
+      - .github/workflows/agent-tile-keys-source.yml
+permissions:
+  contents: read
+jobs:
+  export:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ccd87fbb83202c442d4b2c318718b7e5d1e64561
+      - name: Verify base revision
+        run: test "$(git rev-parse HEAD)" = ccd87fbb83202c442d4b2c318718b7e5d1e64561
+      - name: Pack exact source
+        run: tar --exclude=.git -czf "$RUNNER_TEMP/colorscreen-main-ccd87fbb.tar.gz" .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: colorscreen-main-ccd87fbb
+          path: ${{ runner.temp }}/colorscreen-main-ccd87fbb.tar.gz
+          if-no-files-found: error
