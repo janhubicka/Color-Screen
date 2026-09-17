@@ -955,6 +955,14 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
             first->documentStateSnapshot();
         ParameterState coordinateNoPoints = coordinateGuardBaseline;
         coordinateNoPoints.solver.points.clear();
+        // Optimize coordinates has an independent prerequisite: an existing
+        // regular coordinate basis. The smoke input may legitimately start
+        // without one, so establish a minimal valid mapping before isolating
+        // the control-point enablement guard tested below.
+        coordinateNoPoints.scrToImg.type = colorscreen::Paget;
+        coordinateNoPoints.scrToImg.mesh_trans = nullptr;
+        coordinateNoPoints.scrToImg.coordinate1 = {8, 0};
+        coordinateNoPoints.scrToImg.coordinate2 = {0, 8};
         first->applyState(coordinateNoPoints);
         if (!detectCoordinatesButton || !optimizeCoordinatesButton ||
             !detectCoordinatesButton->isEnabled() ||
