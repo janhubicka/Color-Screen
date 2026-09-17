@@ -636,7 +636,8 @@ void SharpnessPanel::setupUi() {
       [](const ParameterState &s) { return (int)s.rparams.sharpen.mode; },
       [](ParameterState &s, int v) {
         s.rparams.sharpen.mode = (sharpen_mode)v;
-      }, nullptr, "Select the sharpening algorithm. \"None\" disables sharpening, \"Wiener\" and \"Richardson-Lucy\" use the MTF model, \"Unsharp mask\" is a classic edge enhancement.");
+      }, nullptr, "Select the sharpening algorithm. \"None\" disables sharpening, \"Wiener\" and \"Richardson-Lucy\" use the MTF model, \"Unsharp mask\" is a classic edge enhancement.",
+      QStringLiteral("sharpness.mode"));
 
   m_scannerCameraSeparatorToggle = addSeparator("Scanner/Camera properties");
   m_scannerCameraSeparatorToggle->setObjectName(
@@ -660,6 +661,8 @@ void SharpnessPanel::setupUi() {
   m_mtfContainer->addWidget(detachableMTF);
 
   m_showSignedOtfCheck = new QCheckBox(tr("Show signed physical OTF"), mtfWrapper);
+  m_showSignedOtfCheck->setObjectName(
+      QStringLiteral("SharpnessSignedOtfCheck"));
   m_showSignedOtfCheck->setToolTip(
       tr("Show the signed analytical system transfer predicted by the physical "
          "lens model. Measured slanted-edge curves remain MTF magnitudes; "
@@ -722,7 +725,8 @@ void SharpnessPanel::setupUi() {
       },
       [](ParameterState &s, double v) {
         s.rparams.sharpen.scanner_mtf.sigma = v;
-      }, 1.0, nullptr, false, "Residual compact Gaussian blur. In the physical model it is applied after diffraction and defocus; in the empirical fallback it is the compact core blur.");
+      }, 1.0, nullptr, false, "Residual compact Gaussian blur. In the physical model it is applied after diffraction and defocus; in the empirical fallback it is the compact core blur.",
+      QStringLiteral("sharpness.capture.sigma"));
 
 
 
@@ -741,7 +745,8 @@ void SharpnessPanel::setupUi() {
       2.0, // Gamma
       [](const ParameterState &s) {
         return s.rparams.sharpen.scanner_mtf.simulate_diffraction_p();
-      }, false, "Image-plane focus displacement in millimeters. The physical model evaluates the signed incoherent OTF of a defocused circular pupil.");
+      }, false, "Image-plane focus displacement in millimeters. The physical model evaluates the signed incoherent OTF of a defocused circular pupil.",
+      QStringLiteral("sharpness.capture.defocus"));
 
   /* Broad halo parameters fitted by the physical model.  They are placed next
      to the other optical parameters so the result of the fitting dialog is
@@ -761,7 +766,8 @@ void SharpnessPanel::setupUi() {
         return s.rparams.sharpen.scanner_mtf.simulate_diffraction_p();
       },
       false,
-      "Fraction of optical energy redistributed into the broad symmetric halo. Zero disables the halo without discarding its radius.");
+      "Fraction of optical energy redistributed into the broad symmetric halo. Zero disables the halo without discarding its radius.",
+      QStringLiteral("sharpness.capture.halo_fraction"));
 
   addSliderParameter(
       "Halo radius", 0.0, 256.0, 1000.0, 3, "pixels", "not set",
@@ -776,7 +782,8 @@ void SharpnessPanel::setupUi() {
         return s.rparams.sharpen.scanner_mtf.simulate_diffraction_p();
       },
       false,
-      "Gaussian standard deviation of the broad symmetric halo in output pixels. It has no effect while the halo fraction is zero.");
+      "Gaussian standard deviation of the broad symmetric halo in output pixels. It has no effect while the halo fraction is zero.",
+      QStringLiteral("sharpness.capture.halo_sigma"));
 
   // Blur diameter
   // Range 0.0 - 20.0 pixels
@@ -793,7 +800,8 @@ void SharpnessPanel::setupUi() {
       2.0, // Gamma
       [](const ParameterState &s) {
         return !s.rparams.sharpen.scanner_mtf.simulate_diffraction_p();
-      }, false, "Simulates a uniform \"box\" blur of a specific diameter in pixels. Used when diffraction simulation is disabled.");
+      }, false, "Simulates a uniform \"box\" blur of a specific diameter in pixels. Used when diffraction simulation is disabled.",
+      QStringLiteral("sharpness.capture.blur_diameter"));
 
   addButtonParameter(
       "", "Open slanted edge reference",
@@ -838,7 +846,8 @@ void SharpnessPanel::setupUi() {
       },
       [](ParameterState &s, double v) {
         s.rparams.sharpen.scanner_mtf_scale = v;
-      }, 1.0, nullptr, false, "Global intensity of the deconvolution-based sharpening. 0.0 disables it, 1.0 is standard.");
+      }, 1.0, nullptr, false, "Global intensity of the deconvolution-based sharpening. 0.0 disables it, 1.0 is standard.",
+      QStringLiteral("sharpness.capture.mtf_scale"));
 
   addSeparator("Measurements");
 
@@ -913,7 +922,8 @@ void SharpnessPanel::setupUi() {
       },
       [](ParameterState &s, double v) {
         s.rparams.sharpen.supersample = (int)v;
-      }, 1.0, nullptr, false, "Process the sharpening at a higher resolution than the original scan to reduce aliasing artifacts. Increases computation time significantly.");
+      }, 1.0, nullptr, false, "Process the sharpening at a higher resolution than the original scan to reduce aliasing artifacts. Increases computation time significantly.",
+      QStringLiteral("sharpness.deconvolution.supersample"));
 
   // Reconstruction kernel used only when supersampling is active. Lanczos 3
   // is the practical default for lens-limited scans; Lanczos 8 is retained for
@@ -933,7 +943,8 @@ void SharpnessPanel::setupUi() {
       },
       "Select the reconstruction filter used before deconvolution. Lanczos 3 "
       "is faster and normally sufficient for lens-limited scans; Lanczos 8 "
-      "better preserves frequencies very close to two-dimensional Nyquist.");
+      "better preserves frequencies very close to two-dimensional Nyquist.",
+      QStringLiteral("sharpness.deconvolution.kernel"));
 
   addSeparator("Wiener filter");
 
@@ -944,7 +955,8 @@ void SharpnessPanel::setupUi() {
       [](const ParameterState &s) { return s.rparams.sharpen.scanner_snr; },
       [](ParameterState &s, double v) { s.rparams.sharpen.scanner_snr = v; },
       2.0, // Gamma (slow start)
-      nullptr, false, "Used by the Wiener filter to balance between sharpening detail and amplifying image noise. Higher values result in stronger sharpening.");
+      nullptr, false, "Used by the Wiener filter to balance between sharpening detail and amplifying image noise. Higher values result in stronger sharpening.",
+      QStringLiteral("sharpness.wiener.snr"));
 
   addSeparator("Richardson–Lucy deconvolution");
 
@@ -959,7 +971,8 @@ void SharpnessPanel::setupUi() {
         s.rparams.sharpen.richardson_lucy_iterations = (int)v;
       },
       2.0, // Gamma (slow start)
-      nullptr, false, "Number of iterations for the Richardson-Lucy deconvolution. More iterations produce sharper results but may introduce \"ringing\" or \"halos\".");
+      nullptr, false, "Number of iterations for the Richardson-Lucy deconvolution. More iterations produce sharper results but may introduce \"ringing\" or \"halos\".",
+      QStringLiteral("sharpness.richardson_lucy.iterations"));
 
   // Richardson-Lucy sigma
   // Range 0.0 - 2.0, floating point
@@ -970,7 +983,8 @@ void SharpnessPanel::setupUi() {
       },
       [](ParameterState &s, double v) {
         s.rparams.sharpen.richardson_lucy_sigma = v;
-      }, 1.0, nullptr, false, "Damping factor for the Richardson-Lucy algorithm to suppress noise amplification in dark areas.");
+      }, 1.0, nullptr, false, "Damping factor for the Richardson-Lucy algorithm to suppress noise amplification in dark areas.",
+      QStringLiteral("sharpness.richardson_lucy.sigma"));
 
   addSeparator("Unsharp mask");
 
@@ -985,7 +999,8 @@ void SharpnessPanel::setupUi() {
       1.0, // No gamma
       [](const ParameterState &s) {
         return s.rparams.sharpen.mode == sharpen_mode::unsharp_mask;
-      }, false, "The radius of the unsharp mask (edge enhancement) in pixels.");
+      }, false, "The radius of the unsharp mask (edge enhancement) in pixels.",
+      QStringLiteral("sharpness.unsharp.radius"));
 
   addSliderParameter(
       "Amount", 0.0, 100.0, 100.0, 1, "", "",
@@ -994,11 +1009,12 @@ void SharpnessPanel::setupUi() {
       2.0, // Gamma (slow start)
       [](const ParameterState &s) {
         return s.rparams.sharpen.mode == sharpen_mode::unsharp_mask;
-      }, "The strength of the unsharp mask enhancement.");
+      }, false, "The strength of the unsharp mask enhancement.",
+      QStringLiteral("sharpness.unsharp.amount"));
 
   addSeparator("Focus analyzer");
   
-  addCheckboxParameter(
+  QCheckBox *optimizeSigmaCheck = addCheckboxParameter(
       "Optimize Sigma",
       [this](const ParameterState &) {
         return (m_finetuneFlags & colorscreen::finetune_scanner_mtf_sigma) != 0;
@@ -1007,8 +1023,10 @@ void SharpnessPanel::setupUi() {
         if (v) m_finetuneFlags |= colorscreen::finetune_scanner_mtf_sigma;
         else m_finetuneFlags &= ~colorscreen::finetune_scanner_mtf_sigma;
       }, nullptr, "Included in the focus analyzer optimization loop. Multi-area analysis can fit Sigma and Defocus together using scalar-prefit basin seeds; the process-screen MTF is the primary diagnostic.");
+  optimizeSigmaCheck->setObjectName(
+      QStringLiteral("SharpnessOptimizeSigmaCheck"));
 
-  addCheckboxParameter(
+  QCheckBox *optimizeDefocusCheck = addCheckboxParameter(
       "Optimize Defocus",
       [this](const ParameterState &) {
         return (m_finetuneFlags & colorscreen::finetune_scanner_mtf_defocus) != 0;
@@ -1017,6 +1035,8 @@ void SharpnessPanel::setupUi() {
         if (v) m_finetuneFlags |= colorscreen::finetune_scanner_mtf_defocus;
         else m_finetuneFlags &= ~colorscreen::finetune_scanner_mtf_defocus;
       }, nullptr, "Included in the focus analyzer optimization loop. Multi-area analysis preserves a loaded MTF calibration as one start while also testing scalar Sigma/Defocus basins.");
+  optimizeDefocusCheck->setObjectName(
+      QStringLiteral("SharpnessOptimizeDefocusCheck"));
 
   m_analyzeAreaBtn = addToggleButtonParameter("", tr("Analyze area"), [this](bool checked) {
     emit focusAnalysisRequested(checked, m_finetuneFlags);
@@ -1584,6 +1604,8 @@ void SharpnessPanel::updateMeasurementList() {
 
     for (int i = 0; i < (int)measurements.size(); ++i) {
         const auto &m = measurements[i];
+        const QString measurementKeyBase =
+            QStringLiteral("sharpness.measurements.%1").arg(i);
         QWidget *row = new QWidget();
         QHBoxLayout *hLayout = new QHBoxLayout(row);
         hLayout->setContentsMargins(0, 0, 0, 0);
@@ -1613,17 +1635,23 @@ void SharpnessPanel::updateMeasurementList() {
 
         // Name
         QLineEdit *nameEdit = new QLineEdit(QString::fromStdString(m.name));
-        connect(nameEdit, &QLineEdit::editingFinished, this, [this, i, nameEdit]() {
+        const QString nameKey = measurementKeyBase + QStringLiteral(".name");
+        nameEdit->setProperty("parameterKey", nameKey);
+        connect(nameEdit, &QLineEdit::editingFinished, this,
+                [this, i, nameEdit, nameKey]() {
             applyChange([i, nameEdit](ParameterState &s) {
                 if (i < (int)s.rparams.sharpen.scanner_mtf.measurements.size()) {
                     s.rparams.sharpen.scanner_mtf.measurements[i].name = nameEdit->text().toStdString();
                 }
-            }, tr("Change MTF measurement name"));
+            }, tr("Change MTF measurement name"), nameKey);
         });
         hLayout->addWidget(nameEdit, 1);
 
         // Channel
         QComboBox *chanCombo = new QComboBox();
+        const QString channelKey =
+            measurementKeyBase + QStringLiteral(".channel");
+        chanCombo->setProperty("parameterKey", channelKey);
         chanCombo->addItem(tr("Unknown"), -1);
         chanCombo->addItem(tr("Red"), 0);
         chanCombo->addItem(tr("Green"), 1);
@@ -1634,18 +1662,22 @@ void SharpnessPanel::updateMeasurementList() {
         if (idx != -1) chanCombo->setCurrentIndex(idx);
         chanCombo->setFixedWidth(100);
 
-        connect(chanCombo, QOverload<int>::of(&QComboBox::activated), this, [this, i, chanCombo](int index) {
+        connect(chanCombo, QOverload<int>::of(&QComboBox::activated), this,
+                [this, i, chanCombo, channelKey](int index) {
             int val = chanCombo->itemData(index).toInt();
             applyChange([i, val](ParameterState &s) {
                 if (i < (int)s.rparams.sharpen.scanner_mtf.measurements.size()) {
                     s.rparams.sharpen.scanner_mtf.measurements[i].channel = val;
                 }
-            }, tr("Change MTF measurement channel"));
+            }, tr("Change MTF measurement channel"), channelKey);
         });
         hLayout->addWidget(chanCombo);
 
         // Wavelength
         QDoubleSpinBox *waveSpin = new QDoubleSpinBox();
+        const QString wavelengthKey =
+            measurementKeyBase + QStringLiteral(".wavelength");
+        waveSpin->setProperty("parameterKey", wavelengthKey);
         waveSpin->setRange(0, 2000);
         waveSpin->setValue(m.wavelength);
         waveSpin->setSuffix(" nm");
@@ -1655,18 +1687,22 @@ void SharpnessPanel::updateMeasurementList() {
             tr("Authoritative wavelength of this measured edge. Channel is "
                "only a label and does not disable this field."));
         waveSpin->setFixedWidth(120);
-        connect(waveSpin, &QDoubleSpinBox::editingFinished, this, [this, i, waveSpin]() {
+        connect(waveSpin, &QDoubleSpinBox::editingFinished, this,
+                [this, i, waveSpin, wavelengthKey]() {
             double val = waveSpin->value();
             applyChange([i, val](ParameterState &s) {
                 if (i < (int)s.rparams.sharpen.scanner_mtf.measurements.size()) {
                     s.rparams.sharpen.scanner_mtf.measurements[i].wavelength = val;
                 }
-            }, tr("Change MTF measurement wavelength"));
+            }, tr("Change MTF measurement wavelength"), wavelengthKey);
         });
         hLayout->addWidget(waveSpin);
 
         // Same capture
         QCheckBox *sameCheck = new QCheckBox();
+        const QString sameCaptureKey =
+            measurementKeyBase + QStringLiteral(".same_capture");
+        sameCheck->setProperty("parameterKey", sameCaptureKey);
         sameCheck->setFixedWidth(50);
         sameCheck->setToolTip(
             tr("Share the fitted focus displacement with the preceding "
@@ -1677,12 +1713,13 @@ void SharpnessPanel::updateMeasurementList() {
             sameCheck->setEnabled(false);
         }
 
-        connect(sameCheck, &QCheckBox::toggled, this, [this, i](bool v) {
+        connect(sameCheck, &QCheckBox::toggled, this,
+                [this, i, sameCaptureKey](bool v) {
             applyChange([i, v](ParameterState &s) {
                 if (i < (int)s.rparams.sharpen.scanner_mtf.measurements.size()) {
                     s.rparams.sharpen.scanner_mtf.measurements[i].same_capture = v;
                 }
-            }, tr("Change MTF measurement same capture"));
+            }, tr("Change MTF measurement same capture"), sameCaptureKey);
         });
         hLayout->addWidget(sameCheck);
 

@@ -17,6 +17,8 @@
 #include <QEvent>
 #include <QFont>
 #include <QLabel>
+#include <QLineEdit>
+#include <QMetaObject>
 #include <QList>
 #include <QMdiArea>
 #include <QMdiSubWindow>
@@ -324,6 +326,12 @@ QWidget *colorObserverWhitepointField = inspector->findChild<QWidget *>(
     QStringLiteral("ColorObserverWhitepointField"));
 QWidget *colorToneCurveWidget = inspector->findChild<QWidget *>(
     QStringLiteral("ColorToneCurveWidget"));
+QCheckBox *sharpnessSignedOtfCheck = inspector->findChild<QCheckBox *>(
+    QStringLiteral("SharpnessSignedOtfCheck"));
+QCheckBox *sharpnessOptimizeSigmaCheck = inspector->findChild<QCheckBox *>(
+    QStringLiteral("SharpnessOptimizeSigmaCheck"));
+QCheckBox *sharpnessOptimizeDefocusCheck = inspector->findChild<QCheckBox *>(
+    QStringLiteral("SharpnessOptimizeDefocusCheck"));
 bool captureChoicesCompatible = captureTypeCombo != nullptr;
 if (captureTypeCombo && first->sharedImageData()) {
   for (int i = 0; i < captureTypeCombo->count(); ++i) {
@@ -378,6 +386,13 @@ auto findParameterSpinBox = [inspector](const QString &parameterKey) {
     if (spin && spin->property("parameterKey").toString() == parameterKey)
       return spin;
   return static_cast<QDoubleSpinBox *>(nullptr);
+};
+auto findParameterLineEdit = [inspector](const QString &parameterKey) {
+  const QList<QLineEdit *> edits = inspector->findChildren<QLineEdit *>();
+  for (QLineEdit *edit : edits)
+    if (edit && edit->property("parameterKey").toString() == parameterKey)
+      return edit;
+  return static_cast<QLineEdit *>(nullptr);
 };
 auto hasParameterKey = [inspector](const QString &parameterKey) {
   const QList<QWidget *> widgets = inspector->findChildren<QWidget *>();
@@ -1014,6 +1029,114 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
           fail(QStringLiteral("Workspace churn crossed the Color saved-state/presentation boundary"));
           return;
         }
+
+
+        // Sharpness is the eighth complete stable-key migration. Saved
+        // deconvolution/MTF controls carry sharpness.* identities, while chart
+        // presentation and focus-analysis setup remain panel-local state.
+        const QStringList sharpnessParameterKeys = {
+            QStringLiteral("sharpness.mode"),
+            QStringLiteral("sharpness.capture.use_measured_mtf"),
+            QStringLiteral("sharpness.capture.sigma"),
+            QStringLiteral("sharpness.capture.defocus"),
+            QStringLiteral("sharpness.capture.halo_fraction"),
+            QStringLiteral("sharpness.capture.halo_sigma"),
+            QStringLiteral("sharpness.capture.blur_diameter"),
+            QStringLiteral("sharpness.capture.mtf_scale"),
+            QStringLiteral("sharpness.deconvolution.supersample"),
+            QStringLiteral("sharpness.deconvolution.kernel"),
+            QStringLiteral("sharpness.wiener.snr"),
+            QStringLiteral("sharpness.richardson_lucy.iterations"),
+            QStringLiteral("sharpness.richardson_lucy.sigma"),
+            QStringLiteral("sharpness.unsharp.radius"),
+            QStringLiteral("sharpness.unsharp.amount")};
+        for (const QString &key : sharpnessParameterKeys) {
+          if (!hasParameterKey(key)) {
+            fail(QStringLiteral("Workspace churn lost Sharpness parameter key %1")
+                     .arg(key));
+            return;
+          }
+        }
+        if (!sharpnessSignedOtfCheck || !sharpnessOptimizeSigmaCheck ||
+            !sharpnessOptimizeDefocusCheck || !mtfFitButton ||
+            !mtfMeasurementSelector ||
+            !sharpnessSignedOtfCheck->property("parameterKey").toString().isEmpty() ||
+            !sharpnessOptimizeSigmaCheck->property("parameterKey")
+                 .toString().isEmpty() ||
+            !sharpnessOptimizeDefocusCheck->property("parameterKey")
+                 .toString().isEmpty() ||
+            !mtfFitButton->property("parameterKey").toString().isEmpty() ||
+            !mtfMeasurementSelector->property("parameterKey").toString().isEmpty()) {
+          fail(QStringLiteral(
+              "Workspace churn crossed the Sharpness saved-state/presentation boundary"));
+          return;
+        }
+
+        // Measurement metadata rows share visible labels across records. Give
+        // each row target-specific merge identity and prove two adjacent name
+        // edits require two Undo steps.
+        const ParameterState sharpnessMeasurementBaseline =
+            first->documentStateSnapshot();
+        ParameterState sharpnessMeasurementState = sharpnessMeasurementBaseline;
+        auto &sharpnessMeasurements =
+            sharpnessMeasurementState.rparams.sharpen.scanner_mtf.measurements;
+        sharpnessMeasurements.clear();
+        colorscreen::mtf_measurement firstMeasurement;
+        firstMeasurement.name = "First";
+        colorscreen::mtf_measurement secondMeasurement;
+        secondMeasurement.name = "Second";
+        sharpnessMeasurements.push_back(firstMeasurement);
+        sharpnessMeasurements.push_back(secondMeasurement);
+        sharpnessMeasurementState.rparams.sharpen.scanner_mtf.measured_mtf_idx = -1;
+        first->applyState(sharpnessMeasurementState);
+
+        QLineEdit *firstMeasurementName = findParameterLineEdit(
+            QStringLiteral("sharpness.measurements.0.name"));
+        QLineEdit *secondMeasurementName = findParameterLineEdit(
+            QStringLiteral("sharpness.measurements.1.name"));
+        if (!firstMeasurementName || !secondMeasurementName) {
+          fail(QStringLiteral(
+              "Workspace churn lost target-aware Sharpness measurement keys"));
+          return;
+        }
+        firstMeasurementName->setText(QStringLiteral("First edited"));
+        secondMeasurementName->setText(QStringLiteral("Second edited"));
+        QMetaObject::invokeMethod(firstMeasurementName, "editingFinished",
+                                  Qt::DirectConnection);
+        QMetaObject::invokeMethod(secondMeasurementName, "editingFinished",
+                                  Qt::DirectConnection);
+        ParameterState afterSharpnessMeasurementEdits =
+            first->documentStateSnapshot();
+        const auto &afterMeasurements =
+            afterSharpnessMeasurementEdits.rparams.sharpen.scanner_mtf.measurements;
+        if (afterMeasurements.size() != 2 ||
+            afterMeasurements[0].name != "First edited" ||
+            afterMeasurements[1].name != "Second edited") {
+          fail(QStringLiteral(
+              "Sharpness measurement editors did not update distinct records"));
+          return;
+        }
+        undoParametersAction->trigger();
+        const auto &afterSecondMeasurementUndo =
+            first->documentStateSnapshot().rparams.sharpen.scanner_mtf.measurements;
+        if (afterSecondMeasurementUndo.size() != 2 ||
+            afterSecondMeasurementUndo[0].name != "First edited" ||
+            afterSecondMeasurementUndo[1].name != "Second") {
+          fail(QStringLiteral(
+              "Undo merged Sharpness measurement-name edits across records"));
+          return;
+        }
+        undoParametersAction->trigger();
+        const auto &afterFirstMeasurementUndo =
+            first->documentStateSnapshot().rparams.sharpen.scanner_mtf.measurements;
+        if (afterFirstMeasurementUndo.size() != 2 ||
+            afterFirstMeasurementUndo[0].name != "First" ||
+            afterFirstMeasurementUndo[1].name != "Second") {
+          fail(QStringLiteral(
+              "Second Undo did not restore both Sharpness measurement names"));
+          return;
+        }
+        first->applyState(sharpnessMeasurementBaseline);
 
         const QStringList captureDefaultKeys = {
             QStringLiteral("capture.gamma"),
