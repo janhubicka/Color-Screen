@@ -877,7 +877,7 @@ QWidget *ParameterPanel::addSliderParameter(
   return container;
 }
 
-QWidget* ParameterPanel::addSlider(
+ParameterPanel::SliderWidgets ParameterPanel::addSliderControls(
     const QString &label, double min, double max, double scale, int decimals,
     const QString &suffix, const QString &specialValueText,
     double initialValue,
@@ -939,7 +939,19 @@ QWidget* ParameterPanel::addSlider(
   spin->setValue(initialValue);
   slider->setValue(valueMapping.valueToSlider(initialValue));
 
-  return container;
+  return {container, slider, spin};
+}
+
+QWidget *ParameterPanel::addSlider(
+    const QString &label, double min, double max, double scale, int decimals,
+    const QString &suffix, const QString &specialValueText,
+    double initialValue, std::function<void(double)> onChanged, double gamma,
+    bool logarithmic, const QString &tooltip) {
+  const SliderWidgets widgets =
+      addSliderControls(label, min, max, scale, decimals, suffix,
+                        specialValueText, initialValue, onChanged, gamma,
+                        logarithmic, tooltip);
+  return widgets.container;
 }
 
 QComboBox *ParameterPanel::addEnumParameter(

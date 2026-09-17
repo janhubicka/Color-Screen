@@ -323,7 +323,7 @@ void CapturePanel::setupUi()
     // Sensor width is a derived presentation of the saved pixel-pitch
     // parameter, so it deliberately shares the same stable parameter key.
     const QString pixelPitchKey = QStringLiteral("capture.mtf.pixel_pitch");
-    QWidget *sensorWidthSlider = addSlider(
+    const SliderWidgets sensorWidthSlider = addSliderControls(
         "Sensor width", 0.0, 1000.0, 10.0, 2, "mm", "unknown",
         0.0,
         [this, pixelPitchKey](double v) {
@@ -341,13 +341,11 @@ void CapturePanel::setupUi()
             }
         }
     );
-    sensorWidthSlider->setObjectName(QStringLiteral("CaptureSensorWidthField"));
-    sensorWidthSlider->setProperty("parameterKey", pixelPitchKey);
-    if (QSlider *slider = sensorWidthSlider->findChild<QSlider *>())
-      slider->setProperty("parameterKey", pixelPitchKey);
-    if (QDoubleSpinBox *spin =
-            sensorWidthSlider->findChild<QDoubleSpinBox *>())
-      spin->setProperty("parameterKey", pixelPitchKey);
+    sensorWidthSlider.container->setObjectName(
+        QStringLiteral("CaptureSensorWidthField"));
+    sensorWidthSlider.container->setProperty("parameterKey", pixelPitchKey);
+    sensorWidthSlider.slider->setProperty("parameterKey", pixelPitchKey);
+    sensorWidthSlider.spin->setProperty("parameterKey", pixelPitchKey);
 
     // 13b. Rotation assumption
     m_assumeRotationBox = new QCheckBox("Assume 90 degrees rotation");
@@ -679,21 +677,11 @@ void CapturePanel::setupUi()
         if (img && img->width > 0) {
             double divisor = (m_assumeRotationBox->isChecked() && img->height > 0) ? img->height : img->width;
             double width_mm = (state.rparams.sharpen.scanner_mtf.pixel_pitch * divisor) / 1000.0;
-            // Need to update the slider without triggering onChanged to avoid feedback loops?
-            // ParameterPanel::addSlider returns the container. I need the slider inside.
-            QSlider *slider = sensorWidthSlider->findChild<QSlider*>();
-            QDoubleSpinBox *spin = sensorWidthSlider->findChild<QDoubleSpinBox*>();
-            if (slider && spin) {
-                QSignalBlocker signalBlocker3(slider);
-                QSignalBlocker signalBlocker4(spin);
-                // Value to slider mapping is internal to addSlider... 
-                // Re-calculating slider value:
-                // The scale was 10.0 in addSlider call for sensor width
-                spin->setValue(width_mm);
-                slider->setValue(qRound(width_mm * 10.0)); 
-                signalBlocker3.unblock();
-                signalBlocker4.unblock();
-            }
+            QSignalBlocker sliderBlocker(sensorWidthSlider.slider);
+            QSignalBlocker spinBlocker(sensorWidthSlider.spin);
+            sensorWidthSlider.spin->setValue(width_mm);
+            // Sensor width uses a 10x linear slider scale.
+            sensorWidthSlider.slider->setValue(qRound(width_mm * 10.0));
         }
 
         // 6b. EXIF Resolution

@@ -113,14 +113,13 @@ void GeometryPanel::setupUi() {
   }, hasConfiguredGeometry, "Select an area and automatically identify and add registration points within it.");
 
   auto setupFinetuneSlider = [this](const QString &label, double min, double max, double scale, int decimals, double initial, auto member, double gamma = 1.0, bool logarithmic = false, const QString &tooltip = QString()) {
-      QWidget *container = addSlider(label, min, max, scale, decimals, "", "", initial, [this, member](double v) {
+      SliderWidgets widgets = addSliderControls(label, min, max, scale, decimals, "", "", initial, [this, member](double v) {
           using MemberType = std::remove_reference_t<decltype(m_finetuneAreaParams.*member)>;
           (m_finetuneAreaParams.*member) = static_cast<MemberType>(v);
           updateRegistrationPointInfo(m_stateGetter());
       }, gamma, logarithmic, tooltip);
-      QDoubleSpinBox *spin = container->findChild<QDoubleSpinBox*>();
-      if (spin) spin->setMinimumWidth(110);
-      return spin;
+      widgets.spin->setMinimumWidth(110);
+      return widgets.spin;
   };
 
   m_gridWidthSpin = setupFinetuneSlider("Grid width", 0, 2000, 1, 0, 0, &colorscreen::finetune_area_parameters::grid_width, 1.0, false, "Number of grid columns for automatic registration. 0 uses a default value based on image size.");
