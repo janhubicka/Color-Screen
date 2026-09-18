@@ -254,6 +254,45 @@ void startWorkspaceChurnSmoke(ColorScreenApplication &app,
           return;
         }
 
+        // Replacement image loads use a generation gate: a newer request
+        // cancels every progress object owned by the old generation, and a
+        // late old completion must not clear the current request's pending bit.
+        {
+          MainWindow::ImageLoadState loadState;
+          const uint64_t firstGeneration = loadState.begin();
+          auto firstLoad =
+              std::make_shared<colorscreen::progress_info>();
+          auto firstTile =
+              std::make_shared<colorscreen::progress_info>();
+          loadState.setLoadProgress(firstGeneration, firstLoad);
+          loadState.addTileProgress(firstGeneration, firstTile);
+
+          const uint64_t secondGeneration = loadState.begin();
+          if (!firstLoad->pool_cancel() || !firstTile->pool_cancel() ||
+              loadState.current(firstGeneration) ||
+              !loadState.current(secondGeneration) || !loadState.pending) {
+            fail(QStringLiteral(
+                "Image-load replacement did not cancel and supersede the old generation"));
+            return;
+          }
+
+          auto secondLoad =
+              std::make_shared<colorscreen::progress_info>();
+          loadState.setLoadProgress(secondGeneration, secondLoad);
+          loadState.finish(firstGeneration);
+          if (!loadState.pending) {
+            fail(QStringLiteral(
+                "Stale image-load completion cleared the current generation"));
+            return;
+          }
+          loadState.finish(secondGeneration);
+          if (loadState.pending || secondLoad->pool_cancel()) {
+            fail(QStringLiteral(
+                "Current image-load completion did not settle its generation"));
+            return;
+          }
+        }
+
         // Attached documents deliberately reparent their inspector column into
         // WorkspaceWindow's shared inspector stack.  Follow the document-owned
         // inspector handle rather than relying on QObject parentage.

@@ -428,6 +428,7 @@ MainWindow::~MainWindow() {
   m_solverQueue.cancelAll();
   m_colorOptimizerQueue.cancelAll();
   m_oneShotOperations.cancelAll();
+  m_imageLoadState.cancel();
   m_progressController.cancelAll();
   // Result delivery from persistent workers is no longer useful once teardown
   // starts. Disconnect before joining one-shot workers because shutdown may
@@ -3005,7 +3006,7 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
   // current image snapshot. Invalidate both before starting replacement I/O.
   dismissOneShotPrompts();
   m_oneShotOperations.cancelAll();
-  m_imageLoadPending = true;
+  const uint64_t loadGeneration = m_imageLoadState.begin();
   bool parameterDataLoaded = false;
   if (!suppressParamPrompt)
     m_recoveryDirty = false;
@@ -3091,6 +3092,7 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
 
   auto progress = std::make_shared<colorscreen::progress_info>();
   progress->set_task("Opening image", 0);
+  m_imageLoadState.setLoadProgress(loadGeneration, progress);
   addProgress(progress);
 
   std::shared_ptr<colorscreen::image_data> tempScan =
@@ -3106,15 +3108,24 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
   connect(
       watcher, &QFutureWatcher<std::pair<bool, QString>>::finished, this,
       [this, watcher, tempScan, progress, fileName, isCsprj,
-       allowInitialGuide, suggestDetectedMetadata]() {
+       allowInitialGuide, suggestDetectedMetadata, loadGeneration]() {
         if (m_closing) {
           watcher->deleteLater();
           return;
         }
-        std::pair<bool, QString> result = watcher->result();
-        m_imageLoadPending = false;
+        std::pair<bool, QString> result;
+        try {
+          result = watcher->result();
+        } catch (const std::exception &error) {
+          result = {false, QString::fromUtf8(error.what())};
+        } catch (...) {
+          result = {false, tr("Unexpected exception while loading image.")};
+        }
         removeProgress(progress);
         watcher->deleteLater();
+        if (!m_imageLoadState.current(loadGeneration))
+          return;
+        m_imageLoadState.finish(loadGeneration);
 
         if (result.first) {
           m_detectedScreenMap.reset();
@@ -3162,7 +3173,10 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
             const colorscreen::monochrome_bayer_analysis analysis =
                 m_scan->analyze_monochrome_bayer();
             QTimer::singleShot(
-                0, this, [this, analysis, suggestDetectedMetadata]() {
+                0, this,
+                [this, analysis, suggestDetectedMetadata, loadGeneration]() {
+                  if (!m_imageLoadState.current(loadGeneration))
+                    return;
                   maybeOfferInitialSetupGuide(analysis,
                                               suggestDetectedMetadata);
                 });
@@ -3180,6 +3194,7 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
                     std::make_shared<colorscreen::progress_info>();
                 tileProgress->set_task(
                     qPrintable(tr("Loading tile %1,%2").arg(tx).arg(ty)), 1);
+                m_imageLoadState.addTileProgress(loadGeneration, tileProgress);
                 addProgress(tileProgress);
 
                 auto scanRef = m_scan; // keep scan alive
@@ -3189,14 +3204,28 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
                 auto *tileWatcher = new QFutureWatcher<bool>(this);
                 connect(tileWatcher, &QFutureWatcher<bool>::finished, this,
                         [this, tileWatcher, tileProgress, scanRef, capturedX,
-                         capturedY]() {
+                         capturedY, loadGeneration]() {
                           if (m_closing) {
                             tileWatcher->deleteLater();
                             return;
                           }
-                          bool ok = tileWatcher->result();
+                          bool ok = false;
+                          try {
+                            ok = tileWatcher->result();
+                          } catch (const std::exception &error) {
+                            qWarning() << "Stitch tile load threw:"
+                                       << error.what();
+                          } catch (...) {
+                            qWarning()
+                                << "Stitch tile load threw an unknown exception";
+                          }
                           removeProgress(tileProgress);
+                          m_imageLoadState.finishTileProgress(tileProgress);
                           tileWatcher->deleteLater();
+
+                          if (!m_imageLoadState.current(loadGeneration) ||
+                              m_scan != scanRef)
+                            return;
 
                           if (ok) {
                             // Enable the tile and trigger a re-render.
@@ -3934,7 +3963,7 @@ bool MainWindow::isDocumentModified() const {
 
 /** Return whether a new image may safely reuse this document window. */
 bool MainWindow::canReuseForOpen() const {
-  return !m_closing && !m_scan && !m_imageLoadPending &&
+  return !m_closing && !m_scan && !m_imageLoadState.pending &&
          m_currentImageFile.isEmpty() && !isDocumentModified();
 }
 
@@ -4041,6 +4070,7 @@ void MainWindow::closeEvent(QCloseEvent *event) {
   dismissOneShotPrompts();
 
   // Cancel all active processes.
+  m_imageLoadState.cancel();
   m_progressController.cancelAll();
 
   // Clean up recovery files on normal exit

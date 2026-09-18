@@ -17,6 +17,7 @@
 #include <QPointer>
 #include <QString>
 #include <QVBoxLayout>
+#include <algorithm>
 #include <functional>
 #include <map>
 #include <memory>
@@ -708,7 +709,81 @@ private:
   QString m_currentImageFile;
   QString m_currentParamsFile;
   bool m_currentParamsFileIsWeak = false; // true if filename is suggested, not loaded
-  bool m_imageLoadPending = false;
+
+  /** Replacement-image load state. A newer generation cancels prior work and
+      makes every older load/tile completion stale before it can publish. */
+  struct ImageLoadState {
+    uint64_t generation = 0;
+    bool pending = false;
+    std::weak_ptr<colorscreen::progress_info> loadProgress;
+    std::vector<std::weak_ptr<colorscreen::progress_info>> tileProgresses;
+
+    /** Cancel the old generation and start a new replacement request. */
+    uint64_t begin() {
+      cancel();
+      ++generation;
+      pending = true;
+      return generation;
+    }
+
+    /** Return whether CANDIDATE still owns publication. */
+    bool current(uint64_t candidate) const { return candidate == generation; }
+
+    /** Associate the main load progress with CANDIDATE. */
+    void setLoadProgress(
+        uint64_t candidate,
+        const std::shared_ptr<colorscreen::progress_info> &progress) {
+      if (current(candidate))
+        loadProgress = progress;
+      else if (progress)
+        progress->cancel();
+    }
+
+    /** Track one stitch-tile load owned by CANDIDATE. */
+    void addTileProgress(
+        uint64_t candidate,
+        const std::shared_ptr<colorscreen::progress_info> &progress) {
+      if (current(candidate))
+        tileProgresses.emplace_back(progress);
+      else if (progress)
+        progress->cancel();
+    }
+
+    /** Finish the main load only when CANDIDATE is still current. */
+    void finish(uint64_t candidate) {
+      if (!current(candidate))
+        return;
+      pending = false;
+      loadProgress.reset();
+    }
+
+    /** Forget one completed tile progress from this generation. */
+    void finishTileProgress(
+        const std::shared_ptr<colorscreen::progress_info> &progress) {
+      tileProgresses.erase(
+          std::remove_if(
+              tileProgresses.begin(), tileProgresses.end(),
+              [&progress](const auto &candidate) {
+                const auto locked = candidate.lock();
+                return !locked || locked == progress;
+              }),
+          tileProgresses.end());
+    }
+
+    /** Cooperatively cancel every load/tile task owned by this state. */
+    void cancel() {
+      if (auto progress = loadProgress.lock())
+        progress->cancel();
+      for (const auto &candidate : tileProgresses)
+        if (auto progress = candidate.lock())
+          progress->cancel();
+      loadProgress.reset();
+      tileProgresses.clear();
+      pending = false;
+    }
+  };
+  ImageLoadState m_imageLoadState;
+
   bool m_recoveryDirty = false;
   bool m_closing = false;
   bool m_applicationClosePrepared = false;
