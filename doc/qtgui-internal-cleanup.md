@@ -479,9 +479,12 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   publication. Stable replaceable one-shot queue/publication mechanics live in
   `OneShotOperationController`; transient/dedicated task presentation,
   switching, delayed visibility and row bookkeeping live in
-  `DocumentProgressController`. MainWindow still owns workspace/focus policy
-  and file-render confirmation. Continue moving cohesive infrastructure behind
-  focused controllers/services when the interface is similarly stable.
+  `DocumentProgressController`; accepted file-render jobs, future/watcher
+  lifetime, cancellation identity and incomplete-output cleanup live in
+  `FileRenderController`. MainWindow still owns workspace/focus policy plus
+  save-path/render-settings dialogs and document snapshots. Continue moving
+  cohesive infrastructure behind focused controllers/services when the
+  interface is similarly stable.
 - Give long-lived analysis state explicit structs rather than parallel member
   variables. Profile-calibration, geometry-fit, measured-MTF fit, and automatic
   multi-area focus analysis now each live in one lifecycle struct instead of

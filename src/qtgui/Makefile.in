@@ -119,6 +119,7 @@ am_colorscreen_qt_OBJECTS = colorscreen_qt-main.$(OBJEXT) \
 	colorscreen_qt-ImageViewWindow.$(OBJEXT) \
 	colorscreen_qt-MainWindow.$(OBJEXT) \
 	colorscreen_qt-DocumentProgressController.$(OBJEXT) \
+	colorscreen_qt-FileRenderController.$(OBJEXT) \
 	colorscreen_qt-OneShotOperationController.$(OBJEXT) \
 	colorscreen_qt-InitialSetupGuideDialog.$(OBJEXT) \
 	colorscreen_qt-ImageWidget.$(OBJEXT) \
@@ -284,6 +285,7 @@ am__depfiles_remade =  \
 	./$(DEPDIR)/colorscreen_qt-MTFFitDialog.Po \
 	./$(DEPDIR)/colorscreen_qt-MainWindow.Po \
 	./$(DEPDIR)/colorscreen_qt-DocumentProgressController.Po \
+	./$(DEPDIR)/colorscreen_qt-FileRenderController.Po \
 	./$(DEPDIR)/colorscreen_qt-OneShotOperationController.Po \
 	./$(DEPDIR)/colorscreen_qt-MeasureDialog.Po \
 	./$(DEPDIR)/colorscreen_qt-MultiLineTabWidget.Po \
@@ -551,6 +553,7 @@ colorscreen_qt_SOURCES = \
     ImageViewWindow.cpp \
     MainWindow.cpp \
     DocumentProgressController.cpp \
+    FileRenderController.cpp \
     OneShotOperationController.cpp \
     InitialSetupGuideDialog.cpp \
     ImageWidget.cpp \
@@ -656,7 +659,7 @@ MOC_SOURCES = \
 EXTRA_DIST = ColorScreenApplication.h DocumentLifecycleSmoke.h \
 	WorkspaceChurnSmoke.h WorkspaceWindow.h ImageViewWindow.h \
 	ImageWidget.h CapturePanel.h MainWindow.h DocumentProgressController.h \
-	OneShotOperationController.h ChangeParametersCommand.h \
+	FileRenderController.h OneShotOperationController.h ChangeParametersCommand.h \
 	InitialSetupGuideDialog.h MTFChartWidget.h \
 	DeformationChartWidget.h FinetuneImagesPanel.h \
 	BacklightChartWidget.h ColorUtils.h NavigationView.h \
@@ -827,6 +830,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-MTFFitDialog.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-MainWindow.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-DocumentProgressController.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-FileRenderController.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-OneShotOperationController.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-MeasureDialog.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-MultiLineTabWidget.Po@am__quote@ # am--include-marker
@@ -1037,6 +1041,20 @@ colorscreen_qt-DocumentProgressController.obj: DocumentProgressController.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='DocumentProgressController.cpp' object='colorscreen_qt-DocumentProgressController.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-DocumentProgressController.obj `if test -f 'DocumentProgressController.cpp'; then $(CYGPATH_W) 'DocumentProgressController.cpp'; else $(CYGPATH_W) '$(srcdir)/DocumentProgressController.cpp'; fi`
+
+colorscreen_qt-FileRenderController.o: FileRenderController.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-FileRenderController.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-FileRenderController.Tpo -c -o colorscreen_qt-FileRenderController.o `test -f 'FileRenderController.cpp' || echo '$(srcdir)/'`FileRenderController.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-FileRenderController.Tpo $(DEPDIR)/colorscreen_qt-FileRenderController.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='FileRenderController.cpp' object='colorscreen_qt-FileRenderController.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-FileRenderController.o `test -f 'FileRenderController.cpp' || echo '$(srcdir)/'`FileRenderController.cpp
+
+colorscreen_qt-FileRenderController.obj: FileRenderController.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-FileRenderController.obj -MD -MP -MF $(DEPDIR)/colorscreen_qt-FileRenderController.Tpo -c -o colorscreen_qt-FileRenderController.obj `if test -f 'FileRenderController.cpp'; then $(CYGPATH_W) 'FileRenderController.cpp'; else $(CYGPATH_W) '$(srcdir)/FileRenderController.cpp'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-FileRenderController.Tpo $(DEPDIR)/colorscreen_qt-FileRenderController.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='FileRenderController.cpp' object='colorscreen_qt-FileRenderController.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-FileRenderController.obj `if test -f 'FileRenderController.cpp'; then $(CYGPATH_W) 'FileRenderController.cpp'; else $(CYGPATH_W) '$(srcdir)/FileRenderController.cpp'; fi`
 
 colorscreen_qt-OneShotOperationController.o: OneShotOperationController.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-OneShotOperationController.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-OneShotOperationController.Tpo -c -o colorscreen_qt-OneShotOperationController.o `test -f 'OneShotOperationController.cpp' || echo '$(srcdir)/'`OneShotOperationController.cpp
@@ -2566,6 +2584,7 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-MTFFitDialog.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-MainWindow.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-DocumentProgressController.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-FileRenderController.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-OneShotOperationController.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-MeasureDialog.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-MultiLineTabWidget.Po
@@ -2716,6 +2735,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-MTFFitDialog.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-MainWindow.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-DocumentProgressController.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-FileRenderController.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-OneShotOperationController.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-MeasureDialog.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-MultiLineTabWidget.Po
