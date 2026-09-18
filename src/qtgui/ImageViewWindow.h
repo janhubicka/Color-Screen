@@ -211,12 +211,17 @@ private:
   bool m_referenceLoadPending = false;
   QString m_referenceFile;
   int m_selectedMtfMeasurement = -1;
-  std::mutex m_referenceLoadMutex;
-  std::condition_variable m_referenceLoadCondition;
-  bool m_referenceWorkerActive = false;
-  bool m_referenceLoadOk = false;
-  QString m_referenceLoadError;
-  std::shared_ptr<colorscreen::image_data> m_pendingReferenceScan;
+  /** Mutex-published worker/result handoff for one asynchronous reference load.
+      GUI-thread request state remains separate in m_referenceLoadPending. */
+  struct ReferenceLoadState {
+    std::mutex mutex;
+    std::condition_variable condition;
+    bool workerActive = false;
+    bool ok = false;
+    QString error;
+    std::shared_ptr<colorscreen::image_data> pendingScan;
+  };
+  ReferenceLoadState m_referenceLoad;
 
   std::shared_ptr<colorscreen::image_data> m_scan;
   colorscreen::render_parameters m_rparams;
