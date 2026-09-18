@@ -58,6 +58,7 @@ class QThread;
 #include "TaskQueue.h"
 #include "OneShotOperationController.h"
 #include "DocumentProgressController.h"
+#include "FileRenderController.h"
 #include "BacklightChartWidget.h"
 
 class ScreenPanel;
@@ -667,10 +668,8 @@ private slots:
 
 private:
   DocumentProgressController m_progressController;
+  FileRenderController m_fileRenderController;
   QTimer *m_recoveryTimer;  // Auto-save timer for crash recovery
-
-  // Tracks the active file render so cancellation/close can ask for confirmation.
-  std::weak_ptr<colorscreen::progress_info> m_renderProgress;
 
   /** Return focus from a disappearing long-task row to an image canvas. */
   void releaseUserVisibleProgressFocus(QWidget *row);

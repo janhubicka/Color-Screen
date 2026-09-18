@@ -328,6 +328,27 @@ MainWindow::MainWindow(const QString &recoveryDirectory, QWidget *parent)
 
   setupUi();
 
+  m_fileRenderController.configure(
+      {[this]() { return m_closing; },
+       [this](std::shared_ptr<colorscreen::progress_info> progress,
+              const QString &title) {
+         addUserVisibleProgress(std::move(progress), title);
+       },
+       [this](std::shared_ptr<colorscreen::progress_info> progress) {
+         removeProgress(std::move(progress));
+       },
+       [this](const QString &outputPath, bool success, bool cancelled) {
+         if (cancelled) {
+           statusBar()->showMessage(tr("Render cancelled"), 3000);
+         } else if (success) {
+           statusBar()->showMessage(tr("Rendered to %1").arg(outputPath), 5000);
+         } else {
+           QMessageBox::critical(
+               this, tr("Render Failed"),
+               tr("Failed to render to:\n%1").arg(outputPath));
+         }
+       }});
+
   // Set up per-document recovery auto-save timer (30 seconds)
   m_recoveryTimer = new QTimer(this);
   m_recoveryTimer->setInterval(30000); // 30 seconds
@@ -428,6 +449,7 @@ MainWindow::~MainWindow() {
   m_solverQueue.cancelAll();
   m_colorOptimizerQueue.cancelAll();
   m_oneShotOperations.cancelAll();
+  m_fileRenderController.cancelAll();
   m_progressController.cancelAll();
   // Result delivery from persistent workers is no longer useful once teardown
   // starts. Disconnect before joining one-shot workers because shutdown may
@@ -1178,9 +1200,8 @@ void MainWindow::setupUi() {
   progressCallbacks.confirmTermination =
       [this](const std::shared_ptr<colorscreen::progress_info> &info,
              ProgressAction action) {
-        const auto renderProgress = m_renderProgress.lock();
-        if (action != ProgressAction::Cancel || !renderProgress ||
-            renderProgress != info)
+        if (action != ProgressAction::Cancel ||
+            !m_fileRenderController.ownsProgress(info))
           return true;
         const auto result = QMessageBox::question(
             this, tr("Cancel Rendering"), tr("Cancel the current rendering?"),
@@ -3982,7 +4003,7 @@ bool MainWindow::confirmClose() {
   if (!maybeSave())
     return false;
 
-  if (!m_renderProgress.expired()) {
+  if (m_fileRenderController.hasActiveRenders()) {
     const auto result = QMessageBox::question(
         this, tr("Rendering in Progress"),
         tr("A render is currently in progress. Cancel it and close this window?"),
@@ -4041,6 +4062,7 @@ void MainWindow::closeEvent(QCloseEvent *event) {
   dismissOneShotPrompts();
 
   // Cancel all active processes.
+  m_fileRenderController.cancelAll();
   m_progressController.cancelAll();
 
   // Clean up recovery files on normal exit
@@ -6481,12 +6503,9 @@ QString MainWindow::presentFocusAreaAnalysisResult(
 }
 
 /** Render the current image to a TIFF or DNG file.
-   Shows a render settings dialog (RenderDialog) for output format,
-   scale, geometry, and antialiasing options.  Runs the render in a
-   background thread via QtConcurrent::run, tracking it with
-   m_renderProgress so the cancel button can prompt before aborting.
-   On completion, shows a status message or error; on cancellation,
-   removes the incomplete output file.  */
+   MainWindow chooses the path, presents RenderDialog, and snapshots accepted
+   document/settings state. FileRenderController owns background execution,
+   progress identity, cancellation, incomplete-file cleanup, and completion. */
 void MainWindow::onRender() {
   if (!m_scan) {
     QMessageBox::warning(this, tr("Render"),
@@ -6518,88 +6537,33 @@ void MainWindow::onRender() {
     dialog->setAttribute(Qt::WA_DeleteOnClose);
     connect(dialog, &QDialog::accepted, this,
             [this, dialog, outputPath, isDng]() {
-      // Snapshot current parameters (render runs in background).
+      // Snapshot current parameters and accepted dialog settings before the
+      // delete-on-close dialog disappears.
       auto scan = m_scan;
       if (!scan)
         return;
-      colorscreen::scr_to_img_parameters scrParams = m_scrToImgParams;
-      colorscreen::scr_detect_parameters detectParams = m_detectParams;
-      colorscreen::render_parameters rparams = m_rparams;
-      colorscreen::render_type_parameters rtparams = dialog->renderTypeParams();
-      rparams.output_profile = dialog->outputProfile();
-      std::string outputPathStd = outputPath.toStdString();
 
-      auto progress = std::make_shared<colorscreen::progress_info>();
-      m_renderProgress =
-          progress; // track so close/cancel can ask for confirmation
-      addUserVisibleProgress(
-          progress, tr("Rendering %1").arg(QFileInfo(outputPath).fileName()));
+      FileRenderController::Request request;
+      request.scan = std::move(scan);
+      request.scrParams = m_scrToImgParams;
+      request.detectParams = m_detectParams;
+      request.renderParams = m_rparams;
+      request.renderType = dialog->renderTypeParams();
+      request.renderParams.output_profile = dialog->outputProfile();
+      request.outputPath = outputPath;
+      request.progressTitle =
+          tr("Rendering %1").arg(QFileInfo(outputPath).fileName());
+      request.dng = isDng;
+      request.hdr = dialog->hdr();
+      request.depth = dialog->depth();
+      request.geometry = dialog->geometry();
+      request.antialias = dialog->antialias();
+      request.scale = dialog->scale();
+      request.screenScale = dialog->screenScale();
+      request.width = dialog->outputWidth();
+      request.height = dialog->outputHeight();
 
-      // Run render in background thread
-      auto *watcher = new QFutureWatcher<bool>(this);
-      connect(watcher, &QFutureWatcher<bool>::finished, this,
-              [this, watcher, progress, outputPath]() {
-                bool success = watcher->result();
-                bool cancelled = progress->pool_cancel();
-                m_renderProgress.reset(); // no longer active
-                if (!m_closing)
-                  removeProgress(progress);
-                watcher->deleteLater();
-                if (cancelled || !success) {
-                  // Remove the incomplete output file
-                  if (QFile::exists(outputPath))
-                    QFile::remove(outputPath);
-                }
-                if (m_closing)
-                  return;
-                if (cancelled) {
-                  statusBar()->showMessage(tr("Render cancelled"), 3000);
-                } else if (success) {
-                  statusBar()->showMessage(tr("Rendered to %1").arg(outputPath),
-                                           5000);
-                } else {
-                  QMessageBox::critical(
-                      this, tr("Render Failed"),
-                      tr("Failed to render to:\n%1").arg(outputPath));
-                }
-              });
-
-      // Extract all dialog results before the delete-on-close dialog disappears
-      // and before spawning the background thread.
-      bool renderHdr = dialog->hdr();
-      int renderDepth = dialog->depth();
-      auto renderGeometry = dialog->geometry();
-      int renderAntialias = dialog->antialias();
-      double renderScale = dialog->scale();
-      double renderScreenScale = dialog->screenScale();
-      int renderWidth = dialog->outputWidth();
-      int renderHeight = dialog->outputHeight();
-
-      QFuture<bool> future = QtConcurrent::run(
-          [scan, scrParams, detectParams, rparams, rtparams, outputPathStd, isDng,
-           progress, renderHdr, renderDepth, renderGeometry, renderAntialias,
-           renderScale, renderScreenScale, renderWidth,
-           renderHeight]() mutable -> bool {
-            colorscreen::render_to_file_params rfparams;
-            rfparams.filename = outputPathStd.c_str();
-            rfparams.verbose = false;
-            rfparams.dng = isDng;
-            rfparams.hdr = renderHdr;
-            rfparams.depth = renderDepth;
-            rfparams.geometry = renderGeometry;
-            rfparams.antialias = renderAntialias;
-            rfparams.scale = renderScale;
-            rfparams.screen_scale = renderScreenScale;
-            rfparams.width = renderWidth;
-            rfparams.height = renderHeight;
-
-            const char *error = nullptr;
-            return colorscreen::render_to_file(*scan, scrParams, detectParams,
-                                               rparams, rfparams, rtparams,
-                                               progress.get(), &error);
-          });
-
-      watcher->setFuture(future);
+      m_fileRenderController.start(std::move(request));
     });
     dialog->open();
   });

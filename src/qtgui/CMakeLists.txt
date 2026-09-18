@@ -43,6 +43,7 @@ set(SOURCES
     ImageViewWindow.cpp
     MainWindow.cpp
     DocumentProgressController.cpp
+    FileRenderController.cpp
     OneShotOperationController.cpp
     InitialSetupGuideDialog.cpp
     ImageWidget.cpp
@@ -80,6 +81,7 @@ set(HEADERS
     ImageViewWindow.h
     MainWindow.h
     DocumentProgressController.h
+    FileRenderController.h
     OneShotOperationController.h
     ChangeParametersCommand.h
     InitialSetupGuideDialog.h
