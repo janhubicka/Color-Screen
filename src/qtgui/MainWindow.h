@@ -642,7 +642,6 @@ private:
   colorscreen::solver_parameters m_solverParams;
   std::shared_ptr<const colorscreen::screen_map> m_detectedScreenMap;
   QPointer<QMessageBox> m_detectScreenPrompt;
-  QPointer<QMessageBox> m_focusAreaPrompt;
   bool m_showDetectedPatchCenters = false;
   /** Last slanted-edge setup used in this session.  Each accepted measurement
       stores an independent copy of its metadata, while the numerical controls
@@ -793,9 +792,16 @@ private:
   bool m_applicationClosePrepared = false;
   bool m_focusAnalysisPending = false;
   uint64_t m_focusAnalysisFlags = 0;
-  std::vector<colorscreen::finetune_focus_area_candidate> m_focusAreaCandidates;
-  colorscreen::finetune_focus_analysis_result m_focusAreaAnalysisResult;
-  bool m_focusAreaAnalysisRunning = false;
+  /** Session-local automatic multi-area focus-analysis state.
+      Candidate rectangles, accepted diagnostics, approval prompt and running
+      presentation share one lifecycle but never enter ParameterState. */
+  struct FocusAreaAnalysisState {
+    std::vector<colorscreen::finetune_focus_area_candidate> candidates;
+    colorscreen::finetune_focus_analysis_result result;
+    QPointer<QMessageBox> prompt;
+    bool running = false;
+  };
+  FocusAreaAnalysisState m_focusAreaAnalysis;
   int m_selectedMtfMeasurement = -1;
 
   // Generation retained for the progressive adaptive-sharpening worker.
