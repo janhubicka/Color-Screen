@@ -42,10 +42,6 @@ public:
   ~TilePreviewPanel() override;
 
   QWidget *getTilesWidget() const;
-  void reattachTiles(QWidget *widget);
-
-signals:
-  void detachTilesRequested(QWidget *widget);
 
 protected:
   void resizeEvent(QResizeEvent *event) override;
