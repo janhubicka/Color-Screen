@@ -13,12 +13,10 @@ using namespace colorscreen;
 
 namespace {
 TileRenderResult
-renderTilesGeneric(ParameterState state, int scanWidth, int scanHeight,
-                   int generation, int tileSize, coord_t pixel_size,
+renderTilesGeneric(ParameterState state, int tileSize, coord_t pixel_size,
                    std::vector<render_screen_tile_type> tileTypes,
                    std::shared_ptr<colorscreen::progress_info> progress) {
   TileRenderResult result;
-  result.generation = generation;
   result.success = false;
   if (progress) {
      progress->set_task("Tile preview", 1);
@@ -32,11 +30,6 @@ renderTilesGeneric(ParameterState state, int scanWidth, int scanHeight,
   tile.height = tileSize;
   tile.pixelbytes = 3;
   tile.rowstride = tileSize * 3; // 3 bytes per pixel (RGB)
-
-  // Compute pixel size - passed in argument
-  // scr_to_img scrToImgObj;
-  // scrToImgObj.set_parameters(state.scrToImg, scanWidth, scanHeight);
-  // coord_t pixel_size = scrToImgObj.pixel_size(scanWidth, scanHeight);
 
   result.tiles.resize(tileTypes.size());
 
@@ -113,8 +106,6 @@ TilePreviewPanel::TilePreviewPanel(StateGetter stateGetter,
       req.tileSize = qMax(64, (availableWidth - margins - spacing) / numTiles);
       
       if (scan) {
-        req.scanWidth = scan->width;
-        req.scanHeight = scan->height;
         req.pixelSize = 1.0;
         if (screen_geometry_configured_p(state.scrToImg)) {
           scr_to_img scrToImgObj;
@@ -122,7 +113,7 @@ TilePreviewPanel::TilePreviewPanel(StateGetter stateGetter,
             req.pixelSize = scrToImgObj.pixel_size({0,0,scan->width, scan->height});
         }
       } else {
-        req.scanWidth = 0; req.scanHeight = 0; req.pixelSize = 1.0;
+        req.pixelSize = 1.0;
       }
 
       m_renderQueue.requestRender(QVariant::fromValue(req));
@@ -131,34 +122,6 @@ TilePreviewPanel::TilePreviewPanel(StateGetter stateGetter,
   connect(&m_renderQueue, &TaskQueue::triggerRender, this, &TilePreviewPanel::onTriggerRender);
   connect(&m_renderQueue, &TaskQueue::progressStarted, this, &TilePreviewPanel::progressStarted);
   connect(&m_renderQueue, &TaskQueue::progressFinished, this, &TilePreviewPanel::progressFinished);
-
-  // Initialize watcher
-  m_tileWatcher = new QFutureWatcher<TileRenderResult>(this);
-  connect(m_tileWatcher, &QFutureWatcher<TileRenderResult>::finished, this,
-          [this]() {
-            TileRenderResult result = m_tileWatcher->result();
-
-            if (result.generation == m_tileGenerationCounter) {
-              if (result.success) {
-                if (result.tiles.size() == m_tileLabels.size()) {
-                  for (size_t i = 0; i < m_tileLabels.size(); ++i) {
-                    m_tileLabels[i]->setPixmap(
-                        QPixmap::fromImage(result.tiles[i]));
-                  }
-                }
-              } else {
-                // If failed, reset last rendered size so we try again next time
-                // (e.g. on resize or param change)
-                m_lastRenderedTileSize = 0;
-              }
-            }
-
-            if (m_tileProgress) {
-              m_tileProgress.reset();
-            }
-
-            startNextRender();
-          });
 }
 
 TilePreviewPanel::~TilePreviewPanel() {
@@ -194,12 +157,6 @@ TilePreviewPanel::~TilePreviewPanel() {
       m_tilesContainer = nullptr;
   }
 
-  // Delete the watcher
-  if (m_tileWatcher) {
-      m_tileWatcher->disconnect(this);
-      delete m_tileWatcher;
-      m_tileWatcher = nullptr;
-  }
 }
 
 void TilePreviewPanel::setupTiles(const QString &title) {
@@ -338,10 +295,6 @@ void TilePreviewPanel::setDebounceInterval(int msec) {
   m_updateTimer->setInterval(msec);
 }
 
-void TilePreviewPanel::onTileRenderFinished() {
-  scheduleTileUpdate();
-}
-
 void TilePreviewPanel::onTriggerRender(int reqId, std::shared_ptr<colorscreen::progress_info> progress, const QVariant &userData) {
   if (m_tileLabels.empty() || !userData.canConvert<RenderRequest>()) {
     m_renderQueue.reportFinished(reqId, true);
@@ -388,13 +341,12 @@ void TilePreviewPanel::onTriggerRender(int reqId, std::shared_ptr<colorscreen::p
   }
 
   runSynchronized(
-      [this, state = std::move(req.state), scanWidth = req.scanWidth,
-       scanHeight = req.scanHeight, reqId, tileSize = req.tileSize,
+      [this, state = std::move(req.state), reqId, tileSize = req.tileSize,
        pixelSize = req.pixelSize, tileTypes = std::move(req.tileTypes),
        progress = std::move(progress)]() mutable {
         TileRenderResult result = renderTilesGeneric(
-            std::move(state), scanWidth, scanHeight, reqId, tileSize, pixelSize,
-            std::move(tileTypes), std::move(progress));
+            std::move(state), tileSize, pixelSize, std::move(tileTypes),
+            std::move(progress));
 
         std::lock_guard<std::mutex> locker(m_workerMutex);
         m_completedRenders.insert_or_assign(reqId, std::move(result));
@@ -440,19 +392,6 @@ void TilePreviewPanel::finishTileRender(int reqId) {
         m_tileLabels[i]->setPixmap(QPixmap::fromImage(img));
     }
   }
-}
-
-void TilePreviewPanel::performTileRender() {
-    // Deprecated/Unused - logic moved to onTriggerRender
-    // This method was previously called by m_updateTimer.
-    // Now m_updateTimer should trigger m_renderQueue.requestRender().
-    m_renderQueue.requestRender();
-}
-
-void TilePreviewPanel::startNextRender() {
-    // Deprecated/Unused
-    // This method was previously called by the m_tileWatcher's finished signal.
-    // The RenderQueue now manages subsequent renders.
 }
 
 void TilePreviewPanel::resizeEvent(QResizeEvent *event) {

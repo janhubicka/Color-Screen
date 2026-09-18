@@ -783,9 +783,6 @@ void SharpnessPanel::onParametersRefreshed(const ParameterState &state) {
   }
 }
 
-// Methods removed as they are now in TilePreviewPanel or handled by it
-// scheduleTileUpdate, startNextRender, performTileRender, resizeEvent
-
 std::vector<std::pair<render_screen_tile_type, QString>>
 SharpnessPanel::getTileTypes() const {
   return {{original_screen, "Original"},
