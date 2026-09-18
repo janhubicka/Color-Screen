@@ -66,11 +66,6 @@ ColorPanel::ColorPanel(StateGetter stateGetter, StateSetter stateSetter,
 
 ColorPanel::~ColorPanel() = default;
 
-void ColorPanel::reattachCorrectedTiles(QWidget *widget) {
-  if (m_correctedPreview)
-    m_correctedPreview->reattachTiles(widget);
-}
-
 void ColorPanel::setupUi() {
   addSeparator("Adjustments in process color space");
 
@@ -165,7 +160,7 @@ void ColorPanel::setupUi() {
   setupTiles("Color Preview");
 
   // Gamut Chart
-  initGamutGroup(m_gamutGroup, "Gamut", false, [this](QWidget *w) { emit detachGamutChartRequested(w); });
+  initGamutGroup(m_gamutGroup, "Gamut", false);
 
   // Add to form layout
   if (m_currentGroupForm)
@@ -210,8 +205,8 @@ void ColorPanel::setupUi() {
 
   // Wrap layout in a widget to add to FormLayout
   QWidget *spectraWrapper = new QWidget();
-  m_spectraContainer = new QVBoxLayout(spectraWrapper);
-  m_spectraContainer->setContentsMargins(0, 0, 0, 0);
+  auto *spectraContainer = new QVBoxLayout(spectraWrapper);
+  spectraContainer->setContentsMargins(0, 0, 0, 0);
 
   QWidget *chartWrapper = new QWidget();
   QVBoxLayout *wrapperLayout = new QVBoxLayout(chartWrapper);
@@ -226,13 +221,10 @@ void ColorPanel::setupUi() {
 
   wrapperLayout->addWidget(m_spectraChart);
 
-  // Detachable section
-  m_spectraSection = createDetachableSection(
-      "Spectral Chart", chartWrapper, [this, chartWrapper]() {
-        emit detachSpectraChartRequested(chartWrapper);
-      });
-
-  m_spectraContainer->addWidget(m_spectraSection);
+  // Detachable section owns its complete dock/reattach lifecycle.
+  QWidget *spectraSection =
+      createDetachableSection("Spectral Chart", chartWrapper);
+  spectraContainer->addWidget(spectraSection);
 
   // A spectral chart has no meaning for a matrix-only dye model. Treat it as
   // logical row applicability rather than presentation-time show/hide state.
@@ -282,11 +274,7 @@ void ColorPanel::setupUi() {
   {
     CorrectedPreviewPanel *correctedPreview =
         new CorrectedPreviewPanel(m_stateGetter, m_stateSetter, m_imageGetter);
-    m_correctedPreview = correctedPreview;
     correctedPreview->init("Corrected Color Preview");
-
-    connect(correctedPreview, &TilePreviewPanel::detachTilesRequested, this,
-            &ColorPanel::detachCorrectedTilesRequested);
 
     connect(correctedPreview, &TilePreviewPanel::progressStarted, this, &ColorPanel::progressStarted);
     connect(correctedPreview, &TilePreviewPanel::progressFinished, this, &ColorPanel::progressFinished);
@@ -302,8 +290,7 @@ void ColorPanel::setupUi() {
   }
 
   // Corrected Gamut Chart
-  initGamutGroup(m_correctedGamutGroup, "Corrected Gamut", true,
-                 [this](QWidget *w) { emit detachCorrectedGamutChartRequested(w); });
+  initGamutGroup(m_correctedGamutGroup, "Corrected Gamut", true);
 
   if (m_currentGroupForm)
     m_currentGroupForm->addRow(m_correctedGamutGroup.container->parentWidget());
@@ -431,20 +418,18 @@ void ColorPanel::setupUi() {
   });
 
   QWidget *tcContent = new QWidget();
-  m_toneCurveContainer = new QVBoxLayout(tcContent);
-  m_toneCurveContainer->setContentsMargins(0, 0, 0, 0);
-  
+  auto *toneCurveContainer = new QVBoxLayout(tcContent);
+  toneCurveContainer->setContentsMargins(0, 0, 0, 0);
+
   QHBoxLayout *tcHeader = new QHBoxLayout();
   tcHeader->addWidget(new QLabel("Coordinate View:"));
   tcHeader->addWidget(m_toneCurveCoordCombo);
   tcHeader->addStretch();
-  m_toneCurveContainer->addLayout(tcHeader);
-  m_toneCurveContainer->addWidget(m_toneCurveWidget);
+  toneCurveContainer->addLayout(tcHeader);
+  toneCurveContainer->addWidget(m_toneCurveWidget);
 
-  m_toneCurveSection = createDetachableSection("Tone Curve", tcContent, [this, tcContent]() {
-      emit detachToneCurveRequested(tcContent);
-  });
-  m_form->addRow(m_toneCurveSection);
+  QWidget *toneCurveSection = createDetachableSection("Tone Curve", tcContent);
+  m_form->addRow(toneCurveSection);
 
   m_paramUpdaters.push_back([this](const ParameterState &s) {
       m_toneCurveWidget->setToneCurve(s.rparams.output_tone_curve, s.rparams.output_tone_curve_control_points);
@@ -496,20 +481,6 @@ void ColorPanel::updateSpectraChart() {
   }
 }
 
-QWidget *ColorPanel::getSpectraChartWidget() const { return m_spectraChart; }
-
-void ColorPanel::reattachSpectraChart(QWidget *widget) {
-  if (!widget)
-    return;
-
-  // Re-wrap in detachable section
-  QWidget *detachable = createDetachableSection(
-      "Spectral Transmitance", widget,
-      [this, widget]() { emit detachSpectraChartRequested(widget); });
-
-  m_spectraContainer->addWidget(detachable);
-}
-
 std::vector<std::pair<render_screen_tile_type, QString>>
 ColorPanel::getTileTypes() const {
   return {{backlight_screen, "Backlight"},
@@ -558,50 +529,8 @@ void ColorPanel::resizeEvent(QResizeEvent *event) {
   }
 }
 
-QWidget *ColorPanel::getGamutChartWidget() const { return m_gamutGroup.chart; }
-
-void ColorPanel::reattachGamutChart(QWidget *widget) {
-  reattachGamutGroup(m_gamutGroup, widget, [this](QWidget *w) {
-    emit detachGamutChartRequested(w);
-  });
-}
-
-QWidget *ColorPanel::getCorrectedGamutChartWidget() const {
-  return m_correctedGamutGroup.chart;
-}
-
-void ColorPanel::reattachCorrectedGamutChart(QWidget *widget) {
-  reattachGamutGroup(m_correctedGamutGroup, widget, [this](QWidget *w) { emit detachCorrectedGamutChartRequested(w); });
-}
-
-void ColorPanel::reattachToneCurve(QWidget *widget) {
-    if (widget && m_toneCurveSection && m_toneCurveSection->layout()) {
-        QLayout *layout = m_toneCurveSection->layout();
-        // Remove placeholder (last item)
-        if (layout->count() > 1) {
-            QLayoutItem *item = layout->takeAt(layout->count() - 1);
-            if (item) {
-                if (item->widget()) delete item->widget();
-                delete item;
-            }
-        }
-        layout->addWidget(widget);
-        widget->show();
-
-        // Show header
-        if (layout->count() > 0) {
-            QLayoutItem *headerItem = layout->itemAt(0);
-            if (headerItem && headerItem->widget()) {
-                headerItem->widget()->show();
-            }
-        }
-    }
-}
-
 void ColorPanel::initGamutGroup(GamutChartGroup &group, const QString &name,
-                                bool corrected,
-                                std::function<void(QWidget *)> detachSignalEmitter) {
-  group.name = name;
+                                bool corrected) {
   group.corrected = corrected;
   group.chart = new CIEChartWidget();
   group.chart->setFixedHeight(200);
@@ -628,13 +557,13 @@ void ColorPanel::initGamutGroup(GamutChartGroup &group, const QString &name,
   cwLayout->addWidget(group.chart, 0, Qt::AlignCenter);
 
   group.section = createDetachableSection(
-      name, chartWrapper, [this, &group, chartWrapper, detachSignalEmitter]() {
+      name, chartWrapper, [&group, chartWrapper]() {
         group.chart->setMinimumSize(0, 0);
         group.chart->setMaximumSize(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX);
-        group.chart->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+        group.chart->setSizePolicy(QSizePolicy::Expanding,
+                                   QSizePolicy::Expanding);
         if (chartWrapper->layout())
           chartWrapper->layout()->setAlignment(group.chart, Qt::Alignment());
-        detachSignalEmitter(chartWrapper);
       });
 
   group.container->addWidget(group.section);
@@ -701,35 +630,6 @@ void ColorPanel::updateGamutReference(GamutChartGroup &group) {
   }
 
   group.chart->setReferenceGamut(data);
-}
-
-void ColorPanel::reattachGamutGroup(GamutChartGroup &group, QWidget *widget,
-                                    std::function<void(QWidget *)> detachSignalEmitter) {
-  if (!widget)
-    return;
-
-  // Restore docked constraints
-  group.chart->setFixedHeight(200);
-  group.chart->updateGeometry();
-
-  // Restore alignment
-  if (widget->layout())
-    widget->layout()->setAlignment(group.chart, Qt::AlignCenter);
-
-  // Re-wrap in detachable section
-  QWidget *detachable = createDetachableSection(
-      group.name, widget, [this, &group, widget, detachSignalEmitter]() {
-        group.chart->setMinimumSize(0, 0);
-        group.chart->setMaximumSize(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX);
-        group.chart->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
-        if (widget->layout())
-          widget->layout()->setAlignment(group.chart, Qt::Alignment());
-        detachSignalEmitter(widget);
-      });
-
-  group.container->addWidget(detachable);
-  if (width() > 0)
-    group.chart->setFixedWidth(width() / 2);
 }
 
 void ColorPanel::setNeutralAreaChecked(bool checked) {
