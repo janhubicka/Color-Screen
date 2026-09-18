@@ -272,11 +272,8 @@ void GeometryPanel::setupUi() {
   finetuneWrapperLayout->setContentsMargins(0, 0, 0, 0);
   finetuneWrapperLayout->addWidget(m_finetuneImagesPanel);
   
-  QWidget *finetuneDetachable = createDetachableSection(
-      "Finetune Diagnostic Images", finetuneWrapper,
-      [this, finetuneWrapper](){
-        emit detachFinetuneImagesRequested(finetuneWrapper);
-      });
+  QWidget *finetuneDetachable =
+      createDetachableSection("Finetune Diagnostic Images", finetuneWrapper);
   
   QWidget *finetuneContainer = new QWidget();
   m_finetuneImagesContainer = new QVBoxLayout(finetuneContainer);
@@ -293,29 +290,32 @@ void GeometryPanel::setupUi() {
       if (checked) updateDeformationChart();
   });
   
-  auto setupChart = [this, addToPanel](DeformationChartWidget*& chart, QVBoxLayout*& containerLayout, 
-                           const QString& title, auto detachSignal) {
-      chart = new DeformationChartWidget();
-      connect(chart, &DeformationChartWidget::clicked, this, &GeometryPanel::centerOnRequested);
-      QWidget *wrapper = new QWidget();
-      QVBoxLayout *wl = new QVBoxLayout(wrapper);
-      wl->setContentsMargins(0, 0, 0, 0);
-      wl->addWidget(chart);
-      
-      QWidget *detachable = createDetachableSection(title, wrapper, [this, wrapper, detachSignal](){
-          emit (this->*detachSignal)(wrapper);
-      });
-      
-      QWidget *container = new QWidget();
-      containerLayout = new QVBoxLayout(container);
-      containerLayout->setContentsMargins(0,0,0,0);
-      containerLayout->addWidget(detachable);
-      addToPanel(container);
-  };
+  auto setupChart =
+      [this, addToPanel](DeformationChartWidget *&chart,
+                         QVBoxLayout *&containerLayout,
+                         const QString &title) {
+        chart = new DeformationChartWidget();
+        connect(chart, &DeformationChartWidget::clicked, this,
+                &GeometryPanel::centerOnRequested);
 
-  setupChart(m_lensChart, m_lensChartContainer, "Lens Correction", &GeometryPanel::detachLensChartRequested);
-  setupChart(m_perspectiveChart, m_perspectiveChartContainer, "Perspective", &GeometryPanel::detachPerspectiveChartRequested);
-  setupChart(m_nonlinearChart, m_nonlinearChartContainer, "Nonlinear transformation", &GeometryPanel::detachNonlinearChartRequested);
+        QWidget *wrapper = new QWidget();
+        QVBoxLayout *wl = new QVBoxLayout(wrapper);
+        wl->setContentsMargins(0, 0, 0, 0);
+        wl->addWidget(chart);
+
+        QWidget *detachable = createDetachableSection(title, wrapper);
+
+        QWidget *container = new QWidget();
+        containerLayout = new QVBoxLayout(container);
+        containerLayout->setContentsMargins(0, 0, 0, 0);
+        containerLayout->addWidget(detachable);
+        addToPanel(container);
+      };
+
+  setupChart(m_lensChart, m_lensChartContainer, "Lens Correction");
+  setupChart(m_perspectiveChart, m_perspectiveChartContainer, "Perspective");
+  setupChart(m_nonlinearChart, m_nonlinearChartContainer,
+             "Nonlinear transformation");
 
   // Existing Deformation Chart
   m_deformationChart = new DeformationChartWidget();
@@ -328,11 +328,8 @@ void GeometryPanel::setupUi() {
   wrapperLayout->addWidget(m_deformationChart);
   
   // Detachable section
-  QWidget *detachable = createDetachableSection(
-      "Deformation Visualization", chartWrapper, 
-      [this, chartWrapper](){
-         emit detachDeformationChartRequested(chartWrapper);
-      });
+  QWidget *detachable =
+      createDetachableSection("Deformation Visualization", chartWrapper);
 
   // Container to allow reattaching
   QWidget *container = new QWidget();
@@ -509,34 +506,6 @@ void GeometryPanel::updateDeformationChart() {
     m_deformationChart->setDeformationData(state.scrToImg, p0, w, h, mirror, rotation, ox, oy, fw, fh);
 }
 
-void GeometryPanel::reattachDeformationChart(QWidget *widget) {
-    if (!widget) return;
-    
-    QWidget *detachable = createDetachableSection(
-        "Deformation Visualization", widget,
-        [this, widget](){ emit detachDeformationChartRequested(widget); });
-    
-    m_chartContainer->addWidget(detachable);
-}
-
-void GeometryPanel::reattachLensChart(QWidget *widget) {
-    if (!widget) return;
-    QWidget *detachable = createDetachableSection("Lens Correction", widget, [this, widget](){ emit detachLensChartRequested(widget); });
-    m_lensChartContainer->addWidget(detachable);
-}
-
-void GeometryPanel::reattachPerspectiveChart(QWidget *widget) {
-    if (!widget) return;
-    QWidget *detachable = createDetachableSection("Perspective", widget, [this, widget](){ emit detachPerspectiveChartRequested(widget); });
-    m_perspectiveChartContainer->addWidget(detachable);
-}
-
-void GeometryPanel::reattachNonlinearChart(QWidget *widget) {
-    if (!widget) return;
-    QWidget *detachable = createDetachableSection("Nonlinear transformation", widget, [this, widget](){ emit detachNonlinearChartRequested(widget); });
-    m_nonlinearChartContainer->addWidget(detachable);
-}
-
 void GeometryPanel::updateFinetuneImages(const colorscreen::finetune_result& result) {
     if (!m_finetuneImagesPanel) return;
     
@@ -546,12 +515,6 @@ void GeometryPanel::updateFinetuneImages(const colorscreen::finetune_result& res
     if (m_finetuneImagesContainer && m_finetuneImagesContainer->parentWidget()) {
         m_finetuneImagesContainer->parentWidget()->show();
     }
-}
-
-void GeometryPanel::reattachFinetuneImages(QWidget *widget) {
-    if (!widget) return;
-    QWidget *detachable = createDetachableSection("Finetune Diagnostic Images", widget, [this, widget](){ emit detachFinetuneImagesRequested(widget); });
-    m_finetuneImagesContainer->addWidget(detachable);
 }
 
 void GeometryPanel::setRegistrationPointsVisible(bool visible) {

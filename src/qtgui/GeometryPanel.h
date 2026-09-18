@@ -24,11 +24,6 @@ public:
 signals:
   void optimizeRequested(bool autoChecked);
   void nonlinearToggled(bool checked);
-  void detachDeformationChartRequested(QWidget *widget);
-  void detachLensChartRequested(QWidget *widget);
-  void detachPerspectiveChartRequested(QWidget *widget);
-  void detachNonlinearChartRequested(QWidget *widget);
-  void detachFinetuneImagesRequested(QWidget *widget);
 
   void centerOnRequested(const colorscreen::point_t &p);
 
@@ -45,12 +40,7 @@ public:
   bool isNonlinearEnabled() const;
   void updateRegistrationPointInfo(const ParameterState &state);
   void updateDeformationChart();
-  void reattachDeformationChart(QWidget *widget);
-  void reattachLensChart(QWidget *widget);
-  void reattachPerspectiveChart(QWidget *widget);
-  void reattachNonlinearChart(QWidget *widget);
   void updateFinetuneImages(const colorscreen::finetune_result& result);
-  void reattachFinetuneImages(QWidget *widget);
   void setRegistrationPointsVisible(bool visible);
   void setNonlinearChecked(bool checked);
   QCheckBox *autoOptimizeCheckBox() const { return m_autoOptimizeBox; }
