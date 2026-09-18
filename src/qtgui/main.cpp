@@ -2,6 +2,7 @@
 #include "MainWindow.h"
 #include "MultiLineTabWidget.h"
 #include "ParameterPanel.h"
+#include "SliderValueMapping.h"
 #include "ImageViewWindow.h"
 #include "ImageWidget.h"
 #include "SharpnessPanel.h"
@@ -392,6 +393,24 @@ bool runBetaInvariantSmoke() {
       !sliderMappingsAgree(0.0, 1000.0, 10.0, 1.0, true) ||
       !sliderMappingsAgree(0.1, 1000.0, 100.0, 1.0, true))
     return fail("stateful/stateless slider mappings diverged");
+
+  // RenderDialog deliberately uses a coarser 1000-step logarithmic scale.
+  // The shared mapping must preserve that UI resolution without changing the
+  // ParameterPanel default nonlinear range.
+  {
+    const SliderValueMapping renderScaleMapping(
+        0.01, 20.0, 1.0, 1.0, true, std::nullopt, 1000);
+    if (renderScaleMapping.sliderMinimum() != 0 ||
+        renderScaleMapping.sliderMaximum() != 1000 ||
+        qAbs(renderScaleMapping.sliderToValue(0) - 0.01) > 1e-12 ||
+        qAbs(renderScaleMapping.sliderToValue(1000) - 20.0) > 1e-9)
+      return fail("configurable logarithmic slider range changed endpoints");
+    for (int position : {0, 137, 500, 1000}) {
+      const double value = renderScaleMapping.sliderToValue(position);
+      if (qAbs(renderScaleMapping.valueToSlider(value) - position) > 1)
+        return fail("configurable logarithmic slider mapping lost round-trip");
+    }
+  }
 
   ParameterState sentinelState;
   sentinelState.rparams.gamma = 0.0;

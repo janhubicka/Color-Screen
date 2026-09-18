@@ -88,6 +88,7 @@ set(HEADERS
     NavigationView.h
     CapturePanel.h
     ParameterPanel.h
+    SliderValueMapping.h
     TilePreviewPanel.h
     SharpnessPanel.h
     AdaptiveSharpeningDialog.h

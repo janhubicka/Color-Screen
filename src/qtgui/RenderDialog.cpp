@@ -1,5 +1,6 @@
 #include "RenderDialog.h"
 #include "../libcolorscreen/include/render-type-parameters.h"
+#include "SliderValueMapping.h"
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDialogButtonBox>
@@ -12,18 +13,14 @@
 #include <QSlider>
 #include <QSpinBox>
 #include <QVBoxLayout>
-#include <cmath>
 
 using namespace colorscreen;
 
-// ── Scale <-> slider mapping (log scale 0.01 .. 20) ──────────────────────────
-static int scaleToSlider(double s) {
-  double t = (std::log(s) - std::log(0.01)) / (std::log(20.0) - std::log(0.01));
-  return (int)std::round(std::clamp(t, 0.0, 1.0) * 1000);
-}
-static double sliderToScale(int v) {
-  double t = v / 1000.0;
-  return std::exp(std::log(0.01) + t * (std::log(20.0) - std::log(0.01)));
+/** Shared render-scale mapping at the dialog's existing 1000-step resolution. */
+static const SliderValueMapping &renderScaleMapping() {
+  static const SliderValueMapping mapping(
+      0.01, 20.0, 1.0, 1.0, true, std::nullopt, 1000);
+  return mapping;
 }
 
 // ── Helper: create a (spinbox + slider) row ───────────────────────────────────
@@ -45,8 +42,9 @@ static void makeScaleRow(QFormLayout *form, const QString &label,
   hlay->addWidget(spin);
 
   auto *slider = new QSlider(Qt::Horizontal, container);
-  slider->setRange(0, 1000);
-  slider->setValue(scaleToSlider(1.0));
+  const SliderValueMapping &mapping = renderScaleMapping();
+  slider->setRange(mapping.sliderMinimum(), mapping.sliderMaximum());
+  slider->setValue(mapping.valueToSlider(1.0));
   hlay->addWidget(slider, 1);
 
   form->addRow(label, container);
@@ -237,7 +235,7 @@ RenderDialog::RenderDialog(
           this, [this](double v) {
             if (m_updatingSliders) return;
             m_updatingSliders = true;
-            m_scaleSlider->setValue(scaleToSlider(v));
+            m_scaleSlider->setValue(renderScaleMapping().valueToSlider(v));
             m_updatingSliders = false;
             updateSizePreview();
             updateControlStates();
@@ -245,7 +243,7 @@ RenderDialog::RenderDialog(
   connect(m_scaleSlider, &QSlider::valueChanged, this, [this](int v) {
     if (m_updatingSliders) return;
     m_updatingSliders = true;
-    m_scaleSpin->setValue(sliderToScale(v));
+    m_scaleSpin->setValue(renderScaleMapping().sliderToValue(v));
     m_updatingSliders = false;
     updateSizePreview();
     updateControlStates();

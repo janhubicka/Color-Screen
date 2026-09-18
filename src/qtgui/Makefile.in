@@ -660,7 +660,7 @@ EXTRA_DIST = ColorScreenApplication.h DocumentLifecycleSmoke.h \
 	InitialSetupGuideDialog.h MTFChartWidget.h \
 	DeformationChartWidget.h FinetuneImagesPanel.h \
 	BacklightChartWidget.h ColorUtils.h NavigationView.h \
-	ParameterPanel.h ParameterState.h Renderer.h \
+	ParameterPanel.h SliderValueMapping.h ParameterState.h Renderer.h \
 	SynchronizedRunnable.h SharpnessPanel.h SmartSpinBox.h \
 	TilePreviewPanel.h ScreenPanel.h GeometryPanel.h \
 	GeometrySolverWorker.h DetectScreenWorker.h FlatFieldWorker.h \
