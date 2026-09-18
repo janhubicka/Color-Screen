@@ -23,12 +23,6 @@ public:
 protected:
   void showEvent(QShowEvent *event) override;
 
-signals:
-  void detachHDCurveRequested(QWidget *widget);
-
-public:
-  void reattachHDCurve(QWidget *widget);
-
 private slots:
   void onTriggerHistogram(int reqId, std::shared_ptr<colorscreen::progress_info> progress, const QVariant &userData);
   void onHistogramFinished(int reqId, std::vector<uint64_t> data, double minx, double maxx, bool success);
@@ -38,8 +32,7 @@ private:
   void updateSpinBoxes();
 
   HDCurveWidget *m_hdCurveWidget = nullptr;
-  QVBoxLayout *m_hdCurveContainer = nullptr;
-  
+
   QDoubleSpinBox *m_minXSpin = nullptr;
   QDoubleSpinBox *m_minYSpin = nullptr;
   QDoubleSpinBox *m_linear1XSpin = nullptr;
@@ -62,7 +55,6 @@ private:
   TaskQueue m_taskQueue;
   class HistogramWorker *m_worker = nullptr;
   QThread m_workerThread;
-  int m_lastHistogramReqId = 0;
 
   QLabel *m_gammaLabel = nullptr;
   QComboBox *m_presetCombo = nullptr;
