@@ -230,10 +230,16 @@ private:
   colorscreen::solver_parameters m_solverParams;
   colorscreen::render_type_parameters m_renderTypeParams;
   colorscreen::slanted_edge_parameters m_slantedEdgeParameters;
-  std::vector<colorscreen::slanted_edge_parameters> m_pendingMtfParameters;
-  QPointer<QDialog> m_referenceMtfDialog;
-  // Borrow the active request's cancellation handle; the document/worker owns it.
-  std::weak_ptr<colorscreen::progress_info> m_referenceMtfProgress;
+  /** View-local state for one reference-MTF setup/measurement request. The
+      accepted setup defaults above outlive a request and therefore stay
+      separate. */
+  struct ReferenceMtfMeasurementState {
+    std::vector<colorscreen::slanted_edge_parameters> pendingParameters;
+    QPointer<QDialog> dialog;
+    // Borrow the active request's cancellation handle; the document/worker owns it.
+    std::weak_ptr<colorscreen::progress_info> progress;
+  };
+  ReferenceMtfMeasurementState m_referenceMtfMeasurement;
 
   // Exercise production reference measurement and view-local cancellation.
   friend void startWorkspaceChurnSmoke(ColorScreenApplication &app,

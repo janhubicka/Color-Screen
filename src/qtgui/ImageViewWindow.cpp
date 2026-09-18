@@ -898,18 +898,18 @@ void ImageViewWindow::onMeasureMtfRequested(bool checked) {
   auto *dialog = new SlantedEdgeDialog(
       defaults, !currentMtf.measurements.empty(), hasRgb, hasInfrared, this);
   dialog->setAttribute(Qt::WA_DeleteOnClose);
-  m_referenceMtfDialog = dialog;
+  m_referenceMtfMeasurement.dialog = dialog;
   connect(dialog, &QDialog::rejected, this, [this, dialog]() {
-    if (m_referenceMtfDialog != dialog)
+    if (m_referenceMtfMeasurement.dialog != dialog)
       return;
-    m_referenceMtfDialog = nullptr;
+    m_referenceMtfMeasurement.dialog = nullptr;
     m_sharpnessPanel->setMeasureMtfChecked(false);
   });
   connect(dialog, &QDialog::accepted, this,
           [this, dialog, scan, currentState, currentMtf, hasInfrared]() {
-    if (m_referenceMtfDialog != dialog)
+    if (m_referenceMtfMeasurement.dialog != dialog)
       return;
-    m_referenceMtfDialog = nullptr;
+    m_referenceMtfMeasurement.dialog = nullptr;
     if (!m_document || m_referenceLoadPending || m_scan != scan ||
         m_document->documentStateSnapshot() != currentState) {
       cancelReferenceMtfMeasurement();
@@ -918,7 +918,7 @@ void ImageViewWindow::onMeasureMtfRequested(bool checked) {
     const colorscreen::slanted_edge_parameters baseParameters =
         dialog->parameters();
     m_slantedEdgeParameters = baseParameters;
-    m_pendingMtfParameters.clear();
+    m_referenceMtfMeasurement.pendingParameters.clear();
     if (dialog->measureNativeChannels()) {
       static const char *const channelNames[4] = {"Red", "Green", "Blue",
                                                   "Infrared"};
@@ -935,13 +935,13 @@ void ImageViewWindow::onMeasureMtfRequested(bool checked) {
         p.wavelength = colorscreen::my_isfinite(wavelength) && wavelength > 0
                            ? wavelength
                            : 0;
-        m_pendingMtfParameters.push_back(std::move(p));
+        m_referenceMtfMeasurement.pendingParameters.push_back(std::move(p));
       }
     } else {
       colorscreen::slanted_edge_parameters p = baseParameters;
       p.channel = -1;
       p.source_filename = m_referenceFile.toUtf8().toStdString();
-      m_pendingMtfParameters.push_back(std::move(p));
+      m_referenceMtfMeasurement.pendingParameters.push_back(std::move(p));
     }
 
     m_imageWidget->setInteractionMode(ImageWidget::GenericAreaMode);
@@ -1007,12 +1007,12 @@ QRect ImageViewWindow::referenceImageArea(QRect area) const {
 
 /** Cancel reference-local work without cancelling a newer document operation. */
 void ImageViewWindow::cancelReferenceMtfMeasurement() {
-  if (auto progress = m_referenceMtfProgress.lock())
+  if (auto progress = m_referenceMtfMeasurement.progress.lock())
     progress->cancel();
-  m_referenceMtfProgress.reset();
-  m_pendingMtfParameters.clear();
-  if (QDialog *dialog = m_referenceMtfDialog.data()) {
-    m_referenceMtfDialog = nullptr;
+  m_referenceMtfMeasurement.progress.reset();
+  m_referenceMtfMeasurement.pendingParameters.clear();
+  if (QDialog *dialog = m_referenceMtfMeasurement.dialog.data()) {
+    m_referenceMtfMeasurement.dialog = nullptr;
     dialog->close();
   }
   if (m_slantedEdgeReference && m_sharpnessPanel) {
@@ -1026,13 +1026,13 @@ void ImageViewWindow::cancelReferenceMtfMeasurement() {
 
 /** Convert the selected rectangle, then start an atomic channel batch. */
 void ImageViewWindow::onReferenceAreaSelected(QRect widgetArea) {
-  if (!m_slantedEdgeReference || m_pendingMtfParameters.empty() ||
+  if (!m_slantedEdgeReference || m_referenceMtfMeasurement.pendingParameters.empty() ||
       !m_document || !m_scan || m_referenceLoadPending)
     return;
   const QRect area = referenceImageArea(widgetArea);
   if (area.isEmpty())
     return;
-  auto parameters = std::move(m_pendingMtfParameters);
+  auto parameters = std::move(m_referenceMtfMeasurement.pendingParameters);
   startReferenceMtfMeasurement(
       {area.x(), area.y(), area.width(), area.height()}, std::move(parameters));
 }
@@ -1070,7 +1070,7 @@ void ImageViewWindow::startReferenceMtfMeasurement(
            !view->m_referenceLoadPending && view->m_scan == scan &&
            document->sharedImageData() == documentScan &&
            document->documentStateSnapshot() == baseline &&
-           view->m_referenceMtfProgress.lock() == result->progress;
+           view->m_referenceMtfMeasurement.progress.lock() == result->progress;
   };
   operation.onStart = [view, result](
                           std::shared_ptr<colorscreen::progress_info> progress) {
@@ -1079,7 +1079,7 @@ void ImageViewWindow::startReferenceMtfMeasurement(
       progress->cancel();
       return;
     }
-    view->m_referenceMtfProgress = progress;
+    view->m_referenceMtfMeasurement.progress = progress;
     view->m_sharpnessPanel->setMeasureMtfChecked(true);
     view->m_sharpnessPanel->setMeasureMtfEnabled(false);
     // Progress is presented by the document's task row, not a view-local task.
@@ -1110,9 +1110,9 @@ void ImageViewWindow::startReferenceMtfMeasurement(
     view->statusBar()->showMessage(tr("Reference MTF measurements added"), 3000);
   };
   operation.onDone = [view, result]() {
-    if (!view || view->m_referenceMtfProgress.lock() != result->progress)
+    if (!view || view->m_referenceMtfMeasurement.progress.lock() != result->progress)
       return;
-    view->m_referenceMtfProgress.reset();
+    view->m_referenceMtfMeasurement.progress.reset();
     view->m_sharpnessPanel->setMeasureMtfChecked(false);
     view->m_sharpnessPanel->setMeasureMtfEnabled(true);
     view->m_sharpnessPanel->updateUI();
