@@ -47,13 +47,8 @@ public:
                           QWidget *parent = nullptr);
   ~SharpnessPanel() override;
 
-  // Accessors for Dock Widgets
   QWidget *getMTFChartWidget() const;
-
-  // Methods to handle re-attaching
-  void reattachMTFChart(QWidget *widget);
   void updateFinetuneImages(const colorscreen::finetune_result& result);
-  void reattachFinetuneImages(QWidget *widget);
   void setFocusAnalysisChecked(bool checked);
   /** Update availability and summary text for automatic multi-area focus
       analysis owned by the current document. */
@@ -65,8 +60,6 @@ public:
   QString mtfCalibrationSummary() const;
   /** Refresh the panel-local status label from document-owned provenance. */
   void refreshMtfCalibrationStatus();
-  void reattachDotSpread(QWidget *widget);
-  void reattachAdaptiveChart(QWidget *widget);
   AdaptiveSharpeningChart *getAdaptiveChart() const;
   void showAdaptiveChart();
 
@@ -75,10 +68,6 @@ public slots:
 
 signals:
   void adaptiveSharpeningRequested(const AdaptiveSharpeningParameters &parameters);
-  void detachMTFChartRequested(QWidget *widget);
-  void detachAdaptiveChartRequested(QWidget *widget);
-  void detachDotSpreadRequested(QWidget *widget);
-  void detachFinetuneImagesRequested(QWidget *widget);
   void autodetectRequested();
   void focusAnalysisRequested(bool checked, uint64_t flags);
   void findFocusAreasRequested();
@@ -118,7 +107,6 @@ private:
 
   MTFChartWidget *m_mtfChart = nullptr;
   QCheckBox *m_showSignedOtfCheck = nullptr;
-  QVBoxLayout *m_mtfContainer = nullptr; // Container Layout
   QVBoxLayout *m_measurementsLayout = nullptr;
   QToolButton *m_scannerCameraSeparatorToggle = nullptr;
   QComboBox *m_measurementSelector = nullptr;
@@ -128,7 +116,6 @@ private:
   bool m_measurementUiInitialized = false;
   FinetuneImagesPanel *m_finetuneImagesPanel = nullptr;
   QWidget *m_finetuneImagesWrapper = nullptr;
-  QVBoxLayout *m_finetuneImagesContainer = nullptr;
   std::vector<colorscreen::mtf_measurement> m_lastMeasurements;
 
   // Cached parameters for change detection (moved from private to be used in
@@ -150,10 +137,8 @@ private:
   uint64_t m_finetuneFlags = 0;
   AdaptiveSharpeningParameters m_adaptiveSharpeningParameters;
   bool m_adaptiveSharpeningParametersInitialized = false;
-  class TilePreviewPanel *m_dotSpreadPanel = nullptr;
   QPointer<AdaptiveSharpeningChart> m_adaptiveChart;
   QWidget *m_adaptiveChartWrapper = nullptr;
-  QVBoxLayout *m_adaptiveChartContainer = nullptr;
 };
 
 #endif // SHARPNESS_PANEL_H
