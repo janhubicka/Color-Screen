@@ -529,12 +529,20 @@ void ImageViewWindow::loadReferenceImage(const QString &fileName) {
   }
 
   runSynchronized([this, scan, path, progress, demosaic]() {
-    const char *error = nullptr;
-    colorscreen::sub_task task(progress.get());
-    const bool ok = scan->load(path.toUtf8().constData(), true, &error,
-                               progress.get(), demosaic);
-    const QString message =
-        !ok && error ? QString::fromUtf8(error) : QString();
+    bool ok = false;
+    QString message;
+    try {
+      const char *error = nullptr;
+      colorscreen::sub_task task(progress.get());
+      ok = scan->load(path.toUtf8().constData(), true, &error,
+                      progress.get(), demosaic);
+      if (!ok && error)
+        message = QString::fromUtf8(error);
+    } catch (const std::exception &error) {
+      message = QString::fromUtf8(error.what());
+    } catch (...) {
+      message = QStringLiteral("Unexpected exception while loading image.");
+    }
 
     {
       std::lock_guard<std::mutex> locker(m_referenceLoad.mutex);
