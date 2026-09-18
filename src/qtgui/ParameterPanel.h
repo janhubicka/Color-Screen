@@ -61,6 +61,13 @@ protected:
                           const QString &parameterKey = QString(),
                           bool showDefaultReset = false);
 
+  /** Concrete widgets owned by one slider row. */
+  struct SliderWidgets {
+    QWidget *container = nullptr;
+    QSlider *slider = nullptr;
+    QDoubleSpinBox *spin = nullptr;
+  };
+
   /*
     Adds a slider parameter row (Slider + SpinBox).
     scale: factor to map double value to integer slider range (e.g. 100 for 0.01
@@ -84,12 +91,19 @@ protected:
       std::optional<double> specialMinimumValue = std::nullopt,
       ParameterKeyGetter parameterKeyGetter = nullptr);
 
-  /** Concrete widgets owned by one stateless slider row. */
-  struct SliderWidgets {
-    QWidget *container = nullptr;
-    QSlider *slider = nullptr;
-    QDoubleSpinBox *spin = nullptr;
-  };
+  /** Add a stateful slider row and return its concrete controls. Use this only
+      when a derived panel needs to configure the slider or spin box directly. */
+  SliderWidgets addSliderParameterControls(
+      const QString &label, double min, double max, double scale, int decimals,
+      const QString &suffix, const QString &specialValueText,
+      std::function<double(const ParameterState &)> getter,
+      std::function<void(ParameterState &, double)> setter, double gamma = 1.0,
+      std::function<bool(const ParameterState &)> enabledCheck = nullptr,
+      bool logarithmic = false, const QString &tooltip = QString(),
+      const QString &parameterKey = QString(),
+      bool showDefaultReset = false,
+      std::optional<double> specialMinimumValue = std::nullopt,
+      ParameterKeyGetter parameterKeyGetter = nullptr);
 
   /** Add a stateless slider row and return its concrete controls. Use this
       only when a derived panel needs to configure the slider or spin box. */

@@ -722,7 +722,7 @@ void ParameterPanel::addDoubleParameter(
   }
 }
 
-QWidget *ParameterPanel::addSliderParameter(
+ParameterPanel::SliderWidgets ParameterPanel::addSliderParameterControls(
     const QString &label, double min, double max, double scale, int decimals,
     const QString &suffix, const QString &specialValueText,
     std::function<double(const ParameterState &)> getter,
@@ -874,7 +874,26 @@ QWidget *ParameterPanel::addSliderParameter(
             labelWidget->setEnabled(en);
         });
   }
-  return container;
+  return {container, slider, spin};
+}
+
+QWidget *ParameterPanel::addSliderParameter(
+    const QString &label, double min, double max, double scale, int decimals,
+    const QString &suffix, const QString &specialValueText,
+    std::function<double(const ParameterState &)> getter,
+    std::function<void(ParameterState &, double)> setter, double gamma,
+    std::function<bool(const ParameterState &)> enabledCheck,
+    bool logarithmic, const QString &tooltip,
+    const QString &parameterKey, bool showDefaultReset,
+    std::optional<double> specialMinimumValue,
+    ParameterKeyGetter parameterKeyGetter) {
+  return addSliderParameterControls(
+             label, min, max, scale, decimals, suffix, specialValueText,
+             std::move(getter), std::move(setter), gamma,
+             std::move(enabledCheck), logarithmic, tooltip, parameterKey,
+             showDefaultReset, specialMinimumValue,
+             std::move(parameterKeyGetter))
+      .container;
 }
 
 ParameterPanel::SliderWidgets ParameterPanel::addSliderControls(

@@ -79,6 +79,7 @@ public:
   using ParameterPanel::addSeparator;
   using ParameterPanel::addSlider;
   using ParameterPanel::addSliderParameter;
+  using ParameterPanel::addSliderParameterControls;
   using ParameterPanel::setParameterApplicability;
 };
 
@@ -254,9 +255,9 @@ bool runBetaInvariantSmoke() {
       rgbAppliedKeys[1] != QStringLiteral("probe.rgb.green"))
     return fail("correlated RGB helper merged identity across saved channels");
 
-  // Stateful and stateless sliders share one conversion utility. Exercise both
-  // wrappers at the same positions and values for every supported mapping mode
-  // so future changes cannot make their linear/gamma/log geometry diverge.
+  // Stateful and stateless sliders share one conversion utility. Exercise the
+  // typed stateful controls against the stateless wrapper for every supported
+  // mapping mode so future changes cannot make their geometry diverge.
   auto sliderMappingsAgree = [](double min, double max, double scale,
                                 double gamma, bool logarithmic) {
     ParameterState state;
@@ -268,7 +269,7 @@ bool runBetaInvariantSmoke() {
                  const QString &) { state = next; },
         []() { return std::shared_ptr<colorscreen::image_data>(); }, nullptr,
         false);
-    QWidget *stateful = probe.addSliderParameter(
+    const auto stateful = probe.addSliderParameterControls(
         QStringLiteral("Stateful slider"), min, max, scale, 6, QString(),
         QString(),
         [](const ParameterState &current) { return current.rparams.gamma; },
@@ -283,13 +284,14 @@ bool runBetaInvariantSmoke() {
         logarithmic);
     probe.updateUI();
 
-    QSlider *statefulSlider = stateful ? stateful->findChild<QSlider *>() : nullptr;
-    QSlider *statelessSlider = stateless ? stateless->findChild<QSlider *>() : nullptr;
-    QDoubleSpinBox *statefulSpin =
-        stateful ? stateful->findChild<QDoubleSpinBox *>() : nullptr;
+    QSlider *statefulSlider = stateful.slider;
+    QSlider *statelessSlider =
+        stateless ? stateless->findChild<QSlider *>() : nullptr;
+    QDoubleSpinBox *statefulSpin = stateful.spin;
     QDoubleSpinBox *statelessSpin =
         stateless ? stateless->findChild<QDoubleSpinBox *>() : nullptr;
-    if (!statefulSlider || !statelessSlider || !statefulSpin || !statelessSpin ||
+    if (!stateful.container || !statefulSlider || !statelessSlider ||
+        !statefulSpin || !statelessSpin ||
         statefulSlider->minimum() != statelessSlider->minimum() ||
         statefulSlider->maximum() != statelessSlider->maximum())
       return false;
