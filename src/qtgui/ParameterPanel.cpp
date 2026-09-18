@@ -864,11 +864,8 @@ ParameterPanel::SliderWidgets ParameterPanel::addSliderParameterControls(
           slider->setEnabled(en);
           spin->setEnabled(en);
 
-          // Disable container? Using setEnabled on container layout items?
-          // Actually, disabling the container widget is enough if they were
-          // children. But container is just a QWidget holding them. Yes. Wait,
-          // m_form->addRow(label, container). If I disable container, the label
-          // is NOT disabled. I need to disable label.
+          // The field container does not own its QFormLayout label, so keep
+          // the label's enabled state synchronized explicitly.
           QWidget *labelWidget = m_form->labelForField(container);
           if (labelWidget)
             labelWidget->setEnabled(en);

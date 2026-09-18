@@ -88,10 +88,6 @@ void FinetuneImagesPanel::setupUi() {
     vLayout->addWidget(slot.captionLabel, 0, Qt::AlignCenter);
     
     rowLayout->addWidget(container, 1);
-    
-    // We can't keep a pointer to container since we removed it from ImageSlot struct
-    // Wait, I should add it back or just use the label's parent.
-    // I removed it from 'FinetuneImagesPanel.h' but I can just use slot.label->parentWidget()!
     row.push_back(slot);
   };
 
@@ -107,7 +103,7 @@ void FinetuneImagesPanel::setupUi() {
   m_row2Layout->setSpacing(5);
 
   createSlot("Screen", m_row2Images, m_row2Layout);
-  createSlot("Blured Screen", m_row2Images, m_row2Layout);
+  createSlot("Blurred Screen", m_row2Images, m_row2Layout);
   createSlot("Emulsion", m_row2Images, m_row2Layout);
   createSlot("Merged", m_row2Images, m_row2Layout);
   createSlot("Collected", m_row2Images, m_row2Layout);

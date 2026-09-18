@@ -7,7 +7,6 @@
 #include <QLabel>
 #include <QPushButton>
 #include <QDialogButtonBox>
-#include <cmath>
 
 MeasureDialog::MeasureDialog(double pixelDistance, double currentDpi, QWidget *parent)
     : QDialog(parent), m_pixelDistance(pixelDistance), m_resultDpi(currentDpi) {
@@ -26,10 +25,10 @@ MeasureDialog::MeasureDialog(double pixelDistance, double currentDpi, QWidget *p
   m_unitCombo->addItem(tr("inches"), 1.0);
   m_unitCombo->addItem(tr("m"), 0.0254);
 
-  // Set default value based on current DPI if available
+  // Start in millimetres when the existing resolution determines a distance.
   if (currentDpi > 0) {
-    double distanceInInches = m_pixelDistance / currentDpi;
-    m_distanceSpin->setValue(distanceInInches * 25.4); // Default to mm
+    const double distanceInInches = m_pixelDistance / currentDpi;
+    m_distanceSpin->setValue(distanceInInches * 25.4);
     m_unitCombo->setCurrentIndex(0);
   } else {
     m_distanceSpin->setValue(10.0);
@@ -58,14 +57,13 @@ MeasureDialog::MeasureDialog(double pixelDistance, double currentDpi, QWidget *p
 }
 
 void MeasureDialog::updateResult() {
-  double distance = m_distanceSpin->value();
-  double unitScale = m_unitCombo->currentData().toDouble(); // mm per inch or similar? 
-  // Wait, I put mm as 25.4. So unitScale is "units per inch".
-  
-  if (distance > 0 && unitScale > 0) {
-    double distanceInInches = distance / unitScale;
+  const double distance = m_distanceSpin->value();
+  const double unitsPerInch = m_unitCombo->currentData().toDouble();
+
+  if (distance > 0 && unitsPerInch > 0) {
+    const double distanceInInches = distance / unitsPerInch;
     m_resultDpi = m_pixelDistance / distanceInInches;
-    m_resultLabel->setText(QString("%1 PPI").arg(m_resultDpi, 0, 'f', 2));
+    m_resultLabel->setText(tr("%1 PPI").arg(m_resultDpi, 0, 'f', 2));
   } else {
     m_resultLabel->setText(tr("Invalid"));
   }
