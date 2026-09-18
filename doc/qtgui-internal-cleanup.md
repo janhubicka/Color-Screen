@@ -479,10 +479,12 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   implementations can move into focused controllers/services once interfaces
   are stable.
 - Give long-lived analysis state explicit structs rather than parallel member
-  variables. Profile-calibration provenance and geometry-fit provenance now each
-  live in one lifecycle struct, including their pending/failure snapshots and
-  reset operation. Continue this pattern when another analysis has coupled
-  session-local members that are always saved, cleared, or restored together.
+  variables. Profile-calibration, geometry-fit, measured-MTF fit, and automatic
+  multi-area focus analysis now each live in one lifecycle struct instead of
+  parallel request/result/presentation members. Reference views likewise group
+  the mutex-published reference-load handoff and each reference-MTF request.
+  Keep applying this pattern when another analysis has coupled session-local
+  members that are always saved, cleared, or restored together.
 - Consolidate repeated slider value mapping in one tested utility instead of
   duplicating linear/gamma/logarithmic conversions in stateful and stateless
   slider helpers.

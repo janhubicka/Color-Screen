@@ -1731,7 +1731,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         // Restoring the exact input snapshot must not resurrect cancelled work.
         const ParameterState focusBaseline = first->getCurrentState();
         first->onFindFocusAreasRequested();
-        if (!first->m_focusAreaAnalysisRunning ||
+        if (!first->m_focusAreaAnalysis.running ||
             !first->m_oneShotOperationQueue.hasActiveTasks()) {
           fail(QStringLiteral("Focus-area discovery bypassed the one-shot lifecycle"));
           return;
@@ -1745,11 +1745,12 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
       }
 
       case 100: {
-        if (first->m_focusAreaAnalysisRunning) {
+        if (first->m_focusAreaAnalysis.running) {
           retryOrFail(QStringLiteral("Cancelled focus-area discovery did not finish cleanup"));
           return;
         }
-        if (!first->m_focusAreaCandidates.empty() || first->m_focusAreaPrompt ||
+        if (!first->m_focusAreaAnalysis.candidates.empty() ||
+            first->m_focusAreaAnalysis.prompt ||
             first->m_oneShotOperationQueue.hasActiveTasks()) {
           fail(QStringLiteral("Cancelled focus-area discovery published stale output"));
           return;
@@ -1758,10 +1759,10 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         // Run the real multi-area path too. A geometry edit clears the source
         // candidates; a late completion must not put its old vector back.
         const ParameterState focusBaseline = first->getCurrentState();
-        first->m_focusAreaCandidates.resize(3);
+        first->m_focusAreaAnalysis.candidates.resize(3);
         first->onAnalyzeFocusAreasRequested(
             colorscreen::finetune_scanner_mtf_sigma);
-        if (!first->m_focusAreaAnalysisRunning ||
+        if (!first->m_focusAreaAnalysis.running ||
             !first->m_oneShotOperationQueue.hasActiveTasks()) {
           fail(QStringLiteral("Multi-area focus fitting bypassed the one-shot lifecycle"));
           return;
@@ -1775,12 +1776,13 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
       }
 
       case 101: {
-        if (first->m_focusAreaAnalysisRunning) {
+        if (first->m_focusAreaAnalysis.running) {
           retryOrFail(QStringLiteral("Cancelled multi-area fit did not finish cleanup"));
           return;
         }
-        if (!first->m_focusAreaCandidates.empty() || first->m_focusAreaPrompt ||
-            !first->m_focusAreaAnalysisResult.selected.empty() ||
+        if (!first->m_focusAreaAnalysis.candidates.empty() ||
+            first->m_focusAreaAnalysis.prompt ||
+            !first->m_focusAreaAnalysis.result.selected.empty() ||
             first->m_oneShotOperationQueue.hasActiveTasks()) {
           fail(QStringLiteral("Cancelled multi-area fit restored stale diagnostics"));
           return;
@@ -1805,7 +1807,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
             baseline.rparams.sharpen.scanner_mtf.sigma + 0.25;
         auto showPrompt = [first, scan, baseline, analysis, flags]() -> QPushButton * {
           first->presentFocusAreaAnalysisResult(analysis, scan, baseline, flags);
-          if (QMessageBox *box = first->m_focusAreaPrompt.data())
+          if (QMessageBox *box = first->m_focusAreaAnalysis.prompt.data())
             for (QAbstractButton *button : box->buttons())
               if (box->buttonRole(button) == QMessageBox::AcceptRole)
                 return qobject_cast<QPushButton *>(button);
@@ -1815,26 +1817,26 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         ParameterState edited = baseline;
         edited.rparams.brightness += 0.125;
         first->presentFocusAreaAnalysisResult(analysis, scan, edited, flags);
-        if (first->m_focusAreaPrompt) {
+        if (first->m_focusAreaAnalysis.prompt) {
           fail(QStringLiteral("Focus Apply dialog accepted stale input parameters"));
           return;
         }
         first->presentFocusAreaAnalysisResult(
             analysis, second->sharedImageData(), baseline, flags);
-        if (first->m_focusAreaPrompt) {
+        if (first->m_focusAreaAnalysis.prompt) {
           fail(QStringLiteral("Focus Apply dialog accepted a different scan"));
           return;
         }
 
         QPointer<QPushButton> obsoleteApply = showPrompt();
-        QPointer<QMessageBox> obsoletePrompt = first->m_focusAreaPrompt;
+        QPointer<QMessageBox> obsoletePrompt = first->m_focusAreaAnalysis.prompt;
         if (!obsoleteApply || !obsoletePrompt) {
           fail(QStringLiteral("Focus analysis did not offer its Apply dialog"));
           return;
         }
         first->applyState(edited);
         first->applyState(baseline);
-        if (first->m_focusAreaPrompt ||
+        if (first->m_focusAreaAnalysis.prompt ||
             (obsoletePrompt && obsoletePrompt->isVisible())) {
           fail(QStringLiteral("Document edit did not dismiss obsolete focus approval"));
           return;
@@ -1854,7 +1856,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         replacement.description = QStringLiteral("Replace focus approval smoke");
         first->runOneShotOperation(std::move(replacement),
                                    [](colorscreen::progress_info *) {});
-        if (first->m_focusAreaPrompt) {
+        if (first->m_focusAreaAnalysis.prompt) {
           fail(QStringLiteral("New one-shot did not supersede pending focus approval"));
           return;
         }
@@ -1870,7 +1872,8 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         expected.rparams.sharpen.scanner_mtf.sigma =
             analysis.joint_fit.scanner_mtf_sigma;
         apply->click();
-        if (first->getCurrentState() != expected || first->m_focusAreaPrompt ||
+        if (first->getCurrentState() != expected ||
+            first->m_focusAreaAnalysis.prompt ||
             undo->index() != undoIndex + 1 || !first->isDocumentModified()) {
           fail(QStringLiteral("Accepted multi-area focus was not one undoable edit"));
           return;
