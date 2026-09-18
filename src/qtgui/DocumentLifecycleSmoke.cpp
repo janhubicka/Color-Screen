@@ -14,6 +14,7 @@
 #include <QFile>
 #include <QMessageBox>
 #include <QMetaObject>
+#include <QObject>
 #include <QPointer>
 #include <QSet>
 #include <QString>
@@ -288,18 +289,18 @@ void startTaskQueueAsyncPublicationSmoke(ColorScreenApplication &app,
               // request both before adding a pending third request. The timeout
               // must evict already-cancelled workers by itself; no fourth
               // request is allowed to prod the queue.
-              connect(
+              QObject::connect(
                   state->queue, &TaskQueue::progressStarted, &app,
                   [state](std::shared_ptr<colorscreen::progress_info> progress) {
                     state->timeoutStartedProgress.push_back(
                         std::move(progress));
                   });
-              connect(
+              QObject::connect(
                   state->queue, &TaskQueue::progressFinished, &app,
                   [state](std::shared_ptr<colorscreen::progress_info>) {
                     ++state->timeoutFinishedCount;
                   });
-              connect(
+              QObject::connect(
                   state->queue, &TaskQueue::triggerRender, &app,
                   [state, fail](
                       int reqId,
