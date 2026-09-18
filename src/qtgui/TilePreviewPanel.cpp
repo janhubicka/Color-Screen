@@ -8,6 +8,7 @@
 #include <QResizeEvent>
 #include <QScrollArea>
 #include <QColorSpace>
+#include <exception>
 
 using namespace colorscreen;
 
@@ -341,10 +342,21 @@ void TilePreviewPanel::onTriggerRender(int reqId, std::shared_ptr<colorscreen::p
       [this, state = std::move(req.state), reqId, tileSize = req.tileSize,
        pixelSize = req.pixelSize, tileTypes = std::move(req.tileTypes),
        progress = std::move(progress)]() mutable {
-        TileRenderResult result = renderTilesGeneric(
-            std::move(state), tileSize, pixelSize, std::move(tileTypes),
-            std::move(progress));
+        TileRenderResult result;
+        try {
+          result = renderTilesGeneric(
+              std::move(state), tileSize, pixelSize, std::move(tileTypes),
+              std::move(progress));
+        } catch (const std::exception &error) {
+          qWarning() << "Tile preview worker threw:" << error.what();
+          result.success = false;
+        } catch (...) {
+          qWarning() << "Tile preview worker threw an unknown exception";
+          result.success = false;
+        }
 
+        // Publish a normal failed result even after an exception so request
+        // cleanup and the active-worker condition always make progress.
         std::lock_guard<std::mutex> locker(m_workerMutex);
         m_completedRenders.insert_or_assign(reqId, std::move(result));
         if (!m_destroying) {
