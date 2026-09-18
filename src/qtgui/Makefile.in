@@ -128,6 +128,7 @@ am_colorscreen_qt_OBJECTS = colorscreen_qt-main.$(OBJEXT) \
 	colorscreen_qt-ParameterPanel.$(OBJEXT) \
 	colorscreen_qt-TilePreviewPanel.$(OBJEXT) \
 	colorscreen_qt-SharpnessPanel.$(OBJEXT) \
+	colorscreen_qt-AdaptiveSharpeningDialog.$(OBJEXT) \
 	colorscreen_qt-MTFFitDialog.$(OBJEXT) \
 	colorscreen_qt-SlantedEdgeDialog.$(OBJEXT) \
 	colorscreen_qt-ScreenPanel.$(OBJEXT) \
@@ -245,6 +246,7 @@ depcomp = $(SHELL) $(top_srcdir)/build-aux/depcomp
 am__maybe_remake_depfiles = depfiles
 am__depfiles_remade =  \
 	./$(DEPDIR)/colorscreen_qt-AdaptiveSharpeningChart.Po \
+	./$(DEPDIR)/colorscreen_qt-AdaptiveSharpeningDialog.Po \
 	./$(DEPDIR)/colorscreen_qt-AdaptiveSharpeningWorker.Po \
 	./$(DEPDIR)/colorscreen_qt-BacklightChartWidget.Po \
 	./$(DEPDIR)/colorscreen_qt-CIEChartWidget.Po \
@@ -554,6 +556,7 @@ colorscreen_qt_SOURCES = \
     ParameterPanel.cpp \
     TilePreviewPanel.cpp \
     SharpnessPanel.cpp \
+    AdaptiveSharpeningDialog.cpp \
     MTFFitDialog.cpp \
     SlantedEdgeDialog.cpp \
     ScreenPanel.cpp \
@@ -665,7 +668,7 @@ EXTRA_DIST = ColorScreenApplication.h DocumentLifecycleSmoke.h \
 	icons/rotate-right.svg icons/zoom-in.svg icons/zoom-out.svg \
 	icons/zoom-100.svg icons/zoom-fit.svg icons/mirror.svg \
 	AdaptiveSharpeningWorker.h AdaptiveSharpeningParameters.h \
-	AdaptiveSharpeningChart.h RenderDialog.h ProfilePanel.h \
+	AdaptiveSharpeningChart.h AdaptiveSharpeningDialog.h RenderDialog.h ProfilePanel.h \
 	CoordinateOptimizationWorker.h ColorOptimizerWorker.h \
 	CoordinateTransformer.h FlowLayout.h FocusAnalysisWorker.h \
 	HistogramWorker.h MultiLineTabWidget.h ScalableImageLabel.h \
@@ -781,6 +784,7 @@ distclean-compile:
 	-rm -f *.tab.c
 
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-AdaptiveSharpeningChart.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-AdaptiveSharpeningDialog.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-AdaptiveSharpeningWorker.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-BacklightChartWidget.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-CIEChartWidget.Po@am__quote@ # am--include-marker
@@ -1150,6 +1154,20 @@ colorscreen_qt-SharpnessPanel.obj: SharpnessPanel.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='SharpnessPanel.cpp' object='colorscreen_qt-SharpnessPanel.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-SharpnessPanel.obj `if test -f 'SharpnessPanel.cpp'; then $(CYGPATH_W) 'SharpnessPanel.cpp'; else $(CYGPATH_W) '$(srcdir)/SharpnessPanel.cpp'; fi`
+
+colorscreen_qt-AdaptiveSharpeningDialog.o: AdaptiveSharpeningDialog.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-AdaptiveSharpeningDialog.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-AdaptiveSharpeningDialog.Tpo -c -o colorscreen_qt-AdaptiveSharpeningDialog.o `test -f 'AdaptiveSharpeningDialog.cpp' || echo '$(srcdir)/'`AdaptiveSharpeningDialog.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-AdaptiveSharpeningDialog.Tpo $(DEPDIR)/colorscreen_qt-AdaptiveSharpeningDialog.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='AdaptiveSharpeningDialog.cpp' object='colorscreen_qt-AdaptiveSharpeningDialog.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-AdaptiveSharpeningDialog.o `test -f 'AdaptiveSharpeningDialog.cpp' || echo '$(srcdir)/'`AdaptiveSharpeningDialog.cpp
+
+colorscreen_qt-AdaptiveSharpeningDialog.obj: AdaptiveSharpeningDialog.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-AdaptiveSharpeningDialog.obj -MD -MP -MF $(DEPDIR)/colorscreen_qt-AdaptiveSharpeningDialog.Tpo -c -o colorscreen_qt-AdaptiveSharpeningDialog.obj `if test -f 'AdaptiveSharpeningDialog.cpp'; then $(CYGPATH_W) 'AdaptiveSharpeningDialog.cpp'; else $(CYGPATH_W) '$(srcdir)/AdaptiveSharpeningDialog.cpp'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-AdaptiveSharpeningDialog.Tpo $(DEPDIR)/colorscreen_qt-AdaptiveSharpeningDialog.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='AdaptiveSharpeningDialog.cpp' object='colorscreen_qt-AdaptiveSharpeningDialog.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-AdaptiveSharpeningDialog.obj `if test -f 'AdaptiveSharpeningDialog.cpp'; then $(CYGPATH_W) 'AdaptiveSharpeningDialog.cpp'; else $(CYGPATH_W) '$(srcdir)/AdaptiveSharpeningDialog.cpp'; fi`
 
 colorscreen_qt-MTFFitDialog.o: MTFFitDialog.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-MTFFitDialog.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-MTFFitDialog.Tpo -c -o colorscreen_qt-MTFFitDialog.o `test -f 'MTFFitDialog.cpp' || echo '$(srcdir)/'`MTFFitDialog.cpp
@@ -2475,6 +2493,7 @@ clean-am: clean-binPROGRAMS clean-generic clean-libtool mostlyclean-am
 
 distclean: distclean-am
 		-rm -f ./$(DEPDIR)/colorscreen_qt-AdaptiveSharpeningChart.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-AdaptiveSharpeningDialog.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-AdaptiveSharpeningWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-BacklightChartWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-CIEChartWidget.Po
@@ -2622,6 +2641,7 @@ installcheck-am:
 
 maintainer-clean: maintainer-clean-am
 		-rm -f ./$(DEPDIR)/colorscreen_qt-AdaptiveSharpeningChart.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-AdaptiveSharpeningDialog.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-AdaptiveSharpeningWorker.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-BacklightChartWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-CIEChartWidget.Po
