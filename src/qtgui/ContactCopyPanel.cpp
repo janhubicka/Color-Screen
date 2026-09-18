@@ -113,21 +113,20 @@ void ContactCopyPanel::setupUi() {
       }
   });
 
-  // Wrap it nicely to center or align it
+  // Wrap it nicely to center or align it.
   QWidget *chartWrapper = new QWidget();
-  m_hdCurveContainer = new QVBoxLayout(chartWrapper);
-  m_hdCurveContainer->setContentsMargins(0, 0, 0, 0);
-  
-  QWidget *detachableCurve = createDetachableSection("H&D Curve", m_hdCurveWidget, [this]() {
-      emit detachHDCurveRequested(m_hdCurveWidget);
-  });
-  m_hdCurveContainer->addWidget(detachableCurve);
-  
+  auto *hdCurveContainer = new QVBoxLayout(chartWrapper);
+  hdCurveContainer->setContentsMargins(0, 0, 0, 0);
+
+  QWidget *detachableCurve =
+      createDetachableSection("H&D Curve", m_hdCurveWidget);
+  hdCurveContainer->addWidget(detachableCurve);
+
   m_gammaLabel = new QLabel();
   m_gammaLabel->setAlignment(Qt::AlignCenter);
   // Optional: make it look a bit more premium
   m_gammaLabel->setStyleSheet("color: #888; font-style: italic; margin-top: 4px;");
-  m_hdCurveContainer->addWidget(m_gammaLabel);
+  hdCurveContainer->addWidget(m_gammaLabel);
   
   if (m_currentGroupForm)
       m_currentGroupForm->addRow(chartWrapper);
@@ -483,37 +482,15 @@ void ContactCopyPanel::onTriggerHistogram(int reqId, std::shared_ptr<colorscreen
                              Q_ARG(std::shared_ptr<colorscreen::progress_info>, progress));
 }
 
-void ContactCopyPanel::onHistogramFinished(int reqId, std::vector<uint64_t> data, double minx, double maxx, bool success) {
-    m_taskQueue.reportFinished(reqId, success);
-    
-    if (success && m_stateGetter().rparams.contact_copy.simulate &&
-        reqId > m_lastHistogramReqId) {
-        m_lastHistogramReqId = reqId;
+void ContactCopyPanel::onHistogramFinished(int reqId,
+                                           std::vector<uint64_t> data,
+                                           double minx, double maxx,
+                                           bool success) {
+    // A larger request id alone is insufficient once a still-newer request is
+    // pending. Let TaskQueue reject superseded and explicit-cancellation races.
+    const bool publishResult = m_taskQueue.reportFinished(reqId, success);
+    if (success && publishResult &&
+        m_stateGetter().rparams.contact_copy.simulate)
         m_hdCurveWidget->setHistogram(data, minx, maxx);
-    }
 }
 
-void ContactCopyPanel::reattachHDCurve(QWidget *widget) {
-    if (widget != m_hdCurveWidget)
-        return;
-        
-    if (m_hdCurveContainer && m_hdCurveContainer->count() > 0) {
-        QWidget *section = m_hdCurveContainer->itemAt(0)->widget();
-        if (section && section->layout()) {
-            QLayoutItem *item = section->layout()->takeAt(section->layout()->count() - 1);
-            if (item) {
-                if (item->widget()) delete item->widget();
-                delete item;
-            }
-            section->layout()->addWidget(widget);
-            widget->show();
-            
-            if (section->layout()->count() > 0) {
-                QLayoutItem *headerItem = section->layout()->itemAt(0);
-                if (headerItem && headerItem->widget()) {
-                    headerItem->widget()->show();
-                }
-            }
-        }
-    }
-}
