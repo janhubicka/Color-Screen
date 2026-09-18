@@ -51,6 +51,7 @@ set(SOURCES
     ParameterPanel.cpp
     TilePreviewPanel.cpp
     SharpnessPanel.cpp
+    AdaptiveSharpeningDialog.cpp
     MTFFitDialog.cpp
     SlantedEdgeDialog.cpp
     ScreenPanel.cpp
@@ -85,6 +86,7 @@ set(HEADERS
     ParameterPanel.h
     TilePreviewPanel.h
     SharpnessPanel.h
+    AdaptiveSharpeningDialog.h
     MTFFitDialog.h
     SlantedEdgeDialog.h
     ScreenPanel.h
