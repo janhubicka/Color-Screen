@@ -503,7 +503,6 @@ private:
   double m_lastRenderedScale = 1.0;
   double m_lastRenderedX = 0.0;
   double m_lastRenderedY = 0.0;
-  int m_lastCompletedReqId = 0;
   
   // Interaction
   QPoint m_lastMousePos;
@@ -555,7 +554,6 @@ private:
   bool m_minusHeld = false;
   double m_keyboardZoomVelocity = 0.0;
 
-  void updateSimulatedPoints();
   // Schedule a background render of the points overlay image.
   void schedulePointsOverlayRender();
 
