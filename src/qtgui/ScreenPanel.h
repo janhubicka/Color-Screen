@@ -13,10 +13,7 @@ public:
               ImageGetter imageGetter, QWidget *parent = nullptr);
   ~ScreenPanel() override;
 
-  void reattachPreview(QWidget *widget);
-
 signals:
-  void detachPreviewRequested(QWidget *widget);
   void progressStarted(std::shared_ptr<colorscreen::progress_info> progress);
   void progressFinished(std::shared_ptr<colorscreen::progress_info> progress);
   // Request discovery/refinement of a regular screen lattice. Stochastic
@@ -27,7 +24,6 @@ signals:
 
 private:
   void setupUi();
-  TilePreviewPanel *m_previewPanel = nullptr;
 };
 
 #endif // SCREEN_PANEL_H

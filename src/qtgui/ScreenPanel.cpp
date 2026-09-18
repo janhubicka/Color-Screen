@@ -163,11 +163,6 @@ ScreenPanel::ScreenPanel(StateGetter stateGetter, StateSetter stateSetter,
 
 ScreenPanel::~ScreenPanel() = default;
 
-void ScreenPanel::reattachPreview(QWidget *widget) {
-  if (m_previewPanel)
-    m_previewPanel->reattachTiles(widget);
-}
-
 void ScreenPanel::setupUi() {
   // Screen Type Selector
   QComboBox *screenCombo = new ScreenComboBox();
@@ -312,11 +307,7 @@ void ScreenPanel::setupUi() {
 
   ScreenPreviewPanel *preview =
       new ScreenPreviewPanel(m_stateGetter, m_stateSetter, m_imageGetter);
-  m_previewPanel = preview;
   preview->init("Screen Preview");
-
-  connect(preview, &TilePreviewPanel::detachTilesRequested, this,
-          &ScreenPanel::detachPreviewRequested);
 
   connect(preview, &TilePreviewPanel::progressStarted, this,
           &ScreenPanel::progressStarted);
