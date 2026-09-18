@@ -85,9 +85,7 @@ private:
 
     Renderer *m_renderer = nullptr;
     QThread *m_renderThread = nullptr;
-    
-    std::shared_ptr<colorscreen::progress_info> m_currentProgress;
-    
+
     // Internal state
     TaskQueue m_renderQueue;
     

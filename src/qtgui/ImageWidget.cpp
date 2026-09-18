@@ -2832,13 +2832,6 @@ void ImageWidget::schedulePointsOverlayRender ()
 }
 
 /**
- * @brief Kept for backward compatibility.
- */
-void ImageWidget::updateSimulatedPoints() {
-  /* No longer used - kept as stub to avoid build breaks in other files if any. */
-}
-
-/**
  * @brief Toggles the explore mode (precision navigation).
  * 
  * @param enable True to enable explore mode.
@@ -3064,29 +3057,29 @@ void ImageWidget::onTriggerRender(int reqId, std::shared_ptr<colorscreen::progre
  * @param scale Scale factor of the rendered tile.
  * @param success Whether the rendering was successful.
  */
-void ImageWidget::handleImageReady(int reqId, QImage image, double xOffset, double yOffset, double scale, bool success)
+void ImageWidget::handleImageReady(int reqId, QImage image, double xOffset,
+                                   double yOffset, double scale, bool success)
 {
-    qCDebug(lcRenderSync) << "ImageWidget::handleImageReady - Received ID:" << reqId << " success:" << success << " m_lastCompletedReqId:" << m_lastCompletedReqId;
-    m_renderQueue.reportFinished(reqId, success);
+    qCDebug(lcRenderSync) << "ImageWidget::handleImageReady - Received ID:"
+                         << reqId << " success:" << success;
 
-    if (success) {
-        // Sequencing check: only update if this request is newer than the last applied one
-        if (reqId > m_lastCompletedReqId) {
-            qCDebug(lcRenderSync) << "  Applying render ID:" << reqId;
-            m_pixmap = image;
-            m_lastRenderedScale = scale;
-            m_lastRenderedX = xOffset;
-            m_lastRenderedY = yOffset;
-            m_lastCompletedReqId = reqId;
-            update(); 
-        } else {
-            qCDebug(lcRenderSync) << "  IGNORED older render ID:" << reqId;
-        }
+    // A larger request id is not enough: once a newer request exists, an older
+    // render is stale even if no newer image has published yet. TaskQueue also
+    // rejects explicit cancellation races.
+    const bool publishResult = m_renderQueue.reportFinished(reqId, success);
+    if (success && publishResult) {
+        qCDebug(lcRenderSync) << "  Applying render ID:" << reqId;
+        m_pixmap = std::move(image);
+        m_lastRenderedScale = scale;
+        m_lastRenderedX = xOffset;
+        m_lastRenderedY = yOffset;
+        update();
+    } else if (success) {
+        qCDebug(lcRenderSync) << "  IGNORED stale render ID:" << reqId;
     }
 
-    if (!m_renderQueue.hasActiveTasks()) {
+    if (!m_renderQueue.hasActiveTasks())
         m_refreshTimer->stop();
-    }
 }
 
 /**

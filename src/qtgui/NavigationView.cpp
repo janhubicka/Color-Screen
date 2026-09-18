@@ -168,14 +168,11 @@ void NavigationView::onTriggerRender(int reqId, std::shared_ptr<colorscreen::pro
     }
     
     if (scale <= 0) scale = 0.1;
-    m_previewScale = scale; // Update member for mouse interaction (might be slightly racey but ok for UI)
 
     int targetW = (int)(imgW * scale);
     int targetH = (int)(imgH * scale);
     if (targetW <= 0) targetW = 1;
     if (targetH <= 0) targetH = 1;
-
-    m_currentProgress = progress;
 
     bool result = m_renderer->enqueueRender(
         reqId, 0.0, 0.0, scale, targetW, targetH, data.coordinateSpace,
@@ -265,22 +262,18 @@ void NavigationView::resizeEvent(QResizeEvent *event) {
 
 void NavigationView::onImageReady(int reqId, QImage image, double x, double y,
                                   double scale, bool success) {
-  
-  // qDebug() << "NavigationView::onImageReady reqId:" << reqId << " success:" << success << " size:" << image.size();
-  
-  // This is always the current render completing (only one active at a time)
-  if (m_currentProgress) {
-    emit progressFinished(m_currentProgress);
-    m_currentProgress.reset();
-  }
+  Q_UNUSED(x);
+  Q_UNUSED(y);
 
-  // Only update preview image if render was successful
-  if (success) {
-    m_previewImage = image;
-    update();
-  }
+  // TaskQueue is the publication authority. Superseded/cancelled renders still
+  // complete, but must not replace the visible preview or its coordinate scale.
+  const bool publishResult = m_renderQueue.reportFinished(reqId, success);
+  if (!success || !publishResult)
+    return;
 
-  m_renderQueue.reportFinished(reqId, success);
+  m_previewImage = image;
+  m_previewScale = scale;
+  update();
 }
 
 void NavigationView::onViewStateChanged(QRectF visibleRect, double scale) {
@@ -371,9 +364,7 @@ void NavigationView::paintEvent(QPaintEvent *event) {
      double scale = qMin(scaleX, scaleY);
      if (scale <= 0) scale = 0.1;
 
-     if (m_previewScale <= 0.0001) {
-         const_cast<NavigationView*>(this)->m_previewScale = scale;
-     }
+     m_previewScale = scale;
 
      imgW = (int)(scanW * scale);
      imgH = (int)(scanH * scale);
