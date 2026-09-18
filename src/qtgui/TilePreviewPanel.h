@@ -92,6 +92,8 @@ private:
   QWidget *m_tilesContainer = nullptr;
   QVBoxLayout *m_tilesLayoutContainer = nullptr;
   std::vector<ScalableImageLabel *> m_tileLabels;
+  std::vector<std::pair<colorscreen::render_screen_tile_type, QString>>
+      m_tileDefinitions;
 
   QTimer *m_updateTimer = nullptr;
   QFutureWatcher<TileRenderResult> *m_tileWatcher = nullptr;
