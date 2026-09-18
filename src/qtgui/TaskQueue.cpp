@@ -1,11 +1,16 @@
 #include "TaskQueue.h"
 #include <QDebug>
+#include <algorithm>
+#include <atomic>
+#include <exception>
 #include <QFutureWatcher>
 #include <QMutexLocker>
 #include <QPromise>
 #include <QRunnable>
 #include <QThreadPool>
+#include <QTimer>
 #include <mutex>
+#include <utility>
 #include "Logging.h"
 
 namespace {
@@ -50,8 +55,17 @@ private:
 
 } // namespace
 
-TaskQueue::TaskQueue(QObject *parent) : QObject(parent)
+TaskQueue::TaskQueue(QObject *parent, int taskTimeoutMs)
+    : QObject(parent), m_taskTimeoutMs(std::max(1, taskTimeoutMs))
 {
+    m_timeoutTimer = new QTimer(this);
+    m_timeoutTimer->setSingleShot(true);
+    connect(m_timeoutTimer, &QTimer::timeout, this, [this]() {
+        QMutexLocker locker(&m_mutex);
+        evictTimedOutTasksLocked();
+        processPending();
+        schedulePendingTimeoutLocked();
+    });
 }
 
 TaskQueue::~TaskQueue()
@@ -75,20 +89,16 @@ int TaskQueue::requestRender(const QVariant &userData,
     QMutexLocker locker(&m_mutex);
     int newReqId = m_nextReqId++;
     m_latestRequestedReqId = newReqId;
-    
-    // 1. Cancel tasks running too long
-    for (auto it = m_tasks.begin(); it != m_tasks.end(); ) {
-        if (it->active && it->startTime.elapsed() > TASK_TIMEOUT_MS) {
-            qCDebug(lcRenderSync) << "  Task ID:" << it->reqId << " timed out. Cancelling. State:" << formatQueueState();
-            if (it->progress && !it->progress->pool_cancel()) {
-                it->progress->cancel();
-                emit progressFinished(it->progress);
-                it = m_tasks.erase(it);
-                continue;
-            }
-        }
-        ++it;
-    }
+
+    // A not-yet-started request has no worker or progress to clean up. The
+    // newest request supersedes it even when timeout eviction opens a slot.
+    m_pendingReqId.reset();
+    m_pendingUserData = QVariant();
+    m_pendingOnStart = nullptr;
+
+    // 1. Evict workers that exceeded the real runtime timeout. Already
+    // cancelled workers must be evicted too or they can hold a slot forever.
+    evictTimedOutTasksLocked();
 
     // 2. Check concurrency limit
     if (m_tasks.size() >= MAX_CONCURRENT_TASKS) {
@@ -115,11 +125,13 @@ int TaskQueue::requestRender(const QVariant &userData,
         m_pendingReqId = newReqId;
         m_pendingUserData = userData;
         m_pendingOnStart = std::move(onStart);
+        schedulePendingTimeoutLocked();
         return newReqId;
     }
 
     // 3. Start immediately if slot available
     startTask(newReqId, userData, onStart);
+    schedulePendingTimeoutLocked();
     return newReqId;
 }
 
@@ -188,6 +200,7 @@ bool TaskQueue::reportFinished(int reqId, bool success)
       }
 
     processPending();
+    schedulePendingTimeoutLocked();
     return publishResult;
 }
 
@@ -209,6 +222,51 @@ void TaskQueue::processPending()
     }
 }
 
+/** Evict tasks that exceeded the queue runtime timeout.
+    Cancellation is cooperative, but queue tracking cannot depend on a worker
+    observing it; late completion is rejected by reportFinished(). */
+void TaskQueue::evictTimedOutTasksLocked()
+{
+    for (auto it = m_tasks.begin(); it != m_tasks.end(); ) {
+        if (!it->active || it->startTime.elapsed() < m_taskTimeoutMs) {
+            ++it;
+            continue;
+        }
+
+        qCDebug(lcRenderSync)
+            << "  Task ID:" << it->reqId
+            << " timed out. Evicting. State:" << formatQueueState();
+        if (it->progress) {
+            if (!it->progress->pool_cancel())
+                it->progress->cancel();
+            emit progressFinished(it->progress);
+        }
+        it = m_tasks.erase(it);
+    }
+}
+
+/** Arm a single-shot check while a pending request waits for an active slot. */
+void TaskQueue::schedulePendingTimeoutLocked()
+{
+    if (!m_timeoutTimer)
+        return;
+    if (!m_pendingReqId.has_value()) {
+        m_timeoutTimer->stop();
+        return;
+    }
+
+    int delayMs = m_taskTimeoutMs;
+    for (const TaskInfo &task : std::as_const(m_tasks)) {
+        if (!task.active)
+            continue;
+        const qint64 remaining =
+            static_cast<qint64>(m_taskTimeoutMs) - task.startTime.elapsed();
+        delayMs = std::min(
+            delayMs, static_cast<int>(std::max<qint64>(1, remaining)));
+    }
+    m_timeoutTimer->start(delayMs);
+}
+
 /**
  * @brief Cancels everything in the queue.
  */
@@ -218,6 +276,8 @@ void TaskQueue::cancelAll()
     m_pendingReqId.reset();
     m_pendingUserData = QVariant();
     m_pendingOnStart = nullptr;
+    if (m_timeoutTimer)
+        m_timeoutTimer->stop();
     for (auto it = m_tasks.begin(); it != m_tasks.end(); ++it) {
         if (it->progress) {
              it->progress->cancel();
@@ -251,20 +311,34 @@ void TaskQueue::runAsync (std::function<void (colorscreen::progress_info *)> wor
        lifetime/disconnect behavior when TaskQueue is destroyed mid-operation. */
     auto *watcher = new QFutureWatcher<void>(this);
     auto promise = std::make_shared<QPromise<void>>();
+    auto workerSucceeded = std::make_shared<std::atomic_bool>(false);
     const QFuture<void> future = promise->future();
     promise->start();
-    connect(watcher, &QFutureWatcher<void>::finished, this,
-            [this, reqId, watcher, done = std::move(done)]() mutable {
-              watcher->deleteLater();
-              const bool publishResult = reportFinished(reqId, true);
-              done(publishResult);
-            });
+    connect(
+        watcher, &QFutureWatcher<void>::finished, this,
+        [this, reqId, watcher, done = std::move(done),
+         workerSucceeded]() mutable {
+          watcher->deleteLater();
+          const bool succeeded =
+              workerSucceeded->load(std::memory_order_acquire);
+          const bool publishResult = reportFinished(reqId, succeeded);
+          done(succeeded && publishResult);
+        });
     watcher->setFuture(future);
 
     auto *runnable = new TaskQueueRunnable;
     runnable->publish(
-        [w = std::move(worker), progress, promise]() mutable {
-          w(progress.get());
+        [w = std::move(worker), progress, promise, workerSucceeded]() mutable {
+          try {
+            w(progress.get());
+            workerSucceeded->store(true, std::memory_order_release);
+          } catch (const std::exception &error) {
+            qCWarning(lcRenderSync)
+                << "TaskQueue::runAsync worker threw:" << error.what();
+          } catch (...) {
+            qCWarning(lcRenderSync)
+                << "TaskQueue::runAsync worker threw an unknown exception";
+          }
           promise->finish();
         });
     QThreadPool::globalInstance()->start(runnable);
