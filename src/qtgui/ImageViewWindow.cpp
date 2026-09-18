@@ -698,13 +698,14 @@ void ImageViewWindow::updateViewControls() {
   const bool supportsSwitch =
       prop.flags & render_type_property::SUPPORTS_IR_RGB_SWITCH;
 
-  m_colorCheckBox->blockSignals(true);
-  if (m_colorCheckBoxAction)
-    m_colorCheckBoxAction->setVisible(hasRgb);
-  m_colorCheckBox->setVisible(hasRgb);
-  m_colorCheckBox->setEnabled(hasRgb && supportsSwitch);
-  m_colorCheckBox->setChecked(hasRgb && m_renderTypeParams.color);
-  m_colorCheckBox->blockSignals(false);
+  {
+    const QSignalBlocker blocker(m_colorCheckBox);
+    if (m_colorCheckBoxAction)
+      m_colorCheckBoxAction->setVisible(hasRgb);
+    m_colorCheckBox->setVisible(hasRgb);
+    m_colorCheckBox->setEnabled(hasRgb && supportsSwitch);
+    m_colorCheckBox->setChecked(hasRgb && m_renderTypeParams.color);
+  }
 
   if (m_coordinateComboBox) {
     const bool stitched = m_scan && m_scan->stitch;
