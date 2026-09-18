@@ -20,17 +20,6 @@ public:
                       ImageGetter imageGetter, QWidget *parent = nullptr);
   ~ColorPanel() override;
 
-  // Accessors for Dock Widgets
-  QWidget *getSpectraChartWidget() const;
-  void reattachSpectraChart(QWidget *widget);
-  void reattachCorrectedTiles(QWidget *widget);
-
-  QWidget *getGamutChartWidget() const;
-  void reattachGamutChart(QWidget *widget);
-  QWidget *getCorrectedGamutChartWidget() const;
-  void reattachCorrectedGamutChart(QWidget *widget);
-  void reattachToneCurve(QWidget *widget);
-
   void setNeutralAreaChecked(bool checked);
   void setNeutralAreaEnabled(bool enabled);
 
@@ -40,12 +29,6 @@ public:
 signals:
   void neutralAreaRequested();
   void autoLevelsRequested();
-
-  void detachSpectraChartRequested(QWidget *widget);
-  void detachCorrectedTilesRequested(QWidget *widget);
-  void detachGamutChartRequested(QWidget *widget);
-  void detachCorrectedGamutChartRequested(QWidget *widget);
-  void detachToneCurveRequested(QWidget *widget);
 
 protected:
   // TilePreviewPanel overrides
@@ -68,11 +51,8 @@ private:
   colorscreen::render_parameters m_lastRParams;
   int m_lastScrType = -1;
 
-  QWidget *m_spectraSection = nullptr;
   SpectraChartWidget *m_spectraChart = nullptr;
-  QVBoxLayout *m_spectraContainer = nullptr;
   QComboBox *m_spectraMode = nullptr;
-  TilePreviewPanel *m_correctedPreview = nullptr;
 
   QPushButton *m_setNeutralAreaBtn = nullptr;
   QPushButton *m_setAutoLevelsBtn = nullptr;
@@ -87,23 +67,18 @@ private:
     QComboBox *referenceCombo = nullptr;
     QWidget *section = nullptr;
     QVBoxLayout *container = nullptr;
-    QString name;
     bool corrected;
   };
 
-  void initGamutGroup(GamutChartGroup &group, const QString &name, bool corrected, 
-                      std::function<void(QWidget*)> detachSignalEmitter);
+  void initGamutGroup(GamutChartGroup &group, const QString &name,
+                      bool corrected);
   void updateGamutGroup(GamutChartGroup &group);
   void updateGamutReference(GamutChartGroup &group);
-  void reattachGamutGroup(GamutChartGroup &group, QWidget *widget,
-                          std::function<void(QWidget*)> detachSignalEmitter);
 
   GamutChartGroup m_gamutGroup;
   GamutChartGroup m_correctedGamutGroup;
 
   ToneCurveWidget *m_toneCurveWidget = nullptr;
-  QVBoxLayout *m_toneCurveContainer = nullptr;
-  QWidget *m_toneCurveSection = nullptr;
   QComboBox *m_toneCurveCoordCombo = nullptr;
 };
 
