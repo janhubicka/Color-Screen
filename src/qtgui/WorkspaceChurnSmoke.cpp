@@ -1206,7 +1206,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
           return;
         }
         first->onAutodetectCoordinatesRequested();
-        if (first->m_oneShotOperationQueue.hasActiveTasks()) {
+        if (first->m_oneShotOperations.hasActiveTasks()) {
           fail(QStringLiteral(
               "MainWindow started coordinate autodetection despite existing control points"));
           return;
@@ -1732,7 +1732,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         const ParameterState focusBaseline = first->getCurrentState();
         first->onFindFocusAreasRequested();
         if (!first->m_focusAreaAnalysis.running ||
-            !first->m_oneShotOperationQueue.hasActiveTasks()) {
+            !first->m_oneShotOperations.hasActiveTasks()) {
           fail(QStringLiteral("Focus-area discovery bypassed the one-shot lifecycle"));
           return;
         }
@@ -1751,7 +1751,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         }
         if (!first->m_focusAreaAnalysis.candidates.empty() ||
             first->m_focusAreaAnalysis.prompt ||
-            first->m_oneShotOperationQueue.hasActiveTasks()) {
+            first->m_oneShotOperations.hasActiveTasks()) {
           fail(QStringLiteral("Cancelled focus-area discovery published stale output"));
           return;
         }
@@ -1763,7 +1763,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         first->onAnalyzeFocusAreasRequested(
             colorscreen::finetune_scanner_mtf_sigma);
         if (!first->m_focusAreaAnalysis.running ||
-            !first->m_oneShotOperationQueue.hasActiveTasks()) {
+            !first->m_oneShotOperations.hasActiveTasks()) {
           fail(QStringLiteral("Multi-area focus fitting bypassed the one-shot lifecycle"));
           return;
         }
@@ -1783,7 +1783,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         if (!first->m_focusAreaAnalysis.candidates.empty() ||
             first->m_focusAreaAnalysis.prompt ||
             !first->m_focusAreaAnalysis.result.selected.empty() ||
-            first->m_oneShotOperationQueue.hasActiveTasks()) {
+            first->m_oneShotOperations.hasActiveTasks()) {
           fail(QStringLiteral("Cancelled multi-area fit restored stale diagnostics"));
           return;
         }
@@ -1956,7 +1956,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
           if (entry.info == progress && entry.userVisible && entry.row &&
               entry.rowActionButton)
             ++progressEntries;
-        if (!progress || !first->m_oneShotOperationQueue.hasActiveTasks() ||
+        if (!progress || !first->m_oneShotOperations.hasActiveTasks() ||
             progressEntries != 1) {
           fail(QStringLiteral("Reference MTF did not register one document-owned Cancel row"));
           return;
@@ -2066,7 +2066,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
       case 204: {
         ImageViewWindow *reference = state->reference.data();
         if (!reference || reference->m_referenceLoadPending ||
-            first->m_oneShotOperationQueue.hasActiveTasks()) {
+            first->m_oneShotOperations.hasActiveTasks()) {
           retryOrFail(QStringLiteral("Reference reload/cancellation did not settle"));
           return;
         }
@@ -2091,7 +2091,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
       case 205: {
         ImageViewWindow *reference = state->reference.data();
         if (!reference || !reference->m_referenceMtfMeasurement.progress.expired() ||
-            first->m_oneShotOperationQueue.hasActiveTasks()) {
+            first->m_oneShotOperations.hasActiveTasks()) {
           retryOrFail(QStringLiteral("Replacement reference MTF did not settle"));
           return;
         }
@@ -2143,7 +2143,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
       }
 
       case 207: {
-        if (state->reference || first->m_oneShotOperationQueue.hasActiveTasks()) {
+        if (state->reference || first->m_oneShotOperations.hasActiveTasks()) {
           retryOrFail(QStringLiteral("Closed reference work did not settle"));
           return;
         }
@@ -2212,7 +2212,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
 
       case 208: {
         if (first->m_mtfFit.running ||
-            first->m_oneShotOperationQueue.hasActiveTasks()) {
+            first->m_oneShotOperations.hasActiveTasks()) {
           retryOrFail(QStringLiteral("Measured-MTF model fit did not finish"));
           return;
         }
@@ -2266,7 +2266,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
 
       case 209: {
         if (first->m_mtfFit.running ||
-            first->m_oneShotOperationQueue.hasActiveTasks()) {
+            first->m_oneShotOperations.hasActiveTasks()) {
           retryOrFail(QStringLiteral("Cancelled measured-MTF fit did not clean up"));
           return;
         }
@@ -2297,7 +2297,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
 
       case 210: {
         if (first->m_mtfFit.running ||
-            first->m_oneShotOperationQueue.hasActiveTasks()) {
+            first->m_oneShotOperations.hasActiveTasks()) {
           retryOrFail(QStringLiteral("Failed measured-MTF fit did not settle"));
           return;
         }
@@ -2345,7 +2345,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         auto *staleDialog = first->m_sharpnessPanel->findChild<QMessageBox *>(
             QStringLiteral("MtfFitStaleDialog"));
         if (!staleDialog || first->m_mtfFit.running ||
-            first->m_oneShotOperationQueue.hasActiveTasks()) {
+            first->m_oneShotOperations.hasActiveTasks()) {
           fail(QStringLiteral("Stale measured-MTF setup dialog started background work"));
           return;
         }
@@ -2373,7 +2373,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
 
       case 211: {
         if (first->m_mtfFit.running ||
-            first->m_oneShotOperationQueue.hasActiveTasks()) {
+            first->m_oneShotOperations.hasActiveTasks()) {
           retryOrFail(QStringLiteral("Superseded measured-MTF fit did not clean up"));
           return;
         }

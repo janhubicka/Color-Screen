@@ -57,6 +57,7 @@ class QThread;
 #include "ParameterState.h"
 #include "SharpnessPanel.h"
 #include "TaskQueue.h"
+#include "OneShotOperationController.h"
 #include "BacklightChartWidget.h"
 #include <QElapsedTimer>
 
@@ -308,25 +309,12 @@ public:
       const colorscreen::mtf_estimation_options &options, int flags,
       QWidget *resultParent = nullptr);
 
-  /** Lifecycle callbacks for one final-result background operation.
+  /** Lifecycle descriptor for one final-result background operation.
 
-      PREREQUISITES run on the GUI thread before the request enters the queue.
-      ONSTART receives request-local progress only when TaskQueue starts work.
-      Reference views must guard their callbacks and validate their own scan
-      as well as the document snapshot. RESULTVALID is the final publication
-      gate after newest-request/cancellation checks.
-      APPLYRESULT publishes accepted output, and ONDONE restores transient UI
-      state for every started request, including stale/cancelled completions. */
-  struct OneShotOperation {
-    QString description;
-    // Non-empty for a dedicated task row; otherwise use transient progress.
-    QString progressTitle;
-    std::function<bool()> prerequisites;
-    std::function<void(std::shared_ptr<colorscreen::progress_info>)> onStart;
-    std::function<bool()> resultValid;
-    std::function<void()> applyResult;
-    std::function<void()> onDone;
-  };
+      Generic replacement/progress/publication mechanics live in
+      OneShotOperationController; document-specific snapshot and UI callbacks
+      remain owned by MainWindow. */
+  using OneShotOperation = OneShotOperationController::Operation;
 
   /** Run WORKER under this document's one-shot progress/cancellation lifecycle.
       Secondary/reference views use the same queue, not independent watchers. */
@@ -845,7 +833,7 @@ private:
   TaskQueue m_solverQueue;
 
   // Final-result one-shot operations share newest-request publication rules.
-  TaskQueue m_oneShotOperationQueue;
+  OneShotOperationController m_oneShotOperations;
 
   // Session-local provenance for geometry fitting. The baseline is captured
   // only after an accepted solver result, so loaded/manual geometry is never

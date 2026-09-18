@@ -367,10 +367,21 @@ MainWindow::MainWindow(const QString &recoveryDirectory, QWidget *parent)
   connect(&m_solverQueue, &TaskQueue::progressFinished, this,
           &MainWindow::removeProgress);
 
-  connect(&m_oneShotOperationQueue, &TaskQueue::progressStarted, this,
-          &MainWindow::addProgress);
-  connect(&m_oneShotOperationQueue, &TaskQueue::progressFinished, this,
-          &MainWindow::removeProgress);
+  m_oneShotOperations.configure(
+      this,
+      {[this]() { return m_closing; },
+       [this]() { dismissOneShotPrompts(); },
+       [this](std::shared_ptr<colorscreen::progress_info> progress) {
+         addProgress(progress);
+       },
+       [this](std::shared_ptr<colorscreen::progress_info> progress) {
+         removeProgress(progress);
+       },
+       [this](std::shared_ptr<colorscreen::progress_info> progress,
+              const QString &title) {
+         removeProgress(progress);
+         addUserVisibleProgress(progress, title);
+       }});
 
   // Initialize Color Optimizer Worker
   m_colorOptimizerThread = new QThread(this);
@@ -422,7 +433,7 @@ MainWindow::~MainWindow() {
   dismissOneShotPrompts();
   m_solverQueue.cancelAll();
   m_colorOptimizerQueue.cancelAll();
-  m_oneShotOperationQueue.cancelAll();
+  m_oneShotOperations.cancelAll();
   for (const auto &entry : m_activeProgresses)
     if (entry.info)
       entry.info->cancel();
@@ -3466,7 +3477,7 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
   // Final-result work and any pending one-shot confirmation belong to the
   // current image snapshot. Invalidate both before starting replacement I/O.
   dismissOneShotPrompts();
-  m_oneShotOperationQueue.cancelAll();
+  m_oneShotOperations.cancelAll();
   m_imageLoadPending = true;
   bool parameterDataLoaded = false;
   if (!suppressParamPrompt)
@@ -3740,7 +3751,7 @@ void MainWindow::applyState(const ParameterState &state) {
   // Final-result one-shot operations consume an exact document snapshot. Any
   // accepted parameter change (including Undo/Redo) makes that result stale.
   dismissOneShotPrompts();
-  m_oneShotOperationQueue.cancelAll();
+  m_oneShotOperations.cancelAll();
 
   const bool invalidateFocusAreas
       = m_scrToImgParams != state.scrToImg
@@ -5602,67 +5613,11 @@ void MainWindow::dismissOneShotPrompts() {
   }
 }
 
-/** Run one final-result operation with shared lifecycle policy.
-
-    Prerequisites and publication validation execute on the GUI thread. The
-    TaskQueue owns progress, cancellation and newest-request identity; WORKER
-    runs on Qt's thread pool. APPLYRESULT is called only after both the queue
-    and RESULTVALID approve publication. ONDONE restores transient UI for every
-    request that actually started, including cancelled and stale completions.
-    ONSTART receives the same progress handle used by the queue, allowing a
-    reference view to cancel its own work without cancelling unrelated work. */
+/** Delegate one final-result operation to the shared lifecycle controller. */
 void MainWindow::runOneShotOperation(
     OneShotOperation operation,
     std::function<void(colorscreen::progress_info *)> worker) {
-  if (m_closing || !worker)
-    return;
-  if (operation.prerequisites && !operation.prerequisites())
-    return;
-
-  // A newer final-result action supersedes any one-shot result that is
-  // still waiting for confirmation, just as it supersedes running work.
-  dismissOneShotPrompts();
-
-  auto lifecycle =
-      std::make_shared<OneShotOperation>(std::move(operation));
-  const QString description = lifecycle->description;
-
-  // Final-result operations are intentionally replaceable rather than
-  // concurrent. A newer user action should stop wasting work immediately;
-  // TaskQueue's publication verdict remains a second stale-result gate.
-  m_oneShotOperationQueue.cancelAll();
-  m_oneShotOperationQueue.runAsync(
-      [description, worker = std::move(worker)](
-          colorscreen::progress_info *progress) mutable {
-        if (progress) {
-          const QByteArray taskName = description.toUtf8();
-          progress->set_task(
-              std::string(taskName.constData(),
-                          static_cast<std::size_t>(taskName.size())),
-              1);
-        }
-        worker(progress);
-      },
-      [this, lifecycle](bool publishResult) {
-        const bool valid =
-            publishResult && !m_closing &&
-            (!lifecycle->resultValid || lifecycle->resultValid());
-        if (valid && lifecycle->applyResult)
-          lifecycle->applyResult();
-        if (!m_closing && lifecycle->onDone)
-          lifecycle->onDone();
-      },
-      QVariant(),
-      [this, lifecycle](std::shared_ptr<colorscreen::progress_info> progress) {
-        if (!lifecycle->progressTitle.isEmpty()) {
-          // TaskQueue already registered ordinary progress. Replace that entry
-          // rather than tracking the same request twice in the workspace.
-          removeProgress(progress);
-          addUserVisibleProgress(progress, lifecycle->progressTitle);
-        }
-        if (lifecycle->onStart)
-          lifecycle->onStart(progress);
-      });
+  m_oneShotOperations.run(std::move(operation), std::move(worker));
 }
 
 /** Launch an area-based parameter computation.
@@ -5721,7 +5676,7 @@ bool MainWindow::loadParameterFile(const QString &fileName) {
   // Loading external parameters invalidates every final-result state snapshot
   // and any one-shot confirmation waiting on the old parameters.
   dismissOneShotPrompts();
-  m_oneShotOperationQueue.cancelAll();
+  m_oneShotOperations.cancelAll();
   FILE *f = fopen(fileName.toUtf8().constData(), "r");
   if (!f) {
     QMessageBox::critical(this, "Error", "Could not open file.");

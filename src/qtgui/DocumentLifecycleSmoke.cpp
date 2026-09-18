@@ -585,7 +585,7 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
               "Document lifecycle smoke could not start screen detection"));
           return;
         }
-        if (!second->m_oneShotOperationQueue.hasActiveTasks()) {
+        if (!second->m_oneShotOperations.hasActiveTasks()) {
           fail(QStringLiteral(
               "Document lifecycle smoke did not enqueue one-shot screen detection"));
           return;

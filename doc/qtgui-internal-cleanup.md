@@ -475,9 +475,11 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
 ### P2 — maintenance refactoring
 
 - Split very large source files by responsibility rather than by arbitrary line
-  count.  `MainWindow` should retain document coordination, while operation
-  implementations can move into focused controllers/services once interfaces
-  are stable.
+  count. `MainWindow` retains document-specific snapshots, UI decisions and
+  publication, while the stable replaceable one-shot queue/progress/publication
+  machinery now lives in `OneShotOperationController`. Continue moving
+  cohesive operation infrastructure behind focused controllers/services when
+  the interface is similarly stable.
 - Give long-lived analysis state explicit structs rather than parallel member
   variables. Profile-calibration, geometry-fit, measured-MTF fit, and automatic
   multi-area focus analysis now each live in one lifecycle struct instead of
