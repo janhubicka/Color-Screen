@@ -1942,12 +1942,12 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         }
         const auto area = reference->sharedImageData()->get_area();
         reference->startReferenceMtfMeasurement(area, {});
-        if (!reference->m_referenceMtfProgress.expired()) {
+        if (!reference->m_referenceMtfMeasurement.progress.expired()) {
           fail(QStringLiteral("Empty reference batch started work"));
           return;
         }
         reference->startReferenceMtfMeasurement(area, state->referenceParameters);
-        auto progress = reference->m_referenceMtfProgress.lock();
+        auto progress = reference->m_referenceMtfMeasurement.progress.lock();
         int progressEntries = 0;
         for (const ProgressEntry &entry : first->m_activeProgresses)
           if (entry.info == progress && entry.userVisible && entry.row &&
@@ -1964,7 +1964,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
 
       case 201: {
         ImageViewWindow *reference = state->reference.data();
-        if (!reference || !reference->m_referenceMtfProgress.expired()) {
+        if (!reference || !reference->m_referenceMtfMeasurement.progress.expired()) {
           retryOrFail(QStringLiteral("Reference MTF batch did not finish"));
           return;
         }
@@ -2001,7 +2001,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
 
         reference->startReferenceMtfMeasurement(
             reference->sharedImageData()->get_area(), state->referenceParameters);
-        auto progress = reference->m_referenceMtfProgress.lock();
+        auto progress = reference->m_referenceMtfMeasurement.progress.lock();
         ParameterState edited = state->referenceInputs;
         edited.rparams.brightness += 0.125;
         first->applyState(edited);
@@ -2016,7 +2016,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
 
       case 202: {
         ImageViewWindow *reference = state->reference.data();
-        if (!reference || !reference->m_referenceMtfProgress.expired()) {
+        if (!reference || !reference->m_referenceMtfMeasurement.progress.expired()) {
           retryOrFail(QStringLiteral("Stale reference MTF did not finish cleanup"));
           return;
         }
@@ -2036,7 +2036,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
 
       case 203: {
         ImageViewWindow *reference = state->reference.data();
-        if (!reference || !reference->m_referenceMtfProgress.expired()) {
+        if (!reference || !reference->m_referenceMtfMeasurement.progress.expired()) {
           retryOrFail(QStringLiteral("Failed reference batch did not finish cleanup"));
           return;
         }
@@ -2049,10 +2049,10 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         error->accept();
         reference->startReferenceMtfMeasurement(
             reference->sharedImageData()->get_area(), state->referenceParameters);
-        auto progress = reference->m_referenceMtfProgress.lock();
+        auto progress = reference->m_referenceMtfMeasurement.progress.lock();
         reference->reloadReferenceImage();
         if (!progress || !progress->pool_cancel() ||
-            !reference->m_referenceMtfProgress.expired()) {
+            !reference->m_referenceMtfMeasurement.progress.expired()) {
           fail(QStringLiteral("Reference reload did not cancel its measurement"));
           return;
         }
@@ -2073,9 +2073,9 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         }
         const auto area = reference->sharedImageData()->get_area();
         reference->startReferenceMtfMeasurement(area, state->referenceParameters);
-        auto oldProgress = reference->m_referenceMtfProgress.lock();
+        auto oldProgress = reference->m_referenceMtfMeasurement.progress.lock();
         reference->startReferenceMtfMeasurement(area, state->referenceParameters);
-        auto newProgress = reference->m_referenceMtfProgress.lock();
+        auto newProgress = reference->m_referenceMtfMeasurement.progress.lock();
         if (!oldProgress || !newProgress || oldProgress == newProgress ||
             !oldProgress->pool_cancel() || newProgress->pool_cancel()) {
           fail(QStringLiteral("Reference MTF replacement lost request-local cancellation"));
@@ -2087,7 +2087,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
 
       case 205: {
         ImageViewWindow *reference = state->reference.data();
-        if (!reference || !reference->m_referenceMtfProgress.expired() ||
+        if (!reference || !reference->m_referenceMtfMeasurement.progress.expired() ||
             first->m_oneShotOperationQueue.hasActiveTasks()) {
           retryOrFail(QStringLiteral("Replacement reference MTF did not settle"));
           return;
@@ -2130,7 +2130,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         }
         reference->startReferenceMtfMeasurement(
             reference->sharedImageData()->get_area(), state->referenceParameters);
-        auto progress = reference->m_referenceMtfProgress.lock();
+        auto progress = reference->m_referenceMtfMeasurement.progress.lock();
         if (!app.closeView(reference) || !progress || !progress->pool_cancel()) {
           fail(QStringLiteral("Closing the reference did not cancel its measurement"));
           return;
