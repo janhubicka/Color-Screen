@@ -1731,7 +1731,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         // Restoring the exact input snapshot must not resurrect cancelled work.
         const ParameterState focusBaseline = first->getCurrentState();
         first->onFindFocusAreasRequested();
-        if (!first->m_focusAreaAnalysisRunning ||
+        if (!first->m_focusAreaAnalysis.running ||
             !first->m_oneShotOperationQueue.hasActiveTasks()) {
           fail(QStringLiteral("Focus-area discovery bypassed the one-shot lifecycle"));
           return;
@@ -1745,11 +1745,11 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
       }
 
       case 100: {
-        if (first->m_focusAreaAnalysisRunning) {
+        if (first->m_focusAreaAnalysis.running) {
           retryOrFail(QStringLiteral("Cancelled focus-area discovery did not finish cleanup"));
           return;
         }
-        if (!first->m_focusAreaCandidates.empty() || first->m_focusAreaPrompt ||
+        if (!first->m_focusAreaAnalysis.candidates.empty() || first->m_focusAreaPrompt ||
             first->m_oneShotOperationQueue.hasActiveTasks()) {
           fail(QStringLiteral("Cancelled focus-area discovery published stale output"));
           return;
@@ -1758,10 +1758,10 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         // Run the real multi-area path too. A geometry edit clears the source
         // candidates; a late completion must not put its old vector back.
         const ParameterState focusBaseline = first->getCurrentState();
-        first->m_focusAreaCandidates.resize(3);
+        first->m_focusAreaAnalysis.candidates.resize(3);
         first->onAnalyzeFocusAreasRequested(
             colorscreen::finetune_scanner_mtf_sigma);
-        if (!first->m_focusAreaAnalysisRunning ||
+        if (!first->m_focusAreaAnalysis.running ||
             !first->m_oneShotOperationQueue.hasActiveTasks()) {
           fail(QStringLiteral("Multi-area focus fitting bypassed the one-shot lifecycle"));
           return;
@@ -1775,12 +1775,12 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
       }
 
       case 101: {
-        if (first->m_focusAreaAnalysisRunning) {
+        if (first->m_focusAreaAnalysis.running) {
           retryOrFail(QStringLiteral("Cancelled multi-area fit did not finish cleanup"));
           return;
         }
-        if (!first->m_focusAreaCandidates.empty() || first->m_focusAreaPrompt ||
-            !first->m_focusAreaAnalysisResult.selected.empty() ||
+        if (!first->m_focusAreaAnalysis.candidates.empty() || first->m_focusAreaPrompt ||
+            !first->m_focusAreaAnalysis.result.selected.empty() ||
             first->m_oneShotOperationQueue.hasActiveTasks()) {
           fail(QStringLiteral("Cancelled multi-area fit restored stale diagnostics"));
           return;

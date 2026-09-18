@@ -793,9 +793,21 @@ private:
   bool m_applicationClosePrepared = false;
   bool m_focusAnalysisPending = false;
   uint64_t m_focusAnalysisFlags = 0;
-  std::vector<colorscreen::finetune_focus_area_candidate> m_focusAreaCandidates;
-  colorscreen::finetune_focus_analysis_result m_focusAreaAnalysisResult;
-  bool m_focusAreaAnalysisRunning = false;
+
+  // Session-local candidate/diagnostic state for multi-area focus analysis.
+  // The click-to-analyze tool above is a separate interaction lifecycle.
+  struct FocusAreaAnalysisState {
+    std::vector<colorscreen::finetune_focus_area_candidate> candidates;
+    colorscreen::finetune_focus_analysis_result result;
+    bool running = false;
+
+    void clearDiagnostics() {
+      candidates.clear();
+      result = colorscreen::finetune_focus_analysis_result();
+    }
+  };
+  FocusAreaAnalysisState m_focusAreaAnalysis;
+
   int m_selectedMtfMeasurement = -1;
 
   // Generation retained for the progressive adaptive-sharpening worker.
