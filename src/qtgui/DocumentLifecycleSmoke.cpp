@@ -24,6 +24,7 @@
 #include <atomic>
 #include <functional>
 #include <memory>
+#include <stdexcept>
 #include <utility>
 #include <vector>
 
@@ -215,6 +216,12 @@ void startTaskQueueAsyncPublicationSmoke(ColorScreenApplication &app,
     std::shared_ptr<std::atomic_bool> olderStarted =
         std::make_shared<std::atomic_bool>(false);
     bool olderDone = false;
+    bool exceptionDone = false;
+    bool timeoutDone = false;
+    int timeoutPendingReqId = 0;
+    int timeoutFinishedCount = 0;
+    std::vector<std::shared_ptr<colorscreen::progress_info>>
+        timeoutStartedProgress;
     bool failed = false;
     std::function<void()> completed;
   };
@@ -239,7 +246,7 @@ void startTaskQueueAsyncPublicationSmoke(ColorScreenApplication &app,
         while (!progress->pool_cancel())
           QThread::msleep(1);
       },
-      [state, fail](bool publishResult) {
+      [&app, state, fail](bool publishResult) {
         if (publishResult) {
           fail("Document lifecycle smoke published a superseded async result");
           return;
@@ -247,9 +254,86 @@ void startTaskQueueAsyncPublicationSmoke(ColorScreenApplication &app,
         if (state->failed)
           return;
         state->olderDone = true;
-        if (state->queue)
-          state->queue->deleteLater();
-        state->completed();
+        if (!state->queue) {
+          fail("Document lifecycle smoke lost its TaskQueue before exception test");
+          return;
+        }
+
+        // An exception escaping a generic one-shot worker must fail only that
+        // request. It must not unwind out of QRunnable::run() and terminate the
+        // process, and DONE must still run for cleanup with publishResult=false.
+        state->queue->runAsync(
+            [](colorscreen::progress_info *) {
+              throw std::runtime_error(
+                  "intentional TaskQueue worker exception smoke");
+            },
+            [&app, state, fail](bool exceptionPublishResult) {
+              if (exceptionPublishResult) {
+                fail("Document lifecycle smoke published a throwing async result");
+                return;
+              }
+              if (state->failed)
+                return;
+              if (!state->queue || state->queue->hasActiveTasks()) {
+                fail("Document lifecycle smoke retained a throwing async task");
+                return;
+              }
+              state->exceptionDone = true;
+
+              TaskQueue *throwingQueue = state->queue.data();
+              state->queue = new TaskQueue(&app, 20);
+              throwingQueue->deleteLater();
+
+              // Queue two deliberately non-completing tasks and cancellation-
+              // request both before adding a pending third request. The timeout
+              // must evict already-cancelled workers by itself; no fourth
+              // request is allowed to prod the queue.
+              connect(
+                  state->queue, &TaskQueue::progressStarted, &app,
+                  [state](std::shared_ptr<colorscreen::progress_info> progress) {
+                    state->timeoutStartedProgress.push_back(
+                        std::move(progress));
+                  });
+              connect(
+                  state->queue, &TaskQueue::progressFinished, &app,
+                  [state](std::shared_ptr<colorscreen::progress_info>) {
+                    ++state->timeoutFinishedCount;
+                  });
+              connect(
+                  state->queue, &TaskQueue::triggerRender, &app,
+                  [state, fail](
+                      int reqId,
+                      std::shared_ptr<colorscreen::progress_info>,
+                      const QVariant &) {
+                    if (reqId != state->timeoutPendingReqId)
+                      return;
+                    if (state->timeoutFinishedCount != 2) {
+                      fail("Document lifecycle smoke did not evict both cancelled timed-out tasks");
+                      return;
+                    }
+                    if (!state->queue->reportFinished(reqId, true)) {
+                      fail("Document lifecycle smoke rejected timeout-started request");
+                      return;
+                    }
+                    if (state->queue->hasActiveTasks()) {
+                      fail("Document lifecycle smoke retained stale timed-out tasks");
+                      return;
+                    }
+                    state->timeoutDone = true;
+                    state->queue->deleteLater();
+                    state->completed();
+                  });
+
+              state->queue->requestRender();
+              state->queue->requestRender();
+              if (state->timeoutStartedProgress.size() != 2) {
+                fail("Document lifecycle smoke did not start timeout setup tasks");
+                return;
+              }
+              for (const auto &progress : state->timeoutStartedProgress)
+                progress->cancel();
+              state->timeoutPendingReqId = state->queue->requestRender();
+            });
       });
 
   auto supersede = std::make_shared<std::function<void(int)>>();
@@ -282,8 +366,8 @@ void startTaskQueueAsyncPublicationSmoke(ColorScreenApplication &app,
 
   QTimer::singleShot(0, &app, [supersede]() { (*supersede)(1000); });
   QTimer::singleShot(20000, &app, [state, fail]() {
-    if (!state->failed && !state->olderDone)
-      fail("Document lifecycle smoke timed out in TaskQueue::runAsync");
+    if (!state->failed && !state->timeoutDone)
+      fail("Document lifecycle smoke timed out in TaskQueue robustness checks");
   });
 }
 

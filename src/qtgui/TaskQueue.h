@@ -24,6 +24,8 @@
  * 3. It provides progress tracking integration via libcolorscreen's
  *    progress_info system.
  */
+class QTimer;
+
 class TaskQueue : public QObject {
   Q_OBJECT
 public:
@@ -32,7 +34,9 @@ public:
   /** Timeout in milliseconds after which an active task is considered stale and can be cancelled. */
   static constexpr int TASK_TIMEOUT_MS = 5000;
 
-  explicit TaskQueue(QObject *parent = nullptr);
+  /** Construct a queue with the production timeout unless overridden. */
+  explicit TaskQueue(QObject *parent = nullptr,
+                     int taskTimeoutMs = TASK_TIMEOUT_MS);
   ~TaskQueue() override;
 
   /**
@@ -80,6 +84,8 @@ public:
    * is fully published to QThreadPool before a worker can execute it.
    * STARTED receives the request's progress on the GUI thread, before worker
    * dispatch, so callers can select the appropriate progress presentation.
+   * Exceptions escaping WORKER are contained on the pool thread; the request
+   * is completed as failed and DONE is still invoked with false.
    */
   void runAsync (std::function<void (colorscreen::progress_info *)> worker,
                  std::function<void (bool publishResult)> done,
@@ -104,11 +110,18 @@ private:
   void startTask(int reqId, const QVariant &userData, std::function<void(int reqId, std::shared_ptr<colorscreen::progress_info>)> onStart);
   /** Internal helper to move a pending request into the active slot if available. */
   void processPending();
+  /** Evict active tasks whose runtime exceeded the timeout.
+      Caller must hold m_mutex. */
+  void evictTimedOutTasksLocked();
+  /** Arm or stop the pending-request timeout. Caller must hold m_mutex. */
+  void schedulePendingTimeoutLocked();
   /** Formats the current queue state for debugging purposes. */
   QString formatQueueState() const;
 
   int m_nextReqId = 1;
   int m_latestRequestedReqId = 0;
+  int m_taskTimeoutMs = TASK_TIMEOUT_MS;
+  QTimer *m_timeoutTimer = nullptr;
 
   /** @brief Internal state for a managed task. */
   struct TaskInfo {
