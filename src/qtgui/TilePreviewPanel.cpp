@@ -215,10 +215,7 @@ void TilePreviewPanel::setupTiles(const QString &title) {
   m_tilesLayoutContainer = new QVBoxLayout();
   m_tilesLayoutContainer->setContentsMargins(0, 0, 0, 0);
 
-  QWidget *detachableTiles =
-      createDetachableSection(title, m_tilesContainer, [this]() {
-        emit detachTilesRequested(m_tilesContainer);
-      });
+  QWidget *detachableTiles = createDetachableSection(title, m_tilesContainer);
   detachableTiles->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
 
   m_tilesLayoutContainer->addWidget(detachableTiles);
@@ -407,31 +404,6 @@ void TilePreviewPanel::showEvent(QShowEvent *event) {
 }
 
 QWidget *TilePreviewPanel::getTilesWidget() const { return m_tilesContainer; }
-
-void TilePreviewPanel::reattachTiles(QWidget *widget) {
-  if (widget != m_tilesContainer)
-    return;
-
-  if (m_tilesLayoutContainer && m_tilesLayoutContainer->count() > 0) {
-    QWidget *section = m_tilesLayoutContainer->itemAt(0)->widget();
-    if (section && section->layout()) {
-      QLayoutItem *item =
-          section->layout()->takeAt(section->layout()->count() - 1);
-      if (item) {
-        if (item->widget())
-          delete item->widget();
-        delete item;
-      }
-      section->layout()->addWidget(widget);
-      widget->show();
-      if (section->layout()->count() > 0) {
-        QLayoutItem *headerItem = section->layout()->itemAt(0);
-        if (headerItem && headerItem->widget())
-          headerItem->widget()->show();
-      }
-    }
-  }
-}
 
 bool TilePreviewPanel::isTileRenderingEnabled(
     const ParameterState &state) const {
