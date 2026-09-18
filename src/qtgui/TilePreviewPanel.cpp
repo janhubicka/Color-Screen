@@ -228,6 +228,7 @@ void TilePreviewPanel::setupTiles(const QString &title) {
   };
   m_tilesContainer->installEventFilter(new TileResizeEventFilter(this));
 
+  m_tileDefinitions = types;
   m_tileLabels.clear();
   for (const auto &pair : types) {
     ScalableImageLabel *label = new ScalableImageLabel();
@@ -263,14 +264,6 @@ void TilePreviewPanel::setupTiles(const QString &title) {
       });
   detachableTiles->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Maximum);
 
-  // Hack: Rename title based on subclass?
-  // Actually createDetachableSection uses "Tile Preview" here, but Sharpness
-  // used "Sharpness Preview". We can allow overriding title later if needed, or
-  // loop it into setupTiles("Title")? User requested: "On the top there add
-  // three tiles in a dockable widget analogous to ones in Sharpness" "Sharpness
-  // Preview" is the title in SharpnessPanel. "Tile Preview" is generic. We
-  // might want to pass it.
-
   m_tilesLayoutContainer->addWidget(detachableTiles);
 
   QWidget *wrapper = new QWidget();
@@ -295,14 +288,20 @@ void TilePreviewPanel::setupTiles(const QString &title) {
 }
 
 void TilePreviewPanel::rebuildTiles() {
-  if (!m_tilesContainer) return;
-  auto types = getTileTypes();
-  if (types.size() == m_tileLabels.size()) {
-     bool all_match = true;
-     // wait, no easy way to check text, size is usually enough
-     return;
-  }
-  
+  if (!m_tilesContainer)
+    return;
+
+  const auto types = getTileTypes();
+  if (types == m_tileDefinitions && types.size() == m_tileLabels.size())
+    return;
+
+  // Definition changes invalidate both the widgets and any worker still
+  // rendering the previous type/caption set. Cancel before rebuilding so a
+  // completion queued in this gap cannot publish into the new labels.
+  m_renderQueue.cancelAll();
+  m_lastRenderedTileSize = 0;
+  m_tileDefinitions = types;
+
   QLayout *layout = m_tilesContainer->layout();
   QLayoutItem *child;
   while ((child = layout->takeAt(0)) != nullptr) {
@@ -421,20 +420,26 @@ void TilePreviewPanel::finishTileRender(int reqId) {
     m_completedRenders.erase(it);
   }
 
-  if (result.success) {
-    if (result.tiles.size() == m_tileLabels.size()) {
-      for (size_t i = 0; i < m_tileLabels.size(); ++i) {
-        const QImage &img = result.tiles[i];
-        if (!img.isNull())
-          m_tileLabels[i]->setPixmap(QPixmap::fromImage(img));
-      }
-    }
-  } else {
-    // Failed or cancelled: force a retry on the next update.
+  // A failed newest request should retry later. Reset before reportFinished():
+  // that call may synchronously start a pending newer request, which must be
+  // allowed to record its own rendered size without an older completion
+  // clobbering it afterwards.
+  if (!result.success)
     m_lastRenderedTileSize = 0;
-  }
 
-  m_renderQueue.reportFinished(reqId, result.success);
+  // TaskQueue is the publication authority. Ask it before touching widgets:
+  // cancelled/superseded workers still complete, but their images stay private.
+  const bool publishResult = m_renderQueue.reportFinished(reqId, result.success);
+  if (!result.success || !publishResult)
+    return;
+
+  if (result.tiles.size() == m_tileLabels.size()) {
+    for (size_t i = 0; i < m_tileLabels.size(); ++i) {
+      const QImage &img = result.tiles[i];
+      if (!img.isNull())
+        m_tileLabels[i]->setPixmap(QPixmap::fromImage(img));
+    }
+  }
 }
 
 void TilePreviewPanel::performTileRender() {

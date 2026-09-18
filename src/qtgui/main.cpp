@@ -6,6 +6,7 @@
 #include "ImageWidget.h"
 #include "SharpnessPanel.h"
 #include "ToneCurveWidget.h"
+#include "TilePreviewPanel.h"
 #include "TilesPanel.h"
 #include "CoordinateTransformer.h"
 #include "CoordinateOptimizationWorker.h"
@@ -32,6 +33,7 @@
 #include <QIcon>
 #include <QImage>
 #include <QKeyEvent>
+#include <QLabel>
 #include <QMdiArea>
 #include <QMdiSubWindow>
 #include <QMenu>
@@ -57,6 +59,7 @@
 #include <cstring>
 #include <functional>
 #include <memory>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -81,6 +84,43 @@ public:
   using ParameterPanel::addSliderParameter;
   using ParameterPanel::addSliderParameterControls;
   using ParameterPanel::setParameterApplicability;
+};
+
+/** Exercise dynamic tile-definition rebuilds without starting render work. */
+class TileDefinitionProbe final : public TilePreviewPanel {
+public:
+  TileDefinitionProbe(StateGetter stateGetter, StateSetter stateSetter,
+                      ImageGetter imageGetter)
+      : TilePreviewPanel(std::move(stateGetter), std::move(stateSetter),
+                         std::move(imageGetter), nullptr, false) {}
+
+  void initialize() { setupTiles(QStringLiteral("Tile definition probe")); }
+  void useAlternateDefinitions() {
+    m_alternate = true;
+    rebuildTiles();
+  }
+
+protected:
+  std::vector<std::pair<colorscreen::render_screen_tile_type, QString>>
+  getTileTypes() const override {
+    if (m_alternate)
+      return {{colorscreen::corrected_backlight_screen,
+               QStringLiteral("After A")},
+              {colorscreen::corrected_detail_screen,
+               QStringLiteral("After B")}};
+    return {{colorscreen::original_screen, QStringLiteral("Before A")},
+            {colorscreen::corrected_full_screen,
+             QStringLiteral("Before B")}};
+  }
+
+  bool shouldUpdateTiles(const ParameterState &) override { return false; }
+  bool isTileRenderingEnabled(const ParameterState &) const override {
+    return false;
+  }
+  bool requiresScan() const override { return false; }
+
+private:
+  bool m_alternate = false;
 };
 
 /** Deliver one synthetic mouse event using Qt6's local/global constructor. */
@@ -254,6 +294,38 @@ bool runBetaInvariantSmoke() {
       rgbAppliedKeys[0] != QStringLiteral("probe.rgb.red") ||
       rgbAppliedKeys[1] != QStringLiteral("probe.rgb.green"))
     return fail("correlated RGB helper merged identity across saved channels");
+
+  // A tile preview can change its logical tile set without changing the number
+  // of tiles (for example RGB/IR presentation changes). Rebuild must compare
+  // the full type/caption definition rather than only the widget count.
+  {
+    ParameterState tileState;
+    TileDefinitionProbe tileProbe(
+        [&tileState]() { return tileState; },
+        [&tileState](const ParameterState &state, const QString &,
+                     const QString &) { tileState = state; },
+        []() { return std::shared_ptr<colorscreen::image_data>(); });
+    tileProbe.initialize();
+
+    auto captions = [&tileProbe]() {
+      QStringList result;
+      QWidget *tiles = tileProbe.getTilesWidget();
+      if (!tiles)
+        return result;
+      for (QLabel *label : tiles->findChildren<QLabel *>())
+        result.append(label->text());
+      return result;
+    };
+
+    if (captions() !=
+        QStringList{QStringLiteral("Before A"), QStringLiteral("Before B")})
+      return fail("tile preview did not build its initial definition");
+
+    tileProbe.useAlternateDefinitions();
+    if (captions() !=
+        QStringList{QStringLiteral("After A"), QStringLiteral("After B")})
+      return fail("same-sized tile definition change kept stale captions");
+  }
 
   // Stateful and stateless sliders share one conversion utility. Exercise the
   // typed stateful controls against the stateless wrapper for every supported
