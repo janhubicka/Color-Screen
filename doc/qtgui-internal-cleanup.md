@@ -345,11 +345,11 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   first. Workspace churn continues to check the other document/operation-state
   ownership boundaries.
 - Subsequent complete stable-key migrations are Digital Capture (fifth), Contact Copy (sixth), Color (seventh), and Sharpness (eighth). Capture's derived Sensor width shares the pixel-pitch identity while its rotation assumption remains presentation-only. Contact Copy gives each H&D editing surface its own gesture identity. Color adds `color.*` keys for every saved editor, including custom whitepoint/tone-curve widgets. Correlated RGB controls expand their base key to per-channel `.red/.green/.blue` identities; Link channels and Color's area/chart-view controls remain deliberately unkeyed. Sharpness uses `sharpness.*` for saved MTF/deconvolution controls and target-specific `sharpness.measurements.<index>.*` identities for repeated measurement metadata rows; chart presentation, measurement navigation/actions, and focus-analysis setup remain unkeyed. Workspace smoke verifies both the complete Sharpness key set and that adjacent name edits on two measurements require two Undo steps.
-- Prefer `QSignalBlocker` for temporary signal suppression. The first P1 cleanup
-  converts the central `ParameterPanel` synchronization helpers and the simple
-  refresh/update pairs in Capture, Screen, Geometry, Image Layer, Tiles, Color,
-  Contact Copy and Sharpness. Keep lifetime/destruction-specific signal handling
-  separate, and migrate any remaining ordinary pairs incrementally.
+- Prefer `QSignalBlocker` for temporary signal suppression. Central
+  `ParameterPanel` synchronization and ordinary refresh/update paths now use
+  scoped blockers throughout the parameter panels, document window and
+  secondary image views. The remaining direct `blockSignals()` call is the
+  intentional undo-stack teardown suppression, which is lifetime-specific.
 - Keep group folding as presentation state only: a collapsed/expanded section
   must compose with each row's logical applicability instead of overwriting it.
   Image Layer's infrared-only calibration action now uses

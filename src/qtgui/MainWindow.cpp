@@ -1651,9 +1651,8 @@ void MainWindow::updateCoordinateSpaceControls() {
   if (m_finalRotationSpinAction)
     m_finalRotationSpinAction->setVisible(finalCoordinates);
   if (m_finalRotationSpinBox) {
-    m_finalRotationSpinBox->blockSignals(true);
+    const QSignalBlocker blocker(m_finalRotationSpinBox);
     m_finalRotationSpinBox->setValue(m_scrToImgParams.final_rotation);
-    m_finalRotationSpinBox->blockSignals(false);
   }
 
   // Rotate/mirror are document-owned actions also shown in ordinary New View
@@ -1829,7 +1828,7 @@ void MainWindow::onColorCheckBoxChanged(bool checked) {
    After populating, re-selects the current mode, updates 1-0 hotkey
    tooltips, and refreshes the color checkbox state.  */
 void MainWindow::updateModeMenu() {
-  m_modeComboBox->blockSignals(true);
+  const QSignalBlocker modeSignalBlocker(m_modeComboBox);
   m_modeComboBox->clear();
 
   // We access the static array in anonymous namespace from
@@ -1923,7 +1922,6 @@ void MainWindow::updateModeMenu() {
     }
   }
 
-  m_modeComboBox->blockSignals(false);
 }
 
 /** Render a 64×64 preview icon of a screen type pattern.
@@ -4283,10 +4281,9 @@ void MainWindow::updateUIFromState(const ParameterState &state) {
   if (m_mirrorAction) {
     const bool finalCoordinates = m_imageWidget &&
         m_imageWidget->coordinateSpace() == colorscreen::render_final_coordinates;
-    m_mirrorAction->blockSignals(true);
+    const QSignalBlocker blocker(m_mirrorAction);
     m_mirrorAction->setChecked(finalCoordinates ? state.scrToImg.final_mirror
                                                 : state.rparams.scan_mirror);
-    m_mirrorAction->blockSignals(false);
   }
 
   // Sync nonlinear checkbox in GeometryPanel
@@ -4895,13 +4892,12 @@ void MainWindow::updateColorCheckBoxState() {
   m_colorCheckBox->setVisible(isVisible);
   m_colorCheckBox->setEnabled(isEnabled);
 
-  m_colorCheckBox->blockSignals(true);
+  const QSignalBlocker blocker(m_colorCheckBox);
   if (!hasRgb) {
     m_colorCheckBox->setChecked(false);
   } else {
     m_colorCheckBox->setChecked(m_renderTypeParams.color);
   }
-  m_colorCheckBox->blockSignals(false);
 }
 
 /** Show or hide restoration controls that depend on capture/screen type.
