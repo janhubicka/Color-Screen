@@ -433,7 +433,7 @@ void CapturePanel::setupUi()
         }, 1.0, nullptr, false, "Wavelength in nanometers used for MTF modeling of diffraction for the blue channel.",
         QStringLiteral("capture.mtf.wavelength.blue"), true, 0.0);
 
-    m_irWavelengthWidget = addSliderParameter(
+    const SliderWidgets irWavelength = addSliderParameterControls(
         "IR wavelength", 380.0, 1100.0, 1.0, 0, "nm", "default (750 nm)",
         [](const ParameterState &s) {
           return s.rparams.sharpen.scanner_mtf.wavelengths[3];
@@ -442,6 +442,8 @@ void CapturePanel::setupUi()
           s.rparams.sharpen.scanner_mtf.wavelengths[3] = v;
         }, 1.0, nullptr, false, "Wavelength in nanometers used for MTF modeling of diffraction for the scalar or infrared channel.",
         QStringLiteral("capture.mtf.wavelength.scalar"), true, 0.0);
+    m_irWavelengthWidget = irWavelength.container;
+    m_irWavelengthSpin = irWavelength.spin;
 
     // Detected scanner/camera wavelengths use the same explicit Use workflow
     // as f-stop, pixel pitch, fill factor and resolution.
@@ -531,8 +533,8 @@ void CapturePanel::setupUi()
                     lab->setText("IR wavelength");
                 }
             }
-            if (auto spin = m_irWavelengthWidget->findChild<QDoubleSpinBox*>())
-                spin->setSpecialValueText(
+            if (m_irWavelengthSpin)
+                m_irWavelengthSpin->setSpecialValueText(
                     has_rgb ? "default (750 nm)" : "default (550 nm)");
 
             QStringList detectedWavelengths;
@@ -724,9 +726,8 @@ void CapturePanel::setupUi()
     addButtonParameter("Flat field", "Set reference", [this]() { emit flatFieldRequested(); });
     
     m_backlightWidget = new BacklightChartWidget();
-    QWidget *backlightSection = createDetachableSection("Backlight", m_backlightWidget, [this]() {
-      emit detachBacklightRequested(m_backlightWidget);
-    });
+    QWidget *backlightSection =
+        createDetachableSection("Backlight", m_backlightWidget);
     m_form->addRow(backlightSection);
     
     m_cropBtn = addToggleButtonParameter("Crop image", "Change crop", [this](bool checked) {
@@ -759,34 +760,6 @@ void CapturePanel::setupUi()
     });
 
     updateUI();
-}
-
-void CapturePanel::reattachBacklight(QWidget *w) {
-    if (w != m_backlightWidget)
-        return;
-
-    for (int i = 0; i < m_form->rowCount(); ++i) {
-        QLayoutItem *item = m_form->itemAt(i, QFormLayout::SpanningRole);
-        if (item && item->widget()) {
-            QWidget *section = item->widget();
-            if (section->layout()) {
-                QVBoxLayout *vl = qobject_cast<QVBoxLayout*>(section->layout());
-                if (vl && vl->count() > 0) {
-                    QWidget *header = vl->itemAt(0)->widget();
-                    if (header) {
-                        QLabel *titleLabel = header->findChild<QLabel*>();
-                        if (titleLabel && titleLabel->text() == "Backlight") {
-                           vl->addWidget(w);
-                           w->show();
-                           header->show();
-                           updateUI();
-                           return;
-                        }
-                    }
-                }
-            }
-        }
-    }
 }
 
 void CapturePanel::setCropChecked(bool checked) {

@@ -27,10 +27,8 @@ signals:
     void cropRequested();
     void measureRequested();
     void flatFieldRequested();
-    void detachBacklightRequested(QWidget *w);
 
 public:
-  void reattachBacklight(QWidget *w);
   void setCropChecked(bool checked);
 
 private:
@@ -70,6 +68,7 @@ private:
     class QWidget *m_greenWavelengthWidget = nullptr;
     class QWidget *m_blueWavelengthWidget = nullptr;
     class QWidget *m_irWavelengthWidget = nullptr;
+    class QDoubleSpinBox *m_irWavelengthSpin = nullptr;
     class QLabel *m_detectedWavelengthsValue = nullptr;
     class QPushButton *m_useDetectedWavelengthsBtn = nullptr;
     class BacklightChartWidget *m_backlightWidget = nullptr;
