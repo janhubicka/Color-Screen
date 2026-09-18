@@ -21,7 +21,9 @@ class QHBoxLayout;
 class QFormLayout;
 class QGroupBox;
 class QCheckBox;
+class QDoubleSpinBox;
 class QPushButton;
+class QSlider;
 
 class ParameterPanel : public QWidget {
   Q_OBJECT
@@ -82,15 +84,29 @@ protected:
       std::optional<double> specialMinimumValue = std::nullopt,
       ParameterKeyGetter parameterKeyGetter = nullptr);
 
-  /*
-    Adds a slider parameter row (Slider + SpinBox) that does not participate in state.
-  */
-  QWidget* addSlider(
+  /** Concrete widgets owned by one stateless slider row. */
+  struct SliderWidgets {
+    QWidget *container = nullptr;
+    QSlider *slider = nullptr;
+    QDoubleSpinBox *spin = nullptr;
+  };
+
+  /** Add a stateless slider row and return its concrete controls. Use this
+      only when a derived panel needs to configure the slider or spin box. */
+  SliderWidgets addSliderControls(
       const QString &label, double min, double max, double scale, int decimals,
       const QString &suffix, const QString &specialValueText,
-      double initialValue,
-      std::function<void(double)> onChanged, double gamma = 1.0,
-      bool logarithmic = false, const QString &tooltip = QString());
+      double initialValue, std::function<void(double)> onChanged,
+      double gamma = 1.0, bool logarithmic = false,
+      const QString &tooltip = QString());
+
+  /** Add a stateless slider row when the caller only needs its container. */
+  QWidget *addSlider(
+      const QString &label, double min, double max, double scale, int decimals,
+      const QString &suffix, const QString &specialValueText,
+      double initialValue, std::function<void(double)> onChanged,
+      double gamma = 1.0, bool logarithmic = false,
+      const QString &tooltip = QString());
 
   QComboBox *addEnumParameter(
       const QString &label, const std::map<int, QString> &options,
