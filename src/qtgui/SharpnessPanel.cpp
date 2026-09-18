@@ -227,14 +227,11 @@ void SharpnessPanel::setupUi() {
 
   // Create container for MTF
   QWidget *mtfWrapper = new QWidget();
-  m_mtfContainer = new QVBoxLayout(mtfWrapper);
-  m_mtfContainer->setContentsMargins(0, 0, 0, 0);
+  auto *mtfContainer = new QVBoxLayout(mtfWrapper);
+  mtfContainer->setContentsMargins(0, 0, 0, 0);
 
-  QWidget *detachableMTF =
-      createDetachableSection("MTF Chart", m_mtfChart, [this]() {
-        emit detachMTFChartRequested(m_mtfChart);
-      });
-  m_mtfContainer->addWidget(detachableMTF);
+  QWidget *detachableMTF = createDetachableSection("MTF Chart", m_mtfChart);
+  mtfContainer->addWidget(detachableMTF);
 
   m_showSignedOtfCheck = new QCheckBox(tr("Show signed physical OTF"), mtfWrapper);
   m_showSignedOtfCheck->setObjectName(
@@ -245,7 +242,7 @@ void SharpnessPanel::setupUi() {
          "negative lobes are inferred from the fitted optical model."));
   connect(m_showSignedOtfCheck, &QCheckBox::toggled, m_mtfChart,
           &MTFChartWidget::setShowSignedOTF);
-  m_mtfContainer->addWidget(m_showSignedOtfCheck);
+  mtfContainer->addWidget(m_showSignedOtfCheck);
 
   if (m_currentGroupForm)
     m_currentGroupForm->addRow(mtfWrapper);
@@ -255,10 +252,7 @@ void SharpnessPanel::setupUi() {
 
   DotSpreadPreviewPanel *dotSpread =
       new DotSpreadPreviewPanel(m_stateGetter, m_stateSetter, m_imageGetter);
-  m_dotSpreadPanel = dotSpread;
   dotSpread->init("Dot Spread");
-  connect(dotSpread, &TilePreviewPanel::detachTilesRequested, this,
-          &SharpnessPanel::detachDotSpreadRequested);
   connect(dotSpread, &TilePreviewPanel::progressStarted, this, &SharpnessPanel::progressStarted);
   connect(dotSpread, &TilePreviewPanel::progressFinished, this, &SharpnessPanel::progressFinished);
   
@@ -658,14 +652,13 @@ void SharpnessPanel::setupUi() {
   m_finetuneImagesPanel = new FinetuneImagesPanel();
 
   m_finetuneImagesWrapper = new QWidget();
-  m_finetuneImagesContainer = new QVBoxLayout(m_finetuneImagesWrapper);
-  m_finetuneImagesContainer->setContentsMargins(0, 0, 0, 0);
+  auto *finetuneImagesContainer = new QVBoxLayout(m_finetuneImagesWrapper);
+  finetuneImagesContainer->setContentsMargins(0, 0, 0, 0);
 
   QWidget *detachableFI =
-      createDetachableSection("Finetune Diagnostic Images", m_finetuneImagesPanel, [this]() {
-        emit detachFinetuneImagesRequested(m_finetuneImagesPanel);
-      });
-  m_finetuneImagesContainer->addWidget(detachableFI);
+      createDetachableSection("Finetune Diagnostic Images",
+                              m_finetuneImagesPanel);
+  finetuneImagesContainer->addWidget(detachableFI);
   
   m_finetuneImagesWrapper->hide();
 
@@ -687,14 +680,12 @@ void SharpnessPanel::setupUi() {
   m_adaptiveChart->initialize(10, 10); // Default size until real data comes
   
   m_adaptiveChartWrapper = new QWidget();
-  m_adaptiveChartContainer = new QVBoxLayout(m_adaptiveChartWrapper);
-  m_adaptiveChartContainer->setContentsMargins(0, 0, 0, 0);
-  
-  QWidget *detachableChart = createDetachableSection("Adaptive Sharpening Chart", m_adaptiveChart, [this]() {
-      emit detachAdaptiveChartRequested(m_adaptiveChart);
-  });
-  
-  m_adaptiveChartContainer->addWidget(detachableChart);
+  auto *adaptiveChartContainer = new QVBoxLayout(m_adaptiveChartWrapper);
+  adaptiveChartContainer->setContentsMargins(0, 0, 0, 0);
+
+  QWidget *detachableChart =
+      createDetachableSection("Adaptive Sharpening Chart", m_adaptiveChart);
+  adaptiveChartContainer->addWidget(detachableChart);
   m_adaptiveChartWrapper->hide();
   
   if (m_currentGroupForm)
@@ -829,46 +820,6 @@ AdaptiveSharpeningChart *SharpnessPanel::getAdaptiveChart() const
   return m_adaptiveChart.data();
 }
 
-// getTilesWidget removed here (in base)
-
-// createDetachableSection removed (moved to ParameterPanel)
-
-void SharpnessPanel::reattachMTFChart(QWidget *widget) {
-  if (widget != m_mtfChart)
-    return;
-
-  if (m_mtfContainer && m_mtfContainer->count() > 0) {
-    QWidget *section = m_mtfContainer->itemAt(0)->widget();
-    if (section && section->layout()) {
-      // Remove placeholder (last item)
-      QLayoutItem *item =
-          section->layout()->takeAt(section->layout()->count() - 1);
-      if (item) {
-        if (item->widget())
-          delete item->widget();
-        delete item;
-      }
-
-      // Add widget back
-      section->layout()->addWidget(widget);
-      widget->show();
-
-      // Show header again
-      if (section->layout()->count() > 0) {
-        QLayoutItem *headerItem = section->layout()->itemAt(0);
-        if (headerItem && headerItem->widget()) {
-          headerItem->widget()->show();
-        }
-      }
-    }
-  }
-}
-
-void SharpnessPanel::reattachDotSpread(QWidget *widget) {
-    if (m_dotSpreadPanel)
-        m_dotSpreadPanel->reattachTiles(widget);
-}
-
 /** Open the adaptive-analysis settings dialog and launch one run.
     The settings are remembered between invocations but are not part of the
     persistent image/render parameter state.  */
@@ -898,7 +849,6 @@ void SharpnessPanel::onAnalyzeDisplacements() {
   dialog->open();
 }
 
-// reattachTiles removed (in base)
 /** Open the explicit fit dialog. Numerical optimization and publication are
     document-owned so primary and reference panels share one cancellation and
     stale-result policy. */
@@ -1312,37 +1262,6 @@ void SharpnessPanel::updateFinetuneImages(const colorscreen::finetune_result& re
     }
 }
 
-void SharpnessPanel::reattachFinetuneImages(QWidget *widget) {
-  if (widget != m_finetuneImagesPanel)
-    return;
-
-  if (m_finetuneImagesContainer && m_finetuneImagesContainer->count() > 0) {
-    QWidget *section = m_finetuneImagesContainer->itemAt(0)->widget();
-    if (section && section->layout()) {
-      // Remove placeholder (last item)
-      QLayoutItem *item =
-          section->layout()->takeAt(section->layout()->count() - 1);
-      if (item) {
-        if (item->widget())
-          delete item->widget();
-        delete item;
-      }
-
-      // Add widget back
-      section->layout()->addWidget(widget);
-      widget->show();
-
-      // Show header again
-      if (section->layout()->count() > 0) {
-        QLayoutItem *headerItem = section->layout()->itemAt(0);
-        if (headerItem && headerItem->widget()) {
-          headerItem->widget()->show();
-        }
-      }
-    }
-  }
-}
-
 void SharpnessPanel::showAdaptiveChart() {
     if (m_adaptiveChartWrapper) {
         m_adaptiveChartWrapper->show();
@@ -1394,38 +1313,3 @@ void SharpnessPanel::setMeasureMtfEnabled(bool enabled) {
     }
 }
 
-void SharpnessPanel::reattachAdaptiveChart(QWidget *widget)
-{
-  if (!widget || widget != m_adaptiveChart.data())
-    return;
-
-  /* Restore the chart to the detachable section that originally owned it.
-     Adding it directly to the panel form used to leave the section wrapper
-     owning only a placeholder and made the chart lifetime depend on the dock
-     reparenting sequence.  */
-  if (m_adaptiveChartContainer && m_adaptiveChartContainer->count() > 0)
-    {
-      QWidget *section = m_adaptiveChartContainer->itemAt(0)->widget();
-      if (section && section->layout())
-        {
-          if (section->layout()->count() > 1)
-            {
-              QLayoutItem *item = section->layout()->takeAt(1);
-              if (item)
-                {
-                  if (item->widget())
-                    delete item->widget();
-                  delete item;
-                }
-            }
-          section->layout()->addWidget(widget);
-          widget->show();
-          if (section->layout()->count() > 0)
-            {
-              QLayoutItem *headerItem = section->layout()->itemAt(0);
-              if (headerItem && headerItem->widget())
-                headerItem->widget()->show();
-            }
-        }
-    }
-}
