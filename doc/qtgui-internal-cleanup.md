@@ -476,10 +476,12 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
 
 - Split very large source files by responsibility rather than by arbitrary line
   count. `MainWindow` retains document-specific snapshots, UI decisions and
-  publication, while the stable replaceable one-shot queue/progress/publication
-  machinery now lives in `OneShotOperationController`. Continue moving
-  cohesive operation infrastructure behind focused controllers/services when
-  the interface is similarly stable.
+  publication. Stable replaceable one-shot queue/publication mechanics live in
+  `OneShotOperationController`; transient/dedicated task presentation,
+  switching, delayed visibility and row bookkeeping live in
+  `DocumentProgressController`. MainWindow still owns workspace/focus policy
+  and file-render confirmation. Continue moving cohesive infrastructure behind
+  focused controllers/services when the interface is similarly stable.
 - Give long-lived analysis state explicit structs rather than parallel member
   variables. Profile-calibration, geometry-fit, measured-MTF fit, and automatic
   multi-area focus analysis now each live in one lifecycle struct instead of

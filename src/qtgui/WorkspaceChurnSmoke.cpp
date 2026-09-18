@@ -1619,12 +1619,12 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         }
 
         int oneShotProgressEntries = 0;
-        for (const ProgressEntry &entry : first->m_activeProgresses) {
+        for (const ProgressEntry &entry : first->m_progressController.entries()) {
           if (entry.userVisible &&
               entry.title == QStringLiteral("One-shot progress smoke")) {
             ++oneShotProgressEntries;
             int matchingEntries = 0;
-            for (const ProgressEntry &other : first->m_activeProgresses)
+            for (const ProgressEntry &other : first->m_progressController.entries())
               if (other.info == entry.info)
                 ++matchingEntries;
             if (!entry.row || !entry.rowActionButton || matchingEntries != 1) {
@@ -1676,7 +1676,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
           return;
         }
 
-        for (const ProgressEntry &entry : first->m_activeProgresses) {
+        for (const ProgressEntry &entry : first->m_progressController.entries()) {
           if (entry.title == QStringLiteral("One-shot progress smoke")) {
             fail(QStringLiteral("Cancelled one-shot retained its progress row"));
             return;
@@ -1787,7 +1787,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
           fail(QStringLiteral("Cancelled multi-area fit restored stale diagnostics"));
           return;
         }
-        for (const ProgressEntry &entry : first->m_activeProgresses) {
+        for (const ProgressEntry &entry : first->m_progressController.entries()) {
           if (entry.title == QStringLiteral("Find focus areas") ||
               entry.title == QStringLiteral("Analyze focus areas")) {
             fail(QStringLiteral("Cancelled focus-area operation retained its task row"));
@@ -1952,7 +1952,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         reference->startReferenceMtfMeasurement(area, state->referenceParameters);
         auto progress = reference->m_referenceMtfMeasurement.progress.lock();
         int progressEntries = 0;
-        for (const ProgressEntry &entry : first->m_activeProgresses)
+        for (const ProgressEntry &entry : first->m_progressController.entries())
           if (entry.info == progress && entry.userVisible && entry.row &&
               entry.rowActionButton)
             ++progressEntries;
@@ -2151,7 +2151,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
           fail(QStringLiteral("Closed reference published a late measurement"));
           return;
         }
-        for (const ProgressEntry &entry : first->m_activeProgresses)
+        for (const ProgressEntry &entry : first->m_progressController.entries())
           if (entry.title == QStringLiteral("Reference MTF measurement")) {
             fail(QStringLiteral("Reference MTF left a stale progress row"));
             return;
@@ -2194,7 +2194,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
           return;
         }
         int fitRows = 0;
-        for (const ProgressEntry &entry : first->m_activeProgresses)
+        for (const ProgressEntry &entry : first->m_progressController.entries())
           if (entry.title == QStringLiteral("MTF model fit")) {
             ++fitRows;
             if (!entry.userVisible || !entry.row || !entry.rowActionButton) {
@@ -2276,7 +2276,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
           fail(QStringLiteral("Restoring inputs resurrected a cancelled measured-MTF fit"));
           return;
         }
-        for (const ProgressEntry &entry : first->m_activeProgresses)
+        for (const ProgressEntry &entry : first->m_progressController.entries())
           if (entry.title == QStringLiteral("MTF model fit")) {
             fail(QStringLiteral("Cancelled measured-MTF fit left a stale progress row"));
             return;
@@ -2383,7 +2383,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
           fail(QStringLiteral("Superseded measured-MTF fit published a late result"));
           return;
         }
-        for (const ProgressEntry &entry : first->m_activeProgresses)
+        for (const ProgressEntry &entry : first->m_progressController.entries())
           if (entry.title == QStringLiteral("MTF model fit")) {
             fail(QStringLiteral("Superseded measured-MTF fit left a progress row"));
             return;

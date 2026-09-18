@@ -328,12 +328,6 @@ MainWindow::MainWindow(const QString &recoveryDirectory, QWidget *parent)
 
   setupUi();
 
-  // Progress Timer
-  m_progressTimer = new QTimer(this);
-  m_progressTimer->setInterval(100);
-  connect(m_progressTimer, &QTimer::timeout, this,
-          &MainWindow::onProgressTimer);
-
   // Set up per-document recovery auto-save timer (30 seconds)
   m_recoveryTimer = new QTimer(this);
   m_recoveryTimer->setInterval(30000); // 30 seconds
@@ -434,9 +428,7 @@ MainWindow::~MainWindow() {
   m_solverQueue.cancelAll();
   m_colorOptimizerQueue.cancelAll();
   m_oneShotOperations.cancelAll();
-  for (const auto &entry : m_activeProgresses)
-    if (entry.info)
-      entry.info->cancel();
+  m_progressController.cancelAll();
   // Result delivery from persistent workers is no longer useful once teardown
   // starts. Disconnect before joining one-shot workers because shutdown may
   // service blocking queued calls from those workers.
@@ -1171,94 +1163,40 @@ void MainWindow::setupUi() {
   m_mainSplitter->setStretchFactor(0, 9);
   m_mainSplitter->setStretchFactor(1, 1);
 
-  // Status Bar
+  // Status bar and document-owned progress presentation.
   QStatusBar *statusBar = new QStatusBar(this);
   setStatusBar(statusBar);
 
-  // Keep the ordinary status bar permanently one line high.  Short-lived work
-  // may use that line, but long-running user-visible tasks live in a separate
-  // frameless bottom dock above it so they can never make the status bar grow.
-  m_progressContainer = new QWidget(statusBar);
-  m_progressContainer->setObjectName(QStringLiteral("DocumentProgressContainer"));
-  m_progressLayout = new QVBoxLayout(m_progressContainer);
-  m_progressLayout->setContentsMargins(0, 0, 0, 0);
-  m_progressLayout->setSpacing(0);
+  DocumentProgressController::Labels progressLabels;
+  progressLabels.stop = tr("Stop");
+  progressLabels.cancel = tr("Cancel");
+  progressLabels.stopping = tr("Stopping...");
+  progressLabels.cancelling = tr("Cancelling...");
+  progressLabels.working = tr("Working...");
 
-  m_userVisibleProgressContainer = new QWidget();
-  m_userVisibleProgressContainer->setObjectName(
-      QStringLiteral("UserVisibleProgressContainer"));
-  m_userVisibleProgressLayout =
-      new QVBoxLayout(m_userVisibleProgressContainer);
-  m_userVisibleProgressLayout->setContentsMargins(4, 2, 4, 2);
-  m_userVisibleProgressLayout->setSpacing(2);
-  m_userVisibleProgressContainer->hide();
-
-  m_userVisibleProgressDock = new QDockWidget(this);
-  m_userVisibleProgressDock->setObjectName(
-      QStringLiteral("UserVisibleProgressDock"));
-  m_userVisibleProgressDock->setAllowedAreas(Qt::BottomDockWidgetArea);
-  m_userVisibleProgressDock->setFeatures(QDockWidget::NoDockWidgetFeatures);
-  auto *taskDockTitle = new QWidget(m_userVisibleProgressDock);
-  taskDockTitle->setFixedHeight(0);
-  m_userVisibleProgressDock->setTitleBarWidget(taskDockTitle);
-  m_userVisibleProgressDock->setWidget(m_userVisibleProgressContainer);
-  addDockWidget(Qt::BottomDockWidgetArea, m_userVisibleProgressDock);
-  m_userVisibleProgressDock->hide();
-
-  m_transientProgressRow = new QWidget(m_progressContainer);
-  m_transientProgressRow->setObjectName(QStringLiteral("TransientProgressRow"));
-  QHBoxLayout *progressLayout = new QHBoxLayout(m_transientProgressRow);
-  progressLayout->setContentsMargins(0, 0, 0, 0);
-  progressLayout->setSpacing(8);
-
-  m_statusLabel = new QLabel("", m_transientProgressRow);
-  m_statusLabel->setMinimumWidth(150);
-  progressLayout->addWidget(m_statusLabel);
-
-  m_progressBar = new QProgressBar(m_transientProgressRow);
-  m_progressBar->setRange(0, 100);
-  m_progressBar->setTextVisible(false);
-  m_progressBar->setMinimumWidth(200);
-  progressLayout->addWidget(m_progressBar);
-
-  // Progress switcher (count + prev/next buttons)
-  m_progressCountLabel = new QLabel("1/1", m_transientProgressRow);
-  m_progressCountLabel->setMinimumWidth(40);
-  progressLayout->addWidget(m_progressCountLabel);
-
-  m_prevProgressButton = new QPushButton("<", m_transientProgressRow);
-  m_prevProgressButton->setMaximumWidth(30);
-  m_prevProgressButton->setToolTip("Previous progress");
-  connect(m_prevProgressButton, &QPushButton::clicked, this,
-          &MainWindow::onPrevProgress);
-  progressLayout->addWidget(m_prevProgressButton);
-
-  m_nextProgressButton = new QPushButton(">", m_transientProgressRow);
-  m_nextProgressButton->setMaximumWidth(30);
-  m_nextProgressButton->setToolTip("Next progress");
-  connect(m_nextProgressButton, &QPushButton::clicked, this,
-          &MainWindow::onNextProgress);
-  progressLayout->addWidget(m_nextProgressButton);
-
-  m_cancelButton = new QPushButton("Cancel", m_transientProgressRow);
-  connect(m_cancelButton, &QPushButton::clicked, this,
-          &MainWindow::onCancelClicked);
-  progressLayout->addWidget(m_cancelButton);
-
-  m_progressLayout->addWidget(m_transientProgressRow);
-
-  QSizePolicy sp = m_transientProgressRow->sizePolicy();
-  sp.setRetainSizeWhenHidden(true);
-  m_transientProgressRow->setSizePolicy(sp);
-
-  m_progressContainer->setMinimumHeight(m_transientProgressRow->sizeHint().height());
-
-  m_transientProgressRow->hide();
-  m_progressContainer->hide();
-  statusBar->addPermanentWidget(m_progressContainer, 1);
-
-  // Initialize manual selection tracking
-  m_manuallySelectedProgressIndex = -1;
+  DocumentProgressController::Callbacks progressCallbacks;
+  progressCallbacks.confirmTermination =
+      [this](const std::shared_ptr<colorscreen::progress_info> &info,
+             ProgressAction action) {
+        const auto renderProgress = m_renderProgress.lock();
+        if (action != ProgressAction::Cancel || !renderProgress ||
+            renderProgress != info)
+          return true;
+        const auto result = QMessageBox::question(
+            this, tr("Cancel Rendering"), tr("Cancel the current rendering?"),
+            QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+        return result == QMessageBox::Yes;
+      };
+  progressCallbacks.releaseFocus =
+      [this](QWidget *row) { releaseUserVisibleProgressFocus(row); };
+  progressCallbacks.transientVisibilityChanged =
+      [this](bool visible) { emit transientProgressVisibilityChanged(visible); };
+  progressCallbacks.userVisibleVisibilityChanged =
+      [this](bool visible) {
+        emit userVisibleProgressVisibilityChanged(visible);
+      };
+  m_progressController.initialize(this, statusBar, std::move(progressLabels),
+                                  std::move(progressCallbacks));
 
   createToolbar(); // Initialize toolbar
 
@@ -2449,85 +2387,14 @@ void MainWindow::onOpenImage() {
 
 /** Register ordinary transient background progress. */
 void MainWindow::addProgress(std::shared_ptr<colorscreen::progress_info> info) {
-  registerProgress(std::move(info), false, QString(), ProgressAction::Cancel);
+  m_progressController.addProgress(std::move(info));
 }
 
 /** Register a long-running task with its own status-bar row. */
 void MainWindow::addUserVisibleProgress(
     std::shared_ptr<colorscreen::progress_info> info, const QString &title,
     ProgressAction action) {
-  registerProgress(std::move(info), true, title, action);
-}
-
-/** Register INFO and create a dedicated row when USERVISIBLE is true. */
-void MainWindow::registerProgress(
-    std::shared_ptr<colorscreen::progress_info> info, bool userVisible,
-    const QString &title, ProgressAction action) {
-  if (!info)
-    return;
-
-  ProgressEntry entry;
-  entry.info = std::move(info);
-  entry.userVisible = userVisible;
-  entry.action = action;
-  entry.title = title;
-  entry.startTime.start();
-
-  if (userVisible) {
-    entry.row = new QWidget(m_userVisibleProgressContainer);
-    entry.row->setObjectName(QStringLiteral("UserVisibleProgressRow"));
-    entry.row->setProperty("progressTitle", title);
-    QHBoxLayout *rowLayout = new QHBoxLayout(entry.row);
-    rowLayout->setContentsMargins(0, 0, 0, 0);
-    rowLayout->setSpacing(8);
-
-    entry.rowLabel = new QLabel(title, entry.row);
-    entry.rowLabel->setMinimumWidth(220);
-    rowLayout->addWidget(entry.rowLabel, 1);
-
-    entry.rowProgressBar = new QProgressBar(entry.row);
-    entry.rowProgressBar->setRange(0, 0);
-    entry.rowProgressBar->setTextVisible(false);
-    entry.rowProgressBar->setMinimumWidth(200);
-    rowLayout->addWidget(entry.rowProgressBar);
-
-    entry.rowActionButton = new QPushButton(
-        action == ProgressAction::Stop ? tr("Stop") : tr("Cancel"), entry.row);
-    // Keep mouse clicks on a workspace-global task from taking keyboard focus
-    // away from the active MDI image. Keyboard users can still Tab to the
-    // control and activate it normally.
-    entry.rowActionButton->setFocusPolicy(Qt::TabFocus);
-    entry.rowActionButton->setProperty(
-        "progressAction",
-        action == ProgressAction::Stop ? QStringLiteral("stop")
-                                       : QStringLiteral("cancel"));
-    const std::shared_ptr<colorscreen::progress_info> progress = entry.info;
-    connect(entry.rowActionButton, &QPushButton::clicked, this,
-            [this, progress, action]() {
-              requestProgressTermination(progress, action);
-            });
-    rowLayout->addWidget(entry.rowActionButton);
-
-    // Dedicated rows stay together in the persistent user-visible container.
-    m_userVisibleProgressLayout->addWidget(entry.row);
-    entry.row->show();
-  }
-
-  m_activeProgresses.push_back(std::move(entry));
-  if (!m_progressTimer->isActive())
-    m_progressTimer->start();
-
-  updateProgressContainerVisibility();
-}
-
-/** Return the active progresses that share the transient status row. */
-std::vector<ProgressEntry *> MainWindow::transientProgresses() {
-  std::vector<ProgressEntry *> result;
-  result.reserve(m_activeProgresses.size());
-  for (ProgressEntry &entry : m_activeProgresses)
-    if (!entry.userVisible)
-      result.push_back(&entry);
-  return result;
+  m_progressController.addUserVisibleProgress(std::move(info), title, action);
 }
 
 /** Move keyboard focus away from ROW before a visible task control is disabled
@@ -2557,325 +2424,7 @@ void MainWindow::releaseUserVisibleProgressFocus(QWidget *row) {
 /** Remove a completed or terminated background task from progress tracking. */
 void MainWindow::removeProgress(
     std::shared_ptr<colorscreen::progress_info> info) {
-  int removedTransientIndex = -1;
-  int transientIndex = 0;
-
-  for (auto it = m_activeProgresses.begin(); it != m_activeProgresses.end();
-       ++it) {
-    if (it->info == info) {
-      if (!it->userVisible)
-        removedTransientIndex = transientIndex;
-      if (it->row) {
-        releaseUserVisibleProgressFocus(it->row);
-        m_userVisibleProgressLayout->removeWidget(it->row);
-        it->row->deleteLater();
-      }
-      m_activeProgresses.erase(it);
-      break;
-    }
-    if (!it->userVisible)
-      ++transientIndex;
-  }
-
-  if (m_currentlyDisplayedProgress == info)
-    m_currentlyDisplayedProgress.reset();
-
-  if (removedTransientIndex >= 0 && m_manuallySelectedProgressIndex >= 0) {
-    if (m_manuallySelectedProgressIndex == removedTransientIndex)
-      m_manuallySelectedProgressIndex = -1;
-    else if (m_manuallySelectedProgressIndex > removedTransientIndex)
-      --m_manuallySelectedProgressIndex;
-  }
-
-  const std::vector<ProgressEntry *> transient = transientProgresses();
-  if (transient.empty()) {
-    setTransientProgressVisible(false);
-    m_currentlyDisplayedProgress.reset();
-    m_manuallySelectedProgressIndex = -1;
-  } else if (m_manuallySelectedProgressIndex >= (int)transient.size()) {
-    m_manuallySelectedProgressIndex = -1;
-  }
-
-  if (m_activeProgresses.empty())
-    m_progressTimer->stop();
-
-  updateProgressContainerVisibility();
-}
-
-/** Find the most relevant transient task to display in the shared row. */
-ProgressEntry *MainWindow::getLongestRunningTask() {
-  ProgressEntry *oldestActive = nullptr;
-  ProgressEntry *oldestAny = nullptr;
-  qint64 maxActiveTime = -1;
-  qint64 maxAnyTime = -1;
-
-  for (ProgressEntry *entry : transientProgresses()) {
-    const qint64 elapsed = entry->startTime.elapsed();
-    float percent = 0;
-    entry->info->get_status(&percent);
-
-    if (percent > 0 && elapsed > maxActiveTime) {
-      maxActiveTime = elapsed;
-      oldestActive = entry;
-    }
-    if (elapsed > maxAnyTime) {
-      maxAnyTime = elapsed;
-      oldestAny = entry;
-    }
-  }
-
-  return oldestActive ? oldestActive : oldestAny;
-}
-
-/** Format ENTRY's nested progress state into LABEL and BAR. */
-void MainWindow::updateProgressWidgets(const ProgressEntry &entry, QLabel *label,
-                                       QProgressBar *bar,
-                                       const QString &title) {
-  if (!entry.info || !label || !bar)
-    return;
-
-  const std::vector<colorscreen::progress_info::status> statusStack =
-      entry.info->get_status();
-  QStringList tasks;
-  float percent = -1;
-
-  for (const auto &status : statusStack) {
-    if (!status.task.empty()) {
-      QString taskName = QString::fromUtf8(status.task.c_str());
-      if (status.progress >= 0 && &status != &statusStack.back())
-        taskName += QString(" (%1%)").arg((int)status.progress);
-      tasks.append(taskName);
-    }
-    if (status.progress >= 0)
-      percent = status.progress;
-  }
-
-  QString statusText = tasks.join(QStringLiteral(" > "));
-  if (!title.isEmpty()) {
-    if (statusText.isEmpty())
-      statusText = title;
-    else if (statusText.compare(title, Qt::CaseInsensitive) != 0)
-      statusText = title + QStringLiteral(": ") + statusText;
-  } else if (statusText.isEmpty()) {
-    statusText = tr("Working...");
-  }
-
-  const qint64 elapsedMs = entry.startTime.elapsed();
-  if (elapsedMs > 20000 && percent > 0.1f) {
-    const double doneFraction = (double)percent / 100.0;
-    const qint64 remainingMs =
-        (qint64)((double)elapsedMs / doneFraction) - elapsedMs;
-    if (remainingMs > 0) {
-      const int remainingSec = (remainingMs / 1000) % 60;
-      const int remainingMin = remainingMs / 60000;
-      statusText += QString(" (ETR: %1:%2)")
-                        .arg(remainingMin)
-                        .arg(remainingSec, 2, 10, QChar('0'));
-    }
-  }
-
-  label->setText(statusText);
-  if (percent >= 0) {
-    bar->setRange(0, 100);
-    bar->setValue((int)percent);
-  } else {
-    bar->setRange(0, 0);
-  }
-}
-
-/** Show or hide this document's one-line transient progress presentation. */
-void MainWindow::setTransientProgressVisible(bool visible) {
-  if (m_transientProgressRow)
-    m_transientProgressRow->setVisible(visible);
-  if (m_progressContainer)
-    m_progressContainer->setVisible(visible);
-  if (m_transientProgressVisible == visible)
-    return;
-  m_transientProgressVisible = visible;
-  emit transientProgressVisibilityChanged(visible);
-}
-
-/** Synchronize the one-line transient status and dedicated task dock. */
-void MainWindow::updateProgressContainerVisibility() {
-  bool hasUserVisibleRows = false;
-  for (const ProgressEntry &entry : m_activeProgresses) {
-    if (entry.userVisible && entry.row && !entry.row->isHidden()) {
-      hasUserVisibleRows = true;
-      break;
-    }
-  }
-
-  const bool visibilityChanged =
-      m_userVisibleProgressContainer->isHidden() == hasUserVisibleRows;
-  m_userVisibleProgressContainer->setVisible(hasUserVisibleRows);
-  if (m_userVisibleProgressDock &&
-      m_userVisibleProgressDock->widget() == m_userVisibleProgressContainer)
-    m_userVisibleProgressDock->setVisible(hasUserVisibleRows);
-  if (visibilityChanged)
-    emit userVisibleProgressVisibilityChanged(hasUserVisibleRows);
-
-}
-
-/** Periodically update transient progress and every dedicated long-task row. */
-void MainWindow::onProgressTimer() {
-  if (m_activeProgresses.empty()) {
-    setTransientProgressVisible(false);
-    m_currentlyDisplayedProgress.reset();
-    m_manuallySelectedProgressIndex = -1;
-    m_progressTimer->stop();
-    return;
-  }
-
-  for (ProgressEntry &entry : m_activeProgresses) {
-    if (!entry.userVisible)
-      continue;
-    updateProgressWidgets(entry, entry.rowLabel, entry.rowProgressBar,
-                          entry.title);
-    if (entry.rowActionButton && entry.info->pool_cancel()) {
-      // Cancellation can also be requested externally. If a keyboard user had
-      // focused this control, move focus back to the current image before the
-      // disabled button makes Qt choose a fallback MDI child.
-      releaseUserVisibleProgressFocus(entry.row);
-      entry.rowActionButton->setText(entry.action == ProgressAction::Stop
-                                         ? tr("Stopping...")
-                                         : tr("Cancelling..."));
-      entry.rowActionButton->setEnabled(false);
-    }
-  }
-
-  const std::vector<ProgressEntry *> transient = transientProgresses();
-  if (transient.empty()) {
-    setTransientProgressVisible(false);
-    m_currentlyDisplayedProgress.reset();
-    m_manuallySelectedProgressIndex = -1;
-    updateProgressContainerVisibility();
-    return;
-  }
-
-  ProgressEntry *task = nullptr;
-  int currentIndex = 0;
-  if (m_manuallySelectedProgressIndex >= 0 &&
-      m_manuallySelectedProgressIndex < (int)transient.size()) {
-    currentIndex = m_manuallySelectedProgressIndex;
-    task = transient[currentIndex];
-  } else {
-    task = getLongestRunningTask();
-    for (size_t i = 0; task && i < transient.size(); ++i) {
-      if (transient[i] == task) {
-        currentIndex = (int)i;
-        break;
-      }
-    }
-    m_manuallySelectedProgressIndex = -1;
-  }
-
-  if (!task) {
-    setTransientProgressVisible(false);
-    updateProgressContainerVisibility();
-    return;
-  }
-
-  m_currentlyDisplayedProgress = task->info;
-  m_progressCountLabel->setText(
-      QString("%1/%2").arg(currentIndex + 1).arg(transient.size()));
-
-  const bool multiple = transient.size() > 1;
-  m_prevProgressButton->setVisible(multiple);
-  m_nextProgressButton->setVisible(multiple);
-  m_progressCountLabel->setVisible(multiple);
-
-  if (task->startTime.elapsed() > 300) {
-    updateProgressWidgets(*task, m_statusLabel, m_progressBar, QString());
-    setTransientProgressVisible(true);
-  } else {
-    setTransientProgressVisible(false);
-  }
-
-  updateProgressContainerVisibility();
-}
-
-/** Request cooperative termination of INFO using ACTION's user-facing policy. */
-void MainWindow::requestProgressTermination(
-    const std::shared_ptr<colorscreen::progress_info> &info,
-    ProgressAction action) {
-  if (!info)
-    return;
-
-  auto renderProgress = m_renderProgress.lock();
-  if (action == ProgressAction::Cancel && renderProgress &&
-      renderProgress == info) {
-    const auto ret = QMessageBox::question(
-        this, tr("Cancel Rendering"), tr("Cancel the current rendering?"),
-        QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
-    if (ret != QMessageBox::Yes)
-      return;
-  }
-
-  // A mouse click gives the Stop/Cancel button keyboard focus.  Move that
-  // focus to the currently active image before cancel() can synchronously
-  // finish the worker or before disabling the button makes Qt choose another
-  // MDI child as the fallback focus widget.
-  for (ProgressEntry &entry : m_activeProgresses) {
-    if (entry.info == info && entry.row)
-      releaseUserVisibleProgressFocus(entry.row);
-  }
-
-  info->cancel();
-  for (ProgressEntry &entry : m_activeProgresses) {
-    if (entry.info != info || !entry.rowActionButton)
-      continue;
-    entry.rowActionButton->setText(action == ProgressAction::Stop
-                                       ? tr("Stopping...")
-                                       : tr("Cancelling..."));
-    entry.rowActionButton->setEnabled(false);
-  }
-}
-
-/** Cancel the currently displayed transient progress task. */
-void MainWindow::onCancelClicked() {
-  requestProgressTermination(m_currentlyDisplayedProgress,
-                             ProgressAction::Cancel);
-}
-
-/** Switch the shared transient progress row to the previous background task. */
-void MainWindow::onPrevProgress() {
-  const std::vector<ProgressEntry *> transient = transientProgresses();
-  if (transient.size() <= 1)
-    return;
-
-  if (m_manuallySelectedProgressIndex < 0) {
-    ProgressEntry *currentTask = getLongestRunningTask();
-    for (size_t i = 0; i < transient.size(); ++i) {
-      if (transient[i] == currentTask) {
-        m_manuallySelectedProgressIndex = (int)i;
-        break;
-      }
-    }
-  }
-
-  m_manuallySelectedProgressIndex =
-      (m_manuallySelectedProgressIndex - 1 + (int)transient.size()) %
-      (int)transient.size();
-}
-
-/** Switch the shared transient progress row to the next background task. */
-void MainWindow::onNextProgress() {
-  const std::vector<ProgressEntry *> transient = transientProgresses();
-  if (transient.size() <= 1)
-    return;
-
-  if (m_manuallySelectedProgressIndex < 0) {
-    ProgressEntry *currentTask = getLongestRunningTask();
-    for (size_t i = 0; i < transient.size(); ++i) {
-      if (transient[i] == currentTask) {
-        m_manuallySelectedProgressIndex = (int)i;
-        break;
-      }
-    }
-  }
-
-  m_manuallySelectedProgressIndex =
-      (m_manuallySelectedProgressIndex + 1) % (int)transient.size();
+  m_progressController.removeProgress(std::move(info));
 }
 
 /** Post-load initialisation after a new image has been opened.
@@ -2995,45 +2544,23 @@ void MainWindow::refreshWindowMenu() {
 
 /** Remove transient progress from the private status bar for workspace hosting. */
 QWidget *MainWindow::takeWorkspaceStatusWidget() {
-  if (!m_progressContainer)
-    return nullptr;
-  standaloneStatusBar()->removeWidget(m_progressContainer);
-  m_progressContainer->setParent(nullptr);
-  return m_progressContainer;
+  return m_progressController.takeTransientWidget(standaloneStatusBar());
 }
 
 /** Return transient progress to this document's private status bar. */
 void MainWindow::restoreWorkspaceStatusWidget() {
-  if (!m_progressContainer)
-    return;
-  if (m_progressContainer->parentWidget() != standaloneStatusBar()) {
-    m_progressContainer->setParent(standaloneStatusBar());
-    standaloneStatusBar()->addPermanentWidget(m_progressContainer, 1);
-  }
-  m_progressContainer->setVisible(m_transientProgressVisible);
+  m_progressController.restoreTransientWidget(standaloneStatusBar());
 }
 
 /** Remove persistent progress rows from the local task-progress dock. */
 QWidget *MainWindow::takeUserVisibleStatusWidget() {
-  if (!m_userVisibleProgressContainer || !m_userVisibleProgressDock)
-    return m_userVisibleProgressContainer;
-  if (m_userVisibleProgressDock->widget() == m_userVisibleProgressContainer) {
-    m_userVisibleProgressDock->setWidget(nullptr);
-    m_userVisibleProgressContainer->setParent(nullptr);
-    m_userVisibleProgressDock->hide();
-  }
-  return m_userVisibleProgressContainer;
+  return m_progressController.takeUserVisibleWidget();
 }
 
 /** Return persistent user-visible progress rows to this document's task dock. */
 void MainWindow::restoreUserVisibleStatusWidget() {
-  if (!m_userVisibleProgressContainer || !m_userVisibleProgressDock)
-    return;
-  if (m_userVisibleProgressDock->widget() != m_userVisibleProgressContainer)
-    m_userVisibleProgressDock->setWidget(m_userVisibleProgressContainer);
-  updateProgressContainerVisibility();
+  m_progressController.restoreUserVisibleWidget();
 }
-
 
 /** Detach the document-owned inspector from whichever presentation hosts it. */
 QWidget *MainWindow::takeWorkspaceInspector() {
@@ -4513,12 +4040,8 @@ void MainWindow::closeEvent(QCloseEvent *event) {
   m_closing = true;
   dismissOneShotPrompts();
 
-  // Cancel all active processes
-  for (const auto &progress : m_activeProgresses) {
-    if (progress.info) {
-      progress.info->cancel();
-    }
-  }
+  // Cancel all active processes.
+  m_progressController.cancelAll();
 
   // Clean up recovery files on normal exit
   clearRecoveryFiles();
