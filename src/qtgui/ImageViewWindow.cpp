@@ -150,9 +150,9 @@ ImageViewWindow::~ImageViewWindow() {
   // measurement itself depends on this view and is cancelled above.
 
   {
-    std::unique_lock<std::mutex> locker(m_referenceLoadMutex);
-    m_referenceLoadCondition.wait(
-        locker, [this]() { return !m_referenceWorkerActive; });
+    std::unique_lock<std::mutex> locker(m_referenceLoad.mutex);
+    m_referenceLoad.condition.wait(
+        locker, [this]() { return !m_referenceLoad.workerActive; });
   }
   releaseDocumentInspector();
 }
@@ -521,11 +521,11 @@ void ImageViewWindow::loadReferenceImage(const QString &fileName) {
   const QString path = m_referenceFile;
 
   {
-    std::lock_guard<std::mutex> locker(m_referenceLoadMutex);
-    m_referenceWorkerActive = true;
-    m_referenceLoadOk = false;
-    m_referenceLoadError.clear();
-    m_pendingReferenceScan.reset();
+    std::lock_guard<std::mutex> locker(m_referenceLoad.mutex);
+    m_referenceLoad.workerActive = true;
+    m_referenceLoad.ok = false;
+    m_referenceLoad.error.clear();
+    m_referenceLoad.pendingScan.reset();
   }
 
   runSynchronized([this, scan, path, progress, demosaic]() {
@@ -537,22 +537,22 @@ void ImageViewWindow::loadReferenceImage(const QString &fileName) {
         !ok && error ? QString::fromUtf8(error) : QString();
 
     {
-      std::lock_guard<std::mutex> locker(m_referenceLoadMutex);
-      m_referenceLoadOk = ok;
-      m_referenceLoadError = message;
-      m_pendingReferenceScan = scan;
+      std::lock_guard<std::mutex> locker(m_referenceLoad.mutex);
+      m_referenceLoad.ok = ok;
+      m_referenceLoad.error = message;
+      m_referenceLoad.pendingScan = scan;
     }
 
     // The queued Qt call carries no non-trivial payload.  The result itself is
-    // published through m_referenceLoadMutex, which TSan can observe.
+    // published through m_referenceLoad.mutex, which TSan can observe.
     QMetaObject::invokeMethod(this, "finishReferenceLoad",
                               Qt::QueuedConnection);
 
     {
-      std::lock_guard<std::mutex> locker(m_referenceLoadMutex);
-      m_referenceWorkerActive = false;
+      std::lock_guard<std::mutex> locker(m_referenceLoad.mutex);
+      m_referenceLoad.workerActive = false;
     }
-    m_referenceLoadCondition.notify_all();
+    m_referenceLoad.condition.notify_all();
   });
 }
 
@@ -561,10 +561,10 @@ void ImageViewWindow::finishReferenceLoad() {
   bool ok = false;
   QString error;
   {
-    std::lock_guard<std::mutex> locker(m_referenceLoadMutex);
-    ok = m_referenceLoadOk;
-    error = m_referenceLoadError;
-    scan = std::move(m_pendingReferenceScan);
+    std::lock_guard<std::mutex> locker(m_referenceLoad.mutex);
+    ok = m_referenceLoad.ok;
+    error = m_referenceLoad.error;
+    scan = std::move(m_referenceLoad.pendingScan);
   }
 
   m_referenceLoadPending = false;
