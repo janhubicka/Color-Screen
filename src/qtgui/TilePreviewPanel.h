@@ -5,7 +5,6 @@
 #include "../libcolorscreen/include/colorscreen.h"
 #include "ParameterPanel.h"
 #include "TaskQueue.h"
-#include <QFutureWatcher>
 #include <QWidget>
 #include "ScalableImageLabel.h"
 #include <QTimer>
@@ -23,19 +22,14 @@ struct progress_info;
 
 struct TileRenderResult {
   std::vector<QImage> tiles;
-  int generation = 0;
   bool success = false;
 };
-
-Q_DECLARE_METATYPE(TileRenderResult)
 
 class TilePreviewPanel : public ParameterPanel {
   Q_OBJECT
 public:
   struct RenderRequest {
     ParameterState state;
-    int scanWidth;
-    int scanHeight;
     int tileSize;
     double pixelSize;
     std::shared_ptr<colorscreen::image_data> scan;
@@ -83,12 +77,7 @@ private slots:
 
   virtual bool requiresScan() const { return true; }
 
-  void onTileRenderFinished();
-  void performTileRender();
-
 private:
-  void startNextRender();
-
   QWidget *m_tilesContainer = nullptr;
   QVBoxLayout *m_tilesLayoutContainer = nullptr;
   std::vector<ScalableImageLabel *> m_tileLabels;
@@ -96,9 +85,6 @@ private:
       m_tileDefinitions;
 
   QTimer *m_updateTimer = nullptr;
-  QFutureWatcher<TileRenderResult> *m_tileWatcher = nullptr;
-  std::shared_ptr<colorscreen::progress_info> m_tileProgress;
-  int m_tileGenerationCounter = 0;
 
   int m_lastRenderedTileSize = 0;
   TaskQueue m_renderQueue;
