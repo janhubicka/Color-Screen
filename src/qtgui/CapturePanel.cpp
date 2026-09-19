@@ -730,16 +730,9 @@ void CapturePanel::setupUi()
         createDetachableSection("Backlight", m_backlightWidget);
     m_form->addRow(backlightSection);
     
-    m_cropBtn = addToggleButtonParameter("Crop image", "Change crop", [this](bool checked) {
-        if (checked) {
-            emit cropRequested();
-        } else {
-            // Signal MainWindow to cancel crop mode if button is untoggled manually
-            // Actually, we can just repurpose cropRequested or emit a new signal.
-            // Let's just emit cropRequested() and let MainWindow check the button state.
-            emit cropRequested();
-        }
-    });
+    m_cropBtn = addToggleButtonParameter(
+        "Crop image", "Change crop",
+        [this](bool) { emit cropRequested(); });
     
     // Initial update
     updateInfoLabels(m_stateGetter());

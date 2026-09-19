@@ -53,10 +53,8 @@ void AdaptiveSharpeningWorker::run() {
 
     if (worker.do_strips()) {
         emit stripAnalysisStarted(worker.strip_xsteps, worker.strip_ysteps);
-        // Run sequentially to support cancellation (or chunked parallel if needed, but sequential is safer for responsive cancel)
-        // Actually, analyze_scanner_blur_img uses OpenMP. QtConcurrent::blockingMap is good but hard to cancel instantly.
-        // However, we can check cancelled() in the functor.
-        
+        // Dispatch strip jobs through the local pool so each job can observe
+        // cooperative cancellation before entering the analysis.
         std::vector<QPair<int, int>> stripTasks;
         for (int y = 0; y < worker.strip_ysteps; y++) {
             for (int x = 0; x < worker.strip_xsteps; x++) {

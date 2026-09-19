@@ -21,7 +21,7 @@
 #include <QGroupBox>
 #include <QMessageBox>
 #include <QHBoxLayout>
-#include <QIcon> // Added
+#include <QIcon>
 #include <QLineEdit>
 #include <QFileInfo>
 #include <QImage>
@@ -34,7 +34,7 @@
 #include <QTimer>
 #include <QToolButton>
 #include <QTabWidget>
-#include <QVBoxLayout> // Added
+#include <QVBoxLayout>
 #include <QMimeData>
 #include <QDrag>
 #include <QMouseEvent>

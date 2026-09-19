@@ -314,31 +314,20 @@ void ColorPanel::setupUi() {
     wrapper->setProperty("parameterKey",
                          QStringLiteral("color.viewing.observer_whitepoint"));
     QHBoxLayout *hLayout = new QHBoxLayout(wrapper);
-    hLayout->setContentsMargins(0, 5, 0, 5); // Add some vertical breathing room
+    hLayout->setContentsMargins(0, 5, 0, 5);
 
     QLabel *label = new QLabel("Observer whitepoint");
-    // Ensure vertical centering relative to the tall chart
     hLayout->addWidget(label, 0, Qt::AlignVCenter);
 
-    // "Move selector more to right"
+    // Keep the square selector visually separated from the field label.
     hLayout->addSpacing(40);
 
     CIEChartWidget *cieChart = new CIEChartWidget();
     cieChart->setObjectName(QStringLiteral("ColorObserverWhitepointChart"));
     cieChart->setProperty("parameterKey",
                           QStringLiteral("color.viewing.observer_whitepoint"));
-    cieChart->setFixedHeight(200); // Reasonable height
-    cieChart->setFixedWidth(
-        200); // Also fix width to keep aspect sensible or let it expand?
-              // User said "move to right", implying it might be small?
-              // Let's allow expanding but maybe add a stretch before it?
-              // Actually, standard behavior is fine, just added spacing.
+    cieChart->setFixedSize(200, 200);
     hLayout->addWidget(cieChart);
-
-    // If we want it to push to the right edge:
-    // hLayout->addStretch();
-    // But usually charts should be left-aligned after the label/spacing.
-    // I'll stick to addSpacing(40).
 
     if (m_currentGroupForm)
       m_currentGroupForm->addRow(wrapper);
