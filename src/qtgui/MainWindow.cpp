@@ -449,7 +449,7 @@ MainWindow::~MainWindow() {
   m_solverQueue.cancelAll();
   m_colorOptimizerQueue.cancelAll();
   m_oneShotOperations.cancelAll();
-  m_fileRenderController.cancelAll();
+  m_fileRenderController.shutdown();
   m_progressController.cancelAll();
   // Result delivery from persistent workers is no longer useful once teardown
   // starts. Disconnect before joining one-shot workers because shutdown may

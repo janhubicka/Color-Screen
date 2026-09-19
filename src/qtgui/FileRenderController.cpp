@@ -10,6 +10,9 @@
 #include <string>
 #include <utility>
 
+/** Cancel and join any worker that outlives its owning document. */
+FileRenderController::~FileRenderController() { shutdown(); }
+
 /** Bind document presentation/lifetime callbacks once. */
 void FileRenderController::configure(Callbacks callbacks) {
   Q_ASSERT(!m_configured);
@@ -27,34 +30,66 @@ bool FileRenderController::ownsProgress(
     const std::shared_ptr<colorscreen::progress_info> &info) const {
   if (!info)
     return false;
-  return std::find(m_activeProgresses.begin(), m_activeProgresses.end(), info) !=
-         m_activeProgresses.end();
+  return std::any_of(
+      m_activeJobs.begin(), m_activeJobs.end(),
+      [&info](const ActiveJob &job) { return job.progress == info; });
 }
 
-/** Forget one completed progress identity. */
-void FileRenderController::removeActiveProgress(
+/** Forget one completed render job. */
+void FileRenderController::removeActiveJob(
     const std::shared_ptr<colorscreen::progress_info> &progress) {
-  m_activeProgresses.erase(
-      std::remove(m_activeProgresses.begin(), m_activeProgresses.end(),
-                  progress),
-      m_activeProgresses.end());
+  m_activeJobs.erase(
+      std::remove_if(m_activeJobs.begin(), m_activeJobs.end(),
+                     [&progress](const ActiveJob &job) {
+                       return job.progress == progress;
+                     }),
+      m_activeJobs.end());
 }
 
 /** Request cooperative cancellation of every active file render. */
 void FileRenderController::cancelAll() {
-  for (const auto &progress : m_activeProgresses)
-    if (progress)
-      progress->cancel();
+  for (const ActiveJob &job : m_activeJobs)
+    if (job.progress)
+      job.progress->cancel();
+}
+
+/** Cancel, join and clean every worker before the controller can disappear. */
+void FileRenderController::shutdown() {
+  if (m_shuttingDown)
+    return;
+  m_shuttingDown = true;
+
+  cancelAll();
+
+  // Disconnect completion callbacks before waiting: shutdown owns cleanup from
+  // this point forward and must not race a queued finished() delivery.
+  for (ActiveJob &job : m_activeJobs)
+    if (job.watcher)
+      QObject::disconnect(job.watcher, nullptr, this, nullptr);
+
+  for (ActiveJob &job : m_activeJobs) {
+    job.future.waitForFinished();
+
+    if (!job.outputPath.isEmpty() && QFile::exists(job.outputPath))
+      QFile::remove(job.outputPath);
+
+    if (job.watcher) {
+      delete job.watcher.data();
+      job.watcher = nullptr;
+    }
+  }
+
+  m_activeJobs.clear();
 }
 
 /** Start REQUEST in the global thread pool. */
 void FileRenderController::start(Request request) {
   Q_ASSERT(m_configured);
-  if (isClosing() || !request.scan || request.outputPath.isEmpty())
+  if (m_shuttingDown || isClosing() || !request.scan ||
+      request.outputPath.isEmpty())
     return;
 
   auto progress = std::make_shared<colorscreen::progress_info>();
-  m_activeProgresses.push_back(progress);
   if (m_callbacks.addProgress)
     m_callbacks.addProgress(progress, request.progressTitle);
 
@@ -73,7 +108,7 @@ void FileRenderController::start(Request request) {
             }
 
             const bool cancelled = progress->pool_cancel();
-            removeActiveProgress(progress);
+            removeActiveJob(progress);
             watcher->deleteLater();
 
             if (cancelled || !success) {
@@ -111,5 +146,7 @@ void FileRenderController::start(Request request) {
             &error);
       });
 
+  m_activeJobs.push_back(
+      {progress, outputPath, QPointer<QFutureWatcher<bool>>(watcher), future});
   watcher->setFuture(future);
 }

@@ -481,8 +481,10 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   switching, delayed visibility and row bookkeeping live in
   `DocumentProgressController`; accepted file-render jobs, future/watcher
   lifetime, cancellation identity and incomplete-output cleanup live in
-  `FileRenderController`. MainWindow still owns workspace/focus policy plus
-  save-path/render-settings dialogs and document snapshots. Continue moving
+  `FileRenderController`, which also joins active render workers and removes
+  incomplete outputs during document teardown. MainWindow still owns
+  workspace/focus policy plus save-path/render-settings dialogs and document
+  snapshots. Continue moving
   cohesive infrastructure behind focused controllers/services when the
   interface is similarly stable.
 - Give long-lived analysis state explicit structs rather than parallel member
