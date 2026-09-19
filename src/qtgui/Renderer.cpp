@@ -2,6 +2,7 @@
 #include <QImage>
 #include "Logging.h"
 #include <QColorSpace>
+#include <QThread>
 
 #include "../libcolorscreen/include/render-parameters.h"
 #include "../libcolorscreen/include/progress-info.h"
@@ -259,4 +260,52 @@ void Renderer::render(int reqId)
         emit imageReady(reqId, image, outX, outY, scale, true);
     else
         emit imageReady(reqId, QImage(), xOffset, yOffset, scale, false);
+}
+
+/** Ensure no renderer thread outlives its owning view. */
+RendererThreadOwner::~RendererThreadOwner()
+{
+    shutdown();
+}
+
+/** Start a fresh renderer thread for SCAN after stopping any previous worker. */
+Renderer *
+RendererThreadOwner::start(
+    QObject *receiver, std::shared_ptr<colorscreen::image_data> scan)
+{
+    shutdown();
+    if (!receiver || !scan)
+        return nullptr;
+
+    m_receiver = receiver;
+    m_thread = new QThread(receiver);
+    m_renderer = new Renderer(std::move(scan));
+    Renderer *renderer = m_renderer.data();
+    renderer->moveToThread(m_thread);
+    QObject::connect(m_thread, &QThread::finished, renderer,
+                     &QObject::deleteLater);
+    m_thread->start();
+    return renderer;
+}
+
+/** Stop/join the renderer thread while suppressing callbacks to its old view. */
+void
+RendererThreadOwner::shutdown()
+{
+    if (m_renderer && m_receiver)
+        QObject::disconnect(m_renderer.data(), nullptr, m_receiver.data(),
+                            nullptr);
+
+    if (m_thread) {
+        if (m_thread->isRunning()) {
+            m_thread->requestInterruption();
+            m_thread->quit();
+            m_thread->wait();
+        }
+        delete m_thread;
+        m_thread = nullptr;
+    }
+
+    m_renderer = nullptr;
+    m_receiver = nullptr;
 }

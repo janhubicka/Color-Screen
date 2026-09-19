@@ -229,26 +229,7 @@ void ImageWidget::setPan(double x, double y) {
  * @brief Destructor for ImageWidget.
  * Ensures the rendering thread is properly terminated.
  */
-ImageWidget::~ImageWidget() { shutdownRenderer(); }
-
-/** Stop the renderer thread and let QThread::finished delete its worker. */
-void ImageWidget::shutdownRenderer() {
-  if (m_renderer)
-    disconnect(m_renderer.data(), nullptr, this, nullptr);
-
-  if (m_renderThread) {
-    if (m_renderThread->isRunning()) {
-      m_renderThread->requestInterruption();
-      m_renderThread->quit();
-      m_renderThread->wait();
-    }
-    delete m_renderThread;
-    m_renderThread = nullptr;
-  }
-
-  // Renderer is deleted through QThread::finished -> QObject::deleteLater.
-  m_renderer = nullptr;
-}
+ImageWidget::~ImageWidget() { m_rendererThread.shutdown(); }
 
 /**
  * @brief Sets the image and all associated rendering parameters.
@@ -294,7 +275,7 @@ void ImageWidget::setImage(std::shared_ptr<colorscreen::image_data> scan,
   m_scan = nullptr;
 
   // Stop the old worker before replacing its scan.
-  shutdownRenderer();
+  m_rendererThread.shutdown();
 
   m_scan = scan;
   if (m_scan && m_scan->stitch)
@@ -319,17 +300,9 @@ void ImageWidget::setImage(std::shared_ptr<colorscreen::image_data> scan,
   m_panAnimationActive = false;
 
   if (m_scan && m_rparams) {
-    m_renderThread = new QThread(this);
-    m_renderer = new Renderer(m_scan);
-    m_renderer->moveToThread(m_renderThread);
-
-    connect(m_renderThread, &QThread::finished, m_renderer.data(),
-            &QObject::deleteLater);
-    connect(m_renderer.data(), &Renderer::imageReady, this,
+    Renderer *renderer = m_rendererThread.start(this, m_scan);
+    connect(renderer, &Renderer::imageReady, this,
             &ImageWidget::handleImageReady);
-
-    m_renderThread->start();
-
     requestRender();
   }
   update();
@@ -3010,7 +2983,8 @@ void ImageWidget::requestRender() {
 void ImageWidget::onTriggerRender(int reqId, std::shared_ptr<colorscreen::progress_info> progress, const QVariant &userData)
 {
     progress->set_task ("Preparing renderer", 1);
-    if (!m_renderer || !userData.canConvert<RenderRequestData>()) {
+    Renderer *renderer = m_rendererThread.renderer();
+    if (!renderer || !userData.canConvert<RenderRequestData>()) {
          m_renderQueue.reportFinished(reqId, false);
          return; 
     }
@@ -3021,7 +2995,7 @@ void ImageWidget::onTriggerRender(int reqId, std::shared_ptr<colorscreen::progre
     
     progress->set_task ("Invoking renderer", 1);
     // Trigger generic render
-    bool result = m_renderer->enqueueRender(
+    bool result = renderer->enqueueRender(
         reqId, data.xOffset, data.yOffset, data.scale, data.w, data.h,
         data.coordinateSpace, data.params, data.scrToImg, data.scrDetect,
         data.renderType, progress, "Rendering image");

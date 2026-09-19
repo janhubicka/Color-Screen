@@ -10,9 +10,7 @@
 #include "Renderer.h"
 #include "TaskQueue.h"
 #include <QImage>
-#include <QThread>
 #include <QWidget>
-#include <QPointer>
 #include <QRubberBand>
 #include <QTimer>
 #include <memory>
@@ -331,9 +329,6 @@ signals:
   void viewCoordinateSpaceChanged(int coordinateSpace);
 
 private:
-  /** Stop and destroy the renderer thread using Qt's worker-object lifecycle. */
-  void shutdownRenderer();
-
   // Drawing helpers to keep paintEvent clean
   void drawDetectedPatchCenters(QPainter &p);
   void drawPointsOverlay(QPainter &p);
@@ -482,8 +477,7 @@ private:
   colorscreen::render_coordinate_space m_coordinateSpace =
       colorscreen::render_scan_coordinates;
 
-  QPointer<Renderer> m_renderer;
-  QThread *m_renderThread = nullptr;
+  RendererThreadOwner m_rendererThread;
 
   QImage m_pixmap; // The currently displayed rendered tile
 
