@@ -29,29 +29,34 @@ void GeometrySolverWorker::solve(
       solverParams.optimize_lens = false;
     
     auto originalMesh = params.mesh_trans;
-    bool oriignalIsScrToImg = params.mesh_trans_is_scr_to_img;
+    const bool originalIsScrToImg = params.mesh_trans_is_scr_to_img;
 
     // colorscreen::solver modifies params in place and returns sum of squares of error
-    colorscreen::coord_t error_sq = colorscreen::solver(&params, *m_scan, solverParams, progress.get());
+    colorscreen::coord_t error_sq =
+        colorscreen::solver(&params, *m_scan, solverParams, progress.get());
 
-    if (!computeMesh)
-    {
+    if (!computeMesh) {
       params.mesh_trans = originalMesh;
-      params.mesh_trans_is_scr_to_img = oriignalIsScrToImg;
+      params.mesh_trans_is_scr_to_img = originalIsScrToImg;
     }
 
-    qDebug() << "Geometry solver finished with error squared:" << error_sq << " nonlinear " << computeMesh;
+    qDebug() << "Geometry solver finished with error squared:" << error_sq
+             << " nonlinear " << computeMesh;
 
     if (progress && progress->cancelled()) {
       success = false;
       cancelled = true;
     } else {
-      if (computeMesh && (int)solverParams.n_points () > colorscreen::solver_parameters::min_mesh_points (params.type)) {
-        params.mesh_trans = colorscreen::solver_mesh(&params, *m_scan, solverParams, progress.get());
-	params.mesh_trans_is_scr_to_img = false;
+      if (computeMesh &&
+          static_cast<int>(solverParams.n_points()) >
+              colorscreen::solver_parameters::min_mesh_points(params.type)) {
+        params.mesh_trans =
+            colorscreen::solver_mesh(&params, *m_scan, solverParams,
+                                     progress.get());
+        params.mesh_trans_is_scr_to_img = false;
         if (!params.mesh_trans) {
           success = false;
-          if (!progress->cancelled())
+          if (!progress || !progress->cancelled())
             qWarning() << "Geometry solver failed to compute mesh";
         } else {
           success = true;
