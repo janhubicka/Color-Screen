@@ -41,7 +41,7 @@ void GeometryPanel::setupUi() {
   m_showRegistrationPointsBox = new QCheckBox("Show registration points");
   addToPanel(m_showRegistrationPointsBox);
   
-  // To make it easy for MainWindow to sync, let's give it an object name
+  // Stable name used by shared presentation and smoke inspection.
   m_showRegistrationPointsBox->setObjectName("showRegistrationPointsBox");
   
   m_exaggerateSliderContainer = addSlider("Exaggerate", 1.0, 10000.0, 100.0, 1, "x", "", 200.0,

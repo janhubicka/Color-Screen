@@ -1,9 +1,11 @@
 #ifndef CIE_CHART_WIDGET_H
 #define CIE_CHART_WIDGET_H
 
+#include <QImage>
 #include <QPolygonF>
 #include <QWidget>
-#include <vector>
+
+#include <utility>
 
 namespace colorscreen {
 struct xy_t;
@@ -44,10 +46,10 @@ private:
   QPointF mapToWidget(double x, double y) const;
   std::pair<double, double> mapFromWidget(const QPointF &p) const;
   QRectF getChartRect() const;
-  void generateCache(); // Added
+  void generateCache();
 
   QPolygonF m_locus;
-  QImage m_cache; // Added
+  QImage m_cache;
   double m_selectedX = 0.33;
   double m_selectedY = 0.33;
   

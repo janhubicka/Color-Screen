@@ -815,18 +815,12 @@ void JolyAnimation::stepAnimation(double dt) {
        
        it->y = baseY + stripAmp * qSin(angle);
        
-       // Calculate tilt
-       double slope = stripAmp * stripFreq * qCos(angle);
-       // Smoothly interpolate angle? Or direct?
-       // Boats act directly on slope? No, m_bottles uses direct slope.
-       // Let's just set angle directly for flow
-       // Reuse 'isBreaching' as 'facingLeft' flag? No, let's use drift direction
-       bool facingLeft = (stripSpeed < 0);
-       
-       // Tilt based on wave slope
-       double waveTilt = qRadiansToDegrees(qAtan(slope));
-       // Whales are long, maybe average 2 points? Simple slope is fine.
-       it->angle = waveTilt * 0.5; // Dampen tilt
+       const double slope = stripAmp * stripFreq * qCos(angle);
+       const bool facingLeft = stripSpeed < 0;
+
+       // Follow the local wave slope, damped for the whale's longer body.
+       const double waveTilt = qRadiansToDegrees(qAtan(slope));
+       it->angle = waveTilt * 0.5;
        if (facingLeft) it->angle = -it->angle; // Adjust for flip
        
       // Animation lifecycle
