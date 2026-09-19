@@ -39,12 +39,25 @@ NavigationView::NavigationView(QWidget *parent) : QWidget(parent) {
   connect(&m_renderQueue, &TaskQueue::progressFinished, this, &NavigationView::progressFinished);
 }
 
-NavigationView::~NavigationView() {
+NavigationView::~NavigationView() { shutdownRenderer(); }
+
+/** Stop the renderer thread and let QThread::finished delete its worker. */
+void NavigationView::shutdownRenderer() {
+  if (m_renderer)
+    disconnect(m_renderer.data(), nullptr, this, nullptr);
+
   if (m_renderThread) {
-    m_renderThread->requestInterruption();
-    m_renderThread->quit();
-    m_renderThread->wait();
+    if (m_renderThread->isRunning()) {
+      m_renderThread->requestInterruption();
+      m_renderThread->quit();
+      m_renderThread->wait();
+    }
+    delete m_renderThread;
+    m_renderThread = nullptr;
   }
+
+  // Renderer is deleted through QThread::finished -> QObject::deleteLater.
+  m_renderer = nullptr;
 }
 
 void NavigationView::setImage(std::shared_ptr<colorscreen::image_data> scan,
@@ -76,31 +89,9 @@ void NavigationView::setImage(std::shared_ptr<colorscreen::image_data> scan,
   // Clear old scan to release it from memory
   m_scan = nullptr;
 
-  // Clean up old renderer and thread
-  if (m_renderer) {
-    // Disconnect all signals to prevent callbacks during shutdown
-    disconnect(m_renderer, nullptr, this, nullptr);
-    m_renderer->deleteLater();
-    m_renderer = nullptr;
-  }
+  // Stop the old worker before replacing its scan.
+  shutdownRenderer();
 
-  if (m_renderThread) {
-    // Disconnect thread signals to prevent deadlock
-    disconnect(m_renderThread, nullptr, nullptr, nullptr);
-
-    // Ensure thread stops
-    if (m_renderThread->isRunning()) {
-      m_renderThread->requestInterruption();
-      m_renderThread->quit();
-      m_renderThread->wait(); // Wait indefinitely for clean shutdown
-    }
-    // Safe to delete immediately
-    delete m_renderThread;
-    m_renderThread = nullptr;
-  }
-
-  // Reset render queue state for new renderer
-  
   // Now set the new scan pointer (old one is released)
   m_scan = scan;
 
@@ -113,9 +104,9 @@ void NavigationView::setImage(std::shared_ptr<colorscreen::image_data> scan,
     m_renderer = new Renderer(m_scan);
     m_renderer->moveToThread(m_renderThread);
 
-    connect(m_renderThread, &QThread::finished, m_renderer,
+    connect(m_renderThread, &QThread::finished, m_renderer.data(),
             &QObject::deleteLater);
-    connect(m_renderer, &Renderer::imageReady, this,
+    connect(m_renderer.data(), &Renderer::imageReady, this,
             &NavigationView::onImageReady);
     m_renderThread->start();
 

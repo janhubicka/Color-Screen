@@ -1,5 +1,6 @@
 #pragma once
 #include <QWidget>
+#include <QPointer>
 #include <QImage>
 #include <memory>
 // Include parameters definitions
@@ -70,6 +71,9 @@ private slots:
     void onTriggerRender(int reqId, std::shared_ptr<colorscreen::progress_info> progress, const QVariant &userData);
 
 private:
+    /** Stop and destroy the renderer thread using Qt's worker-object lifecycle. */
+    void shutdownRenderer();
+
     /** Cancel a viewport drag without emitting another pan target. */
     void cancelPointerInteraction();
     void updateSliderRange();
@@ -83,7 +87,7 @@ private:
     colorscreen::scr_detect_parameters *m_scrDetect = nullptr;
     colorscreen::render_type_parameters m_renderType; // Internal copy
 
-    Renderer *m_renderer = nullptr;
+    QPointer<Renderer> m_renderer;
     QThread *m_renderThread = nullptr;
 
     // Internal state
