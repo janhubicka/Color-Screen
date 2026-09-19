@@ -2,6 +2,7 @@
 
 #include <QObject>
 #include <QImage>
+#include <QPointer>
 #include <condition_variable>
 #include <cstddef>
 #include <memory>
@@ -14,6 +15,8 @@
 #include "../libcolorscreen/include/scr-to-img-parameters.h"
 #include "../libcolorscreen/include/scr-detect-parameters.h"
 #include "../libcolorscreen/include/progress-info.h"
+
+class QThread;
 
 class Renderer : public QObject
 {
@@ -76,4 +79,32 @@ private:
     std::mutex m_activeMutex;
     std::condition_variable m_activeCondition;
     std::size_t m_activeTasks = 0;
+};
+
+/** Own one Renderer together with its dedicated QThread.
+
+    Views keep render-request and imageReady policy. This helper owns only the
+    worker-object/thread lifecycle shared by ImageWidget and NavigationView. */
+class RendererThreadOwner final {
+public:
+    RendererThreadOwner() = default;
+    ~RendererThreadOwner();
+
+    RendererThreadOwner(const RendererThreadOwner &) = delete;
+    RendererThreadOwner &operator=(const RendererThreadOwner &) = delete;
+
+    /** Replace any existing worker with a Renderer for SCAN owned by RECEIVER. */
+    Renderer *start(QObject *receiver,
+                    std::shared_ptr<colorscreen::image_data> scan);
+
+    /** Disconnect RECEIVER, stop/join the thread and release the worker. */
+    void shutdown();
+
+    /** Return the current renderer, or nullptr when no scan is active. */
+    Renderer *renderer() const { return m_renderer.data(); }
+
+private:
+    QPointer<QObject> m_receiver;
+    QPointer<Renderer> m_renderer;
+    QThread *m_thread = nullptr;
 };

@@ -7,7 +7,6 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QSlider>
-#include <QThread>
 #include <QVBoxLayout>
 #include <QtMath> // qMin, qMax
 
@@ -39,26 +38,7 @@ NavigationView::NavigationView(QWidget *parent) : QWidget(parent) {
   connect(&m_renderQueue, &TaskQueue::progressFinished, this, &NavigationView::progressFinished);
 }
 
-NavigationView::~NavigationView() { shutdownRenderer(); }
-
-/** Stop the renderer thread and let QThread::finished delete its worker. */
-void NavigationView::shutdownRenderer() {
-  if (m_renderer)
-    disconnect(m_renderer.data(), nullptr, this, nullptr);
-
-  if (m_renderThread) {
-    if (m_renderThread->isRunning()) {
-      m_renderThread->requestInterruption();
-      m_renderThread->quit();
-      m_renderThread->wait();
-    }
-    delete m_renderThread;
-    m_renderThread = nullptr;
-  }
-
-  // Renderer is deleted through QThread::finished -> QObject::deleteLater.
-  m_renderer = nullptr;
-}
+NavigationView::~NavigationView() { m_rendererThread.shutdown(); }
 
 void NavigationView::setImage(std::shared_ptr<colorscreen::image_data> scan,
                               colorscreen::render_parameters *rparams,
@@ -90,7 +70,7 @@ void NavigationView::setImage(std::shared_ptr<colorscreen::image_data> scan,
   m_scan = nullptr;
 
   // Stop the old worker before replacing its scan.
-  shutdownRenderer();
+  m_rendererThread.shutdown();
 
   // Now set the new scan pointer (old one is released)
   m_scan = scan;
@@ -100,15 +80,9 @@ void NavigationView::setImage(std::shared_ptr<colorscreen::image_data> scan,
     m_lastRotation = m_rparams->scan_rotation;
     m_lastMirror = m_rparams->scan_mirror;
 
-    m_renderThread = new QThread(this);
-    m_renderer = new Renderer(m_scan);
-    m_renderer->moveToThread(m_renderThread);
-
-    connect(m_renderThread, &QThread::finished, m_renderer.data(),
-            &QObject::deleteLater);
-    connect(m_renderer.data(), &Renderer::imageReady, this,
+    Renderer *renderer = m_rendererThread.start(this, m_scan);
+    connect(renderer, &Renderer::imageReady, this,
             &NavigationView::onImageReady);
-    m_renderThread->start();
 
     // Use a helper or just manually create the request here
     RenderRequestData data;
@@ -128,7 +102,8 @@ void NavigationView::setImage(std::shared_ptr<colorscreen::image_data> scan,
 
 void NavigationView::onTriggerRender(int reqId, std::shared_ptr<colorscreen::progress_info> progress, const QVariant &userData) {
     progress->set_task ("Preparing navigation renderer", 1);
-    if (!m_renderer || !m_scan || !userData.canConvert<RenderRequestData>()) {
+    Renderer *renderer = m_rendererThread.renderer();
+    if (!renderer || !m_scan || !userData.canConvert<RenderRequestData>()) {
         m_renderQueue.reportFinished(reqId, false);
         return;
     }
@@ -165,7 +140,7 @@ void NavigationView::onTriggerRender(int reqId, std::shared_ptr<colorscreen::pro
     if (targetW <= 0) targetW = 1;
     if (targetH <= 0) targetH = 1;
 
-    bool result = m_renderer->enqueueRender(
+    bool result = renderer->enqueueRender(
         reqId, 0.0, 0.0, scale, targetW, targetH, data.coordinateSpace,
         data.params, data.scrToImg, data.scrDetect, data.renderType, progress,
         "Rendering navigation");
