@@ -13,7 +13,12 @@ public:
       : QObject(parent), m_scan(scan) {}
   virtual ~WorkerBase();
 
-  void setScan(std::shared_ptr<colorscreen::image_data> scan) { m_scan = scan; }
+  /** Replace the worker's image on its own QObject thread.
+
+      MainWindow and panels may call this directly from the GUI thread after the
+      worker has moved to a dedicated QThread. Cross-thread calls are queued so
+      m_scan is never assigned concurrently with a worker slot reading it. */
+  void setScan(std::shared_ptr<colorscreen::image_data> scan);
 
 protected:
   std::shared_ptr<colorscreen::image_data> m_scan;
