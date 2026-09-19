@@ -8,6 +8,9 @@
 #include "../libcolorscreen/include/scr-detect-parameters.h"
 #include "../libcolorscreen/include/scr-to-img-parameters.h"
 
+#include <QFuture>
+#include <QFutureWatcher>
+#include <QPointer>
 #include <QObject>
 #include <QString>
 
@@ -20,6 +23,7 @@
     MainWindow keeps save-path/settings dialogs and document snapshot policy.
     This controller owns background execution, progress identity, cooperative
     cancellation, incomplete-file cleanup, and completion handoff. */
+
 class FileRenderController final : public QObject {
 public:
   /** Immutable snapshot needed by one file render. */
@@ -53,6 +57,9 @@ public:
     std::function<void(const QString &, bool, bool)> finished;
   };
 
+  /** Ensure no render worker survives the controller. */
+  ~FileRenderController() override;
+
   /** Bind callbacks once before starting renders. */
   void configure(Callbacks callbacks);
 
@@ -60,7 +67,7 @@ public:
   void start(Request request);
 
   /** Return true while any accepted file render is still running. */
-  bool hasActiveRenders() const { return !m_activeProgresses.empty(); }
+  bool hasActiveRenders() const { return !m_activeJobs.empty(); }
 
   /** Return whether INFO belongs to an active file-render job. */
   bool ownsProgress(
@@ -69,15 +76,26 @@ public:
   /** Request cooperative cancellation of every active file render. */
   void cancelAll();
 
+  /** Cancel, join and clean every active render before document teardown. */
+  void shutdown();
+
 private:
   /** Return whether the owning document is closing. */
   bool isClosing() const;
 
-  /** Forget one completed progress identity. */
-  void removeActiveProgress(
+  struct ActiveJob {
+    std::shared_ptr<colorscreen::progress_info> progress;
+    QString outputPath;
+    QPointer<QFutureWatcher<bool>> watcher;
+    QFuture<bool> future;
+  };
+
+  /** Forget one completed render job. */
+  void removeActiveJob(
       const std::shared_ptr<colorscreen::progress_info> &progress);
 
   Callbacks m_callbacks;
-  std::vector<std::shared_ptr<colorscreen::progress_info>> m_activeProgresses;
+  std::vector<ActiveJob> m_activeJobs;
   bool m_configured = false;
+  bool m_shuttingDown = false;
 };
