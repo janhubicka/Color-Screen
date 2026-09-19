@@ -229,12 +229,25 @@ void ImageWidget::setPan(double x, double y) {
  * @brief Destructor for ImageWidget.
  * Ensures the rendering thread is properly terminated.
  */
-ImageWidget::~ImageWidget() {
+ImageWidget::~ImageWidget() { shutdownRenderer(); }
+
+/** Stop the renderer thread and let QThread::finished delete its worker. */
+void ImageWidget::shutdownRenderer() {
+  if (m_renderer)
+    disconnect(m_renderer.data(), nullptr, this, nullptr);
+
   if (m_renderThread) {
-    m_renderThread->requestInterruption();
-    m_renderThread->quit();
-    m_renderThread->wait();
+    if (m_renderThread->isRunning()) {
+      m_renderThread->requestInterruption();
+      m_renderThread->quit();
+      m_renderThread->wait();
+    }
+    delete m_renderThread;
+    m_renderThread = nullptr;
   }
+
+  // Renderer is deleted through QThread::finished -> QObject::deleteLater.
+  m_renderer = nullptr;
 }
 
 /**
@@ -280,28 +293,8 @@ void ImageWidget::setImage(std::shared_ptr<colorscreen::image_data> scan,
   // Clear old scan to release it from memory
   m_scan = nullptr;
 
-  // Clean up old renderer and thread
-  if (m_renderer) {
-    disconnect(m_renderer, nullptr, this, nullptr);
-    m_renderer->deleteLater();
-    m_renderer = nullptr;
-  }
-
-  if (m_renderThread) {
-    disconnect(m_renderThread, nullptr, nullptr, nullptr);
-    if (m_renderThread->isRunning()) {
-      m_renderThread->requestInterruption();
-      m_renderThread->quit();
-      m_renderThread->wait();
-    }
-    delete m_renderThread;
-    m_renderThread = nullptr;
-  }
-
-  // m_renderQueue.cancelAll() handled above.
-
-
-
+  // Stop the old worker before replacing its scan.
+  shutdownRenderer();
 
   m_scan = scan;
   if (m_scan && m_scan->stitch)
@@ -330,9 +323,9 @@ void ImageWidget::setImage(std::shared_ptr<colorscreen::image_data> scan,
     m_renderer = new Renderer(m_scan);
     m_renderer->moveToThread(m_renderThread);
 
-    connect(m_renderThread, &QThread::finished, m_renderer,
+    connect(m_renderThread, &QThread::finished, m_renderer.data(),
             &QObject::deleteLater);
-    connect(m_renderer, &Renderer::imageReady, this,
+    connect(m_renderer.data(), &Renderer::imageReady, this,
             &ImageWidget::handleImageReady);
 
     m_renderThread->start();
