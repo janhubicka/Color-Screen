@@ -1,3 +1,4 @@
+#include "BackgroundThreadRegistry.h"
 #include "ColorScreenApplication.h"
 #include "MainWindow.h"
 #include "MultiLineTabWidget.h"
@@ -38,6 +39,7 @@
 #include <QMdiSubWindow>
 #include <QMenu>
 #include <QMenuBar>
+#include <QMetaObject>
 #include <QMouseEvent>
 #include <QPalette>
 #include <QPushButton>
@@ -55,6 +57,7 @@
 #include <QTransform>
 #include <QUndoStack>
 
+#include <atomic>
 #include <cmath>
 #include <cstring>
 #include <functional>
@@ -138,12 +141,69 @@ void sendKeySmokeEvent(QWidget &target, QEvent::Type type, int key) {
   QCoreApplication::sendEvent(&target, &event);
 }
 
+/** Exercise deadlock-safe joining of ad-hoc document worker threads. */
+bool backgroundThreadRegistryShutdownSmoke() {
+  BackgroundThreadRegistry registry;
+  QThread workerThread;
+  QObject worker;
+  QThread *guiThread = QThread::currentThread();
+  QObject *guiContext = QCoreApplication::instance();
+  std::atomic<bool> enteredBlockingCall{false};
+  std::atomic<bool> callbackServiced{false};
+
+  worker.moveToThread(&workerThread);
+  QObject::connect(
+      &workerThread, &QThread::started, &worker,
+      [&worker, guiThread, guiContext, &enteredBlockingCall,
+       &callbackServiced]() {
+        enteredBlockingCall.store(true, std::memory_order_release);
+        QMetaObject::invokeMethod(
+            guiContext,
+            [&callbackServiced]() {
+              callbackServiced.store(true, std::memory_order_release);
+            },
+            Qt::BlockingQueuedConnection);
+        worker.moveToThread(guiThread);
+      });
+
+  registry.track(&workerThread);
+  workerThread.start();
+
+  for (int i = 0;
+       i < 1000 && !enteredBlockingCall.load(std::memory_order_acquire); ++i)
+    QThread::msleep(1);
+
+  if (!enteredBlockingCall.load(std::memory_order_acquire)) {
+    qCritical() << "Background-thread registry smoke worker did not start";
+    registry.shutdown(guiContext);
+    return false;
+  }
+
+  registry.shutdown(guiContext);
+  if (workerThread.isRunning()) {
+    qCritical() << "Background-thread registry did not join its worker";
+    return false;
+  }
+  if (!callbackServiced.load(std::memory_order_acquire)) {
+    qCritical() << "Background-thread registry did not service blocking MetaCall";
+    return false;
+  }
+  if (!registry.empty()) {
+    qCritical() << "Background-thread registry retained joined workers";
+    return false;
+  }
+  return true;
+}
+
 /** Exercise beta-critical non-rendering UI/document invariants. */
 bool runBetaInvariantSmoke() {
   auto fail = [](const char *reason) {
     qCritical() << "Beta invariant smoke failed:" << reason;
     return false;
   };
+
+  if (!backgroundThreadRegistryShutdownSmoke())
+    return false;
 
   // Logical tab availability must not depend on whether an ancestor is
   // currently mapped. The host deliberately remains hidden for the whole

@@ -42,6 +42,7 @@ set(SOURCES
     WorkspaceWindow.cpp
     ImageViewWindow.cpp
     MainWindow.cpp
+    BackgroundThreadRegistry.cpp
     DocumentProgressController.cpp
     FileRenderController.cpp
     OneShotOperationController.cpp
@@ -80,6 +81,7 @@ set(HEADERS
     WorkspaceWindow.h
     ImageViewWindow.h
     MainWindow.h
+    BackgroundThreadRegistry.h
     DocumentProgressController.h
     FileRenderController.h
     OneShotOperationController.h
