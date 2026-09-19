@@ -459,7 +459,7 @@ MainWindow::~MainWindow() {
   if (m_colorOptimizerWorker)
     disconnect(m_colorOptimizerWorker, nullptr, this, nullptr);
 
-  shutdownBackgroundThreads();
+  m_backgroundThreads.shutdown(this);
 
   if (m_solverThread) {
     m_solverThread->quit();
@@ -490,50 +490,6 @@ MainWindow::~MainWindow() {
     m_mainSplitter = nullptr;
   }
 
-}
-
-/** Track a one-shot worker thread owned by this document's lifetime. */
-void MainWindow::trackBackgroundThread(QThread *thread) {
-  if (!thread)
-    return;
-  m_backgroundThreads.erase(
-      std::remove_if(m_backgroundThreads.begin(), m_backgroundThreads.end(),
-                     [](const QPointer<QThread> &candidate) {
-                       return candidate.isNull();
-                     }),
-      m_backgroundThreads.end());
-  m_backgroundThreads.emplace_back(thread);
-}
-
-/** Cancel/join every one-shot worker before document members are destroyed. */
-void MainWindow::shutdownBackgroundThreads() {
-  for (const QPointer<QThread> &guard : m_backgroundThreads) {
-    if (QThread *thread = guard.data())
-      if (thread->isRunning()) {
-        thread->requestInterruption();
-        thread->quit();
-      }
-  }
-
-  // FinetuneMisregisteredWorker can be blocked asking the document for its
-  // latest point set through a BlockingQueuedConnection.  A plain wait() from
-  // the GUI thread would deadlock in that state.  Poll in short intervals and
-  // service only MetaCall events addressed to this document; m_closing makes
-  // every result callback a no-op while still allowing the blocking request to
-  // return and observe cancellation.
-  bool running = true;
-  while (running) {
-    running = false;
-    for (const QPointer<QThread> &guard : m_backgroundThreads) {
-      if (QThread *thread = guard.data(); thread && thread->isRunning()) {
-        running = true;
-        thread->wait(10);
-      }
-    }
-    if (running)
-      QCoreApplication::sendPostedEvents(this, QEvent::MetaCall);
-  }
-  m_backgroundThreads.clear();
 }
 
 /** Build the entire main window UI.
@@ -5462,7 +5418,7 @@ void MainWindow::onAutomaticallyAddPointsInAreaRequested(
             params, m_geometryPanel->isNonlinearEnabled());
         auto *thread = new QThread(this);
         worker->moveToThread(thread);
-        trackBackgroundThread(thread);
+        m_backgroundThreads.track(thread);
 
         connect(thread, &QThread::started, worker,
                 &FinetuneMisregisteredWorker::run);
@@ -5572,7 +5528,7 @@ void MainWindow::onAutomaticallyAddPointsRequested(const colorscreen::finetune_a
       params, m_geometryPanel->isNonlinearEnabled(), true);
   QThread *thread = new QThread(this);
   worker->moveToThread(thread);
-  trackBackgroundThread(thread);
+  m_backgroundThreads.track(thread);
 
   // Connect signals
   connect(thread, &QThread::started, worker, &FinetuneMisregisteredWorker::run);
@@ -5840,7 +5796,7 @@ void MainWindow::onAdaptiveSharpeningRequested(
 
   QThread *thread = new QThread(this);
   worker->moveToThread(thread);
-  trackBackgroundThread(thread);
+  m_backgroundThreads.track(thread);
 
   connect(thread, &QThread::started, worker, &AdaptiveSharpeningWorker::run);
 

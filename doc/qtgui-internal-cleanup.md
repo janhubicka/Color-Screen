@@ -482,11 +482,13 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   `DocumentProgressController`; accepted file-render jobs, future/watcher
   lifetime, cancellation identity and incomplete-output cleanup live in
   `FileRenderController`, which also joins active render workers and removes
-  incomplete outputs during document teardown. MainWindow still owns
+  incomplete outputs during document teardown. Ad-hoc QThread workers that
+  publish incremental results are tracked and joined by
+  `BackgroundThreadRegistry`, including the BlockingQueuedConnection-safe
+  MetaCall drain required by misregistered-point workers. MainWindow still owns
   workspace/focus policy plus save-path/render-settings dialogs and document
-  snapshots. Continue moving
-  cohesive infrastructure behind focused controllers/services when the
-  interface is similarly stable.
+  snapshots. Continue moving cohesive infrastructure behind focused
+  controllers/services when the interface is similarly stable.
 - Give long-lived analysis state explicit structs rather than parallel member
   variables. Profile-calibration, geometry-fit, measured-MTF fit, and automatic
   multi-area focus analysis now each live in one lifecycle struct instead of

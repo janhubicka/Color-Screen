@@ -56,6 +56,7 @@ class QThread;
 #include "ParameterState.h"
 #include "SharpnessPanel.h"
 #include "TaskQueue.h"
+#include "BackgroundThreadRegistry.h"
 #include "OneShotOperationController.h"
 #include "DocumentProgressController.h"
 #include "FileRenderController.h"
@@ -811,15 +812,8 @@ private:
   };
   MtfFitState m_mtfFit;
   
-  // One-shot background threads that intentionally publish intermediate
-  // results (misregistered finetune, adaptive sharpening, etc.).
-  // QPointer makes completed/deleteLater threads harmless until the vector is
-  // pruned; shutdown joins every still-running operation before document state
-  // is destroyed.
-  std::vector<QPointer<QThread>> m_backgroundThreads;
-
-  void trackBackgroundThread(QThread *thread);
-  void shutdownBackgroundThreads();
+  // Ad-hoc workers that intentionally publish intermediate results.
+  BackgroundThreadRegistry m_backgroundThreads;
 
   // The workspace smoke probe exercises private one-shot publication rules.
   friend void startWorkspaceChurnSmoke(ColorScreenApplication &app,
