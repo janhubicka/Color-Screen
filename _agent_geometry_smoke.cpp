@@ -230,6 +230,19 @@ bool geometrySectionPreferencesSmoke() {
   state.solver.points.push_back({{0, 0}, {0, 0}, Solver::green});
   state.solver.points.push_back({{79, 63}, {20, 16}, Solver::green});
   second->updateRegistrationPointInfo(state);
+  if (!verifyMessages(*second, {false, true, false, false}))
+    return fail(QStringLiteral("outliers incorrectly cleared the coverage warning"));
+
+  // Coverage uses the central 90% span, not a bounding box. Replace the
+  // cluster by a distributed grid instead of relying on isolated outliers.
+  state.solver.points.clear();
+  const int gridRows = (enoughPoints + 9) / 10;
+  for (int i = 0; i < enoughPoints; ++i) {
+    const double x = (i % 10) * 79.0 / 9;
+    const double y = (i / 10) * 63.0 / (gridRows - 1);
+    state.solver.points.push_back({{x, y}, {x / 4, y / 4}, Solver::green});
+  }
+  second->updateRegistrationPointInfo(state);
   if (!verifyMessages(*second, {false, false, false, false}))
     return fail(QStringLiteral("sufficient lens coverage retained its warning"));
   const ParameterState withGeometry = state;
