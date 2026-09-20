@@ -595,7 +595,24 @@ The `screen_simulation` unit group verifies:
 - an all-zero screen produces finite black preview data and zero patch
   proportions;
 - known patch proportions are accumulated accurately;
-- `screen::add` survives MTF and point-spread filtering.
+- `screen::add` survives MTF and point-spread filtering;
+- finite digital filtering treats sharpening None and Richardson--Lucy with
+  zero iterations identically, while Blur deconvolution deliberately applies
+  a second capture blur;
+- the Sharpness Preview's **Digitized** tile applies the forward capture
+  transfer exactly once, **Sharpened** is identical to it for effective mode
+  None (including Richardson--Lucy at zero iterations), and positive
+  Richardson--Lucy / Blur deconvolution remain active.
+
+The Sharpness Preview is diagnostic presentation, not a second simulation
+pipeline. **Original** is the ideal historical screen, **Digitized** is the
+screen after one configured capture transfer, and **Sharpened** additionally
+anticipates the effective digital sharpening mode. The periodic preview may use
+the screen-domain equivalent of a digital filter, but its stage ownership must
+match the finite simulation: forward capture once, then optional sharpening.
+The production finite screen used by colour-loss estimation already samples the
+forward-captured screen and then calls the same image sharpening/deconvolution
+implementation with the same Richardson--Lucy iteration count.
 
 The complete optimized unit suite and Autotools testsuite must pass before this
 stage contract is changed further.
