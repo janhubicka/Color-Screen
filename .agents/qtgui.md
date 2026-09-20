@@ -341,6 +341,23 @@ immediately. If Bayer compensation requires a reload first, preserve the
 autodetection request only for that exact reload generation and start detection
 after the replacement image is installed.
 
+The setup guide's physical-screen picker is the same icon-populated selector as
+the Screen panel, filtered to regular screens for monochrome workflows. Once a
+selected screen has a known preferred dye model, offer that model as a checked
+setup suggestion. Dynamic appearance of the screen/model/autodetect rows must
+invalidate and resize the dialog layout; they must never overlay following
+capture-metadata controls.
+
+Successful **Detect screen** completes the setup sequence. After regular screen
+geometry is known, use the same `scr_to_img_parameters::estimate_dpi()` path as
+Digital Capture's **Resolution from screen** control and offer the resulting PPI
+as an independent checked suggestion. Offer any still-missing preferred dye
+model in the same dialog. This recommendation step applies to both RGB screen
+identification and monochrome/known-screen geometry discovery; closing the
+dialog declines optional recommendations but never discards mandatory detected
+geometry. The prompt remains snapshot-bound, so intervening document/image
+changes invalidate it.
+
 ### 3. Independent Exports (Render to File)
 - **When to Use**: Tasks that are independent of ongoing UI parameter tweaks once started and should run to completion.
 - **Examples**: `onRender()` (rendering to a final file).

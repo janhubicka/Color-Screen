@@ -30,6 +30,7 @@ public:
 
   CaptureType selectedCaptureType() const;
   colorscreen::scr_type selectedScreenType() const;
+  bool usePreferredColorModel() const;
   bool automaticallyDetectScreen() const;
   bool useMonochromeBayerCorrection() const;
   bool useFStop() const;
@@ -47,6 +48,7 @@ private:
   QComboBox *m_captureType = nullptr;
   QWidget *m_screenTypeRow = nullptr;
   QComboBox *m_screenType = nullptr;
+  QCheckBox *m_preferredColorModel = nullptr;
   QCheckBox *m_autoDetectScreen = nullptr;
   QCheckBox *m_monochromeBayer = nullptr;
   QCheckBox *m_fstop = nullptr;

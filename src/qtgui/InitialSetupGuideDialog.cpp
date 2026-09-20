@@ -1,5 +1,6 @@
 #include "InitialSetupGuideDialog.h"
 
+#include "ScreenPanel.h"
 #include "../libcolorscreen/include/base.h"
 #include "../libcolorscreen/include/imagedata.h"
 
@@ -11,6 +12,7 @@
 #include <QLabel>
 #include <QPushButton>
 #include <QStringList>
+#include <QTimer>
 #include <QVBoxLayout>
 
 #include <cmath>
@@ -81,27 +83,20 @@ InitialSetupGuideDialog::InitialSetupGuideDialog(
   auto *screenRowLayout = new QHBoxLayout(m_screenTypeRow);
   screenRowLayout->setContentsMargins(0, 0, 0, 0);
   screenRowLayout->addWidget(new QLabel(tr("Original color screen:"), m_screenTypeRow));
-  m_screenType = new QComboBox(m_screenTypeRow);
+  m_screenType = createScreenTypeComboBox(
+      m_screenTypeRow, true, tr("Choose regular screen type…"));
   m_screenType->setObjectName(QStringLiteral("InitialScreenTypeCombo"));
-  m_screenType->addItem(tr("Choose regular screen type…"),
-                        (int)colorscreen::NoScreen);
-  for (int i = 0; i < colorscreen::max_scr_type; ++i) {
-    const auto type = static_cast<colorscreen::scr_type>(i);
-    if (!colorscreen::scr_names[i].name ||
-        !colorscreen::screen_has_regular_geometry_p(type))
-      continue;
-    m_screenType->addItem(
-        QString::fromUtf8(colorscreen::scr_names[i].pretty_name), i);
-    const char *help = colorscreen::scr_names[i].help;
-    if (help && help[0])
-      m_screenType->setItemData(m_screenType->count() - 1,
-                                QString::fromUtf8(help), Qt::ToolTipRole);
-  }
   const int initialScreenIndex = m_screenType->findData((int)initialScreenType);
   if (initialScreenIndex >= 0)
     m_screenType->setCurrentIndex(initialScreenIndex);
   screenRowLayout->addWidget(m_screenType, 1);
   layout->addWidget(m_screenTypeRow);
+
+  m_preferredColorModel = new QCheckBox(this);
+  m_preferredColorModel->setObjectName(
+      QStringLiteral("InitialPreferredColorModelCheck"));
+  m_preferredColorModel->setChecked(true);
+  layout->addWidget(m_preferredColorModel);
 
   m_autoDetectScreen = new QCheckBox(
       tr("Automatically detect the screen after applying setup"), this);
@@ -140,6 +135,8 @@ InitialSetupGuideDialog::InitialSetupGuideDialog(
 
     m_monochromeBayer =
         new QCheckBox(tr("Reload with Bayer-filter compensation"), this);
+    m_monochromeBayer->setObjectName(
+        QStringLiteral("InitialMonochromeBayerCheck"));
     m_monochromeBayer->setChecked(true);
     layout->addWidget(m_monochromeBayer);
 
@@ -246,6 +243,13 @@ colorscreen::scr_type InitialSetupGuideDialog::selectedScreenType() const {
       m_screenType->currentData().toInt());
 }
 
+/** Return whether the preferred dye model for the chosen screen is accepted. */
+bool InitialSetupGuideDialog::usePreferredColorModel() const {
+  return m_preferredColorModel && !m_preferredColorModel->isHidden() &&
+         m_preferredColorModel->isEnabled() &&
+         m_preferredColorModel->isChecked();
+}
+
 /** Return whether accepted setup should launch screen autodetection. */
 bool InitialSetupGuideDialog::automaticallyDetectScreen() const {
   return m_autoDetectScreen && !m_autoDetectScreen->isHidden() &&
@@ -269,6 +273,25 @@ void InitialSetupGuideDialog::updateScreenSetupControls() {
       colorscreen::screen_has_regular_geometry_p(selectedScreenType());
 
   m_screenTypeRow->setVisible(regularRequired);
+
+  colorscreen::render_parameters preferred;
+  const bool hasPreferredModel =
+      regularSelected && preferred.auto_color_model(selectedScreenType());
+  if (hasPreferredModel) {
+    const QString modelName = QString::fromUtf8(
+        colorscreen::render_parameters::color_model_properties[
+            preferred.color_model]
+            .pretty_name);
+    if (m_preferredColorModel->isHidden())
+      m_preferredColorModel->setChecked(true);
+    m_preferredColorModel->setText(
+        tr("Use preferred color model: %1").arg(modelName));
+    m_preferredColorModel->setToolTip(
+        tr("Use the dye/color model recommended for the selected historical "
+           "screen process."));
+  }
+  m_preferredColorModel->setVisible(regularRequired && hasPreferredModel);
+
   m_autoDetectScreen->setVisible(usesScreen);
   m_autoDetectScreen->setEnabled(
       usesScreen &&
@@ -289,6 +312,18 @@ void InitialSetupGuideDialog::updateScreenSetupControls() {
   } else {
     m_autoDetectScreen->setToolTip(QString());
   }
+
+  // These controls appear after the dialog has already been laid out when the
+  // capture/screen choice changes. Recompute the top-level size so the newly
+  // visible checkboxes receive their own rows rather than being clipped into
+  // the following capture-metadata controls.
+  QTimer::singleShot(0, this, [this]() {
+    if (layout()) {
+      layout()->invalidate();
+      layout()->activate();
+    }
+    adjustSize();
+  });
 }
 
 bool InitialSetupGuideDialog::useMonochromeBayerCorrection() const {

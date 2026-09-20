@@ -257,6 +257,16 @@ mode, and points to **Screen -> Swap screen colors**. The redundant Digital
 Capture "try luck" detector is gone, and the swap action now lives with Screen
 detection rather than Geometry.
 
+The opening/setup path now also converges on one post-detection recommendation
+dialog. The initial monochrome screen selector reuses the Screen panel's rendered
+pattern icons and offers a preferred dye model when known. Once automatic
+geometry is available—whether from RGB screen identification or B&W
+known-screen detection—the same screen calibration as Digital Capture's
+**Resolution from screen** computes a candidate PPI. Preferred dyes and PPI are
+independent checked suggestions; neither is silently accepted if the
+recommendation dialog is closed. The setup-dialog smoke additionally checks that
+dynamic screen rows do not overlap the following Bayer control.
+
 Large lens-distorted scans also exposed a bootstrap problem: ordinary flood-fill
 can stall while the trusted point cloud is still too local for global lens
 parameters to be identifiable. Full-image automatic discovery now uses one

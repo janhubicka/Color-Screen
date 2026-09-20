@@ -121,10 +121,21 @@ The initial **Suggested image setup** guide should make that distinction
 actionable.  Selecting one of these monochrome screened capture types exposes a
 regular **Original color screen** selector and an **Automatically detect the
 screen** checkbox which remains disabled until the screen type is chosen.
-Conversely, when the historical screen itself is visible in RGB, common screen
-types can be autodetected from their colour pattern: keep automatic detection
-available without forcing a prior screen-type selection or showing a redundant
-screen chooser.
+Use the same thumbnail/pattern selector as the Screen panel, not a second
+text-only list. When the selected process has a preferred dye model, offer that
+model immediately as a checked suggestion. Conversely, when the historical
+screen itself is visible in RGB, common screen types can be autodetected from
+their colour pattern: keep automatic detection available without forcing a
+prior screen-type selection or showing a redundant screen chooser.
+
+After successful regular-screen geometry discovery, finish this guided opening
+sequence by offering **Resolution from screen** as a checked PPI suggestion,
+computed by the same physical-screen calibration used by Digital Capture.
+Combine it with any still-needed preferred dye-model suggestion. RGB screen
+identification and monochrome/known-screen geometry discovery should converge on
+this same final recommendation step, so a successful opening normally ends with
+configured geometry and an explicit opportunity to accept the inferred physical
+resolution.
 
 ### Stage 4 — Screen detection and geometry
 

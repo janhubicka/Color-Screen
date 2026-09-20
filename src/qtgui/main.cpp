@@ -920,11 +920,11 @@ bool initialSetupGuideScreenDetectionSmoke() {
     return false;
   };
 
-  // A monochrome-through-screen capture has no screen-colour identity. It must
-  // expose a regular-screen selector and keep automatic detection unavailable
-  // until the physical screen is chosen.
+  // Include the Bayer checkbox below the dynamic screen controls: this catches
+  // the real dialog-layout regression where newly shown rows were clipped into
+  // the next checkbox.
   InitialSetupGuideDialog mono(
-      nullptr, true, true, false, false, false, false, false, false, nullptr,
+      nullptr, true, true, true, false, false, false, false, false, nullptr,
       colorscreen::render_parameters::capture_unknown, colorscreen::NoScreen);
   auto *capture = mono.findChild<QComboBox *>(
       QStringLiteral("InitialCaptureTypeCombo"));
@@ -932,35 +932,49 @@ bool initialSetupGuideScreenDetectionSmoke() {
       QStringLiteral("InitialScreenTypeCombo"));
   auto *screenRow = mono.findChild<QWidget *>(
       QStringLiteral("InitialScreenTypeRow"));
+  auto *preferred = mono.findChild<QCheckBox *>(
+      QStringLiteral("InitialPreferredColorModelCheck"));
   auto *detect = mono.findChild<QCheckBox *>(
       QStringLiteral("InitialAutoDetectScreenCheck"));
-  if (!capture || !screen || !screenRow || !detect)
+  auto *bayer = mono.findChild<QCheckBox *>(
+      QStringLiteral("InitialMonochromeBayerCheck"));
+  if (!capture || !screen || !screenRow || !preferred || !detect || !bayer)
     return fail("screen setup controls are missing");
+
+  mono.show();
+  QCoreApplication::processEvents();
 
   int monoCapture = capture->findData(
       (int)colorscreen::render_parameters::capture_transparency);
   if (monoCapture < 0)
     return fail("monochrome screened capture is not offered");
   capture->setCurrentIndex(monoCapture);
+  QCoreApplication::processEvents();
   if (screenRow->isHidden() || detect->isHidden() || detect->isEnabled() ||
-      mono.automaticallyDetectScreen())
+      !preferred->isHidden() || mono.automaticallyDetectScreen())
     return fail("monochrome detection did not wait for a screen type");
 
-  int regularScreen = -1;
-  for (int i = 0; i < screen->count(); ++i) {
-    const auto type =
-        static_cast<colorscreen::scr_type>(screen->itemData(i).toInt());
-    if (colorscreen::screen_has_regular_geometry_p(type)) {
-      regularScreen = i;
-      break;
-    }
-  }
-  if (regularScreen < 0)
-    return fail("regular screen choices are missing");
-  screen->setCurrentIndex(regularScreen);
+  const int dufayScreen = screen->findData((int)colorscreen::Dufay);
+  if (dufayScreen < 0)
+    return fail("Dufay is missing from regular screen choices");
+  if (screen->itemIcon(dufayScreen).isNull())
+    return fail("initial screen selector lost Screen-panel pattern icons");
+
+  screen->setCurrentIndex(dufayScreen);
+  QCoreApplication::processEvents();
+  QCoreApplication::processEvents();
   if (!detect->isEnabled() || !mono.automaticallyDetectScreen() ||
-      !colorscreen::screen_has_regular_geometry_p(mono.selectedScreenType()))
+      mono.selectedScreenType() != colorscreen::Dufay)
     return fail("regular screen selection did not enable autodetection");
+  if (preferred->isHidden() || !preferred->isChecked() ||
+      !mono.usePreferredColorModel() || preferred->text().isEmpty())
+    return fail("Dufay selection did not offer its preferred color model");
+
+  // Every dynamically inserted row must occupy independent dialog geometry.
+  if (screenRow->geometry().bottom() >= preferred->geometry().top() ||
+      preferred->geometry().bottom() >= detect->geometry().top() ||
+      detect->geometry().bottom() >= bayer->geometry().top())
+    return fail("dynamic screen setup controls overlap following checkboxes");
 
   // If screen colours are visible in RGB, common screen types can be
   // identified automatically. Do not make the user choose a screen first.
@@ -970,9 +984,12 @@ bool initialSetupGuideScreenDetectionSmoke() {
       colorscreen::NoScreen);
   auto *visibleScreenRow = visible.findChild<QWidget *>(
       QStringLiteral("InitialScreenTypeRow"));
+  auto *visiblePreferred = visible.findChild<QCheckBox *>(
+      QStringLiteral("InitialPreferredColorModelCheck"));
   auto *visibleDetect = visible.findChild<QCheckBox *>(
       QStringLiteral("InitialAutoDetectScreenCheck"));
-  if (!visibleScreenRow || !visibleDetect || !visibleScreenRow->isHidden() ||
+  if (!visibleScreenRow || !visiblePreferred || !visibleDetect ||
+      !visibleScreenRow->isHidden() || !visiblePreferred->isHidden() ||
       visibleDetect->isHidden() || !visibleDetect->isEnabled() ||
       !visible.automaticallyDetectScreen())
     return fail("visible-screen capture still requires manual screen selection");
