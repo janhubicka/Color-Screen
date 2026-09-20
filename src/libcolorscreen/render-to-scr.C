@@ -566,14 +566,19 @@ render_screen_tile (tile_parameters &tile, scr_type type,
   if (!screen_has_regular_geometry_p (type))
     return false;
   bool anticipate_sharpening = false;
+  sharpen_parameters::sharpen_mode effective_mode = sharpen_parameters::none;
+  luminosity_t digital_usm_radius = 0;
+  luminosity_t digital_usm_amount = 0;
   if (rst != original_screen)
     {
       sp = rparam.sharpen;
-      sp.usm_radius *= pixel_size;
+      digital_usm_radius = sp.usm_radius * pixel_size;
+      digital_usm_amount = sp.usm_amount;
       sp.scanner_mtf_scale *= pixel_size;
       int img_layer_c = rparam.get_image_layer_channel(nullptr);
       sp.scanner_mtf.wavelength =
           sp.scanner_mtf.get_channel_wavelength(img_layer_c);
+      effective_mode = sp.get_mode ();
 
       /* The preview has three distinct stages:
            Original  - ideal historical screen;
@@ -582,31 +587,35 @@ render_screen_tile (tile_parameters &tile, scr_type type,
 
          GET_SCREEN historically decides whether to build the forward capture
          transfer from the effective sharpening state.  For a Digitized tile,
-         and for a Sharpened tile whose effective mode is None, use
+         effective mode None, and Unsharp Mask (handled explicitly below), use
          blur_deconvolution only as an internal request to construct that one
          forward transfer while keeping ANTICIPATE_SHARPENING false.  Do not
          pass that synthetic mode as an anticipated digital operation: doing so
          squares the transfer and blurs the screen twice.
 
-         In particular Richardson-Lucy with zero iterations has effective mode
-         None and must therefore be identical to Digitized.  Positive
-         Richardson-Lucy iterations keep the real mode and are applied by the
-         periodic-screen RL implementation with the configured iteration count.
-         Blur deconvolution deliberately remains the one mode that applies the
-         capture blur a second time.  */
-      const sharpen_parameters::sharpen_mode effective_mode = sp.get_mode ();
-      anticipate_sharpening
-          = rst == sharpened_screen
-            && effective_mode != sharpen_parameters::none;
+         Richardson-Lucy with zero iterations has effective mode None and is
+         therefore identical to Digitized. Positive Richardson-Lucy iterations
+         keep the real mode and are applied by the periodic-screen RL
+         implementation with the configured iteration count. Blur
+         deconvolution deliberately remains the one mode that applies the
+         capture blur a second time. */
+      const bool explicit_unsharp =
+          rst == sharpened_screen
+          && effective_mode == sharpen_parameters::unsharp_mask;
+      anticipate_sharpening =
+          rst == sharpened_screen
+          && effective_mode != sharpen_parameters::none
+          && !explicit_unsharp;
       if (rst == blurred_screen
           || (rst == sharpened_screen
-              && effective_mode == sharpen_parameters::none))
+              && (effective_mode == sharpen_parameters::none
+                  || explicit_unsharp)))
         {
           /* Match reconstruction/color-loss simulation: USM_RADIUS is
              overloaded by the periodic-screen helper as the legacy forward
              Gaussian capture blur when no scanner MTF is active.  It must come
              from SCREEN_BLUR_RADIUS here, not from the unrelated digital
-             Unsharp Mask radius.  */
+             Unsharp Mask radius. */
           sp.usm_radius = rparam.screen_blur_radius * pixel_size;
           sp.mode = sharpen_parameters::blur_deconvolution;
         }
@@ -614,6 +623,29 @@ render_screen_tile (tile_parameters &tile, scr_type type,
   std::shared_ptr<screen> scr = render_to_scr::get_screen (
       type, false, anticipate_sharpening, sp, rparam.red_strip_width,
       rparam.green_strip_width, progress);
+
+  /* Periodic inverse-filter construction handles the deconvolution modes.
+     Unsharp Mask is instead the same linear FIR operation used by image
+     sharpening: blur the already Digitized screen with the configured radius,
+     then add AMOUNT times the high-frequency residual.  Periodic boundaries
+     are the natural boundary condition for this one-unit-cell preview. */
+  if (scr && rst == sharpened_screen
+      && effective_mode == sharpen_parameters::unsharp_mask)
+    {
+      screen lowpass;
+      lowpass.initialize_with_blur (*scr, digital_usm_radius);
+      auto unsharp = std::make_shared<screen> ();
+      memcpy (unsharp->add, scr->add, sizeof (unsharp->add));
+      for (int y = 0; y < screen::size; ++y)
+        for (int x = 0; x < screen::size; ++x)
+          for (int channel = 0; channel < 3; ++channel)
+            unsharp->mult[y][x][channel]
+                = scr->mult[y][x][channel]
+                  + (scr->mult[y][x][channel]
+                     - lowpass.mult[y][x][channel])
+                        * digital_usm_amount;
+      scr = std::move (unsharp);
+    }
   if (!scr)
     return false;
   /* For small renders do just one period of screen. For bigger do multiple.  */
