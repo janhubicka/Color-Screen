@@ -141,6 +141,13 @@ action strip is enough:
 Each step should show prerequisites and outcome.  Automatic commands are verbs;
 parameters controlling them are nouns/settings.  Do not mix the two visually.
 
+While the combined **Detect screen** operation is still running, Workflow must
+not reinterpret every incremental point/geometry publication as a completed
+stage. Keep one operation-owned next-step hint: wait/Cancel during coordinate
+autodetection and wait/Stop during incremental full-image point discovery.
+Normal point-count, inspect, fit, and reconstruction recommendations resume only
+after the active detection request finishes or is cancelled/stopped.
+
 For precision tools that need two spatial anchors, prefer a hybrid interaction:
 click the first anchor, allow navigation/zoom while a live preview follows the
 pointer, and click the second anchor; retain press-drag-release as a quick shortcut
