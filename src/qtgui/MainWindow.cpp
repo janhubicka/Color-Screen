@@ -5323,14 +5323,15 @@ void MainWindow::startAreaSelection(const QString &message,
 
 /** Close stale final-result confirmations without applying their results. */
 void MainWindow::dismissOneShotPrompts() {
-  for (QPointer<QMessageBox> *guard :
-       {&m_detectScreenPrompt, &m_focusAreaAnalysis.prompt}) {
-    if (QMessageBox *prompt = guard->data()) {
-      // Clear first: close() emits finished, whose callback must recognize that
-      // this prompt no longer owns publication, even after a later Undo.
-      *guard = nullptr;
-      prompt->close();
-    }
+  if (QDialog *prompt = m_detectScreenPrompt.data()) {
+    // Clear first: close() emits finished, whose callback must recognize that
+    // this prompt no longer owns publication, even after a later Undo.
+    m_detectScreenPrompt = nullptr;
+    prompt->close();
+  }
+  if (QMessageBox *prompt = m_focusAreaAnalysis.prompt.data()) {
+    m_focusAreaAnalysis.prompt = nullptr;
+    prompt->close();
   }
 }
 
@@ -5840,8 +5841,37 @@ void MainWindow::startAutomaticPointDiscovery(
             if (!m_closing && screenAutodetection)
               clearScreenAutodetectionProgress(progress);
 
-            if (!m_closing && !success &&
-                (!progress || !progress->pool_cancel())) {
+            const bool cancelled = progress && progress->pool_cancel();
+            if (!m_closing && screenAutodetection && success && !cancelled &&
+                m_scan) {
+              const auto scan = m_scan;
+              const ParameterState baseline = getCurrentState();
+              presentScreenDetectionSuggestions(
+                  scan, baseline, baseline.scrToImg, false,
+                  [this, baseline](bool updateColorModel, bool updateDpi,
+                                   double screenDpi) {
+                    ParameterState newState = baseline;
+                    QStringList changes;
+                    if (updateColorModel) {
+                      const auto previous = newState.rparams.color_model;
+                      if (newState.rparams.auto_color_model(
+                              newState.scrToImg.type) &&
+                          newState.rparams.color_model != previous)
+                        changes << tr("preferred color model");
+                    }
+                    if (updateDpi && screenDpi > 0) {
+                      newState.rparams.sharpen.scanner_mtf.scan_dpi =
+                          screenDpi;
+                      changes << tr("screen-derived resolution");
+                    }
+                    if (!changes.isEmpty())
+                      changeParameters(
+                          newState,
+                          tr("Use %1").arg(changes.join(", ")));
+                  });
+            }
+
+            if (!m_closing && !success && !cancelled) {
               QMessageBox::warning(this, "Optimization Failed",
                                    "Automatically add points failed.");
             }
@@ -5915,6 +5945,75 @@ void MainWindow::onAutodetectScreen() {
       });
 }
 
+/** Offer optional setup derived from a now-known regular screen.
+
+    The prompt is snapshot-bound exactly like other final-result confirmations:
+    changing the image or any document parameter while it is visible vetoes its
+    delayed suggestions. APPLY owns the caller-specific mandatory publication
+    (for RGB discovery this includes the newly detected screen/geometry). */
+void MainWindow::presentScreenDetectionSuggestions(
+    std::shared_ptr<colorscreen::image_data> scan,
+    const ParameterState &baseline,
+    const colorscreen::scr_to_img_parameters &geometry,
+    bool alwaysShow,
+    std::function<void(bool, bool, double)> apply) {
+  if (!scan || !colorscreen::screen_has_regular_geometry_p(geometry.type)) {
+    if (apply)
+      apply(false, false, -1);
+    return;
+  }
+
+  colorscreen::render_parameters preferredColor = baseline.rparams;
+  const bool hasPreferredColor =
+      preferredColor.auto_color_model(geometry.type);
+  const bool suggestColor =
+      hasPreferredColor &&
+      preferredColor.color_model != baseline.rparams.color_model;
+
+  const std::optional<double> dpi = estimateScreenDpi(geometry, scan.get());
+  const bool suggestDpi =
+      dpi && std::abs(*dpi - baseline.rparams.sharpen.scanner_mtf.scan_dpi) >
+                 0.1;
+
+  if (!alwaysShow && !suggestColor && !suggestDpi) {
+    if (m_scan == scan && getCurrentState() == baseline && apply)
+      apply(false, false, dpi.value_or(-1));
+    return;
+  }
+
+  const QString screenName = QString::fromUtf8(
+      colorscreen::scr_names[(int)geometry.type].pretty_name);
+  const QString currentColor = QString::fromUtf8(
+      colorscreen::render_parameters::color_model_properties[
+          baseline.rparams.color_model]
+          .pretty_name);
+  const QString preferredColorName = QString::fromUtf8(
+      colorscreen::render_parameters::color_model_properties[
+          preferredColor.color_model]
+          .pretty_name);
+
+  auto *dialog = new ScreenDetectionSuggestionDialog(
+      screenName, renderScreenIcon(geometry.type), currentColor,
+      preferredColorName, suggestColor, dpi, suggestDpi, this);
+  dialog->setAttribute(Qt::WA_DeleteOnClose);
+  m_detectScreenPrompt = dialog;
+
+  connect(
+      dialog, &QDialog::finished, this,
+      [this, dialog, scan, baseline, dpi, apply = std::move(apply)](int) {
+        if (m_detectScreenPrompt != dialog)
+          return;
+        m_detectScreenPrompt = nullptr;
+        if (m_closing || m_scan != scan || getCurrentState() != baseline)
+          return;
+        if (apply) {
+          apply(dialog->usePreferredColorModel(), dialog->useScreenDpi(),
+                dpi.value_or(-1));
+        }
+      });
+  dialog->open();
+}
+
 /** Present a completed screen detection and publish it only after confirmation.
    BASELINE is deliberately retained after the worker finishes: asynchronous
    QMessageBox::open() leaves the GUI responsive, so an edit, image change, or
@@ -5938,56 +6037,11 @@ void MainWindow::presentDetectedScreenResult(
   const std::shared_ptr<const colorscreen::screen_map> detectedScreenMap =
       result.screenMap;
 
-  colorscreen::render_parameters automaticColor = baseline.rparams;
-  automaticColor.auto_color_model(detectedParam.type);
-  const QString currentDye = QString::fromUtf8(
-      colorscreen::render_parameters::color_model_properties[
-          baseline.rparams.color_model]
-          .pretty_name);
-  const QString detectedDye = QString::fromUtf8(
-      colorscreen::render_parameters::color_model_properties[
-          automaticColor.color_model]
-          .pretty_name);
-  const QString detectedScreen = QString::fromUtf8(
-      colorscreen::scr_names[(int)detectedParam.type].pretty_name);
-  const bool askColorModel = currentDye != detectedDye;
-
-  auto *msgBox = new QMessageBox(this);
-  msgBox->setAttribute(Qt::WA_DeleteOnClose);
-  msgBox->setWindowTitle(tr("Screen Detection"));
-  msgBox->setIconPixmap(renderScreenIcon(detectedParam.type).pixmap(128, 128));
-  if (askColorModel) {
-    msgBox->setText(tr("Detected Screen: <b>%1</b>").arg(detectedScreen));
-    msgBox->setInformativeText(
-        tr("Change color model (Dyes) from %1 to %2?")
-            .arg(currentDye)
-            .arg(detectedDye));
-    msgBox->setStandardButtons(QMessageBox::Yes | QMessageBox::No);
-    msgBox->setDefaultButton(QMessageBox::Yes);
-  } else {
-    msgBox->setText(
-        tr("Detected Screen: <b>%1</b> successfully.").arg(detectedScreen));
-    msgBox->setStandardButtons(QMessageBox::Ok);
-  }
-
-  m_detectScreenPrompt = msgBox;
-  connect(
-      msgBox, &QMessageBox::finished, this,
-      [this, msgBox, askColorModel, scan, baseline, detectedParam,
-       detectedMesh, solverPoints, detectedScreenMap](int) mutable {
-        // A newer operation or document edit clears m_detectScreenPrompt before
-        // closing this box, making its delayed finished signal harmless.
-        if (m_detectScreenPrompt != msgBox)
-          return;
-        m_detectScreenPrompt = nullptr;
-        if (m_closing || m_scan != scan || getCurrentState() != baseline)
-          return;
-
-        const bool updateColorModel =
-            askColorModel &&
-            msgBox->standardButton(msgBox->clickedButton()) ==
-                QMessageBox::Yes;
-
+  presentScreenDetectionSuggestions(
+      scan, baseline, detectedParam, true,
+      [this, baseline, detectedParam, detectedMesh, solverPoints,
+       detectedScreenMap](bool updateColorModel, bool updateDpi,
+                          double screenDpi) mutable {
         ParameterState newState = baseline;
         newState.scrToImg.type = detectedParam.type;
         if (detectedMesh) {
@@ -5997,6 +6051,8 @@ void MainWindow::presentDetectedScreenResult(
         }
         if (updateColorModel)
           newState.rparams.auto_color_model(detectedParam.type);
+        if (updateDpi && screenDpi > 0)
+          newState.rparams.sharpen.scanner_mtf.scan_dpi = screenDpi;
         newState.solver.points = solverPoints;
 
         // Render mode is view/session state, not part of the undoable document
@@ -6019,7 +6075,6 @@ void MainWindow::presentDetectedScreenResult(
         // Refine the remaining geometry while preserving the detected mesh.
         requestGeometryOptimization(false);
       });
-  msgBox->open();
 }
 
 /** Launch adaptive sharpening analysis with PARAMETERS selected by the user.
