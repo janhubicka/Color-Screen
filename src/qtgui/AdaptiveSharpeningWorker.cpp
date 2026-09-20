@@ -62,14 +62,14 @@ void AdaptiveSharpeningWorker::run() {
             }
         }
         
-        if (m_progress && m_progress->cancelled()) {
+        if (m_progress && m_progress->cancel_requested()) {
             emit finished(false, nullptr, tr("Analysis cancelled."));
             return;
         }
 
         for (const auto& task : stripTasks) {
             pool.start([this, &worker, task]() {
-                if (worker.progress && worker.progress->cancelled()) return;
+                if (worker.progress && worker.progress->cancel_requested()) return;
                 
                 colorscreen::coord_t red = 0, green = 0;
                 if (worker.analyze_strips(task.first, task.second, &red, &green)) {
@@ -79,7 +79,7 @@ void AdaptiveSharpeningWorker::run() {
         }
         pool.waitForDone();
         
-        if (m_progress && m_progress->cancelled()) {
+        if (m_progress && m_progress->cancel_requested()) {
             emit finished(false, nullptr, tr("Analysis cancelled."));
             return;
         }
@@ -109,7 +109,7 @@ void AdaptiveSharpeningWorker::run() {
     // Reuse pool for blur tasks
     for (const auto& task : blurTasks) {
         pool.start([this, &worker, task]() {
-            if (worker.progress && worker.progress->cancelled()) return;
+            if (worker.progress && worker.progress->cancel_requested()) return;
             
             colorscreen::rgbdata disp;
             if (worker.analyze_blur(task.first, task.second, &disp)) {
@@ -119,7 +119,7 @@ void AdaptiveSharpeningWorker::run() {
     }
     pool.waitForDone();
     
-    if (m_progress && m_progress->cancelled()) {
+    if (m_progress && m_progress->cancel_requested()) {
         emit finished(false, nullptr, tr("Analysis cancelled."));
         return;
     }

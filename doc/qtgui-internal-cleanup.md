@@ -427,11 +427,17 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   its helper returns only points produced from the captured solver/render/geometry
   snapshot, and exact scan/`ParameterState` plus finetune-control validation
   prevents those points from being appended after an intervening edit or a
-  change to the operation's spacing/tolerance controls. `FinetuneMisregisteredWorker` remains
-  a dedicated `QThread` because its point and geometry batches are intentionally
-  visible while it is still running. Keep migrating custom one-shot `QThread`
-  workers incrementally where their intermediate signal requirements allow the
-  same policy without obscuring the worker API. Final-result screen-type detection
+  change to the operation's spacing/tolerance controls. `FinetuneMisregisteredWorker`
+  remains a dedicated `QThread` because its point and geometry batches are
+  intentionally visible while it is still running. Adaptive sharpening now
+  follows the same explicit *progressive* ownership rule: generation, exact
+  progress identity, source scan and full input snapshot gate every coarse/dense
+  chart signal as well as the final correction. Starting another analysis or
+  editing its inputs cancels the old request before queued cells can repaint the
+  chart; abandoned live data are replaced by the accepted document correction.
+  Keep migrating custom one-shot `QThread` workers incrementally where their
+  intermediate signal requirements allow the same policy without obscuring the
+  worker API. Final-result screen-type detection
   now follows this rule too: the detector owns its diagnostic screen map through
   RAII, exact scan/`ParameterState` validation gates worker completion, and the
   asynchronous dye-model confirmation remains tied to that same baseline. A
@@ -533,12 +539,15 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   snapshots. Continue moving cohesive infrastructure behind focused
   controllers/services when the interface is similarly stable.
 - Give long-lived analysis state explicit structs rather than parallel member
-  variables. Profile-calibration, geometry-fit, measured-MTF fit, and automatic
-  multi-area focus analysis now each live in one lifecycle struct instead of
-  parallel request/result/presentation members. Reference views likewise group
-  the mutex-published reference-load handoff and each reference-MTF request.
-  Keep applying this pattern when another analysis has coupled session-local
-  members that are always saved, cleared, or restored together.
+  variables. Profile-calibration, geometry-fit, measured-MTF fit, automatic
+  multi-area focus analysis, and progressive adaptive sharpening now each live
+  in one lifecycle struct instead of parallel request/result/presentation
+  members. Adaptive sharpening groups its generation, immutable baseline, scan,
+  and progress identity because both live chart cells and the final correction
+  share that ownership. Reference views likewise group the mutex-published
+  reference-load handoff and each reference-MTF request. Keep applying this
+  pattern when another analysis has coupled session-local members that are
+  always saved, cleared, or restored together.
 - Keep linear/gamma/logarithmic slider conversions centralized in
   `SliderValueMapping`; do not reintroduce separate mapping formulas in stateful
   and stateless helpers.
