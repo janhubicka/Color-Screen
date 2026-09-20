@@ -3171,9 +3171,17 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
                             tileWatcher->deleteLater();
                             return;
                           }
-                          bool ok = tileWatcher->result();
+                          const bool ok = tileWatcher->result();
                           removeProgress(tileProgress);
                           tileWatcher->deleteLater();
+
+                          // A demosaic/project reload replaces m_scan while
+                          // workers for the previous image_data may still
+                          // finish. Their tile bytes belong to scanRef only;
+                          // never publish an enable edit into the replacement
+                          // document state.
+                          if (m_scan != scanRef)
+                            return;
 
                           if (ok) {
                             // Enable the tile and trigger a re-render.
