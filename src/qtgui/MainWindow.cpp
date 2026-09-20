@@ -2926,15 +2926,23 @@ void MainWindow::maybeOfferInitialSetupGuide(
           changes << tr("capture type");
         }
 
+        colorscreen::scr_type selectedScreen = state.scrToImg.type;
         if (colorscreen::render_parameters::capture_requires_regular_screen_p(
                 capture)) {
-          const colorscreen::scr_type selectedScreen =
-              dialog->selectedScreenType();
+          selectedScreen = dialog->selectedScreenType();
           if (colorscreen::screen_has_regular_geometry_p(selectedScreen) &&
               state.scrToImg.type != selectedScreen) {
             state.scrToImg.type = selectedScreen;
             changes << tr("screen type");
           }
+        }
+
+        if (dialog->usePreferredColorModel() &&
+            colorscreen::screen_has_regular_geometry_p(selectedScreen)) {
+          const auto previousModel = state.rparams.color_model;
+          if (state.rparams.auto_color_model(selectedScreen) &&
+              state.rparams.color_model != previousModel)
+            changes << tr("preferred color model");
         }
 
         const bool autoDetectScreen =
