@@ -2607,6 +2607,108 @@ test_screen_simulation ()
       ok = false;
     }
 
+  /* The finite screen path used by simulated colour-loss estimation applies
+     the forward capture transfer before sampling and the digital filter only
+     afterwards.  Effective mode None and Richardson-Lucy with zero iterations
+     must therefore produce identical sampled images.  Blur deconvolution must
+     remain different because its purpose is to apply the capture blur again. */
+  sharpen_parameters digital_filter;
+  digital_filter.scanner_mtf.f_stop = 8;
+  digital_filter.scanner_mtf.wavelength = 550;
+  digital_filter.scanner_mtf.pixel_pitch = 3.7;
+  digital_filter.scanner_mtf.scan_dpi = 4000;
+  digital_filter.scanner_mtf.sensor_fill_factor = 1;
+  digital_filter.scanner_mtf.defocus = 2;
+  digital_filter.scanner_mtf_scale = 1;
+
+  sharpen_parameters forward_filter = digital_filter;
+  forward_filter.mode = sharpen_parameters::blur_deconvolution;
+  forward_filter.scanner_mtf_scale *= (luminosity_t)0.25;
+  std::shared_ptr<screen> forward_screen = render_to_scr::get_screen (
+      Paget, false, false, forward_filter, (coord_t)0, (coord_t)0, nullptr);
+  if (!forward_screen)
+    {
+      fprintf (stderr, "Finite forward capture screen construction failed\n");
+      ok = false;
+    }
+  else
+    {
+      scr_to_img_parameters finite_parameters;
+      finite_parameters.type = Paget;
+      finite_parameters.coordinate1 = { 4, 0 };
+      finite_parameters.coordinate2 = { 0, 4 };
+
+      simulated_screen_params finite_none = {};
+      finite_none.screen_id = 901;
+      finite_none.width = 24;
+      finite_none.height = 20;
+      finite_none.params = finite_parameters;
+      finite_none.scr = forward_screen.get ();
+      finite_none.sampling = screen_sampling::point_sample;
+      finite_none.sharpen = digital_filter;
+      finite_none.sharpen.mode = sharpen_parameters::none;
+
+      simulated_screen_params finite_rl_zero = finite_none;
+      finite_rl_zero.sharpen.mode
+          = sharpen_parameters::richardson_lucy_deconvolution;
+      finite_rl_zero.sharpen.richardson_lucy_iterations = 0;
+
+      std::unique_ptr<simulated_screen> none_image
+          = get_new_simulated_screen (finite_none, nullptr);
+      std::unique_ptr<simulated_screen> rl_zero_image
+          = get_new_simulated_screen (finite_rl_zero, nullptr);
+      if (!none_image || !rl_zero_image)
+        {
+          fprintf (stderr, "Finite no-sharpen/RL-zero simulation failed\n");
+          ok = false;
+        }
+      else
+        {
+          for (int y = 0; y < finite_none.height; y++)
+            for (int x = 0; x < finite_none.width; x++)
+              if (!none_image->get_pixel (x, y).almost_equal_p (
+                      rl_zero_image->get_pixel (x, y),
+                      (luminosity_t)1e-7))
+                {
+                  fprintf (
+                      stderr,
+                      "Finite Richardson-Lucy zero iterations changed pixel "
+                      "(%i,%i)\n",
+                      x, y);
+                  ok = false;
+                  y = finite_none.height;
+                  break;
+                }
+
+          simulated_screen_params finite_blur = finite_none;
+          finite_blur.sharpen.mode = sharpen_parameters::blur_deconvolution;
+          std::unique_ptr<simulated_screen> blur_image
+              = get_new_simulated_screen (finite_blur, nullptr);
+          bool blur_differs = false;
+          if (!blur_image)
+            {
+              fprintf (stderr, "Finite blur-deconvolution simulation failed\n");
+              ok = false;
+            }
+          else
+            for (int y = 0; y < finite_none.height && !blur_differs; y++)
+              for (int x = 0; x < finite_none.width; x++)
+                if (!none_image->get_pixel (x, y).almost_equal_p (
+                        blur_image->get_pixel (x, y),
+                        (luminosity_t)1e-5))
+                  {
+                    blur_differs = true;
+                    break;
+                  }
+          if (blur_image && !blur_differs)
+            {
+              fprintf (stderr,
+                       "Finite Blur deconvolution failed to add second blur\n");
+              ok = false;
+            }
+        }
+    }
+
   /* Verify integration over the complete pixel footprint.  The screen is a
      one-dimensional sinusoid at 0.5 cycles per capture pixel.  Compare the
      five-point Gauss--Legendre result with a dense midpoint integral of the
