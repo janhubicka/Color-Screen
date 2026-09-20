@@ -353,13 +353,20 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
 - Keep group folding as presentation state only: a collapsed/expanded section
   must compose with each row's logical applicability instead of overwriting it.
   `addSeparator()` now accepts an optional stable `sectionKey`, distinct from
-  saved parameter/Undo identity. Screen and Image Layer opt into application-
-  preference persistence; only user activation writes settings. New panels
-  restore the last explicit choice, while existing panels retain their local
+  saved parameter/Undo identity. Screen, Image Layer, Color, and Contact Copy
+  opt into application-preference persistence; only user activation writes
+  settings. New panels restore the last explicit choice, while existing panels
+  retain their local
   presentation. Refresh re-applies folding to rows added after the header, and
   guarded callbacks tolerate UI rebuilds. The beta smoke covers recreation with
   renamed/repeated captions, key separation, unkeyed compatibility, dynamic rows,
-  applicability, programmatic changes, and zero document setter calls.
+  applicability, programmatic changes, and zero document setter calls. The next
+  real-panel probe covers all five Color and four Contact Copy sections under
+  an isolated settings identity, including multiple live panels and reopening.
+  Color's Tone Curve wrapper now belongs to Final adjustments instead of the
+  outer form, preventing that editor from escaping the section's fold. Nested
+  spectral-chart applicability and simulation-dependent Contact Copy groups
+  remain independent of the remembered presentation.
   Image Layer's infrared-only calibration action now uses
   `setParameterApplicability()` rather than a direct-visibility repair callback,
   and workspace-churn smoke covers collapse/expand resurrection explicitly.

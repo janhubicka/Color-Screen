@@ -729,7 +729,11 @@ To maintain consistency across different UI actions, use the following standardi
 in `QSettings` under `inspector/sections/<sectionKey>/expanded`. Supply a stable,
 untranslated key scoped to the panel (for example `screen.denoise.pre`), never
 an image filename, translated title, row index, or saved `parameterKey`.
-The Screen and Image Layer panels are the first migrated callers. Empty keys
+Screen, Image Layer, Color, and Contact Copy now use explicit section keys.
+Color's five sections and Contact Copy's four specialist sections keep their
+process/simulation applicability separate from restored folding. The Tone Curve
+detachable wrapper belongs inside Final adjustments, so folding that section
+also hides its attached curve without changing the dock lifecycle. Empty keys
 retain the old initially-expanded, nonpersistent behavior.
 
 Only `QToolButton::clicked` persists a preference. Programmatic `setChecked()`,
@@ -747,3 +751,11 @@ contract; section applicability still addresses the outer group. The header's
 and Expand/Collapse tooltip describe the section. Beta smoke uses a unique,
 cleaned-up settings subtree and tests restoration, key isolation, applicability,
 late rows, and the absence of document edits.
+
+The beta-invariant smoke also constructs the real Color and Contact Copy panels
+under a temporary QSettings organization/domain/application identity, restoring
+the original identity on every exit. It checks all nine keys, alternating saved
+folds, recreation, independent live inspectors, applicability changes, the nested
+spectral chart, and the attached Tone Curve. This probe runs before document
+creation without pumping GUI events; it must never alter operator preferences
+or invoke the document state setter.

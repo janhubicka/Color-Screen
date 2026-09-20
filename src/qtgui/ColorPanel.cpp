@@ -67,7 +67,8 @@ ColorPanel::ColorPanel(StateGetter stateGetter, StateSetter stateSetter,
 ColorPanel::~ColorPanel() = default;
 
 void ColorPanel::setupUi() {
-  addSeparator("Adjustments in process color space");
+  addSeparator("Adjustments in process color space",
+               QStringLiteral("color.process"));
 
   // dark point
   addSliderParameter(
@@ -117,7 +118,8 @@ void ColorPanel::setupUi() {
 
   m_currentGroupForm = nullptr; // End Adjustments section
 
-  addSeparator("Backlight");
+  addSeparator("Backlight",
+               QStringLiteral("color.backlight"));
 
   // Backlight intensity
   addSliderParameter(
@@ -151,7 +153,8 @@ void ColorPanel::setupUi() {
     return render_parameters::capture_has_screen_p(capture);
   };
 
-  addSeparator("Screen dyes");
+  addSeparator("Screen dyes",
+               QStringLiteral("color.dyes"));
   m_screenDyesGroup = m_currentGroupForm ? m_currentGroupForm->parentWidget()
                                          : nullptr;
   if (m_screenDyesGroup)
@@ -261,7 +264,8 @@ void ColorPanel::setupUi() {
 
   m_currentGroupForm = nullptr; // End Screen dyes section
   // Separator
-  addSeparator("Viewing conditions correction");
+  addSeparator("Viewing conditions correction",
+               QStringLiteral("color.viewing"));
   m_viewingCorrectionGroup =
       m_currentGroupForm ? m_currentGroupForm->parentWidget() : nullptr;
   if (m_viewingCorrectionGroup)
@@ -359,7 +363,8 @@ void ColorPanel::setupUi() {
     m_form->addRow(spacer);
 
   // Final adjustments
-  addSeparator ("Final adjustments");
+  addSeparator("Final adjustments",
+               QStringLiteral("color.final"));
 
   // Saturation
   addSliderParameter (
@@ -418,7 +423,9 @@ void ColorPanel::setupUi() {
   toneCurveContainer->addWidget(m_toneCurveWidget);
 
   QWidget *toneCurveSection = createDetachableSection("Tone Curve", tcContent);
-  m_form->addRow(toneCurveSection);
+  // The curve is part of Final adjustments, not a separate top-level row.
+  // Keep the detachable wrapper inside the section so folding includes it.
+  m_currentGroupForm->addRow(toneCurveSection);
 
   m_paramUpdaters.push_back([this](const ParameterState &s) {
       m_toneCurveWidget->setToneCurve(s.rparams.output_tone_curve, s.rparams.output_tone_curve_control_points);

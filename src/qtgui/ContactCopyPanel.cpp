@@ -61,10 +61,12 @@ void ContactCopyPanel::setupUi() {
   // Contact-copy parameters are specialist controls. Keep only the master
   // switch visible while the simulation is inactive, but retain each section's
   // independent expanded/collapsed state so enabling the feature restores the
-  // user's previous presentation.
+  // user's previous presentation. Explicit keys also restore this choice in
+  // new panels; enabling the simulation never overwrites the preference.
   auto addSimulationSection = [this](const QString &title,
-                                     const QString &objectName) {
-    addSeparator(title);
+                                     const QString &objectName,
+                                     const QString &sectionKey) {
+    addSeparator(title, sectionKey);
     QWidget *group =
         m_currentGroupForm ? m_currentGroupForm->parentWidget() : nullptr;
     if (group)
@@ -77,7 +79,8 @@ void ContactCopyPanel::setupUi() {
 
   addSimulationSection(
       QStringLiteral("Film characteristics"),
-      QStringLiteral("ContactCopyFilmCharacteristicsGroup"));
+      QStringLiteral("ContactCopyFilmCharacteristicsGroup"),
+      QStringLiteral("contact_copy.film"));
   m_hdCurveWidget = new HDCurveWidget();
   m_hdCurveWidget->setObjectName(QStringLiteral("ContactCopyHDCurveWidget"));
   m_hdCurveWidget->setProperty("parameterKey",
@@ -207,7 +210,8 @@ void ContactCopyPanel::setupUi() {
                 QStringLiteral("contact_copy.curve.max.y"));
   addSimulationSection(
       QStringLiteral("H&D Richards model parameters"),
-      QStringLiteral("ContactCopyRichardsGroup"));
+      QStringLiteral("ContactCopyRichardsGroup"),
+      QStringLiteral("contact_copy.richards"));
 
   auto addRichardsSlider = [this](const QString &label, const QString &tooltip, 
                                  std::function<double(const colorscreen::richards_curve_parameters &)> getter,
@@ -281,7 +285,8 @@ void ContactCopyPanel::setupUi() {
 
   addSimulationSection(
       QStringLiteral("H&D Coordinate points (manual entry)"),
-      QStringLiteral("ContactCopyManualPointsGroup"));
+      QStringLiteral("ContactCopyManualPointsGroup"),
+      QStringLiteral("contact_copy.manual_points"));
 
   auto addRow = [this](const QString &label, QWidget *w1, QWidget *w2) {
       QWidget *row = new QWidget();
@@ -308,7 +313,8 @@ void ContactCopyPanel::setupUi() {
 
   addSimulationSection(
       QStringLiteral("Simulated darkroom"),
-      QStringLiteral("ContactCopyDarkroomGroup"));
+      QStringLiteral("ContactCopyDarkroomGroup"),
+      QStringLiteral("contact_copy.darkroom"));
 
   addSliderParameter(
       "Preflash", 0.0, 100.0, 100.0, 2, "", "",
