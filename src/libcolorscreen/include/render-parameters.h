@@ -101,7 +101,7 @@ struct sharpen_parameters
   luminosity_t scanner_mtf_scale = 1;
 
   /* Number of iterations of Richardson-Lucy deconvolution sharpening.
-     If 0, much faster Wiener filter will be used.  */
+     Zero disables Richardson-Lucy sharpening; get_mode() then returns None.  */
   int richardson_lucy_iterations = 0;
 
   /* Dampening parameter sigma.  */
