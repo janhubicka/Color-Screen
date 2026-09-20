@@ -163,26 +163,32 @@ ScreenPanel::ScreenPanel(StateGetter stateGetter, StateSetter stateSetter,
 
 ScreenPanel::~ScreenPanel() = default;
 
-void ScreenPanel::setupUi() {
-  // Screen Type Selector
-  QComboBox *screenCombo = new ScreenComboBox();
-  screenCombo->setObjectName(QStringLiteral("ScreenTypeCombo"));
-  screenCombo->setProperty("parameterKey", QStringLiteral("screen.type"));
+/** Build the canonical physical-screen selector with pattern thumbnails. */
+QComboBox *createScreenTypeComboBox(QWidget *parent, bool regularOnly,
+                                    const QString &placeholder) {
+  auto *screenCombo = new ScreenComboBox(parent);
   screenCombo->view()->setIconSize(QSize(64, 64));
+
+  if (!placeholder.isEmpty())
+    screenCombo->addItem(placeholder, (int)NoScreen);
 
   for (int i = 0; i < max_scr_type; ++i) {
     if (!scr_names[i].name)
       continue;
 
-    scr_type type = (scr_type)i;
-    QString name = QString::fromUtf8(scr_names[i].pretty_name);
+    const scr_type type = (scr_type)i;
+    if (regularOnly && !screen_has_regular_geometry_p(type))
+      continue;
+    // A regular-only selector uses an explicit placeholder for "not chosen".
+    if (regularOnly && type == NoScreen)
+      continue;
 
+    const QString name = QString::fromUtf8(scr_names[i].pretty_name);
     if (!screen_has_regular_geometry_p(type)) {
       screenCombo->addItem(name, i);
     } else {
-      // Render Preview
-      int w = 64;
-      int h = 64;
+      constexpr int w = 64;
+      constexpr int h = 64;
       std::vector<uint8_t> buffer(w * h * 3);
 
       tile_parameters tile;
@@ -195,22 +201,30 @@ void ScreenPanel::setupUi() {
       tile.step = 1.0;
 
       render_parameters rparams;
-
-      bool ok = render_screen_tile(tile, type, rparams, 1.0, original_screen,
-                                   nullptr);
-
+      const bool ok = render_screen_tile(
+          tile, type, rparams, 1.0, original_screen, nullptr);
       if (ok) {
         QImage img(buffer.data(), w, h, w * 3, QImage::Format_RGB888);
-        QIcon icon(QPixmap::fromImage(img.copy()));
-        screenCombo->addItem(icon, name, i);
+        screenCombo->addItem(QIcon(QPixmap::fromImage(img.copy())), name, i);
       } else {
         screenCombo->addItem(name, i);
       }
-
     }
+
+    const char *help = scr_names[i].help;
+    if (help && help[0])
+      screenCombo->setItemData(screenCombo->count() - 1,
+                               QString::fromUtf8(help), Qt::ToolTipRole);
   }
 
-  addEnumTooltips(screenCombo, scr_names, max_scr_type);
+  return screenCombo;
+}
+
+void ScreenPanel::setupUi() {
+  // Screen Type Selector
+  QComboBox *screenCombo = createScreenTypeComboBox(this);
+  screenCombo->setObjectName(QStringLiteral("ScreenTypeCombo"));
+  screenCombo->setProperty("parameterKey", QStringLiteral("screen.type"));
   screenCombo->setToolTip(
       "Select the physical color screen process. None means no historical "
       "screen; Random, Autochrome and Agfa Farbenplatte are stochastic "
