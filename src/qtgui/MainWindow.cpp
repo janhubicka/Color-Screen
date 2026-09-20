@@ -53,6 +53,7 @@
 #include <QFrame>
 #include <QFutureWatcher>
 #include <QHBoxLayout>
+#include <QIcon>
 #include <QLabel>
 #include <QMenu>
 #include <QMenuBar>
@@ -104,6 +105,97 @@ namespace {
 ColorScreenApplication *documentApplication() {
   return dynamic_cast<ColorScreenApplication *>(QCoreApplication::instance());
 }
+
+/** Return the physical scan resolution inferred from a configured screen. */
+std::optional<double> estimateScreenDpi(
+    const colorscreen::scr_to_img_parameters &geometry,
+    const colorscreen::image_data *scan) {
+  if (!scan || scan->width <= 0 || scan->height <= 0 ||
+      !colorscreen::screen_geometry_configured_p(geometry))
+    return std::nullopt;
+
+  colorscreen::scr_to_img map;
+  if (!map.set_parameters(geometry, *scan))
+    return std::nullopt;
+  const double pixelSize =
+      map.pixel_size({0, 0, scan->width, scan->height});
+  const double dpi = geometry.estimate_dpi(pixelSize);
+  if (!colorscreen::my_isfinite(dpi) || dpi <= 0)
+    return std::nullopt;
+  return dpi;
+}
+
+/** Confirmation used after screen geometry becomes known.
+
+    Screen identity/geometry are not optional here; the checkboxes cover only
+    derived recommendations that can be declined independently. */
+class ScreenDetectionSuggestionDialog final : public QDialog {
+public:
+  ScreenDetectionSuggestionDialog(
+      const QString &screenName, const QIcon &screenIcon,
+      const QString &currentColorModel, const QString &preferredColorModel,
+      bool suggestColorModel, std::optional<double> screenDpi,
+      bool suggestScreenDpi, QWidget *parent)
+      : QDialog(parent) {
+    setWindowTitle(tr("Screen Detection"));
+    setModal(true);
+
+    auto *root = new QVBoxLayout(this);
+    auto *summary = new QHBoxLayout();
+    if (!screenIcon.isNull()) {
+      auto *icon = new QLabel(this);
+      icon->setPixmap(screenIcon.pixmap(96, 96));
+      icon->setFixedSize(96, 96);
+      summary->addWidget(icon, 0, Qt::AlignTop);
+    }
+    auto *message = new QLabel(
+        tr("Screen geometry detected for <b>%1</b>.").arg(screenName), this);
+    message->setWordWrap(true);
+    summary->addWidget(message, 1);
+    root->addLayout(summary);
+
+    if (suggestColorModel) {
+      m_colorModel = new QCheckBox(
+          tr("Change color model from %1 to preferred %2")
+              .arg(currentColorModel, preferredColorModel),
+          this);
+      m_colorModel->setChecked(true);
+      m_colorModel->setObjectName(
+          QStringLiteral("DetectedScreenPreferredColorModelCheck"));
+      root->addWidget(m_colorModel);
+    }
+
+    if (suggestScreenDpi && screenDpi) {
+      m_screenDpi = new QCheckBox(
+          tr("Set resolution to %1 PPI (estimated from screen geometry)")
+              .arg(*screenDpi, 0, 'f', 1),
+          this);
+      m_screenDpi->setChecked(true);
+      m_screenDpi->setObjectName(
+          QStringLiteral("DetectedScreenResolutionCheck"));
+      root->addWidget(m_screenDpi);
+    }
+
+    auto *buttons =
+        new QDialogButtonBox(QDialogButtonBox::Ok, this);
+    buttons->button(QDialogButtonBox::Ok)->setText(
+        suggestColorModel || suggestScreenDpi ? tr("Apply suggestions")
+                                              : tr("Continue"));
+    connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
+    root->addWidget(buttons);
+  }
+
+  bool usePreferredColorModel() const {
+    return m_colorModel && m_colorModel->isChecked();
+  }
+  bool useScreenDpi() const {
+    return m_screenDpi && m_screenDpi->isChecked();
+  }
+
+private:
+  QCheckBox *m_colorModel = nullptr;
+  QCheckBox *m_screenDpi = nullptr;
+};
 
 /** Numerical result of one document-owned measured-MTF model fit. */
 struct MtfModelFitResult {
