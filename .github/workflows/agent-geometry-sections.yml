@@ -1,0 +1,124 @@
+name: Agent Geometry section verification
+on:
+  push:
+    branches: [agent/transport-gui-geometry-sections-20260920]
+permissions:
+  contents: write
+  actions: read
+  packages: read
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    container:
+      image: ghcr.io/janhubicka/color-screen-ci:ubuntu-24.04
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    env:
+      LC_ALL: C.UTF-8
+      LANG: C.UTF-8
+      PATH: /usr/lib/qt6/libexec:/usr/lib/x86_64-linux-gnu/qt6/libexec:/usr/lib/qt6/bin:/usr/lib/x86_64-linux-gnu/qt6/bin:/usr/lib64/qt6/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    defaults:
+      run:
+        shell: bash
+        working-directory: source
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: transport
+      - uses: actions/checkout@v4
+        with:
+          ref: e6ed1c6ba993eda61d5860368d33593282a7ea4b
+          path: source
+      - uses: actions/download-artifact@v4
+        with:
+          name: colorscreen-deb-amd64
+          run-id: 35513870966
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: source/runtime-deb
+      - name: Verify exact core baseline and apply intended patch
+        run: |
+          git fetch --depth=1 origin c3af172163122867edfe32c88dd7350d69b8497e
+          git diff --exit-code c3af172163122867edfe32c88dd7350d69b8497e HEAD -- src/libcolorscreen configure.ac
+          mkdir -p runtime
+          dpkg-deb -x runtime-deb/*.deb runtime
+          ldd runtime/usr/local/lib/libcolorscreen.so
+          python3 ../transport/_agent_geometry_prepare.py
+          git diff > geometry-sections.diff
+          sha256sum geometry-sections.diff
+          git diff --stat
+      - name: Configure checking build
+        run: |
+          mkdir -p build-qt
+          cd build-qt
+          CXXFLAGS="-O0 -g1" CFLAGS="-O0 -g1" ../configure \
+            --enable-qtgui --enable-checking --disable-static-link
+      - name: Native real-panel smoke and negative controls
+        run: |
+          set -o pipefail
+          python3 ../transport/_agent_geometry_verify.py 2>&1 | tee geometry-section-verification.log
+      - name: Compile changed production GUI translation units
+        run: |
+          make -C build-qt/src/qtgui -j2 colorscreen_qt-GeometryPanel.o \
+            colorscreen_qt-ParameterPanel.o colorscreen_qt-main.o
+      - name: Publish clean review branch
+        run: |
+          python3 - <<'PY'
+          import subprocess
+          allowed = {'src/qtgui/GeometryPanel.cpp', 'src/qtgui/ParameterPanel.cpp',
+                     'src/qtgui/ParameterPanel.h', 'src/qtgui/main.cpp',
+                     '.agents/qtgui.md', 'doc/qtgui-workflow-roadmap.md',
+                     'doc/qtgui-internal-cleanup.md'}
+          changed = set(subprocess.check_output(['git', 'diff', '--name-only'], text=True).splitlines())
+          if changed != allowed:
+              raise SystemExit(f'Unexpected diff: {changed ^ allowed}')
+          subprocess.run(['git', 'add', '--', *sorted(allowed)], check=True)
+          PY
+          git diff --cached --check
+          git checkout -b agent/qtgui-geometry-section-preferences
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -F - <<'EOF'
+          qtgui: remember Geometry folds without resurrecting diagnostics
+
+          Give all five Geometry sections stable presentation preference keys.
+          Keep fit-prerequisite messages inside Geometry fit and register their
+          applicability independently of folding. Register all four chart rows
+          similarly so a direct refresh cannot reopen a collapsed Visualization
+          section or resurrect diagnostics for missing geometry/corrections.
+
+          Factor a presentation-only updateWidgetStates helper from the common
+          refresh path. Incremental point/chart updates use it without recursive
+          parameter refresh or document edits. Signal-block the initial Auto fit
+          checkbox synchronization. Preserve the existing finetune-image section,
+          chart detach lifecycle, parameter identities, and processing defaults.
+
+          Add real-panel beta smoke for every section key, persistence across
+          recreation, independent inspectors, point thresholds and lens coverage,
+          changing/missing geometry, chart applicability, and zero document/fit
+          requests. Isolate and restore the QSettings identity. Update developer
+          documentation and both GUI tracking documents.
+
+          Focused Ubuntu verification: 20 ordinary and 20 ASan/UBSan native probe
+          iterations passed; four deliberately broken production variants were
+          rejected. All three changed production translation units compile with
+          checking enabled. Metadata and whitespace checks pass. The reused
+          unchanged CI-built core is not sanitizer-instrumented and the focused
+          harness disables leak detection; full application/platform coverage
+          remains with the normal PR workflows.
+          EOF
+          git push origin HEAD:refs/heads/agent/qtgui-geometry-section-preferences
+          git log -1 --format=fuller
+          git show --stat --oneline HEAD
+      - name: Upload focused validation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: geometry-section-verification
+          path: |
+            source/geometry-section-verification.log
+            source/geometry-sections.diff
+            source/build-qt/config.log
+            source/build-qt/geometry-section-verification/probe.cpp
+          if-no-files-found: warn
