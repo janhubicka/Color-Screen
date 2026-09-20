@@ -625,6 +625,10 @@ private:
   colorscreen::solver_parameters m_solverParams;
   std::shared_ptr<const colorscreen::screen_map> m_detectedScreenMap;
   QPointer<QMessageBox> m_detectScreenPrompt;
+  // Session-only guidance for the combined Detect screen workflow. The weak
+  // progress identity never owns the task and cannot outlive its worker.
+  std::weak_ptr<colorscreen::progress_info> m_screenAutodetectionProgress;
+  bool m_screenAutodetectionUsesStop = false;
   bool m_showDetectedPatchCenters = false;
   /** Last slanted-edge setup used in this session.  Each accepted measurement
       stores an independent copy of its metadata, while the numerical controls
@@ -672,6 +676,21 @@ private slots:
   void updateRegistrationGroupVisibility();
   bool screenCoordinateToolAvailable() const;
   void updateScreenCoordinateToolPresentation();
+
+  /** Start full-crop point discovery. SCREENAUTODETECTION pins Workflow
+      guidance to the active Detect screen operation instead of provisional
+      point/fit state. */
+  void startAutomaticPointDiscovery(
+      const colorscreen::finetune_area_parameters &params,
+      bool screenAutodetection);
+
+  /** Publish/clear the progress request currently owning Detect-screen
+      guidance. Identity checks make coordinate-to-point handoff race-safe. */
+  void setScreenAutodetectionProgress(
+      const std::shared_ptr<colorscreen::progress_info> &progress,
+      bool usesStop);
+  void clearScreenAutodetectionProgress(
+      const std::shared_ptr<colorscreen::progress_info> &progress);
 
 private:
   DocumentProgressController m_progressController;

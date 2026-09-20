@@ -1287,6 +1287,74 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
           return;
         }
 
+        // Detect screen publishes points and geometry incrementally. While that
+        // operation owns progress, those provisional states must not make the
+        // next-step hint oscillate between inspect/add/fit recommendations.
+        auto coordinateDetectionProgress =
+            std::make_shared<colorscreen::progress_info>();
+        first->setScreenAutodetectionProgress(coordinateDetectionProgress,
+                                              false);
+        const QString coordinateDetectionHint = nextStepSummary->text();
+        if (!coordinateDetectionHint.contains(QStringLiteral("screen detection"))
+            || !coordinateDetectionHint.contains(QStringLiteral("Cancel"))) {
+          fail(QStringLiteral(
+              "Workflow did not pin coordinate-autodetection guidance"));
+          return;
+        }
+        first->updateRegistrationActions();
+        if (nextStepSummary->text() != coordinateDetectionHint) {
+          fail(QStringLiteral(
+              "Registration refresh changed active screen-detection guidance"));
+          return;
+        }
+
+        auto pointDetectionProgress =
+            std::make_shared<colorscreen::progress_info>();
+        first->setScreenAutodetectionProgress(pointDetectionProgress, true);
+        const QString pointDetectionHint = nextStepSummary->text();
+        if (!pointDetectionHint.contains(QStringLiteral("screen detection"))
+            || !pointDetectionHint.contains(QStringLiteral("Stop"))) {
+          fail(QStringLiteral(
+              "Workflow did not pin incremental detection to wait/Stop"));
+          return;
+        }
+
+        // Simulate automatic solving while point discovery is still active.
+        first->m_geometryFit.pendingInputs = first->documentStateSnapshot();
+        first->m_geometryFit.pendingNonlinearEnabled =
+            first->m_geometryPanel->isNonlinearEnabled();
+        first->updateWorkflowSummary();
+        if (nextStepSummary->text() != pointDetectionHint) {
+          fail(QStringLiteral(
+              "Geometry fitting changed active screen-detection guidance"));
+          return;
+        }
+        first->m_geometryFit.pendingInputs.reset();
+        first->m_geometryFit.pendingNonlinearEnabled.reset();
+
+        // The coordinate stage completes after handing off to point discovery.
+        // Its old completion must not clear the newer request's guidance.
+        first->clearScreenAutodetectionProgress(coordinateDetectionProgress);
+        if (nextStepSummary->text() != pointDetectionHint) {
+          fail(QStringLiteral(
+              "Older detection stage cleared newer point-discovery guidance"));
+          return;
+        }
+
+        pointDetectionProgress->cancel();
+        first->updateWorkflowSummary();
+        if (!nextStepSummary->text().contains(QStringLiteral("stopping"))) {
+          fail(QStringLiteral(
+              "Workflow did not acknowledge Stop during screen detection"));
+          return;
+        }
+        first->clearScreenAutodetectionProgress(pointDetectionProgress);
+        if (nextStepSummary->text().contains(QStringLiteral("screen detection is"))) {
+          fail(QStringLiteral(
+              "Workflow kept screen-detection guidance after completion"));
+          return;
+        }
+
         // Geometry-fit provenance must be owned independently from TaskQueue
         // publication. An older completion must not clear a newer request, and
         // cancelling the newest request must still remove the running state even
