@@ -523,12 +523,16 @@ specialist stages.
   defaults even when the ordinary numeric editing range starts above zero;
 - standardize collapsible Common/Diagnostics/Advanced sections;
 - remember expansion state through stable, untranslated section keys.
-  Screen and Image Layer are the first migrated panels: explicitly folding a
-  section is an application preference restored in subsequently created panels,
-  including after restart. Existing open panels keep their own local fold state.
+  Screen, Image Layer, Color, and Contact Copy now use this contract: explicitly
+  folding a section is an application preference restored in subsequently
+  created panels, including after restart. Existing open panels keep their own
+  local fold state.
   Programmatic folding, document refresh, and process-dependent applicability do
-  not overwrite that choice. Other panels keep the previous initially-expanded
-  behavior until their sections receive explicit keys;
+  not overwrite that choice. Color includes all five existing groups and keeps
+  the Tone Curve inside Final adjustments. Contact Copy includes all four
+  specialist groups; switching simulation off and on does not change their
+  saved folds. Other panels keep the previous initially-expanded behavior until
+  their sections receive explicit keys;
 - add consistent per-module reset/bypass only where semantically valid.
 
 ### Phase D — navigation consolidation
