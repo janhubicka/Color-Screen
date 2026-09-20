@@ -10,6 +10,7 @@
 #include "ParameterPanel.h"
 #include "ImageViewWindow.h"
 #include "ImageWidget.h"
+#include "InitialSetupGuideDialog.h"
 #include "SharpnessPanel.h"
 #include "ToneCurveWidget.h"
 #include "TilePreviewPanel.h"
@@ -29,6 +30,7 @@
 #include <QAction>
 #include <QCheckBox>
 #include <QColor>
+#include <QComboBox>
 #include <QCommandLineOption>
 #include <QCommandLineParser>
 #include <QCoreApplication>
@@ -911,6 +913,84 @@ bool geometrySectionPreferencesSmoke() {
   return true;
 }
 
+/** Verify capture-aware screen controls in Suggested image setup. */
+bool initialSetupGuideScreenDetectionSmoke() {
+  auto fail = [](const char *reason) {
+    qCritical() << "Initial-setup screen smoke failed:" << reason;
+    return false;
+  };
+
+  // A monochrome-through-screen capture has no screen-colour identity. It must
+  // expose a regular-screen selector and keep automatic detection unavailable
+  // until the physical screen is chosen.
+  InitialSetupGuideDialog mono(
+      nullptr, true, true, false, false, false, false, false, false, nullptr,
+      colorscreen::render_parameters::capture_unknown, colorscreen::NoScreen);
+  auto *capture = mono.findChild<QComboBox *>(
+      QStringLiteral("InitialCaptureTypeCombo"));
+  auto *screen = mono.findChild<QComboBox *>(
+      QStringLiteral("InitialScreenTypeCombo"));
+  auto *screenRow = mono.findChild<QWidget *>(
+      QStringLiteral("InitialScreenTypeRow"));
+  auto *detect = mono.findChild<QCheckBox *>(
+      QStringLiteral("InitialAutoDetectScreenCheck"));
+  if (!capture || !screen || !screenRow || !detect)
+    return fail("screen setup controls are missing");
+
+  int monoCapture = capture->findData(
+      (int)colorscreen::render_parameters::capture_transparency);
+  if (monoCapture < 0)
+    return fail("monochrome screened capture is not offered");
+  capture->setCurrentIndex(monoCapture);
+  if (screenRow->isHidden() || detect->isHidden() || detect->isEnabled() ||
+      mono.automaticallyDetectScreen())
+    return fail("monochrome detection did not wait for a screen type");
+
+  int regularScreen = -1;
+  for (int i = 0; i < screen->count(); ++i) {
+    const auto type =
+        static_cast<colorscreen::scr_type>(screen->itemData(i).toInt());
+    if (colorscreen::screen_has_regular_geometry_p(type)) {
+      regularScreen = i;
+      break;
+    }
+  }
+  if (regularScreen < 0)
+    return fail("regular screen choices are missing");
+  screen->setCurrentIndex(regularScreen);
+  if (!detect->isEnabled() || !mono.automaticallyDetectScreen() ||
+      !colorscreen::screen_has_regular_geometry_p(mono.selectedScreenType()))
+    return fail("regular screen selection did not enable autodetection");
+
+  // If screen colours are visible in RGB, common screen types can be
+  // identified automatically. Do not make the user choose a screen first.
+  InitialSetupGuideDialog visible(
+      nullptr, false, false, false, false, false, false, false, false, nullptr,
+      colorscreen::render_parameters::capture_transparency_with_screen,
+      colorscreen::NoScreen);
+  auto *visibleScreenRow = visible.findChild<QWidget *>(
+      QStringLiteral("InitialScreenTypeRow"));
+  auto *visibleDetect = visible.findChild<QCheckBox *>(
+      QStringLiteral("InitialAutoDetectScreenCheck"));
+  if (!visibleScreenRow || !visibleDetect || !visibleScreenRow->isHidden() ||
+      visibleDetect->isHidden() || !visibleDetect->isEnabled() ||
+      !visible.automaticallyDetectScreen())
+    return fail("visible-screen capture still requires manual screen selection");
+
+  // Ordinary images have no historical screen workflow at all.
+  InitialSetupGuideDialog plain(
+      nullptr, false, false, false, false, false, false, false, false, nullptr,
+      colorscreen::render_parameters::capture_plain_image,
+      colorscreen::NoScreen);
+  auto *plainDetect = plain.findChild<QCheckBox *>(
+      QStringLiteral("InitialAutoDetectScreenCheck"));
+  if (!plainDetect || !plainDetect->isHidden() ||
+      plain.automaticallyDetectScreen())
+    return fail("ordinary image exposes screen autodetection");
+
+  return true;
+}
+
 /** Exercise beta-critical non-rendering UI/document invariants. */
 bool runBetaInvariantSmoke() {
   auto fail = [](const char *reason) {
@@ -921,7 +1001,8 @@ bool runBetaInvariantSmoke() {
   if (!backgroundThreadRegistryShutdownSmoke()
       || !parameterSectionPreferencesSmoke()
       || !colorSectionPreferencesSmoke()
-      || !geometrySectionPreferencesSmoke())
+      || !geometrySectionPreferencesSmoke()
+      || !initialSetupGuideScreenDetectionSmoke())
     return false;
 
   // Logical tab availability must not depend on whether an ancestor is
