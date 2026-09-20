@@ -541,7 +541,7 @@ void SharpnessPanel::setupUi() {
         s.rparams.sharpen.richardson_lucy_iterations = (int)v;
       },
       2.0, // Gamma (slow start)
-      nullptr, false, "Number of iterations for the Richardson-Lucy deconvolution. More iterations produce sharper results but may introduce \"ringing\" or \"halos\".",
+      nullptr, false, "Number of Richardson-Lucy iterations. Zero disables Richardson-Lucy sharpening; more iterations generally produce sharper results but may introduce \"ringing\" or \"halos\".",
       QStringLiteral("sharpness.richardson_lucy.iterations"));
 
   // Richardson-Lucy sigma
@@ -786,7 +786,7 @@ void SharpnessPanel::onParametersRefreshed(const ParameterState &state) {
 std::vector<std::pair<render_screen_tile_type, QString>>
 SharpnessPanel::getTileTypes() const {
   return {{original_screen, "Original"},
-          {blurred_screen, "Blurred"},
+          {blurred_screen, "Digitized"},
           {sharpened_screen, "Sharpened"}};
 }
 

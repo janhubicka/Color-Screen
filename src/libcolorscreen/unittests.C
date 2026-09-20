@@ -2241,6 +2241,164 @@ test_screen_blur ()
 bool
 test_screen_sharpening ()
 {
+  /* Sharpness Preview must separate one forward capture transfer from the
+     optional digital filter.  In particular, effective mode None—including
+     Richardson-Lucy with zero iterations—must leave Sharpened identical to
+     Digitized.  Blur deconvolution is the intentional exception: it applies
+     the capture transfer a second time.  */
+  auto render_preview =
+      [] (const sharpen_parameters &sharpen, render_screen_tile_type type,
+          std::vector<uint8_t> *pixels)
+      {
+        constexpr int width = 96;
+        constexpr int height = 96;
+        pixels->assign (width * height * 3, 0);
+        tile_parameters tile;
+        tile.pixels = pixels->data ();
+        tile.rowstride = width * 3;
+        tile.pixelbytes = 3;
+        tile.width = width;
+        tile.height = height;
+        tile.pos = { 0, 0 };
+        tile.step = 1;
+
+        render_parameters rparam;
+        rparam.sharpen = sharpen;
+        rparam.screen_blur_radius = (coord_t)1.25;
+        return render_screen_tile (tile, Paget, rparam, (coord_t)0.01, type,
+                                   nullptr);
+      };
+
+  sharpen_parameters preview_sharpen;
+  preview_sharpen.scanner_mtf.f_stop = 8;
+  preview_sharpen.scanner_mtf.wavelength = 550;
+  preview_sharpen.scanner_mtf.pixel_pitch = 3.7;
+  preview_sharpen.scanner_mtf.scan_dpi = 4000;
+  preview_sharpen.scanner_mtf.defocus = 8;
+  preview_sharpen.scanner_mtf_scale = 1;
+
+  std::vector<uint8_t> original_preview;
+  std::vector<uint8_t> digitized_preview;
+  std::vector<uint8_t> sharpened_preview;
+  if (!render_preview (preview_sharpen, original_screen, &original_preview)
+      || !render_preview (preview_sharpen, blurred_screen,
+                          &digitized_preview)
+      || !render_preview (preview_sharpen, sharpened_screen,
+                          &sharpened_preview))
+    {
+      fprintf (stderr, "Sharpness preview rendering failed\n");
+      return false;
+    }
+  if (original_preview == digitized_preview)
+    {
+      fprintf (stderr,
+               "Sharpness Digitized preview did not apply capture transfer\n");
+      return false;
+    }
+  if (digitized_preview != sharpened_preview)
+    {
+      fprintf (stderr,
+               "Sharpening=None changed Digitized screen preview\n");
+      return false;
+    }
+
+  /* With no scanner MTF, Digitized falls back to the legacy capture-screen
+     blur. It must use render_parameters::screen_blur_radius rather than the
+     unrelated digital Unsharp Mask radius. */
+  sharpen_parameters legacy_preview;
+  legacy_preview.mode = sharpen_parameters::none;
+  legacy_preview.scanner_mtf_scale = 0;
+  legacy_preview.usm_radius = 0;
+  std::vector<uint8_t> legacy_digitized_a;
+  std::vector<uint8_t> legacy_digitized_b;
+  if (!render_preview (legacy_preview, blurred_screen, &legacy_digitized_a))
+    {
+      fprintf (stderr, "Legacy Digitized preview rendering failed\n");
+      return false;
+    }
+  legacy_preview.usm_radius = 12;
+  legacy_preview.usm_amount = 5;
+  if (!render_preview (legacy_preview, blurred_screen, &legacy_digitized_b)
+      || legacy_digitized_a != legacy_digitized_b)
+    {
+      fprintf (stderr,
+               "Digitized preview depends on digital Unsharp Mask radius\n");
+      return false;
+    }
+  if (legacy_digitized_a == original_preview)
+    {
+      fprintf (stderr,
+               "Legacy Digitized preview ignored screen blur radius\n");
+      return false;
+    }
+
+  preview_sharpen.mode = sharpen_parameters::richardson_lucy_deconvolution;
+  preview_sharpen.richardson_lucy_iterations = 0;
+  if (preview_sharpen.get_mode () != sharpen_parameters::none
+      || !render_preview (preview_sharpen, sharpened_screen,
+                          &sharpened_preview)
+      || digitized_preview != sharpened_preview)
+    {
+      fprintf (stderr,
+               "Richardson-Lucy with zero iterations changed screen preview\n");
+      return false;
+    }
+
+  preview_sharpen.mode = sharpen_parameters::unsharp_mask;
+  preview_sharpen.usm_radius = 2;
+  preview_sharpen.usm_amount = 1.5;
+  if (!render_preview (preview_sharpen, sharpened_screen,
+                       &sharpened_preview)
+      || digitized_preview == sharpened_preview)
+    {
+      fprintf (stderr,
+               "Unsharp Mask did not affect Sharpness Preview\n");
+      return false;
+    }
+  preview_sharpen.usm_amount = 0;
+  if (preview_sharpen.get_mode () != sharpen_parameters::none
+      || !render_preview (preview_sharpen, sharpened_screen,
+                          &sharpened_preview)
+      || digitized_preview != sharpened_preview)
+    {
+      fprintf (stderr,
+               "Disabled Unsharp Mask changed Digitized screen preview\n");
+      return false;
+    }
+
+  preview_sharpen.mode = sharpen_parameters::blur_deconvolution;
+  preview_sharpen.usm_radius = 0;
+  preview_sharpen.usm_amount = 0;
+  if (!render_preview (preview_sharpen, sharpened_screen,
+                       &sharpened_preview)
+      || digitized_preview == sharpened_preview)
+    {
+      fprintf (stderr,
+               "Blur deconvolution did not apply the intentional second blur\n");
+      return false;
+    }
+
+  preview_sharpen.mode = sharpen_parameters::richardson_lucy_deconvolution;
+  preview_sharpen.richardson_lucy_iterations = 1;
+  std::vector<uint8_t> rl_one_preview;
+  if (!render_preview (preview_sharpen, sharpened_screen, &rl_one_preview)
+      || digitized_preview == rl_one_preview)
+    {
+      fprintf (stderr,
+               "Positive Richardson-Lucy iterations did not affect preview\n");
+      return false;
+    }
+  preview_sharpen.richardson_lucy_iterations = 2;
+  if (!render_preview (preview_sharpen, sharpened_screen,
+                       &sharpened_preview)
+      || digitized_preview == sharpened_preview
+      || rl_one_preview == sharpened_preview)
+    {
+      fprintf (stderr,
+               "Richardson-Lucy preview ignored configured iteration count\n");
+      return false;
+    }
+
   std::unique_ptr <screen> scr (new screen);
   std::unique_ptr <screen> mstr (new screen);
   mstr->initialize (Paget);
@@ -2512,6 +2670,108 @@ test_screen_simulation ()
       fprintf (stderr,
                "Screen construction lost measured aperture ownership\n");
       ok = false;
+    }
+
+  /* The finite screen path used by simulated colour-loss estimation applies
+     the forward capture transfer before sampling and the digital filter only
+     afterwards.  Effective mode None and Richardson-Lucy with zero iterations
+     must therefore produce identical sampled images.  Blur deconvolution must
+     remain different because its purpose is to apply the capture blur again. */
+  sharpen_parameters digital_filter;
+  digital_filter.scanner_mtf.f_stop = 8;
+  digital_filter.scanner_mtf.wavelength = 550;
+  digital_filter.scanner_mtf.pixel_pitch = 3.7;
+  digital_filter.scanner_mtf.scan_dpi = 4000;
+  digital_filter.scanner_mtf.sensor_fill_factor = 1;
+  digital_filter.scanner_mtf.defocus = 2;
+  digital_filter.scanner_mtf_scale = 1;
+
+  sharpen_parameters forward_filter = digital_filter;
+  forward_filter.mode = sharpen_parameters::blur_deconvolution;
+  forward_filter.scanner_mtf_scale *= (luminosity_t)0.25;
+  std::shared_ptr<screen> forward_screen = render_to_scr::get_screen (
+      Paget, false, false, forward_filter, (coord_t)0, (coord_t)0, nullptr);
+  if (!forward_screen)
+    {
+      fprintf (stderr, "Finite forward capture screen construction failed\n");
+      ok = false;
+    }
+  else
+    {
+      scr_to_img_parameters finite_parameters;
+      finite_parameters.type = Paget;
+      finite_parameters.coordinate1 = { 4, 0 };
+      finite_parameters.coordinate2 = { 0, 4 };
+
+      simulated_screen_params finite_none = {};
+      finite_none.screen_id = 901;
+      finite_none.width = 24;
+      finite_none.height = 20;
+      finite_none.params = finite_parameters;
+      finite_none.scr = forward_screen.get ();
+      finite_none.sampling = screen_sampling::point_sample;
+      finite_none.sharpen = digital_filter;
+      finite_none.sharpen.mode = sharpen_parameters::none;
+
+      simulated_screen_params finite_rl_zero = finite_none;
+      finite_rl_zero.sharpen.mode
+          = sharpen_parameters::richardson_lucy_deconvolution;
+      finite_rl_zero.sharpen.richardson_lucy_iterations = 0;
+
+      std::unique_ptr<simulated_screen> none_image
+          = get_new_simulated_screen (finite_none, nullptr);
+      std::unique_ptr<simulated_screen> rl_zero_image
+          = get_new_simulated_screen (finite_rl_zero, nullptr);
+      if (!none_image || !rl_zero_image)
+        {
+          fprintf (stderr, "Finite no-sharpen/RL-zero simulation failed\n");
+          ok = false;
+        }
+      else
+        {
+          for (int y = 0; y < finite_none.height; y++)
+            for (int x = 0; x < finite_none.width; x++)
+              if (!none_image->get_pixel (x, y).almost_equal_p (
+                      rl_zero_image->get_pixel (x, y),
+                      (luminosity_t)1e-7))
+                {
+                  fprintf (
+                      stderr,
+                      "Finite Richardson-Lucy zero iterations changed pixel "
+                      "(%i,%i)\n",
+                      x, y);
+                  ok = false;
+                  y = finite_none.height;
+                  break;
+                }
+
+          simulated_screen_params finite_blur = finite_none;
+          finite_blur.sharpen.mode = sharpen_parameters::blur_deconvolution;
+          std::unique_ptr<simulated_screen> blur_image
+              = get_new_simulated_screen (finite_blur, nullptr);
+          bool blur_differs = false;
+          if (!blur_image)
+            {
+              fprintf (stderr, "Finite blur-deconvolution simulation failed\n");
+              ok = false;
+            }
+          else
+            for (int y = 0; y < finite_none.height && !blur_differs; y++)
+              for (int x = 0; x < finite_none.width; x++)
+                if (!none_image->get_pixel (x, y).almost_equal_p (
+                        blur_image->get_pixel (x, y),
+                        (luminosity_t)1e-5))
+                  {
+                    blur_differs = true;
+                    break;
+                  }
+          if (blur_image && !blur_differs)
+            {
+              fprintf (stderr,
+                       "Finite Blur deconvolution failed to add second blur\n");
+              ok = false;
+            }
+        }
     }
 
   /* Verify integration over the complete pixel footprint.  The screen is a
