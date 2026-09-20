@@ -710,3 +710,29 @@ To maintain consistency across different UI actions, use the following standardi
 - **Document function**: Add block comments to functions using Doxygen-style (`/** ... */`) to allow for automated documentation generation.
 - **Document design decisions**: Keep comments in the source which helps later understanding of the design of individual parts.
 - **Sync with .agents**: Ensure that any major architectural changes (like new threading patterns or global helpers) are reflected in this document.
+
+
+## Persistent inspector section preferences
+
+`ParameterPanel::addSeparator(title, sectionKey)` optionally remembers folding
+in `QSettings` under `inspector/sections/<sectionKey>/expanded`. Supply a stable,
+untranslated key scoped to the panel (for example `screen.denoise.pre`), never
+an image filename, translated title, row index, or saved `parameterKey`.
+The Screen and Image Layer panels are the first migrated callers. Empty keys
+retain the old initially-expanded, nonpersistent behavior.
+
+Only `QToolButton::clicked` persists a preference. Programmatic `setChecked()`,
+parameter refresh, and logical applicability must not write preferences or
+invoke the document state setter. A newly created panel restores the latest
+explicit user choice; existing panels retain their local presentation, so
+opening or closing another document cannot reset it. These preferences are not
+`.par`, recovery, dirty, or Undo state.
+
+Populate the section and call `updateUI()` before showing it. The keyed-section refresh
+callback reapplies folding to all rows, including rows added after restoration,
+and composes it with `parameterApplicable`. Keep the existing layout/parent
+contract; section applicability still addresses the outer group. The header's
+`sectionKey` metadata is separate from processing keys, and its accessible name
+and Expand/Collapse tooltip describe the section. Beta smoke uses a unique,
+cleaned-up settings subtree and tests restoration, key isolation, applicability,
+late rows, and the absence of document edits.

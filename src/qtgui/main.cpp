@@ -195,6 +195,158 @@ bool backgroundThreadRegistryShutdownSmoke() {
   return true;
 }
 
+/** Verify that section preferences stay independent of document state. */
+bool parameterSectionPreferencesSmoke() {
+  auto fail = [](const char *reason) {
+    qCritical() << "Section-preference smoke failed:" << reason;
+    return false;
+  };
+
+  // Touch only a unique test subtree, including on an early failure.
+  QTemporaryDir temporary;
+  if (!temporary.isValid())
+    return fail("could not allocate unique settings keys");
+  const QString keyRoot = QStringLiteral("smoke.%1")
+      .arg(QFileInfo(temporary.path()).fileName());
+  const QString settingsRoot =
+      QStringLiteral("inspector/sections/") + keyRoot;
+  struct SettingsCleanup {
+    QString root;
+    /** Remove only preferences belonging to this smoke invocation. */
+    ~SettingsCleanup() { QSettings().remove(root); }
+  } cleanup{settingsRoot};
+  const QString firstKey = keyRoot + QStringLiteral("/first");
+  const QString secondKey = keyRoot + QStringLiteral("/second");
+  const QString firstSetting = settingsRoot + QStringLiteral("/first/expanded");
+  const QString secondSetting = settingsRoot + QStringLiteral("/second/expanded");
+
+  ParameterState state;
+  int documentEdits = 0;
+  auto getState = [&state]() { return state; };
+  auto setState = [&state, &documentEdits](const ParameterState &next,
+                                          const QString &, const QString &) {
+    state = next;
+    ++documentEdits;
+  };
+  auto noImage = []() { return std::shared_ptr<colorscreen::image_data>(); };
+  auto addRow = [](CheckboxSemanticsProbe &panel) {
+    QCheckBox *field = panel.addCheckboxParameter(
+        QStringLiteral("Saved value"),
+        [](const ParameterState &s) { return s.rparams.scan_mirror; },
+        [](ParameterState &s, bool value) { s.rparams.scan_mirror = value; });
+    return field->parentWidget();
+  };
+
+  {
+    CheckboxSemanticsProbe panel(getState, setState, noImage, nullptr, false);
+    QToolButton *first = panel.addSeparator(QStringLiteral("Repeated title"),
+                                           firstKey);
+    QWidget *firstRow = addRow(panel);
+    QToolButton *second = panel.addSeparator(QStringLiteral("Repeated title"),
+                                            secondKey);
+    QWidget *secondRow = addRow(panel);
+    bool rowApplicable = false;
+    panel.setParameterApplicability(secondRow,
+        [&rowApplicable](const ParameterState &) { return rowApplicable; });
+    panel.updateUI();
+    if (!first->isChecked() || !second->isChecked() || firstRow->isHidden()
+        || !secondRow->isHidden())
+      return fail("initial folding or row applicability is incorrect");
+    if (QSettings().contains(firstSetting) || QSettings().contains(secondSetting))
+      return fail("initial refresh persisted a choice the user did not make");
+    if (first->property("sectionKey").toString() != firstKey
+        || first->property("parameterKey").isValid()
+        || first->accessibleName() != QStringLiteral("Repeated title"))
+      return fail("section identity/accessibility was confused with parameters");
+
+    first->click();
+    panel.updateUI();
+    if (!firstRow->isHidden() || first->arrowType() != Qt::RightArrow
+        || QSettings().value(firstSetting, true).toBool()
+        || QSettings().contains(secondSetting))
+      return fail("user folding did not persist independently by stable key");
+
+    // Repeated captions and inapplicable rows must not share fold state.
+    second->click();
+    second->click();
+    panel.updateUI();
+    if (!secondRow->isHidden() || !second->isChecked()
+        || !QSettings().value(secondSetting, false).toBool())
+      return fail("expansion resurrected an inapplicable row");
+    rowApplicable = true;
+    panel.updateUI();
+    if (secondRow->isHidden())
+      return fail("applicable row did not return in an expanded section");
+
+    // Programmatic changes and a hidden/reparented inspector are not choices
+    // to copy into subsequently opened documents.
+    first->setChecked(true);
+    QWidget *firstGroup = first->parentWidget()->parentWidget();
+    bool sectionApplicable = false;
+    panel.setParameterApplicability(firstGroup,
+        [&sectionApplicable](const ParameterState &) {
+          return sectionApplicable;
+        });
+    panel.updateUI();
+    if (!firstGroup->isHidden() || !first->isChecked()
+        || QSettings().value(firstSetting, true).toBool())
+      return fail("programmatic folding/applicability overwrote the preference");
+    sectionApplicable = true;
+    panel.updateUI();
+    if (firstGroup->isHidden() || firstRow->isHidden())
+      return fail("whole-section applicability lost local expansion state");
+  }
+
+  {
+    CheckboxSemanticsProbe restored(getState, setState, noImage, nullptr, false);
+    QToolButton *first = restored.addSeparator(QStringLiteral("Renamed title"),
+                                              firstKey);
+    QWidget *firstRow = addRow(restored);
+    restored.updateUI();
+    if (first->isChecked() || !firstRow->isHidden()
+        || first->arrowType() != Qt::RightArrow)
+      return fail("recreated/renamed section did not restore collapsed state");
+    QWidget *lateRow = addRow(restored);
+    state.rparams.scan_mirror = true;
+    restored.updateUI();
+    if (!lateRow->isHidden() || !firstRow->isHidden())
+      return fail("late rows or document refresh escaped a collapsed section");
+
+    QToolButton *second = restored.addSeparator(QStringLiteral("Renamed title"),
+                                               secondKey);
+    QWidget *secondRow = addRow(restored);
+    QToolButton *unkeyed = restored.addSeparator(QStringLiteral("Renamed title"));
+    QWidget *unkeyedRow = addRow(restored);
+    restored.updateUI();
+    if (!second->isChecked() || secondRow->isHidden()
+        || !unkeyed->isChecked() || unkeyedRow->isHidden())
+      return fail("same-caption or unkeyed sections inherited another key");
+
+    const QStringList settingsBefore = QSettings().allKeys();
+    unkeyed->click();
+    restored.updateUI();
+    if (!unkeyedRow->isHidden() || QSettings().allKeys() != settingsBefore)
+      return fail("unkeyed folding wrote application settings");
+
+    first->click();
+    restored.updateUI();
+    if (firstRow->isHidden() || lateRow->isHidden()
+        || !QSettings().value(firstSetting, false).toBool())
+      return fail("explicit re-expansion did not replace the saved choice");
+  }
+
+  CheckboxSemanticsProbe reopened(getState, setState, noImage, nullptr, false);
+  QToolButton *first = reopened.addSeparator(QStringLiteral("Third title"),
+                                            firstKey);
+  QWidget *row = addRow(reopened);
+  reopened.updateUI();
+  if (!first->isChecked() || row->isHidden())
+    return fail("latest user expansion was not restored");
+  if (documentEdits != 0)
+    return fail("section preferences entered the document/Undo setter");
+  return true;
+}
+
 /** Exercise beta-critical non-rendering UI/document invariants. */
 bool runBetaInvariantSmoke() {
   auto fail = [](const char *reason) {
@@ -202,7 +354,8 @@ bool runBetaInvariantSmoke() {
     return false;
   };
 
-  if (!backgroundThreadRegistryShutdownSmoke())
+  if (!backgroundThreadRegistryShutdownSmoke()
+      || !parameterSectionPreferencesSmoke())
     return false;
 
   // Logical tab availability must not depend on whether an ancestor is

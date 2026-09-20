@@ -221,7 +221,13 @@ protected:
       const QString &tooltip = QString(),
       const QString &parameterKey = QString());
 
-  QToolButton *addSeparator(const QString &title);
+  /** Add a foldable section. A non-empty, stable untranslated SECTIONKEY
+      remembers explicit user folding in application settings. Empty keys keep
+      the historical initially-expanded, nonpersistent behavior. Section keys
+      are presentation metadata, not saved parameter or undo identities.
+      Call updateUI() after populating rows to apply restored folding. */
+  QToolButton *addSeparator(const QString &title,
+                           const QString &sectionKey = QString());
 
   /** Hide the complete form row containing WIDGET whenever APPLICABLECHECK
       returns false.

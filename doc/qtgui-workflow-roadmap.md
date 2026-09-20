@@ -522,7 +522,13 @@ specialist stages.
   such as `0 = not configured/use process default` remain first-class stored
   defaults even when the ordinary numeric editing range starts above zero;
 - standardize collapsible Common/Diagnostics/Advanced sections;
-- remember expansion state;
+- remember expansion state through stable, untranslated section keys.
+  Screen and Image Layer are the first migrated panels: explicitly folding a
+  section is an application preference restored in subsequently created panels,
+  including after restart. Existing open panels keep their own local fold state.
+  Programmatic folding, document refresh, and process-dependent applicability do
+  not overwrite that choice. Other panels keep the previous initially-expanded
+  behavior until their sections receive explicit keys;
 - add consistent per-module reset/bypass only where semantically valid.
 
 ### Phase D — navigation consolidation
