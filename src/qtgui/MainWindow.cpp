@@ -5891,7 +5891,7 @@ void MainWindow::onAutodetectScreen() {
     return;
 
   // Starting this action supersedes an older successful detection that may
-  // still be waiting for the user to confirm its dye-model choice.
+  // still be waiting for screen-derived setup recommendations.
   dismissOneShotPrompts();
 
   // A stochastic process has no regular lattice to identify. Color-element
@@ -6000,14 +6000,20 @@ void MainWindow::presentScreenDetectionSuggestions(
 
   connect(
       dialog, &QDialog::finished, this,
-      [this, dialog, scan, baseline, dpi, apply = std::move(apply)](int) {
+      [this, dialog, scan, baseline, dpi, apply = std::move(apply)](int result) {
         if (m_detectScreenPrompt != dialog)
           return;
         m_detectScreenPrompt = nullptr;
         if (m_closing || m_scan != scan || getCurrentState() != baseline)
           return;
+
+        // Closing the window still accepts the mandatory detected geometry in
+        // the RGB path, matching the old confirmation behavior, but must not
+        // silently accept optional dye/PPI recommendations.
+        const bool acceptSuggestions = result == QDialog::Accepted;
         if (apply) {
-          apply(dialog->usePreferredColorModel(), dialog->useScreenDpi(),
+          apply(acceptSuggestions && dialog->usePreferredColorModel(),
+                acceptSuggestions && dialog->useScreenDpi(),
                 dpi.value_or(-1));
         }
       });
@@ -6015,9 +6021,9 @@ void MainWindow::presentScreenDetectionSuggestions(
 }
 
 /** Present a completed screen detection and publish it only after confirmation.
-   BASELINE is deliberately retained after the worker finishes: asynchronous
-   QMessageBox::open() leaves the GUI responsive, so an edit, image change, or
-   newer final-result operation while the prompt is visible must invalidate the
+   BASELINE is deliberately retained after the worker finishes: the asynchronous
+   recommendation dialog leaves the GUI responsive, so an edit, image change,
+   or newer final-result operation while it is visible must invalidate the
    result instead of applying it to a different document state. */
 void MainWindow::presentDetectedScreenResult(
     const DetectScreenAnalysisResult &result,
