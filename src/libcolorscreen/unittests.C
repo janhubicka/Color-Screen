@@ -2355,13 +2355,23 @@ test_screen_sharpening ()
     }
 
   preview_sharpen.mode = sharpen_parameters::richardson_lucy_deconvolution;
-  preview_sharpen.richardson_lucy_iterations = 2;
-  if (!render_preview (preview_sharpen, sharpened_screen,
-                       &sharpened_preview)
-      || digitized_preview == sharpened_preview)
+  preview_sharpen.richardson_lucy_iterations = 1;
+  std::vector<uint8_t> rl_one_preview;
+  if (!render_preview (preview_sharpen, sharpened_screen, &rl_one_preview)
+      || digitized_preview == rl_one_preview)
     {
       fprintf (stderr,
                "Positive Richardson-Lucy iterations did not affect preview\n");
+      return false;
+    }
+  preview_sharpen.richardson_lucy_iterations = 2;
+  if (!render_preview (preview_sharpen, sharpened_screen,
+                       &sharpened_preview)
+      || digitized_preview == sharpened_preview
+      || rl_one_preview == sharpened_preview)
+    {
+      fprintf (stderr,
+               "Richardson-Lucy preview ignored configured iteration count\n");
       return false;
     }
 
