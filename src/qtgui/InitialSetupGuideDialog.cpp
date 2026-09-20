@@ -7,6 +7,7 @@
 #include <QComboBox>
 #include <QDialogButtonBox>
 #include <QFrame>
+#include <QHBoxLayout>
 #include <QLabel>
 #include <QPushButton>
 #include <QStringList>
@@ -18,8 +19,9 @@ InitialSetupGuideDialog::InitialSetupGuideDialog(
     QWidget *parent, bool suggestCaptureType, bool looksMonochrome,
     bool suggestBayer, bool suggestFStop, bool suggestPitch, bool suggestFill,
     bool suggestDPI, bool suggestWavelengths,
-    const colorscreen::image_data *scan)
-    : QDialog(parent) {
+    const colorscreen::image_data *scan, CaptureType initialCaptureType,
+    colorscreen::scr_type initialScreenType)
+    : QDialog(parent), m_initialCaptureType(initialCaptureType) {
   setWindowTitle(tr("Suggested image setup"));
   setModal(true);
 
@@ -67,14 +69,66 @@ InitialSetupGuideDialog::InitialSetupGuideDialog(
         tr("Choose Unknown if you are not sure yet. Color-Screen will keep "
            "the restoration workflow conservative until this is known."));
     layout->addWidget(m_captureType);
+  }
 
-    if (suggestBayer || suggestFStop || suggestPitch || suggestFill ||
-        suggestDPI || suggestWavelengths) {
-      auto *line = new QFrame(this);
-      line->setFrameShape(QFrame::HLine);
-      line->setFrameShadow(QFrame::Sunken);
-      layout->addWidget(line);
-    }
+  // Screen setup follows the physical capture choice. Monochrome captures
+  // cannot identify the process from screen colors, so they expose only
+  // regular screens and require one before automatic lattice detection.
+  // RGB captures with the screen visible can identify common processes
+  // directly, so the selector stays hidden and autodetection remains usable.
+  m_screenTypeRow = new QWidget(this);
+  m_screenTypeRow->setObjectName(QStringLiteral("InitialScreenTypeRow"));
+  auto *screenRowLayout = new QHBoxLayout(m_screenTypeRow);
+  screenRowLayout->setContentsMargins(0, 0, 0, 0);
+  screenRowLayout->addWidget(new QLabel(tr("Original color screen:"), m_screenTypeRow));
+  m_screenType = new QComboBox(m_screenTypeRow);
+  m_screenType->setObjectName(QStringLiteral("InitialScreenTypeCombo"));
+  m_screenType->addItem(tr("Choose regular screen type…"),
+                        (int)colorscreen::NoScreen);
+  for (int i = 0; i < colorscreen::max_scr_type; ++i) {
+    const auto type = static_cast<colorscreen::scr_type>(i);
+    if (!colorscreen::scr_names[i].name ||
+        !colorscreen::screen_has_regular_geometry_p(type))
+      continue;
+    m_screenType->addItem(
+        QString::fromUtf8(colorscreen::scr_names[i].pretty_name), i);
+    const char *help = colorscreen::scr_names[i].help;
+    if (help && help[0])
+      m_screenType->setItemData(m_screenType->count() - 1,
+                                QString::fromUtf8(help), Qt::ToolTipRole);
+  }
+  const int initialScreenIndex = m_screenType->findData((int)initialScreenType);
+  if (initialScreenIndex >= 0)
+    m_screenType->setCurrentIndex(initialScreenIndex);
+  screenRowLayout->addWidget(m_screenType, 1);
+  layout->addWidget(m_screenTypeRow);
+
+  m_autoDetectScreen = new QCheckBox(
+      tr("Automatically detect the screen after applying setup"), this);
+  m_autoDetectScreen->setObjectName(
+      QStringLiteral("InitialAutoDetectScreenCheck"));
+  m_autoDetectScreen->setChecked(true);
+  layout->addWidget(m_autoDetectScreen);
+
+  if (m_captureType) {
+    connect(m_captureType, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, [this](int) { updateScreenSetupControls(); });
+  }
+  connect(m_screenType, QOverload<int>::of(&QComboBox::currentIndexChanged),
+          this, [this](int) { updateScreenSetupControls(); });
+  updateScreenSetupControls();
+
+  const bool hasFollowingSuggestions =
+      suggestBayer || suggestFStop || suggestPitch || suggestFill ||
+      suggestDPI || suggestWavelengths;
+  const bool hasSetupSection =
+      suggestCaptureType ||
+      colorscreen::render_parameters::capture_has_screen_p(initialCaptureType);
+  if (hasSetupSection && hasFollowingSuggestions) {
+    auto *line = new QFrame(this);
+    line->setFrameShape(QFrame::HLine);
+    line->setFrameShadow(QFrame::Sunken);
+    layout->addWidget(line);
   }
 
   if (suggestBayer) {
@@ -180,8 +234,61 @@ InitialSetupGuideDialog::InitialSetupGuideDialog(
 InitialSetupGuideDialog::CaptureType
 InitialSetupGuideDialog::selectedCaptureType() const {
   if (!m_captureType)
-    return colorscreen::render_parameters::capture_unknown;
+    return m_initialCaptureType;
   return static_cast<CaptureType>(m_captureType->currentData().toInt());
+}
+
+/** Return the original regular screen selected for a monochrome capture. */
+colorscreen::scr_type InitialSetupGuideDialog::selectedScreenType() const {
+  if (!m_screenType)
+    return colorscreen::NoScreen;
+  return static_cast<colorscreen::scr_type>(
+      m_screenType->currentData().toInt());
+}
+
+/** Return whether accepted setup should launch screen autodetection. */
+bool InitialSetupGuideDialog::automaticallyDetectScreen() const {
+  return m_autoDetectScreen && !m_autoDetectScreen->isHidden() &&
+         m_autoDetectScreen->isEnabled() && m_autoDetectScreen->isChecked();
+}
+
+/** Refresh screen controls after capture or screen selection changes. */
+void InitialSetupGuideDialog::updateScreenSetupControls() {
+  if (!m_screenTypeRow || !m_screenType || !m_autoDetectScreen)
+    return;
+
+  const CaptureType capture = selectedCaptureType();
+  const bool usesScreen =
+      colorscreen::render_parameters::capture_has_screen_p(capture);
+  const bool regularRequired =
+      colorscreen::render_parameters::capture_requires_regular_screen_p(capture);
+  const bool screenColorsVisible =
+      colorscreen::render_parameters::capture_supports_screen_detection_p(
+          capture);
+  const bool regularSelected =
+      colorscreen::screen_has_regular_geometry_p(selectedScreenType());
+
+  m_screenTypeRow->setVisible(regularRequired);
+  m_autoDetectScreen->setVisible(usesScreen);
+  m_autoDetectScreen->setEnabled(
+      usesScreen &&
+      (screenColorsVisible || (regularRequired && regularSelected)));
+
+  if (screenColorsVisible) {
+    m_autoDetectScreen->setToolTip(
+        tr("The screen colors are visible in this capture, so Color-Screen can "
+           "identify common screen types automatically."));
+  } else if (regularRequired && !regularSelected) {
+    m_autoDetectScreen->setToolTip(
+        tr("Choose the original regular color screen before enabling "
+           "automatic detection."));
+  } else if (regularRequired) {
+    m_autoDetectScreen->setToolTip(
+        tr("Detect the selected regular screen lattice and registration "
+           "points automatically."));
+  } else {
+    m_autoDetectScreen->setToolTip(QString());
+  }
 }
 
 bool InitialSetupGuideDialog::useMonochromeBayerCorrection() const {
