@@ -2844,11 +2844,17 @@ void MainWindow::openRecentFile() {
 /** Reload the current scan with the selected demosaic mode.  Reloading clears
    the undo stack after replacing image_data, so preserve the document's dirty
    state explicitly when unsaved parameters preceded the reload. */
-void MainWindow::reloadCurrentImageWithDemosaic() {
+void MainWindow::reloadCurrentImageWithDemosaic(bool autodetectScreen) {
   if (m_currentImageFile.isEmpty())
     return;
   if (isDocumentModified())
     m_recoveryDirty = true;
+
+  if (autodetectScreen)
+    m_screenAutodetectAfterLoadGeneration = m_imageLoadGeneration + 1;
+  else
+    m_screenAutodetectAfterLoadGeneration.reset();
+
   loadFile(m_currentImageFile, true);
   if (ColorScreenApplication *application = documentApplication())
     application->reloadSlantedEdgeReferences(this);
@@ -2896,8 +2902,8 @@ void MainWindow::maybeOfferInitialSetupGuide(
   const std::shared_ptr<colorscreen::image_data> guideScan = m_scan;
   auto *dialog = new InitialSetupGuideDialog(
       this, suggestCaptureType, looksMonochrome, suggestBayer, suggestFStop,
-      suggestPitch,
-      suggestFill, suggestDPI, suggestWavelengths, guideScan.get());
+      suggestPitch, suggestFill, suggestDPI, suggestWavelengths, guideScan.get(),
+      m_rparams.get_capture_type(guideScan.get()), m_scrToImgParams.type);
   connect(
       dialog, &QDialog::finished, this,
       [this, dialog, guideScan, suggestCaptureType, suggestBayer, suggestFStop,
@@ -2909,15 +2915,30 @@ void MainWindow::maybeOfferInitialSetupGuide(
         ParameterState state = getCurrentState();
         QStringList changes;
 
-        if (suggestCaptureType) {
-          const auto capture = dialog->selectedCaptureType();
-          if (capture != colorscreen::render_parameters::capture_unknown) {
-            state.rparams.capture_type = capture;
-            if (!colorscreen::render_parameters::capture_has_screen_p(capture))
-              state.scrToImg.type = colorscreen::NoScreen;
-            changes << tr("capture type");
+        const auto capture = suggestCaptureType
+            ? dialog->selectedCaptureType()
+            : state.rparams.get_capture_type(guideScan.get());
+        if (suggestCaptureType &&
+            capture != colorscreen::render_parameters::capture_unknown) {
+          state.rparams.capture_type = capture;
+          if (!colorscreen::render_parameters::capture_has_screen_p(capture))
+            state.scrToImg.type = colorscreen::NoScreen;
+          changes << tr("capture type");
+        }
+
+        if (colorscreen::render_parameters::capture_requires_regular_screen_p(
+                capture)) {
+          const colorscreen::scr_type selectedScreen =
+              dialog->selectedScreenType();
+          if (colorscreen::screen_has_regular_geometry_p(selectedScreen) &&
+              state.scrToImg.type != selectedScreen) {
+            state.scrToImg.type = selectedScreen;
+            changes << tr("screen type");
           }
         }
+
+        const bool autoDetectScreen =
+            dialog->automaticallyDetectScreen();
 
         const bool useBayer =
             suggestBayer && dialog->useMonochromeBayerCorrection();
@@ -2961,13 +2982,18 @@ void MainWindow::maybeOfferInitialSetupGuide(
           changes << tr("channel wavelengths");
         }
 
-        if (changes.isEmpty())
-          return;
+        if (!changes.isEmpty()) {
+          changeParameters(
+              state, tr("Use suggested %1").arg(changes.join(", ")));
+        }
 
-        changeParameters(
-            state, tr("Use autodetected %1").arg(changes.join(", ")));
-        if (useBayer)
-          reloadCurrentImageWithDemosaic();
+        if (useBayer) {
+          reloadCurrentImageWithDemosaic(autoDetectScreen);
+        } else if (autoDetectScreen) {
+          // Let parameter/panel refresh finish before Screen detection inspects
+          // the accepted capture and optional regular-screen choice.
+          QTimer::singleShot(0, this, &MainWindow::onAutodetectScreen);
+        }
       });
   connect(dialog, &QDialog::finished, dialog, &QObject::deleteLater);
   dialog->open();
@@ -2989,6 +3015,9 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
   dismissOneShotPrompts();
   m_oneShotOperations.cancelAll();
   const uint64_t loadGeneration = ++m_imageLoadGeneration;
+  if (m_screenAutodetectAfterLoadGeneration &&
+      *m_screenAutodetectAfterLoadGeneration != loadGeneration)
+    m_screenAutodetectAfterLoadGeneration.reset();
   m_imageLoadPending = true;
   bool parameterDataLoaded = false;
   if (!suppressParamPrompt)
@@ -3106,6 +3135,12 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
         if (loadGeneration != m_imageLoadGeneration)
           return;
 
+        const bool autodetectScreenAfterLoad =
+            m_screenAutodetectAfterLoadGeneration &&
+            *m_screenAutodetectAfterLoadGeneration == loadGeneration;
+        if (autodetectScreenAfterLoad)
+          m_screenAutodetectAfterLoadGeneration.reset();
+
         m_imageLoadPending = false;
 
         if (result.first) {
@@ -3138,6 +3173,10 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
                                   &m_detectParams, &m_renderTypeParams,
                                   &m_solverParams);
           onImageLoaded();
+
+          if (autodetectScreenAfterLoad) {
+            QTimer::singleShot(0, this, &MainWindow::onAutodetectScreen);
+          }
 
           // Add to recent files and immediately establish this document's
           // independent crash-recovery payload.
