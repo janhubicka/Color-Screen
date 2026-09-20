@@ -786,12 +786,17 @@ private:
     std::optional<ParameterState> baseline;
     std::optional<ParameterState> pendingInputs;
     std::optional<bool> pendingNonlinearEnabled;
+    // TaskQueue publishability and provenance cleanup are separate. Track the
+    // dispatched request that owns pendingInputs so a cancelled completion can
+    // clear its own state without an older completion clearing a newer fit.
+    std::optional<int> pendingRequestId;
     std::optional<ParameterState> failureInputs;
 
     void clear() {
       baseline.reset();
       pendingInputs.reset();
       pendingNonlinearEnabled.reset();
+      pendingRequestId.reset();
       failureInputs.reset();
     }
   };
