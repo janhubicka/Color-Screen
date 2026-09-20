@@ -435,6 +435,12 @@ private:
   /** Apply a successful coordinate refinement as one undoable document edit. */
   void applyOptimizedCoordinates(const colorscreen::finetune_result &result);
 
+  /** Submit one geometry solve while tracking the current nonlinear UI mode.
+
+      COMPUTEMESH controls whether this worker recomputes the nonlinear mesh;
+      the provenance gate independently records the panel's current mode. */
+  void requestGeometryOptimization(bool computeMesh);
+
   /** Present RESULT and defer accepted publication through a window-modal prompt. */
   void presentDetectedScreenResult(
       const DetectScreenAnalysisResult &result,
@@ -776,13 +782,13 @@ private:
   struct GeometryFitState {
     std::optional<ParameterState> baseline;
     std::optional<ParameterState> pendingInputs;
-    std::optional<bool> pendingComputeMesh;
+    std::optional<bool> pendingNonlinearEnabled;
     std::optional<ParameterState> failureInputs;
 
     void clear() {
       baseline.reset();
       pendingInputs.reset();
-      pendingComputeMesh.reset();
+      pendingNonlinearEnabled.reset();
       failureInputs.reset();
     }
   };
