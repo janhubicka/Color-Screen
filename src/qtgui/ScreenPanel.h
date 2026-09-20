@@ -3,8 +3,16 @@
 
 #include "ParameterPanel.h"
 
+class QComboBox;
 class TilePreviewPanel;
 namespace colorscreen { struct progress_info; } // namespace colorscreen
+
+/** Create the icon-populated screen selector shared by the Screen panel and
+    initial setup. REGULARONLY filters stochastic/no-screen entries.
+    PLACEHOLDER, when non-empty, is inserted first with NoScreen data. */
+QComboBox *createScreenTypeComboBox(QWidget *parent = nullptr,
+                                    bool regularOnly = false,
+                                    const QString &placeholder = QString());
 
 class ScreenPanel : public ParameterPanel {
   Q_OBJECT
