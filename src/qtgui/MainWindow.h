@@ -715,6 +715,7 @@ private:
   QString m_currentParamsFile;
   bool m_currentParamsFileIsWeak = false; // true if filename is suggested, not loaded
   bool m_imageLoadPending = false;
+  uint64_t m_imageLoadGeneration = 0;
   bool m_recoveryDirty = false;
   bool m_closing = false;
   bool m_applicationClosePrepared = false;
