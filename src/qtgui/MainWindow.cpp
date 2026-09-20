@@ -2982,6 +2982,7 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
   // current image snapshot. Invalidate both before starting replacement I/O.
   dismissOneShotPrompts();
   m_oneShotOperations.cancelAll();
+  const uint64_t loadGeneration = ++m_imageLoadGeneration;
   m_imageLoadPending = true;
   bool parameterDataLoaded = false;
   if (!suppressParamPrompt)
@@ -3083,15 +3084,23 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
   connect(
       watcher, &QFutureWatcher<std::pair<bool, QString>>::finished, this,
       [this, watcher, tempScan, progress, fileName, isCsprj,
-       allowInitialGuide, suggestDetectedMetadata]() {
+       allowInitialGuide, suggestDetectedMetadata, loadGeneration]() {
         if (m_closing) {
           watcher->deleteLater();
           return;
         }
-        std::pair<bool, QString> result = watcher->result();
-        m_imageLoadPending = false;
+
+        const std::pair<bool, QString> result = watcher->result();
         removeProgress(progress);
         watcher->deleteLater();
+
+        // Reloading (notably after changing demosaic mode) can start another
+        // asynchronous image load before this one finishes. Only the newest
+        // generation may clear the pending state or replace the document scan.
+        if (loadGeneration != m_imageLoadGeneration)
+          return;
+
+        m_imageLoadPending = false;
 
         if (result.first) {
           m_detectedScreenMap.reset();
@@ -3139,7 +3148,12 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
             const colorscreen::monochrome_bayer_analysis analysis =
                 m_scan->analyze_monochrome_bayer();
             QTimer::singleShot(
-                0, this, [this, analysis, suggestDetectedMetadata]() {
+                0, this,
+                [this, analysis, suggestDetectedMetadata, loadGeneration,
+                 tempScan]() {
+                  if (m_closing || loadGeneration != m_imageLoadGeneration ||
+                      m_scan != tempScan)
+                    return;
                   maybeOfferInitialSetupGuide(analysis,
                                               suggestDetectedMetadata);
                 });
@@ -3189,12 +3203,17 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
 
                 QFuture<bool> tileFuture = QtConcurrent::run(
                     [scanRef, capturedX, capturedY, tileProgress]() -> bool {
-                      if (!scanRef || !scanRef->stitch)
+                      try {
+                        if (!scanRef || !scanRef->stitch)
+                          return false;
+                        const char *err = nullptr;
+                        return scanRef->stitch->images[capturedY][capturedX]
+                            .load_img(&err, tileProgress.get());
+                      } catch (...) {
+                        // A failed tile remains disabled. Never let a worker
+                        // exception escape through QFutureWatcher::result().
                         return false;
-                      const char *err = nullptr;
-                      bool ok = scanRef->stitch->images[capturedY][capturedX]
-                                    .load_img(&err, tileProgress.get());
-                      return ok;
+                      }
                     });
                 tileWatcher->setFuture(tileFuture);
               }
@@ -3216,16 +3235,23 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
   QString absolutePath = m_currentImageFile;
   QFuture<std::pair<bool, QString>> future = QtConcurrent::run(
       [tempScan, absolutePath, progress, demosaic, isCsprj]() {
-        const char *error = nullptr;
-        colorscreen::sub_task task(progress.get());
-        bool res = tempScan->load(absolutePath.toUtf8().constData(),
-                                  /*preload_all=*/!isCsprj, &error,
-                                  progress.get(), demosaic);
-        QString errStr;
-        if (!res && error) {
-          errStr = QString::fromUtf8(error);
+        try {
+          const char *error = nullptr;
+          colorscreen::sub_task task(progress.get());
+          const bool res =
+              tempScan->load(absolutePath.toUtf8().constData(),
+                             /*preload_all=*/!isCsprj, &error,
+                             progress.get(), demosaic);
+          QString errStr;
+          if (!res && error)
+            errStr = QString::fromUtf8(error);
+          return std::make_pair(res, errStr);
+        } catch (const std::exception &exception) {
+          return std::make_pair(false, QString::fromUtf8(exception.what()));
+        } catch (...) {
+          return std::make_pair(
+              false, QStringLiteral("Unexpected exception while loading image."));
         }
-        return std::make_pair(res, errStr);
       });
 
   watcher->setFuture(future);
