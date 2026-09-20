@@ -1,5 +1,9 @@
 #include "HistogramWorker.h"
 
+#include <QDebug>
+
+#include <exception>
+
 HistogramWorker::HistogramWorker(std::shared_ptr<colorscreen::image_data> scan, QObject *parent)
     : WorkerBase(scan, parent) {}
 
@@ -19,10 +23,19 @@ void HistogramWorker::compute(int reqId,
     progress->set_task("Computing histogram", 1);
   }
 
-  std::vector<uint64_t> hist = colorscreen::hd_x_histogram(params, *m_scan, steps, minX, maxX, axisType, progress.get());
+  std::vector<uint64_t> hist;
+  bool success = false;
+  try {
+    hist = colorscreen::hd_x_histogram(params, *m_scan, steps, minX, maxX,
+                                       axisType, progress.get());
+    // hd_x_histogram returns early with an empty result when cancelled.
+    success = (!hist.empty() || steps == 0) &&
+              (!progress || !progress->cancelled());
+  } catch (const std::exception &exception) {
+    qWarning() << "Histogram worker failed with exception:" << exception.what();
+  } catch (...) {
+    qWarning() << "Histogram worker failed with unknown exception";
+  }
 
-  // Check if we were cancelled (progress_info would know, but hd_x_histogram returns early if cancelled)
-  bool success = !hist.empty() || steps == 0;
-  
   emit finished(reqId, hist, minX, maxX, success);
 }

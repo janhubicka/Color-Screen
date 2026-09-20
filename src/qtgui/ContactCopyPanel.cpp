@@ -30,8 +30,15 @@ ContactCopyPanel::ContactCopyPanel(StateGetter stateGetter, StateSetter stateSet
 }
 
 ContactCopyPanel::~ContactCopyPanel() {
-    m_workerThread.quit();
-    m_workerThread.wait();
+  // Stop queue ownership before the worker can emit a late result into a panel
+  // whose derived-class members are already being destroyed.
+  m_taskQueue.cancelAll();
+  if (m_worker)
+    disconnect(m_worker, nullptr, this, nullptr);
+
+  m_workerThread.requestInterruption();
+  m_workerThread.quit();
+  m_workerThread.wait();
 }
 
 void ContactCopyPanel::updateUI() {
