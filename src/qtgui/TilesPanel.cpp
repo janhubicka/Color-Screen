@@ -100,12 +100,19 @@ void TilesPanel::updateForNewImage() {
 
 void TilesPanel::rebuildTileGrid() {
   if (m_selectorGroup) {
-    m_selectorGroup->deleteLater();
+    delete m_selectorGroup;
     m_selectorGroup = nullptr;
   }
-  qDeleteAll(m_gridWidget->findChildren<QWidget*>());
-  if (m_gridWidget->layout()) {
-    delete m_gridWidget->layout();
+
+  if (QLayout *layout = m_gridWidget->layout()) {
+    while (QLayoutItem *item = layout->takeAt(0)) {
+      // The grid owns one QFrame per tile. Deleting that direct child also
+      // destroys its selector/checkbox descendants, so never collect all
+      // descendants into a second deletion list.
+      delete item->widget();
+      delete item;
+    }
+    delete layout;
   }
 
   m_tileChecks.clear();
