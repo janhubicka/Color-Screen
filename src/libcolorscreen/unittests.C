@@ -2264,6 +2264,7 @@ test_screen_sharpening ()
 
         render_parameters rparam;
         rparam.sharpen = sharpen;
+        rparam.screen_blur_radius = (coord_t)1.25;
         return render_screen_tile (tile, Paget, rparam, (coord_t)0.01, type,
                                    nullptr);
       };
@@ -2298,6 +2299,36 @@ test_screen_sharpening ()
     {
       fprintf (stderr,
                "Sharpening=None changed Digitized screen preview\n");
+      return false;
+    }
+
+  /* With no scanner MTF, Digitized falls back to the legacy capture-screen
+     blur. It must use render_parameters::screen_blur_radius rather than the
+     unrelated digital Unsharp Mask radius. */
+  sharpen_parameters legacy_preview;
+  legacy_preview.mode = sharpen_parameters::none;
+  legacy_preview.scanner_mtf_scale = 0;
+  legacy_preview.usm_radius = 0;
+  std::vector<uint8_t> legacy_digitized_a;
+  std::vector<uint8_t> legacy_digitized_b;
+  if (!render_preview (legacy_preview, blurred_screen, &legacy_digitized_a))
+    {
+      fprintf (stderr, "Legacy Digitized preview rendering failed\n");
+      return false;
+    }
+  legacy_preview.usm_radius = 12;
+  legacy_preview.usm_amount = 5;
+  if (!render_preview (legacy_preview, blurred_screen, &legacy_digitized_b)
+      || legacy_digitized_a != legacy_digitized_b)
+    {
+      fprintf (stderr,
+               "Digitized preview depends on digital Unsharp Mask radius\n");
+      return false;
+    }
+  if (legacy_digitized_a == original_preview)
+    {
+      fprintf (stderr,
+               "Legacy Digitized preview ignored screen blur radius\n");
       return false;
     }
 
