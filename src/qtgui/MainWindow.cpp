@@ -3700,12 +3700,17 @@ QString MainWindow::profileCalibrationSummary() const {
     edits therefore remain visible while being labelled stale. A running fit
     whose inputs changed is cancelled before it can publish an obsolete result. */
 void MainWindow::updateWorkflowSummary() {
+  const ParameterState currentState = getCurrentState();
+  // Adaptive sharpening intentionally publishes live cells. A document edit
+  // invalidates both those cells and the eventual correction table even when
+  // the operator later undoes back to the same values.
+  cancelStaleAdaptiveSharpening(currentState);
+
   if (!m_workflowProcessLabel || !m_workflowRegistrationLabel ||
       !m_workflowCalibrationLabel || !m_workflowProfileLabel ||
       !m_workflowNextStepLabel)
     return;
 
-  const ParameterState currentState = getCurrentState();
   const bool pendingNonlinearModeChanged =
       m_geometryFit.pendingNonlinearEnabled && m_geometryPanel &&
       *m_geometryFit.pendingNonlinearEnabled !=
@@ -6083,11 +6088,61 @@ void MainWindow::presentDetectedScreenResult(
       });
 }
 
+/** Return whether GENERATION/PROGRESS still own the progressive adaptive
+    sharpening request and its immutable inputs are unchanged.  This gate is
+    used by every live chart signal as well as final result publication. */
+bool MainWindow::adaptiveSharpeningRequestCurrent(
+    uint64_t generation,
+    const std::shared_ptr<colorscreen::progress_info> &progress) const {
+  if (m_closing || !progress || progress->pool_cancel() ||
+      progress->cancelled() ||
+      generation != m_adaptiveSharpening.generation)
+    return false;
+  if (m_adaptiveSharpening.progress.lock() != progress ||
+      !m_adaptiveSharpening.baseline ||
+      m_adaptiveSharpening.scan != m_scan)
+    return false;
+  return *m_adaptiveSharpening.baseline == getCurrentState();
+}
+
+/** Restore the adaptive chart to accepted document state after a live request
+    is cancelled, fails, becomes stale or is superseded before publication. */
+void MainWindow::restoreAdaptiveSharpeningChart() {
+  if (!m_sharpnessPanel)
+    return;
+  if (AdaptiveSharpeningChart *chart = m_sharpnessPanel->getAdaptiveChart()) {
+    chart->clear();
+    chart->setCorrection(m_rparams.scanner_blur_correction);
+  }
+}
+
+/** Cancel a progressive adaptive-sharpening request when CURRENTSTATE no
+    longer matches its captured input snapshot.  Increment generation before
+    requesting cancellation so already queued chart cells are rejected too. */
+void MainWindow::cancelStaleAdaptiveSharpening(
+    const ParameterState &currentState) {
+  if (!m_adaptiveSharpening.baseline)
+    return;
+  if (m_adaptiveSharpening.scan == m_scan &&
+      *m_adaptiveSharpening.baseline == currentState)
+    return;
+
+  const auto progress = m_adaptiveSharpening.progress.lock();
+  ++m_adaptiveSharpening.generation;
+  m_adaptiveSharpening.clearRequest();
+  if (progress)
+    progress->cancel();
+  restoreAdaptiveSharpeningChart();
+  if (!m_closing)
+    statusBar()->showMessage(
+        tr("Displacement analysis stopped because its inputs changed."), 3000);
+}
+
 /** Launch adaptive sharpening analysis with PARAMETERS selected by the user.
-   The worker resolves automatic coarse/dense grid dimensions and connects
-   incremental results to the AdaptiveSharpeningChart for real-time
-   visualisation.  The final correction table is applied in
-   onAdaptiveSharpeningFinished.  */
+    The request owns one immutable scan/ParameterState snapshot. Incremental
+    chart cells and the final correction table share that same generation and
+    progress identity, so a superseded/cancelled/stale worker cannot repaint or
+    publish into a newer document state. */
 void MainWindow::onAdaptiveSharpeningRequested(
     const AdaptiveSharpeningParameters &parameters) {
   if (!m_scan)
@@ -6098,16 +6153,25 @@ void MainWindow::onAdaptiveSharpeningRequested(
     return;
   }
 
-  // Create progress info
+  const auto scan = m_scan;
+  const ParameterState baseline = getCurrentState();
+
+  // Supersede any older live request immediately. Its worker may need time to
+  // unwind, but generation/progress gates below prevent further publication.
+  const auto previousProgress = m_adaptiveSharpening.progress.lock();
+  const uint64_t generation = ++m_adaptiveSharpening.generation;
+  if (previousProgress)
+    previousProgress->cancel();
+
   auto progress = std::make_shared<colorscreen::progress_info>();
-  progress->set_task("Adaptive sharpening analysis", 1);
+  progress->set_task("adaptive sharpening analysis", 1);
+  m_adaptiveSharpening.baseline = baseline;
+  m_adaptiveSharpening.scan = scan;
+  m_adaptiveSharpening.progress = progress;
   addUserVisibleProgress(progress, tr("Analyze displacements"));
 
-  // Create worker from the complete one-run configuration selected in the
-  // dialog. The worker resolves automatic dimensions in STEP1.
-  const uint64_t generation = ++m_adaptiveSharpeningGeneration;
   AdaptiveSharpeningWorker *worker = new AdaptiveSharpeningWorker(
-      m_scrToImgParams, m_rparams, m_scan, parameters, progress);
+      baseline.scrToImg, baseline.rparams, scan, parameters, progress);
 
   QThread *thread = new QThread(this);
   worker->moveToThread(thread);
@@ -6115,23 +6179,40 @@ void MainWindow::onAdaptiveSharpeningRequested(
 
   connect(thread, &QThread::started, worker, &AdaptiveSharpeningWorker::run);
 
-  // Connect visualization signals.  Let the worker report the actual resolved
-  // coarse and dense grids instead of duplicating its aspect-ratio logic here.
+  // Route every incremental publication through MainWindow. Connecting the
+  // worker directly to the chart let an old request overwrite a newer chart.
+  QPointer<AdaptiveSharpeningChart> chart;
   if (m_sharpnessPanel && m_sharpnessPanel->getAdaptiveChart()) {
     m_sharpnessPanel->showAdaptiveChart();
-    AdaptiveSharpeningChart *chart = m_sharpnessPanel->getAdaptiveChart();
+    chart = m_sharpnessPanel->getAdaptiveChart();
+    chart->clear();
 
-    connect(worker, &AdaptiveSharpeningWorker::stripAnalysisStarted, chart,
-            [chart](int w, int h) { chart->initialize(w, h); });
-    connect(worker, &AdaptiveSharpeningWorker::stripAnalyzed, chart,
-            &AdaptiveSharpeningChart::updateStrip);
-    connect(worker, &AdaptiveSharpeningWorker::blurAnalysisStarted, chart,
-            [chart](int w, int h) {
-              // Re-initialize for high-res blur analysis
-              chart->initialize(w, h);
+    connect(worker, &AdaptiveSharpeningWorker::stripAnalysisStarted, this,
+            [this, chart, generation, progress](int w, int h) {
+              if (chart &&
+                  adaptiveSharpeningRequestCurrent(generation, progress))
+                chart->initialize(w, h);
             });
-    connect(worker, &AdaptiveSharpeningWorker::blurAnalyzed, chart,
-            &AdaptiveSharpeningChart::updateBlur);
+    connect(worker, &AdaptiveSharpeningWorker::stripAnalyzed, this,
+            [this, chart, generation, progress](int x, int y, double red,
+                                                double green) {
+              if (chart &&
+                  adaptiveSharpeningRequestCurrent(generation, progress))
+                chart->updateStrip(x, y, red, green);
+            });
+    connect(worker, &AdaptiveSharpeningWorker::blurAnalysisStarted, this,
+            [this, chart, generation, progress](int w, int h) {
+              if (chart &&
+                  adaptiveSharpeningRequestCurrent(generation, progress))
+                chart->initialize(w, h);
+            });
+    connect(worker, &AdaptiveSharpeningWorker::blurAnalyzed, this,
+            [this, chart, generation, progress](int x, int y,
+                                                double correction) {
+              if (chart &&
+                  adaptiveSharpeningRequestCurrent(generation, progress))
+                chart->updateBlur(x, y, correction);
+            });
   }
 
   connect(worker, &AdaptiveSharpeningWorker::finished, thread, &QThread::quit,
@@ -6144,13 +6225,34 @@ void MainWindow::onAdaptiveSharpeningRequested(
               std::shared_ptr<colorscreen::scanner_blur_correction_parameters>
                   result,
               const QString &error) {
-            const bool cancelled = progress && progress->pool_cancel();
-            if (!m_closing && generation == m_adaptiveSharpeningGeneration) {
-              if (!cancelled)
+            const bool ownsRequest =
+                generation == m_adaptiveSharpening.generation &&
+                m_adaptiveSharpening.progress.lock() == progress;
+            const bool publishable =
+                adaptiveSharpeningRequestCurrent(generation, progress);
+            const bool cancelled =
+                progress && (progress->pool_cancel() || progress->cancelled());
+
+            // Request ownership controls cleanup; publication validity is a
+            // separate question. Clear first so applying a successful result
+            // through Undo/applyState cannot cancel its own completed request.
+            if (ownsRequest)
+              m_adaptiveSharpening.clearRequest();
+
+            if (!m_closing && ownsRequest) {
+              if (publishable && !cancelled)
                 onAdaptiveSharpeningFinished(success, result, error);
-              else
-                statusBar()->showMessage(tr("Displacement analysis cancelled"),
-                                         3000);
+              else {
+                restoreAdaptiveSharpeningChart();
+                if (cancelled)
+                  statusBar()->showMessage(
+                      tr("Displacement analysis cancelled"), 3000);
+                else
+                  statusBar()->showMessage(
+                      tr("Displacement analysis result discarded because "
+                         "its inputs changed."),
+                      4000);
+              }
             }
             if (!m_closing)
               removeProgress(progress);
@@ -6160,13 +6262,14 @@ void MainWindow::onAdaptiveSharpeningRequested(
 }
 
 /** Handle completion of adaptive sharpening analysis.
-   On success, wraps the computed scanner_blur_correction in an undo command
-   and updates the chart widget.  Shows a success info or failure warning.  */
+    On success, wraps the computed scanner_blur_correction in an undo command
+    and updates the chart widget.  Shows a success info or failure warning. */
 void MainWindow::onAdaptiveSharpeningFinished(
     bool success,
     std::shared_ptr<colorscreen::scanner_blur_correction_parameters> result,
     const QString &error) {
   if (!success || !result) {
+    restoreAdaptiveSharpeningChart();
     if (!success) {
       QMessageBox::warning(this, tr("Adaptive Sharpening"),
                            error.isEmpty()
@@ -6183,13 +6286,9 @@ void MainWindow::onAdaptiveSharpeningFinished(
   m_undoStack->push(new ChangeParametersCommand(
       this, oldState, newState, "Adaptive Sharpening Analysis"));
 
-  // Update UI
-  updateUIFromState(newState);
-
-  // Explicitly update chart
-  if (m_sharpnessPanel && m_sharpnessPanel->getAdaptiveChart()) {
+  // applyState() already refreshes panel/chart state through the undo command.
+  if (m_sharpnessPanel && m_sharpnessPanel->getAdaptiveChart())
     m_sharpnessPanel->getAdaptiveChart()->setCorrection(result);
-  }
 
   QMessageBox::information(this, tr("Adaptive Sharpening"),
                            tr("Analysis completed successfully."));
