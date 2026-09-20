@@ -43,6 +43,11 @@ public:
   virtual void updateUI();
 
 protected:
+  /** Refresh registered widget availability and folding only. Incremental
+      presentation updates can use this without applying parameter values or
+      recursively invoking onParametersRefreshed(). */
+  void updateWidgetStates();
+
   /*
     Adds a double parameter row (SpinBox + Optional Combo).
 

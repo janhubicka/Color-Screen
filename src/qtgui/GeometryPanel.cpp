@@ -28,7 +28,8 @@ void GeometryPanel::setupUi() {
       else m_form->addRow(item);
   };
 
-  addSeparator("Registration points");
+  addSeparator("Registration points",
+               QStringLiteral("geometry.registration_points"));
 
   std::map<int, QString> pretty_scanner_type_names = {
       {colorscreen::fixed_lens, "Fixed Lens"},
@@ -72,7 +73,8 @@ void GeometryPanel::setupUi() {
                 emit heatmapToleranceChanged(v);
             }, 1.0, false, "The threshold for color-coding deformation errors in the diagnostic charts. Lower values make the heatmap more sensitive to small errors.");
 
-  addSeparator("Automatic registration");
+  addSeparator("Automatic registration",
+               QStringLiteral("geometry.automatic_registration"));
 
   auto hasConfiguredGeometry = [](const ParameterState &s) {
       return colorscreen::screen_geometry_configured_p(s.scrToImg);
@@ -130,14 +132,19 @@ void GeometryPanel::setupUi() {
   setupFinetuneSlider("Max displacement", 0, 0.5, 100, 2, 0.05, &colorscreen::finetune_area_parameters::max_displacement, 3.0, false, "Maximum allowed displacement for a point to be accepted. Measured in screen units.");
 
 
-  addSeparator("Geometry fit");
+  addSeparator("Geometry fit",
+               QStringLiteral("geometry.fit"));
 
   m_autoOptimizeBox = addCheckboxParameter("Auto fit geometry",
       [this](const ParameterState &){ return isAutoEnabled(); },
       [](ParameterState &, bool){ /* Handled by checkbox toggle signal */ },
       nullptr, "Automatically rerun the geometry fit whenever registration points are added or moved.");
   m_autoOptimizeBox->setObjectName("autoSolverBox");
-  m_autoOptimizeBox->setChecked(true);
+  // Initial presentation is not a document edit or a request to run the fit.
+  {
+    const QSignalBlocker blocker(m_autoOptimizeBox);
+    m_autoOptimizeBox->setChecked(true);
+  }
 
   m_optimizeButton = addButtonParameter("Fit", "Fit geometry", [this]() {
       emit optimizeRequested(m_autoOptimizeBox->isChecked());
@@ -151,7 +158,7 @@ void GeometryPanel::setupUi() {
       if (m_autoOptimizeBox->isChecked()) emit optimizeRequested(true);
   };
 
-  auto configureDynamicStatusLabel = [](QLabel *label,
+  auto configureDynamicStatusLabel = [this, addToPanel](QLabel *label,
                                                 const QString &objectName) {
     label->setObjectName(objectName);
     label->setWordWrap(true);
@@ -162,13 +169,17 @@ void GeometryPanel::setupUi() {
     label->setStyleSheet(
         "font-size: 10px; color: #888; margin-left: 20px;");
     label->setVisible(false);
+    // Prerequisites belong to Geometry fit, including when it is collapsed.
+    addToPanel(label);
+    setParameterApplicability(label, [label](const ParameterState &) {
+      return !label->text().isEmpty();
+    });
   };
 
   m_optimizationMessageLabel = new QLabel();
   configureDynamicStatusLabel(
       m_optimizationMessageLabel,
       QStringLiteral("GeometryOptimizationMessage"));
-  m_form->addRow(m_optimizationMessageLabel);
 
   m_lensCb = addCheckboxWithReset(
       "Optimize lens correction",
@@ -197,7 +208,6 @@ void GeometryPanel::setupUi() {
   m_lensMessageLabel = new QLabel();
   configureDynamicStatusLabel(
       m_lensMessageLabel, QStringLiteral("GeometryLensMessage"));
-  m_form->addRow(m_lensMessageLabel);
 
   m_tiltCb = addCheckboxWithReset(
       "Optimize tilt",
@@ -211,7 +221,6 @@ void GeometryPanel::setupUi() {
   m_tiltMessageLabel = new QLabel();
   configureDynamicStatusLabel(
       m_tiltMessageLabel, QStringLiteral("GeometryTiltMessage"));
-  m_form->addRow(m_tiltMessageLabel);
 
   m_nlCb = addCheckboxParameter("Nonlinear corrections",
       [this](const ParameterState &s){
@@ -227,7 +236,6 @@ void GeometryPanel::setupUi() {
   m_nonlinearMessageLabel = new QLabel();
   configureDynamicStatusLabel(
       m_nonlinearMessageLabel, QStringLiteral("GeometryNonlinearMessage"));
-  m_form->addRow(m_nonlinearMessageLabel);
 
   addEnumParameter(
       "Scanner/camera geometry", pretty_scanner_type_names,
@@ -238,7 +246,8 @@ void GeometryPanel::setupUi() {
       "This defines how the perspective and lens distortions affects the image.",
       QStringLiteral("geometry.scanner_type"));
 
-  addSeparator("Final image orientation");
+  addSeparator("Final image orientation",
+               QStringLiteral("geometry.final_orientation"));
   auto hasFinalGeometry = [](const ParameterState &s) {
       return colorscreen::screen_geometry_configured_p(s.scrToImg);
   };
@@ -285,15 +294,22 @@ void GeometryPanel::setupUi() {
   
   addToPanel(finetuneContainer);
 
-  QToolButton* visBtn = addSeparator("Visualization");
+  QToolButton* visBtn = addSeparator("Visualization",
+               QStringLiteral("geometry.visualization"));
   connect(visBtn, &QToolButton::toggled, this, [this](bool checked){
       if (checked) updateDeformationChart();
   });
   
+  auto hasGeometry = [this](const ParameterState &state) {
+    auto scan = m_imageGetter();
+    return scan && scan->width > 0 && scan->height > 0
+        && colorscreen::screen_geometry_configured_p(state.scrToImg);
+  };
   auto setupChart =
       [this, addToPanel](DeformationChartWidget *&chart,
                          QVBoxLayout *&containerLayout,
-                         const QString &title) {
+                         const QString &title, const QString &objectName,
+                         std::function<bool(const ParameterState &)> applicable) {
         chart = new DeformationChartWidget();
         connect(chart, &DeformationChartWidget::clicked, this,
                 &GeometryPanel::centerOnRequested);
@@ -309,13 +325,30 @@ void GeometryPanel::setupUi() {
         containerLayout = new QVBoxLayout(container);
         containerLayout->setContentsMargins(0, 0, 0, 0);
         containerLayout->addWidget(detachable);
+        container->setObjectName(objectName);
         addToPanel(container);
+        setParameterApplicability(container, applicable);
       };
 
-  setupChart(m_lensChart, m_lensChartContainer, "Lens Correction");
-  setupChart(m_perspectiveChart, m_perspectiveChartContainer, "Perspective");
+  setupChart(m_lensChart, m_lensChartContainer, "Lens Correction",
+             QStringLiteral("GeometryLensChartRow"),
+             [hasGeometry](const ParameterState &state) {
+               return hasGeometry(state)
+                   && !state.scrToImg.lens_correction.is_noop();
+             });
+  setupChart(m_perspectiveChart, m_perspectiveChartContainer, "Perspective",
+             QStringLiteral("GeometryPerspectiveChartRow"),
+             [hasGeometry](const ParameterState &state) {
+               return hasGeometry(state)
+                   && (std::abs(state.scrToImg.tilt_x) > 1e-6
+                       || std::abs(state.scrToImg.tilt_y) > 1e-6);
+             });
   setupChart(m_nonlinearChart, m_nonlinearChartContainer,
-             "Nonlinear transformation");
+             "Nonlinear transformation",
+             QStringLiteral("GeometryNonlinearChartRow"),
+             [hasGeometry](const ParameterState &state) {
+               return hasGeometry(state) && state.scrToImg.mesh_trans != nullptr;
+             });
 
   // Existing Deformation Chart
   m_deformationChart = new DeformationChartWidget();
@@ -333,11 +366,13 @@ void GeometryPanel::setupUi() {
 
   // Container to allow reattaching
   QWidget *container = new QWidget();
+  container->setObjectName(QStringLiteral("GeometryFinalChartRow"));
   m_chartContainer = new QVBoxLayout(container);
   m_chartContainer->setContentsMargins(0, 0, 0, 0);
   m_chartContainer->addWidget(detachable);
   
   addToPanel(container);
+  setParameterApplicability(container, hasGeometry);
 
   updateUI();
 }
@@ -346,6 +381,7 @@ bool GeometryPanel::isAutoEnabled() const {
   return m_autoOptimizeBox && m_autoOptimizeBox->isChecked();
 }
 
+/** Refresh prerequisites from STATE without changing section preferences. */
 void GeometryPanel::updateRegistrationPointInfo(const ParameterState &state) {
   int numPoints = state.solver.points.size();
   colorscreen::scr_type type = state.scrToImg.type;
@@ -367,9 +403,8 @@ void GeometryPanel::updateRegistrationPointInfo(const ParameterState &state) {
       if (!label) return;
       if (numPoints < threshold) {
           label->setText(QString("%1 additional registration points needed for %2").arg(threshold - numPoints).arg(task));
-          label->show();
       } else {
-          label->hide();
+          label->clear();
       }
   };
 
@@ -388,7 +423,6 @@ void GeometryPanel::updateRegistrationPointInfo(const ParameterState &state) {
                       scan->width, scan->height, state.scrToImg.scanner_type)) {
           m_lensMessageLabel->setText(
               "Lens correction needs registration points spanning at least half of each relevant scan axis");
-          m_lensMessageLabel->show();
       }
   }
 
@@ -408,6 +442,9 @@ void GeometryPanel::updateRegistrationPointInfo(const ParameterState &state) {
           m_gridHeightSpin->setSpecialValueText("Default");
       }
   }
+  // Point batches also reach this method without a complete parameter refresh.
+  // Apply the new message applicability without re-entering updateUI().
+  updateWidgetStates();
 }
 
 bool GeometryPanel::isNonlinearEnabled() const {
@@ -416,6 +453,7 @@ bool GeometryPanel::isNonlinearEnabled() const {
   return s.scrToImg.mesh_trans != nullptr;
 }
 
+/** Refresh chart data and applicability, preserving the local fold state. */
 void GeometryPanel::updateDeformationChart() {
   if (!m_deformationChart)
     return;
@@ -440,24 +478,10 @@ void GeometryPanel::updateDeformationChart() {
   // Update visibility based on content
   const bool hasGeometry = hasScan &&
       colorscreen::screen_geometry_configured_p(state.scrToImg);
-  bool showLens = hasGeometry && !state.scrToImg.lens_correction.is_noop();
-  bool showPerspective = hasGeometry && (std::abs(state.scrToImg.tilt_x) > 1e-6 || std::abs(state.scrToImg.tilt_y) > 1e-6);
-  bool showNonlinear = hasGeometry && (state.scrToImg.mesh_trans != nullptr);
-  bool showFinal = hasGeometry;
+  // Direct chart refreshes (including section expansion) use the same row
+  // applicability as a full refresh. Never show a row through a saved fold.
+  updateWidgetStates();
 
-  // Using parentWidget() of the layout to get the container widget added to the form
-  if (m_lensChartContainer && m_lensChartContainer->parentWidget())
-      m_lensChartContainer->parentWidget()->setVisible(showLens);
-  
-  if (m_perspectiveChartContainer && m_perspectiveChartContainer->parentWidget())
-      m_perspectiveChartContainer->parentWidget()->setVisible(showPerspective);
-
-  if (m_nonlinearChartContainer && m_nonlinearChartContainer->parentWidget())
-      m_nonlinearChartContainer->parentWidget()->setVisible(showNonlinear);
-      
-  if (m_chartContainer && m_chartContainer->parentWidget())
-      m_chartContainer->parentWidget()->setVisible(showFinal);
-  
   if (!hasGeometry) {
     if(m_deformationChart) m_deformationChart->clear();
     if(m_lensChart) m_lensChart->clear();
