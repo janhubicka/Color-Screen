@@ -1286,6 +1286,60 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
           return;
         }
 
+        // Geometry-fit provenance must be owned independently from TaskQueue
+        // publication. An older completion must not clear a newer request, and
+        // cancelling the newest request must still remove the running state even
+        // though reportFinished() correctly rejects its result.
+        first->m_solverQueue.cancelAll();
+        std::shared_ptr<colorscreen::progress_info> olderGeometryProgress;
+        std::shared_ptr<colorscreen::progress_info> newerGeometryProgress;
+        const int olderGeometryRequest = first->m_solverQueue.requestRender(
+            QVariant(),
+            [&olderGeometryProgress](
+                int, std::shared_ptr<colorscreen::progress_info> progress) {
+              olderGeometryProgress = std::move(progress);
+            });
+        const int newerGeometryRequest = first->m_solverQueue.requestRender(
+            QVariant(),
+            [&newerGeometryProgress](
+                int, std::shared_ptr<colorscreen::progress_info> progress) {
+              newerGeometryProgress = std::move(progress);
+            });
+        if (!olderGeometryProgress || !newerGeometryProgress) {
+          fail(QStringLiteral(
+              "Geometry cancellation smoke did not start both synthetic requests"));
+          return;
+        }
+
+        first->m_geometryFit.pendingInputs = first->documentStateSnapshot();
+        first->m_geometryFit.pendingNonlinearEnabled =
+            first->m_geometryPanel->isNonlinearEnabled();
+        first->m_geometryFit.pendingRequestId = newerGeometryRequest;
+        first->updateWorkflowSummary();
+
+        first->onSolverFinished(olderGeometryRequest, workflowReady.scrToImg,
+                                false, false);
+        if (!first->m_geometryFit.pendingInputs ||
+            !first->m_geometryFit.pendingRequestId ||
+            *first->m_geometryFit.pendingRequestId != newerGeometryRequest) {
+          fail(QStringLiteral(
+              "Older geometry completion cleared newer fit provenance"));
+          return;
+        }
+
+        newerGeometryProgress->cancel();
+        first->onSolverFinished(newerGeometryRequest, workflowReady.scrToImg,
+                                false, true);
+        if (first->m_geometryFit.pendingInputs ||
+            first->m_geometryFit.pendingNonlinearEnabled ||
+            first->m_geometryFit.pendingRequestId ||
+            nextStepSummary->text().contains(
+                QStringLiteral("Geometry fit is running"))) {
+          fail(QStringLiteral(
+              "Cancelled newest geometry fit left stale running provenance"));
+          return;
+        }
+
         first->m_geometryFit = savedGeometryFit;
         first->m_renderTypeParams.type = savedRenderType;
         first->applyState(workflowBaseline);
