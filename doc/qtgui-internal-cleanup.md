@@ -353,8 +353,8 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
 - Keep group folding as presentation state only: a collapsed/expanded section
   must compose with each row's logical applicability instead of overwriting it.
   `addSeparator()` now accepts an optional stable `sectionKey`, distinct from
-  saved parameter/Undo identity. Screen, Image Layer, Color, and Contact Copy
-  opt into application-preference persistence; only user activation writes
+  saved parameter/Undo identity. Screen, Image Layer, Color, Contact Copy, and
+  Geometry opt into application-preference persistence; only user activation writes
   settings. New panels restore the last explicit choice, while existing panels
   retain their local
   presentation. Refresh re-applies folding to rows added after the header, and
@@ -367,6 +367,16 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   outer form, preventing that editor from escaping the section's fold. Nested
   spectral-chart applicability and simulation-dependent Contact Copy groups
   remain independent of the remembered presentation.
+  Geometry's five sections now follow the same contract. Its fit-status labels
+  belong inside Geometry fit rather than the outer form. Message presence and
+  all four chart rows use registered applicability, including point batches
+  and explicit chart refreshes between complete parameter refreshes. The shared
+  `updateWidgetStates()` presentation-only helper avoids recursion into the
+  derived refresh hook. Geometry's initial Auto fit checkbox synchronization is
+  signal-blocked, so construction does not issue a redundant document setter.
+  Real-panel smoke covers remembered/independent folds, point thresholds, lens
+  coverage, missing and changing geometry, chart applicability, and no document
+  edits or automatic fit requests. Existing chart detachment stays unchanged.
   Image Layer's infrared-only calibration action now uses
   `setParameterApplicability()` rather than a direct-visibility repair callback,
   and workspace-churn smoke covers collapse/expand resurrection explicitly.

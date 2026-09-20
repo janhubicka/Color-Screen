@@ -729,7 +729,8 @@ To maintain consistency across different UI actions, use the following standardi
 in `QSettings` under `inspector/sections/<sectionKey>/expanded`. Supply a stable,
 untranslated key scoped to the panel (for example `screen.denoise.pre`), never
 an image filename, translated title, row index, or saved `parameterKey`.
-Screen, Image Layer, Color, and Contact Copy now use explicit section keys.
+Screen, Image Layer, Color, Contact Copy, and Geometry now use explicit
+section keys.
 Color's five sections and Contact Copy's four specialist sections keep their
 process/simulation applicability separate from restored folding. The Tone Curve
 detachable wrapper belongs inside Final adjustments, so folding that section
@@ -759,3 +760,15 @@ folds, recreation, independent live inspectors, applicability changes, the neste
 spectral chart, and the attached Tone Curve. This probe runs before document
 creation without pumping GUI events; it must never alter operator preferences
 or invoke the document state setter.
+
+Geometry's five section preferences follow the same contract. Its four fit
+prerequisite messages are rows inside Geometry fit, applicable only while their
+message is nonempty. All four Visualization chart rows register applicability
+independently of the section fold. Incremental point/chart updates call
+`ParameterPanel::updateWidgetStates()` to replay presentation callbacks only;
+this must not invoke parameter updaters or `onParametersRefreshed()` recursively.
+Do not restore direct `show()`/`setVisible()` calls for these rows. The separate
+Finetune Diagnostic Images section and the shared chart dock lifecycle are
+unchanged. Geometry's real-panel smoke checks recreation, independent inspectors,
+point-count/coverage messages, absent or changing geometry, attached chart rows,
+and zero document-setter/fit requests under an isolated settings identity.

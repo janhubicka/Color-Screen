@@ -521,13 +521,16 @@ void ParameterPanel::updateUI() {
     updater(state);
   }
 
-  // Update Widget State (Availability)
-  for (auto &widgetUpdater : m_widgetStateUpdaters) {
-    widgetUpdater();
-  }
+  updateWidgetStates();
 
   // Call virtual method for derived classes
   onParametersRefreshed(state);
+}
+
+/** Refresh presentation callbacks without re-entering parameter refresh. */
+void ParameterPanel::updateWidgetStates() {
+  for (auto &widgetUpdater : m_widgetStateUpdaters)
+    widgetUpdater();
 }
 
 void ParameterPanel::applyChange(
