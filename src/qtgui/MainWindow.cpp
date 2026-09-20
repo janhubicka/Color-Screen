@@ -3527,16 +3527,17 @@ void MainWindow::updateWorkflowSummary() {
     return;
 
   const ParameterState currentState = getCurrentState();
-  const bool pendingMeshModeChanged =
-      m_geometryFit.pendingComputeMesh && m_geometryPanel &&
-      *m_geometryFit.pendingComputeMesh != m_geometryPanel->isNonlinearEnabled();
+  const bool pendingNonlinearModeChanged =
+      m_geometryFit.pendingNonlinearEnabled && m_geometryPanel &&
+      *m_geometryFit.pendingNonlinearEnabled !=
+          m_geometryPanel->isNonlinearEnabled();
   if (m_geometryFit.pendingInputs &&
       (geometryFitInputsDiffer(*m_geometryFit.pendingInputs, currentState) ||
-       pendingMeshModeChanged)) {
+       pendingNonlinearModeChanged)) {
     // Reset first because cancelAll() may synchronously trigger progress/UI
     // callbacks that refresh this summary again.
     m_geometryFit.pendingInputs.reset();
-    m_geometryFit.pendingComputeMesh.reset();
+    m_geometryFit.pendingNonlinearEnabled.reset();
     m_solverQueue.cancelAll();
   }
 
@@ -4277,24 +4278,31 @@ void MainWindow::onRegistrationPointsToggled(bool checked) {
    Captures the current scr_to_img and solver parameters along with
    the nonlinear mesh flag, and submits them to m_solverQueue which
    will cancel any in-flight solve and start a new one.  */
-void MainWindow::onOptimizeGeometry(bool autoChecked) {
-  if (!m_scan || !m_solverWorker)
+void MainWindow::onOptimizeGeometry(bool /*autoChecked*/) {
+  if (!m_geometryPanel)
+    return;
+  requestGeometryOptimization(m_geometryPanel->isNonlinearEnabled());
+}
+
+/** Submit one geometry fit with independent mesh recomputation and UI-mode gates. */
+void MainWindow::requestGeometryOptimization(bool computeMesh) {
+  if (!m_scan || !m_solverWorker || !m_geometryPanel)
     return;
 
   SolverRequestData data;
   data.scrToImg = m_scrToImgParams;
   data.solver = m_solverParams;
-  data.computeMesh = m_geometryPanel->isNonlinearEnabled();
+  data.computeMesh = computeMesh;
 
-  // The pending snapshot is both user-visible provenance and a second stale
-  // result gate beyond TaskQueue's newest-request check. It catches edits to
-  // points/geometry and the requested nonlinear mode while this solve runs.
+  // The document snapshot and current nonlinear presentation mode form the
+  // domain-level stale gate beyond TaskQueue's newest-request check. The
+  // worker's COMPUTEMESH choice is deliberately independent: automatic screen
+  // detection can refine the remaining geometry while preserving its mesh.
   m_geometryFit.pendingInputs = getCurrentState();
-  m_geometryFit.pendingComputeMesh = data.computeMesh;
+  m_geometryFit.pendingNonlinearEnabled = m_geometryPanel->isNonlinearEnabled();
   m_geometryFit.failureInputs.reset();
   updateWorkflowSummary();
 
-  // Request new solve task with captured data
   m_solverQueue.requestRender(QVariant::fromValue(data));
 }
 
@@ -4309,7 +4317,7 @@ void MainWindow::onTriggerSolve(
   if (!m_scan || !m_solverWorker || !userData.canConvert<SolverRequestData>()) {
     m_solverQueue.reportFinished(reqId, false);
     m_geometryFit.pendingInputs.reset();
-    m_geometryFit.pendingComputeMesh.reset();
+    m_geometryFit.pendingNonlinearEnabled.reset();
     updateWorkflowSummary();
     return;
   }
@@ -4345,14 +4353,15 @@ void MainWindow::onSolverFinished(int reqId,
     return;
 
   const ParameterState now = getCurrentState();
-  const bool meshModeStillCurrent =
-      m_geometryFit.pendingComputeMesh && m_geometryPanel &&
-      *m_geometryFit.pendingComputeMesh == m_geometryPanel->isNonlinearEnabled();
+  const bool nonlinearModeStillCurrent =
+      m_geometryFit.pendingNonlinearEnabled && m_geometryPanel &&
+      *m_geometryFit.pendingNonlinearEnabled ==
+          m_geometryPanel->isNonlinearEnabled();
   const bool inputsStillCurrent =
-      m_geometryFit.pendingInputs && meshModeStillCurrent &&
+      m_geometryFit.pendingInputs && nonlinearModeStillCurrent &&
       !geometryFitInputsDiffer(*m_geometryFit.pendingInputs, now);
   m_geometryFit.pendingInputs.reset();
-  m_geometryFit.pendingComputeMesh.reset();
+  m_geometryFit.pendingNonlinearEnabled.reset();
 
   if (cancelled || !inputsStillCurrent) {
     updateWorkflowSummary();
@@ -5762,8 +5771,8 @@ void MainWindow::presentDetectedScreenResult(
         updateRegistrationActions();
         updateModeMenu();
 
-        // Preserve the detected mesh while refining remaining geometry.
-        m_solverQueue.requestRender(false);
+        // Refine the remaining geometry while preserving the detected mesh.
+        requestGeometryOptimization(false);
       });
   msgBox->open();
 }
