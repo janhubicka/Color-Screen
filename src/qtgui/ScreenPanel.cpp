@@ -302,7 +302,8 @@ void ScreenPanel::setupUi() {
     detectionHint->setVisible(!hint.isEmpty());
   });
 
-  QToolButton *screenPatternToggle = addSeparator("Screen pattern");
+  QToolButton *screenPatternToggle = addSeparator("Screen pattern",
+                   QStringLiteral("screen.pattern"));
   screenPatternToggle->setObjectName(QStringLiteral("ScreenPatternToggle"));
 
   ScreenPreviewPanel *preview =
@@ -354,7 +355,8 @@ void ScreenPanel::setupUi() {
 
   m_widgetStateUpdaters.push_back([preview]() { preview->updateUI(); });
 
-  addSeparator("Reconstruction");
+  addSeparator("Reconstruction",
+                   QStringLiteral("screen.reconstruction"));
 
   // Element density collection threshold
   addSliderParameter(
@@ -401,7 +403,8 @@ void ScreenPanel::setupUi() {
       QStringLiteral("screen.demosaiced_scaling"));
 
 
-  addSeparator("Pre-demosaic denoising");
+  addSeparator("Pre-demosaic denoising",
+                   QStringLiteral("screen.denoise.pre"));
 
   // Screen Denoise Mode
   addEnumParameter("Denoise Mode",
@@ -470,7 +473,8 @@ void ScreenPanel::setupUi() {
       false, "Range standard deviation for Bilateral filter. Controls how much intensity difference is allowed while smoothing.",
       QStringLiteral("screen.denoise.pre.bilateral_sigma_r"));
 
-  addSeparator("Post-demosaic denoising");
+  addSeparator("Post-demosaic denoising",
+                   QStringLiteral("screen.denoise.post"));
 
   addEnumParameter("Denoise Mode",
       denoise_parameters::denoise_mode_names,

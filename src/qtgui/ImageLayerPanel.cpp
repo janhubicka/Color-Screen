@@ -37,7 +37,8 @@ void ImageLayerPanel::setupUi() {
   });
 
   QToolButton *simulatedSectionToggle =
-      addSeparator(tr("Simulated image layer from RGB"));
+      addSeparator(tr("Simulated image layer from RGB"),
+                   QStringLiteral("image_layer.simulated_rgb"));
   simulatedSectionToggle->setObjectName(
       QStringLiteral("SimulatedImageLayerToggle"));
   QWidget *simulatedSection = simulatedSectionToggle->parentWidget();

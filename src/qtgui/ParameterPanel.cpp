@@ -18,6 +18,7 @@
 #include <QRegularExpression>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QSettings>
 #include <QSlider>
 #include <QShowEvent>
 #include <QToolButton>
@@ -1395,16 +1396,26 @@ void ParameterPanel::addCorrelatedRGBParameter(
   }
 }
 
-QToolButton *ParameterPanel::addSeparator(const QString &title) {
+/** Add a foldable section, optionally restoring an application preference.
+
+    SECTIONKEY is an untranslated presentation identity, never an undo key.
+    Only explicit button activation persists a choice; refresh, applicability,
+    and programmatic folding must not overwrite the user's preference. */
+QToolButton *ParameterPanel::addSeparator(const QString &title,
+                                         const QString &sectionKey) {
+  const QString settingsKey = sectionKey.isEmpty()
+      ? QString()
+      : QStringLiteral("inspector/sections/%1/expanded").arg(sectionKey);
+  const bool expanded = settingsKey.isEmpty()
+      || QSettings().value(settingsKey, true).toBool();
+
   QGroupBox *group = new QGroupBox();
   group->setFlat(true);
   group->setStyleSheet(
       "QGroupBox { border: none; margin: 0px; padding: 0px; }");
 
-  // Create a custom title widget with arrow button
+  // Create a custom title widget with arrow button.
   QWidget *titleWidget = new QWidget();
-
-  // Use palette for theme-aware coloring
   QPalette pal = titleWidget->palette();
   pal.setColor(QPalette::Window, pal.color(QPalette::Mid));
   titleWidget->setAutoFillBackground(true);
@@ -1415,11 +1426,18 @@ QToolButton *ParameterPanel::addSeparator(const QString &title) {
   titleLayout->setSpacing(4);
 
   QToolButton *arrowBtn = new QToolButton();
-  arrowBtn->setArrowType(Qt::DownArrow);
+  arrowBtn->setArrowType(expanded ? Qt::DownArrow : Qt::RightArrow);
   arrowBtn->setStyleSheet(
       "QToolButton { border: none; background: transparent; }");
   arrowBtn->setCheckable(true);
-  arrowBtn->setChecked(true);
+  arrowBtn->setChecked(expanded);
+  arrowBtn->setAccessibleName(title);
+  arrowBtn->setToolTip(expanded ? tr("Collapse %1").arg(title)
+                                : tr("Expand %1").arg(title));
+  if (!sectionKey.isEmpty()) {
+    arrowBtn->setProperty("sectionKey", sectionKey);
+    group->setProperty("sectionKey", sectionKey);
+  }
 
   QLabel *titleLabel = new QLabel(title);
   QFont font = titleLabel->font();
@@ -1434,54 +1452,54 @@ QToolButton *ParameterPanel::addSeparator(const QString &title) {
   groupLayout->setContentsMargins(0, 0, 0, 0);
   groupLayout->setSpacing(0);
   group->setLayout(groupLayout);
-
   groupLayout->addWidget(titleWidget);
 
   QFormLayout *groupForm = new QFormLayout();
-  groupForm->setProperty(parameterSectionExpandedProperty, true);
+  groupForm->setProperty(parameterSectionExpandedProperty, expanded);
   m_groupForms.push_back(groupForm);
   groupLayout->addLayout(groupForm);
 
-  // Connect arrow button to toggle visibility
-  connect(arrowBtn, &QToolButton::toggled, [arrowBtn, groupForm](bool checked) {
-    arrowBtn->setArrowType(checked ? Qt::DownArrow : Qt::RightArrow);
-    groupForm->setProperty(parameterSectionExpandedProperty, checked);
+  // Rows are added after the header. Reapply folding during updateUI(), so
+  // restored and dynamically added rows cannot escape a collapsed section.
+  // Guard the refresh callback because derived panels may rebuild their UI.
+  const QPointer<QToolButton> sectionToggle = arrowBtn;
+  const QPointer<QFormLayout> sectionForm = groupForm;
+  auto updateVisibility = [sectionToggle, sectionForm, title]() {
+    if (!sectionToggle || !sectionForm)
+      return;
+    const bool checked = sectionToggle->isChecked();
+    sectionToggle->setArrowType(checked ? Qt::DownArrow : Qt::RightArrow);
+    sectionToggle->setToolTip(checked ? tr("Collapse %1").arg(title)
+                                     : tr("Expand %1").arg(title));
+    sectionForm->setProperty(parameterSectionExpandedProperty, checked);
 
-    auto setVisibleRecursive = [](QLayoutItem *item, bool visible) {
-        auto recurse = [](auto self, QLayoutItem *itm, bool vis) -> void {
-            if (!itm) return;
-            if (itm->widget()) {
-                QWidget *widget = itm->widget();
-                widget->setVisible(vis && parameterWidgetApplicable(widget));
-            } else if (itm->layout()) {
-                QLayout *subLayout = itm->layout();
-                for (int j = 0; j < subLayout->count(); ++j) {
-                    self(self, subLayout->itemAt(j), vis);
-                }
-            }
-        };
-        recurse(recurse, item, visible);
-    };
-
-    // Hide all widgets in the form layout
-    for (int i = 0; i < groupForm->rowCount(); ++i) {
-      QLayoutItem *labelItem = groupForm->itemAt(i, QFormLayout::LabelRole);
-      QLayoutItem *fieldItem = groupForm->itemAt(i, QFormLayout::FieldRole);
-      // Check SpanningRole as well just in case, though usually FieldRole covers it in 2-arg addRow
-      QLayoutItem *spanningItem = groupForm->itemAt(i, QFormLayout::SpanningRole);
-
-      setVisibleRecursive(labelItem, checked);
-      setVisibleRecursive(fieldItem, checked);
-      if (spanningItem && spanningItem != fieldItem && spanningItem != labelItem) {
-          setVisibleRecursive(spanningItem, checked);
+    auto setVisibleRecursive = [](auto self, QLayoutItem *item,
+                                  bool visible) -> void {
+      if (!item)
+        return;
+      if (QWidget *widget = item->widget()) {
+        widget->setVisible(visible && parameterWidgetApplicable(widget));
+      } else if (QLayout *layout = item->layout()) {
+        for (int i = 0; i < layout->count(); ++i)
+          self(self, layout->itemAt(i), visible);
       }
-    }
-  });
+    };
+    for (int i = 0; i < sectionForm->count(); ++i)
+      setVisibleRecursive(setVisibleRecursive, sectionForm->itemAt(i), checked);
+  };
+  connect(arrowBtn, &QToolButton::toggled, this,
+          [updateVisibility](bool) { updateVisibility(); });
+  if (!settingsKey.isEmpty()) {
+    m_widgetStateUpdaters.push_back(updateVisibility);
+    connect(arrowBtn, &QToolButton::clicked, this,
+            [settingsKey](bool checked) {
+              QSettings().setValue(settingsKey, checked);
+            });
+  }
 
   m_form->addRow(group);
   m_currentGroupForm = groupForm;
-
-  return arrowBtn; // Return the toggle button
+  return arrowBtn;
 }
 
 /** Register logical applicability for the form row containing WIDGET. */
