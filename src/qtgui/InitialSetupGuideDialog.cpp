@@ -135,6 +135,8 @@ InitialSetupGuideDialog::InitialSetupGuideDialog(
 
     m_monochromeBayer =
         new QCheckBox(tr("Reload with Bayer-filter compensation"), this);
+    m_monochromeBayer->setObjectName(
+        QStringLiteral("InitialMonochromeBayerCheck"));
     m_monochromeBayer->setChecked(true);
     layout->addWidget(m_monochromeBayer);
 
