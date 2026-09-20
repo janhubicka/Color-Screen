@@ -27,6 +27,7 @@ jobs:
       - name: Install focused test compiler
         run: |
           set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           apt-get update
           apt-get install -y --no-install-recommends clang-18 libclang-rt-18-dev llvm-18
       - name: Apply exact smoke replacement and extract focused harnesses
