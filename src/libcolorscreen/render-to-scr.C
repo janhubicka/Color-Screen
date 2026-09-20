@@ -3,6 +3,7 @@
    This file is part of Color-Screen.  */
 
 #include <cassert>
+#include <cstring>
 #include "render-to-scr.h"
 #include <atomic>
 #include "screen.h"
