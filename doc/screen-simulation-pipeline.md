@@ -601,18 +601,25 @@ The `screen_simulation` unit group verifies:
   a second capture blur;
 - the Sharpness Preview's **Digitized** tile applies the forward capture
   transfer exactly once, **Sharpened** is identical to it for effective mode
-  None (including Richardson--Lucy at zero iterations), and positive
-  Richardson--Lucy / Blur deconvolution remain active.
+  None (including Richardson--Lucy at zero iterations), Unsharp Mask applies
+  the same FIR Gaussian radius/amount update as image sharpening, and positive
+  Richardson--Lucy / Blur deconvolution remain active with the configured
+  iteration/mode semantics;
+- the legacy no-MTF Digitized fallback takes its Gaussian radius from
+  `screen_blur_radius`, never from the later digital Unsharp Mask radius.
 
 The Sharpness Preview is diagnostic presentation, not a second simulation
 pipeline. **Original** is the ideal historical screen, **Digitized** is the
 screen after one configured capture transfer, and **Sharpened** additionally
-anticipates the effective digital sharpening mode. The periodic preview may use
-the screen-domain equivalent of a digital filter, but its stage ownership must
-match the finite simulation: forward capture once, then optional sharpening.
-The production finite screen used by colour-loss estimation already samples the
-forward-captured screen and then calls the same image sharpening/deconvolution
-implementation with the same Richardson--Lucy iteration count.
+applies the effective digital sharpening mode. The periodic preview uses
+periodic boundary conditions: Unsharp Mask uses the same FIR kernel and
+high-frequency-residual formula as image sharpening, while deconvolution uses
+the corresponding periodic MTF/Richardson--Lucy implementation. Its stage
+ownership must match the finite simulation: forward capture once, then optional
+sharpening. The production finite screen used by colour-loss estimation already
+samples the forward-captured screen and then calls the same image
+sharpening/deconvolution implementation with the same Richardson--Lucy
+iteration count.
 
 The complete optimized unit suite and Autotools testsuite must pass before this
 stage contract is changed further.
