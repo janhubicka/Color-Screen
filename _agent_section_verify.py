@@ -100,6 +100,7 @@ source = build / 'section-smoke.cpp'
 source.write_text(code)
 flags = shlex.split(subprocess.check_output(
     ['pkg-config', '--cflags', '--libs', 'Qt6Widgets'], text=True))
+compiler = shlex.split(os.environ.get('CXX', 'g++'))
 env = dict(os.environ, QT_QPA_PLATFORM='offscreen')
 # Leak checking is left to the complete application CI; this Qt offscreen
 # harness checks address/undefined behavior in the section interactions.
@@ -109,7 +110,7 @@ for name, extra in [('ordinary', []),
                     ('asan-ubsan', ['-fsanitize=address,undefined',
                                     '-fno-omit-frame-pointer'])]:
     binary = build / name
-    subprocess.run(['clang++', '-std=c++17', '-O1', '-g', '-Wall', '-Wextra',
+    subprocess.run([*compiler, '-std=c++17', '-O1', '-g', '-Wall', '-Wextra',
                     *extra, str(source), '-o', str(binary), *flags], check=True)
     subprocess.run([str(binary)], env=env, check=True)
 
@@ -122,7 +123,7 @@ for name, removed in [('without-persistence',
     negative = build / (name + '.cpp')
     negative.write_text(code.replace(removed, '/* negative control */'))
     binary = build / name
-    subprocess.run(['clang++', '-std=c++17', '-O1', str(negative),
+    subprocess.run([*compiler, '-std=c++17', '-O1', str(negative),
                     '-o', str(binary), *flags], check=True)
     result = subprocess.run([str(binary)], env=env)
     if result.returncode != 1:
