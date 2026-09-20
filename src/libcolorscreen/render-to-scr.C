@@ -565,18 +565,46 @@ render_screen_tile (tile_parameters &tile, scr_type type,
     }
   if (!screen_has_regular_geometry_p (type))
     return false;
+  bool anticipate_sharpening = false;
   if (rst != original_screen)
     {
       sp = rparam.sharpen;
       sp.usm_radius *= pixel_size;
       sp.scanner_mtf_scale *= pixel_size;
       int img_layer_c = rparam.get_image_layer_channel(nullptr);
-      sp.scanner_mtf.wavelength = sp.scanner_mtf.get_channel_wavelength(img_layer_c);
-      if (rst != sharpened_screen || sp.mode == sharpen_parameters::none)
+      sp.scanner_mtf.wavelength =
+          sp.scanner_mtf.get_channel_wavelength(img_layer_c);
+
+      /* The preview has three distinct stages:
+           Original  - ideal historical screen;
+           Digitized - one forward pass through the capture transfer;
+           Sharpened - that digitized screen after the selected digital filter.
+
+         GET_SCREEN historically decides whether to build the forward capture
+         transfer from the effective sharpening state.  For a Digitized tile,
+         and for a Sharpened tile whose effective mode is None, use
+         blur_deconvolution only as an internal request to construct that one
+         forward transfer while keeping ANTICIPATE_SHARPENING false.  Do not
+         pass that synthetic mode as an anticipated digital operation: doing so
+         squares the transfer and blurs the screen twice.
+
+         In particular Richardson-Lucy with zero iterations has effective mode
+         None and must therefore be identical to Digitized.  Positive
+         Richardson-Lucy iterations keep the real mode and are applied by the
+         periodic-screen RL implementation with the configured iteration count.
+         Blur deconvolution deliberately remains the one mode that applies the
+         capture blur a second time.  */
+      const sharpen_parameters::sharpen_mode effective_mode = sp.get_mode ();
+      anticipate_sharpening
+          = rst == sharpened_screen
+            && effective_mode != sharpen_parameters::none;
+      if (rst == blurred_screen
+          || (rst == sharpened_screen
+              && effective_mode == sharpen_parameters::none))
         sp.mode = sharpen_parameters::blur_deconvolution;
     }
   std::shared_ptr<screen> scr = render_to_scr::get_screen (
-      type, false, rst == sharpened_screen, sp, rparam.red_strip_width,
+      type, false, anticipate_sharpening, sp, rparam.red_strip_width,
       rparam.green_strip_width, progress);
   if (!scr)
     return false;
