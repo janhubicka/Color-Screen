@@ -1,6 +1,7 @@
 #include "WorkspaceChurnSmoke.h"
 
 #include "ColorScreenApplication.h"
+#include "GeometryPanel.h"
 #include "ImageViewWindow.h"
 #include "MainWindow.h"
 #include "MultiLineTabWidget.h"
