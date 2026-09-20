@@ -524,6 +524,19 @@ private:
   /** Clear transient automatic focus-area state for this document. */
   void clearFocusAreaAnalysis();
 
+  /** Return true only while GENERATION/PROGRESS still own the adaptive
+      sharpening request and its immutable scan/parameter snapshot is current. */
+  bool adaptiveSharpeningRequestCurrent(
+      uint64_t generation,
+      const std::shared_ptr<colorscreen::progress_info> &progress) const;
+
+  /** Cancel adaptive sharpening when CURRENTSTATE no longer matches the
+      request snapshot, and restore the chart to accepted document data. */
+  void cancelStaleAdaptiveSharpening(const ParameterState &currentState);
+
+  /** Replace live adaptive-analysis pixels with the accepted correction map. */
+  void restoreAdaptiveSharpeningChart();
+
 
   // Window state management
   void saveWindowState();
@@ -769,8 +782,23 @@ private:
   FocusAreaAnalysisState m_focusAreaAnalysis;
   int m_selectedMtfMeasurement = -1;
 
-  // Generation retained for the progressive adaptive-sharpening worker.
-  uint64_t m_adaptiveSharpeningGeneration = 0;
+  /** Session-local ownership for progressive adaptive sharpening.
+      Unlike a one-shot result this worker intentionally publishes live chart
+      cells, so generation, progress identity and immutable inputs must remain
+      coupled until completion/cancellation. */
+  struct AdaptiveSharpeningState {
+    uint64_t generation = 0;
+    std::optional<ParameterState> baseline;
+    std::shared_ptr<colorscreen::image_data> scan;
+    std::weak_ptr<colorscreen::progress_info> progress;
+
+    void clearRequest() {
+      baseline.reset();
+      scan.reset();
+      progress.reset();
+    }
+  };
+  AdaptiveSharpeningState m_adaptiveSharpening;
 
   // Crash recovery
   QString m_recoveryDir;
