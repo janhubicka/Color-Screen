@@ -323,6 +323,24 @@ Tasks that run in the background and report a final result (or series of interme
 - **Examples**: FinetuneWorker, DetectScreenWorker, FlatFieldWorker, FocusAnalysisWorker, AdaptiveSharpeningWorker, area-based computations (white balance, auto levels).
 - **Behavior**: Tracked via `progress_info` for manual or automatic cancellation. `MainWindow::OneShotOperation` is the shared final-result lifecycle for simple document operations: it records prerequisites, a progress description, start/cleanup UI callbacks, a final result-validation gate, and the apply callback. These operations are replaceable: starting a new one cancels the previous request immediately, and TaskQueue newest-request ownership is an additional publication gate. The first migrated users are area-based parameter computations and flat-field analysis. Area computations validate the captured image pointer and complete `ParameterState` snapshot before publishing, so a stale whole-state result cannot overwrite an intervening edit. Flat-field analysis, point-based focus analysis, single-area registration finetune, and final-result screen-type detection are plain synchronous helpers executed by this lifecycle; none owns a QObject thread or generation counter. Their publication gates require the captured image and relevant document snapshot to remain current. Coordinate autodetection and refinement use the same lifecycle too; the optional post-detection point-finding continuation is request-local. A non-empty `OneShotOperation::progressTitle` retains a dedicated Cancel row, replacing rather than duplicating TaskQueue's ordinary progress entry before dispatch. Coordinate refinement must construct the new state before calling `changeParameters()`; mutating the live coordinates first makes that setter see a no-op and loses Undo. Screen detection additionally keeps its asynchronous confirmation prompt under the same ownership rule: a document edit or newer final-result action dismisses an obsolete prompt before it can publish. Automatic focus-area discovery/fitting, external-reference MTF measurement, and measured-MTF model fitting also use this lifecycle. The model-fit setup dialog remains panel-local, but computation/provenance/publication are document-owned so primary and reference inspectors cannot create competing fit queues. Custom `QThread` workers that emit intermediate results, such as `FinetuneMisregisteredWorker`, keep their explicit wiring until their interfaces can use the same policy cleanly.
 
+### Initial screen setup
+
+The post-load **Suggested image setup** guide follows the same screen-detection
+semantics as the Screen panel. If the user selects **Monochrome transparency
+taken using regular color screen** or the corresponding negative, expose an
+**Original color screen** selector containing regular screens only. Automatic
+screen detection stays disabled until a regular screen is selected, because
+monochrome data no longer contains the colour identity needed to infer the
+historical process.
+
+For captures where the historical screen colours are visible in RGB, do not
+require or show that selector merely to enable detection. Common regular screen
+types can be identified by **Detect screen** from an initially unknown/None
+screen type, so the setup guide may offer **Automatically detect the screen**
+immediately. If Bayer compensation requires a reload first, preserve the
+autodetection request only for that exact reload generation and start detection
+after the replacement image is installed.
+
 ### 3. Independent Exports (Render to File)
 - **When to Use**: Tasks that are independent of ongoing UI parameter tweaks once started and should run to completion.
 - **Examples**: `onRender()` (rendering to a final file).
