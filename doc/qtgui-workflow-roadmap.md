@@ -117,6 +117,15 @@ reconstruction.  Stochastic screens (Random, Autochrome, Agfa Farbenplatte)
 cannot be reconstructed from monochrome data because the colour identity of
 their individual screen elements has been lost.
 
+The initial **Suggested image setup** guide should make that distinction
+actionable.  Selecting one of these monochrome screened capture types exposes a
+regular **Original color screen** selector and an **Automatically detect the
+screen** checkbox which remains disabled until the screen type is chosen.
+Conversely, when the historical screen itself is visible in RGB, common screen
+types can be autodetected from their colour pattern: keep automatic detection
+available without forcing a prior screen-type selection or showing a redundant
+screen chooser.
+
 ### Stage 4 — Screen detection and geometry
 
 Current panels/features:
