@@ -3749,7 +3749,19 @@ void MainWindow::updateWorkflowSummary() {
       profileApplicable && m_workflowProcessLabel->isVisible());
 
   QString nextStep;
-  if (!m_scan) {
+  const auto screenAutodetectionProgress =
+      m_screenAutodetectionProgress.lock();
+  if (screenAutodetectionProgress) {
+    if (screenAutodetectionProgress->pool_cancel()) {
+      nextStep = m_screenAutodetectionUsesStop
+          ? tr("Next: screen detection is stopping…")
+          : tr("Next: screen detection is cancelling…");
+    } else {
+      nextStep = m_screenAutodetectionUsesStop
+          ? tr("Next: screen detection is running. Wait for it to finish, or press Stop.")
+          : tr("Next: screen detection is running. Wait for it to finish, or press Cancel.");
+    }
+  } else if (!m_scan) {
     nextStep = tr("Next: load an image.");
   } else if (capture == colorscreen::render_parameters::capture_unknown) {
     nextStep = tr("Next: choose Capture type in Digital capture.");
@@ -5563,15 +5575,45 @@ void MainWindow::onAutomaticallyAddPointsInAreaRequested(
       });
 }
 
-/** Handle request to automatically add registration points across the
-   entire cropped image area.  Similar to the area-restricted variant
-   but uses the full scan crop as the search region.
-   The worker reports results incrementally: pointsReady batches add
-   new registration points; geometryReady updates trigger immediate
-   re-optimisation.  The requestCurrentPoints signal uses a blocking
-   queued connection so the worker can read the latest point set from
-   the main thread.  */
-void MainWindow::onAutomaticallyAddPointsRequested(const colorscreen::finetune_area_parameters &params) {
+/** Pin Workflow's next-step guidance to one active Detect-screen request. */
+void MainWindow::setScreenAutodetectionProgress(
+    const std::shared_ptr<colorscreen::progress_info> &progress,
+    bool usesStop) {
+  m_screenAutodetectionProgress = progress;
+  m_screenAutodetectionUsesStop = usesStop;
+  updateWorkflowSummary();
+}
+
+/** Clear Detect-screen guidance only if PROGRESS still owns the workflow.
+
+    Coordinate autodetection hands off directly to incremental point discovery.
+    Its delayed one-shot completion must therefore not clear the newer Stop
+    phase after that handoff has already happened. */
+void MainWindow::clearScreenAutodetectionProgress(
+    const std::shared_ptr<colorscreen::progress_info> &progress) {
+  const auto current = m_screenAutodetectionProgress.lock();
+  if (!current || current != progress)
+    return;
+  m_screenAutodetectionProgress.reset();
+  m_screenAutodetectionUsesStop = false;
+  updateWorkflowSummary();
+}
+
+/** Handle a panel request to add registration points outside Detect screen. */
+void MainWindow::onAutomaticallyAddPointsRequested(
+    const colorscreen::finetune_area_parameters &params) {
+  startAutomaticPointDiscovery(params, false);
+}
+
+/** Add registration points across the entire cropped image area.
+
+    SCREENAUTODETECTION is true only for the combined Screen -> Detect screen
+    workflow. While it is true, point and geometry batches may still update the
+    live GUI, but Workflow keeps one stable wait/Stop hint until this worker
+    finishes. */
+void MainWindow::startAutomaticPointDiscovery(
+    const colorscreen::finetune_area_parameters &params,
+    bool screenAutodetection) {
   if (!m_scan) {
     return;
   }
@@ -5590,6 +5632,8 @@ void MainWindow::onAutomaticallyAddPointsRequested(const colorscreen::finetune_a
   colorscreen::sub_task task(progress.get());
   addUserVisibleProgress(progress, tr("Automatically add points"),
                          ProgressAction::Stop);
+  if (screenAutodetection)
+    setScreenAutodetectionProgress(progress, true);
 
   // Create worker and thread
   FinetuneMisregisteredWorker *worker = new FinetuneMisregisteredWorker(
@@ -5651,9 +5695,11 @@ void MainWindow::onAutomaticallyAddPointsRequested(const colorscreen::finetune_a
                             : m_solverParams.points;
           }, Qt::BlockingQueuedConnection);
   connect(worker, &FinetuneMisregisteredWorker::finished, this,
-          [this, progress](bool success) {
+          [this, progress, screenAutodetection](bool success) {
             if (!m_closing)
               removeProgress(progress);
+            if (!m_closing && screenAutodetection)
+              clearScreenAutodetectionProgress(progress);
 
             if (!m_closing && !success &&
                 (!progress || !progress->pool_cancel())) {
@@ -5696,7 +5742,7 @@ void MainWindow::onAutodetectScreen() {
             6000);
         return;
       }
-      onAutomaticallyAddPointsRequested(m_geometryPanel->finetuneAreaParams());
+      startAutomaticPointDiscovery(m_geometryPanel->finetuneAreaParams(), true);
       return;
     }
 
@@ -5988,10 +6034,20 @@ void MainWindow::startCoordinateAutodetection(bool addPointsAfterDetection) {
   const auto scan = m_scan;
   const ParameterState baseline = getCurrentState();
   auto result = std::make_shared<CoordinateAutodetectionResult>();
+  auto workflowProgress =
+      std::make_shared<std::weak_ptr<colorscreen::progress_info>>();
 
   OneShotOperation operation;
   operation.description = tr("Autodetecting coordinates");
   operation.progressTitle = tr("Coordinate autodetection");
+  operation.onStart =
+      [this, addPointsAfterDetection, workflowProgress](
+          std::shared_ptr<colorscreen::progress_info> progress) {
+        if (!addPointsAfterDetection)
+          return;
+        *workflowProgress = progress;
+        setScreenAutodetectionProgress(progress, false);
+      };
   operation.prerequisites = [this, scan]() { return m_scan == scan; };
   operation.resultValid = [this, scan, baseline, result]() {
     return m_scan == scan && getCurrentState() == baseline &&
@@ -6013,7 +6069,13 @@ void MainWindow::startCoordinateAutodetection(bool addPointsAfterDetection) {
     statusBar()->showMessage(tr("Autodetect coordinates finished"), 3000);
 
     if (addPointsAfterDetection && m_geometryPanel)
-      onAutomaticallyAddPointsRequested(m_geometryPanel->finetuneAreaParams());
+      startAutomaticPointDiscovery(m_geometryPanel->finetuneAreaParams(), true);
+  };
+  operation.onDone = [this, addPointsAfterDetection, workflowProgress]() {
+    if (!addPointsAfterDetection)
+      return;
+    if (auto progress = workflowProgress->lock())
+      clearScreenAutodetectionProgress(progress);
   };
 
   runOneShotOperation(

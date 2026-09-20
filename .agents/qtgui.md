@@ -772,3 +772,15 @@ Finetune Diagnostic Images section and the shared chart dock lifecycle are
 unchanged. Geometry's real-panel smoke checks recreation, independent inspectors,
 point-count/coverage messages, absent or changing geometry, attached chart rows,
 and zero document-setter/fit requests under an isolated settings identity.
+
+
+During the combined **Screen -> Detect screen** workflow, the persistent
+next-step label is operation-owned rather than inferred from provisional
+registration state. Coordinate autodetection pins a stable wait/Cancel hint;
+after the request hands off to incremental full-image point discovery, the hint
+becomes wait/Stop. Point and geometry batches may continue updating their
+diagnostics underneath, but must not make Workflow alternate between add,
+inspect, and fit recommendations before detection finishes. The marker stores a
+weak progress identity; an older coordinate-stage completion therefore cannot
+clear the newer point-discovery stage after handoff. Completion/cancellation
+restores the ordinary state-derived recommendation.

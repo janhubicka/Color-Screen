@@ -239,6 +239,14 @@ points, fit/autosolve — visually linear while retaining a usable fallback.
 
 ### Automatic registration obscured the result and could stall before lens fitting
 
+The persistent Workflow hint now treats the combined **Detect screen** run as
+one operation while it is active. Coordinate detection publishes a stable
+wait/Cancel hint, and its handoff to incremental full-image point discovery
+switches that to wait/Stop. Intermediate point batches and automatic geometry
+updates may refresh diagnostics but cannot cycle the next-step recommendation.
+The session marker follows the weak progress identity so an old coordinate-stage
+completion cannot clear a newer point-discovery stage.
+
 The combined **Detect screen** path used to arm **Add Point** after finding the
 initial lattice. Add Point deliberately turns the green registration overlay on,
 so a successful automatic run could finish on a reconstructed colour image that
