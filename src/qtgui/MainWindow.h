@@ -36,6 +36,7 @@ class QDoubleSpinBox;
 class QVBoxLayout; // Added for Linearization tab
 class QLabel;
 class QProgressBar;
+class QDialog;
 class QMessageBox;
 class QPushButton;
 class QWidget;
@@ -448,6 +449,18 @@ private:
       std::shared_ptr<colorscreen::image_data> scan,
       const ParameterState &baseline);
 
+  /** Offer screen-specific dye and resolution recommendations. GEOMETRY is
+      already known (or newly detected). APPLY is called only while BASELINE
+      and SCAN remain current. ALWAYS_SHOW preserves the RGB screen-detection
+      confirmation even when no optional recommendation differs. */
+  void presentScreenDetectionSuggestions(
+      std::shared_ptr<colorscreen::image_data> scan,
+      const ParameterState &baseline,
+      const colorscreen::scr_to_img_parameters &geometry,
+      bool alwaysShow,
+      std::function<void(bool usePreferredColorModel, bool useScreenDpi,
+                         double screenDpi)> apply);
+
   /** Dismiss obsolete one-shot confirmations without publishing their results. */
   void dismissOneShotPrompts();
 
@@ -625,7 +638,7 @@ private:
   colorscreen::scr_to_img_parameters m_scrToImgParams;
   colorscreen::solver_parameters m_solverParams;
   std::shared_ptr<const colorscreen::screen_map> m_detectedScreenMap;
-  QPointer<QMessageBox> m_detectScreenPrompt;
+  QPointer<QDialog> m_detectScreenPrompt;
   // Session-only guidance for the combined Detect screen workflow. The weak
   // progress identity never owns the task and cannot outlive its worker.
   std::weak_ptr<colorscreen::progress_info> m_screenAutodetectionProgress;
