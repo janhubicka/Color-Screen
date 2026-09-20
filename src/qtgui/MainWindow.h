@@ -408,9 +408,10 @@ private:
   bool isDocumentModified() const;
 
   /** Reload the current image using the selected demosaic mode without
-      prompting for parameter data.  Existing unsaved parameter state remains
-      marked dirty across the asynchronous reload. */
-  void reloadCurrentImageWithDemosaic();
+      prompting for parameter data. Existing unsaved parameter state remains
+      marked dirty across the asynchronous reload. If AUTODETECTSCREEN is true,
+      launch Screen detection only after the replacement image has loaded. */
+  void reloadCurrentImageWithDemosaic(bool autodetectScreen = false);
 
   /** Offer conservative post-load setup guidance when ANALYSIS says the
       normally demosaiced RAW is likely an achromatic Bayer capture. */
@@ -735,6 +736,9 @@ private:
   bool m_currentParamsFileIsWeak = false; // true if filename is suggested, not loaded
   bool m_imageLoadPending = false;
   uint64_t m_imageLoadGeneration = 0;
+  // Exact reload generation that should continue into screen autodetection.
+  // A newer image load clears the handoff rather than detecting on another file.
+  std::optional<uint64_t> m_screenAutodetectAfterLoadGeneration;
   bool m_recoveryDirty = false;
   bool m_closing = false;
   bool m_applicationClosePrepared = false;
