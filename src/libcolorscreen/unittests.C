@@ -2344,7 +2344,31 @@ test_screen_sharpening ()
       return false;
     }
 
+  preview_sharpen.mode = sharpen_parameters::unsharp_mask;
+  preview_sharpen.usm_radius = 2;
+  preview_sharpen.usm_amount = 1.5;
+  if (!render_preview (preview_sharpen, sharpened_screen,
+                       &sharpened_preview)
+      || digitized_preview == sharpened_preview)
+    {
+      fprintf (stderr,
+               "Unsharp Mask did not affect Sharpness Preview\n");
+      return false;
+    }
+  preview_sharpen.usm_amount = 0;
+  if (preview_sharpen.get_mode () != sharpen_parameters::none
+      || !render_preview (preview_sharpen, sharpened_screen,
+                          &sharpened_preview)
+      || digitized_preview != sharpened_preview)
+    {
+      fprintf (stderr,
+               "Disabled Unsharp Mask changed Digitized screen preview\n");
+      return false;
+    }
+
   preview_sharpen.mode = sharpen_parameters::blur_deconvolution;
+  preview_sharpen.usm_radius = 0;
+  preview_sharpen.usm_amount = 0;
   if (!render_preview (preview_sharpen, sharpened_screen,
                        &sharpened_preview)
       || digitized_preview == sharpened_preview)
