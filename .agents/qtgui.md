@@ -321,7 +321,12 @@ Tasks that run in the background and report a final result (or series of interme
 - **When to Use**: Computations that should work with the freshest data; if the data changes significantly, the old task should be cancelled and a new one started.
 - **Implementation**: Can use `QThread + moveToThread` (if custom signal/slot communication is needed) or `QtConcurrent::run` (for simple functional tasks).
 - **Examples**: FinetuneWorker, DetectScreenWorker, FlatFieldWorker, FocusAnalysisWorker, AdaptiveSharpeningWorker, area-based computations (white balance, auto levels).
-- **Behavior**: Tracked via `progress_info` for manual or automatic cancellation. `MainWindow::OneShotOperation` is the shared final-result lifecycle for simple document operations: it records prerequisites, a progress description, start/cleanup UI callbacks, a final result-validation gate, and the apply callback. These operations are replaceable: starting a new one cancels the previous request immediately, and TaskQueue newest-request ownership is an additional publication gate. The first migrated users are area-based parameter computations and flat-field analysis. Area computations validate the captured image pointer and complete `ParameterState` snapshot before publishing, so a stale whole-state result cannot overwrite an intervening edit. Flat-field analysis, point-based focus analysis, single-area registration finetune, and final-result screen-type detection are plain synchronous helpers executed by this lifecycle; none owns a QObject thread or generation counter. Their publication gates require the captured image and relevant document snapshot to remain current. Coordinate autodetection and refinement use the same lifecycle too; the optional post-detection point-finding continuation is request-local. A non-empty `OneShotOperation::progressTitle` retains a dedicated Cancel row, replacing rather than duplicating TaskQueue's ordinary progress entry before dispatch. Coordinate refinement must construct the new state before calling `changeParameters()`; mutating the live coordinates first makes that setter see a no-op and loses Undo. Screen detection additionally keeps its asynchronous confirmation prompt under the same ownership rule: a document edit or newer final-result action dismisses an obsolete prompt before it can publish. Automatic focus-area discovery/fitting, external-reference MTF measurement, and measured-MTF model fitting also use this lifecycle. The model-fit setup dialog remains panel-local, but computation/provenance/publication are document-owned so primary and reference inspectors cannot create competing fit queues. Custom `QThread` workers that emit intermediate results, such as `FinetuneMisregisteredWorker`, keep their explicit wiring until their interfaces can use the same policy cleanly.
+- **Behavior**: Tracked via `progress_info` for manual or automatic cancellation. `MainWindow::OneShotOperation` is the shared final-result lifecycle for simple document operations: it records prerequisites, a progress description, start/cleanup UI callbacks, a final result-validation gate, and the apply callback. These operations are replaceable: starting a new one cancels the previous request immediately, and TaskQueue newest-request ownership is an additional publication gate. The first migrated users are area-based parameter computations and flat-field analysis. Area computations validate the captured image pointer and complete `ParameterState` snapshot before publishing, so a stale whole-state result cannot overwrite an intervening edit. Flat-field analysis, point-based focus analysis, single-area registration finetune, and final-result screen-type detection are plain synchronous helpers executed by this lifecycle; none owns a QObject thread or generation counter. Their publication gates require the captured image and relevant document snapshot to remain current. Coordinate autodetection and refinement use the same lifecycle too; the optional post-detection point-finding continuation is request-local. A non-empty `OneShotOperation::progressTitle` retains a dedicated Cancel row, replacing rather than duplicating TaskQueue's ordinary progress entry before dispatch. Coordinate refinement must construct the new state before calling `changeParameters()`; mutating the live coordinates first makes that setter see a no-op and loses Undo. Screen detection additionally keeps its asynchronous confirmation prompt under the same ownership rule: a document edit or newer final-result action dismisses an obsolete prompt before it can publish. Automatic focus-area discovery/fitting, external-reference MTF measurement, and measured-MTF model fitting also use this lifecycle. The model-fit setup dialog remains panel-local, but computation/provenance/publication are document-owned so primary and reference inspectors cannot create competing fit queues. Custom `QThread` workers that emit intermediate results keep explicit wiring when
+those intermediate values are part of the feature. `FinetuneMisregisteredWorker`
+publishes point/geometry batches; `AdaptiveSharpeningWorker` publishes live
+analysis-map cells. Their live and final publication must still be tied to the
+same immutable request snapshot and identity, and the document must cancel them
+when those inputs become stale.
 
 ### Initial screen setup
 
@@ -440,10 +445,25 @@ When a worker provides incremental updates (e.g., finding registration points in
 - **Partial Updates**: Workers should emit signals like `pointsReady` or `intermediateResult` while continuing their work.
 - **Final Sync**: Always emit a final update when the worker finishes to ensure no pending data is lost.
 - **Undo Integration**: Each emitted signal that modifies the `ParameterState` should be pushed to the `QUndoStack` in `MainWindow`.
+- **Progressive publication ownership**: A custom worker that intentionally emits
+  live GUI data must not connect those signals straight to a presentation widget
+  unless the data are independent of document state. Capture an immutable input
+  snapshot plus request identity, and gate *every* live signal and the final
+  result through the same ownership test. Adaptive Sharpening uses generation +
+  exact `progress_info` identity + scan + full `ParameterState`; a document
+  edit cancels the request and restores the chart to accepted document data.
+  `FinetuneMisregisteredWorker` has the analogous explicit incremental
+  lifecycle for point/geometry batches.
 
 ### 4. Cancellation
 
-Workers must periodically check `m_progress->cancelled()` and exit gracefully. Treat `progress_info::pool_cancel()` as an immediate *publication* veto: once cancellation is requested, a racing successful completion must not be applied to document state.
+Workers must periodically call `m_progress->cancel_requested()` and exit
+gracefully when it returns true. `progress_info::cancelled()` reports that a
+worker has already acknowledged cancellation; it is not the right polling API
+for observing a fresh request. Treat `progress_info::pool_cancel()` as an
+immediate *publication* veto on the GUI/owner side: once cancellation is
+requested, a racing successful or incremental completion must not be applied to
+document or presentation state.
 
 One-shot `QThread` workers owned by a document must also be registered with the document lifetime. The worker's `finished` signal must stop its `QThread` independently of any `MainWindow` result callback (use a direct connection to the thread-safe `QThread::quit()`), and the document must cancel and join all still-running one-shot threads before its parameter/UI members are destroyed. Never make thread shutdown depend on a receiver that may itself be closing.
 
