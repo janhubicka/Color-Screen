@@ -1,0 +1,118 @@
+name: Agent Color section verification
+on:
+  push:
+    branches: [agent/transport-gui-color-sections-20260920]
+permissions:
+  contents: write
+  actions: read
+  packages: read
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    container:
+      image: ghcr.io/janhubicka/color-screen-ci:ubuntu-24.04
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    env:
+      LC_ALL: C.UTF-8
+      LANG: C.UTF-8
+      PATH: /usr/lib/qt6/libexec:/usr/lib/x86_64-linux-gnu/qt6/libexec:/usr/lib/qt6/bin:/usr/lib/x86_64-linux-gnu/qt6/bin:/usr/lib64/qt6/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    defaults:
+      run:
+        shell: bash
+        working-directory: source
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: transport
+      - uses: actions/checkout@v4
+        with:
+          ref: afc0873b2eb4371731998f0f28559cea760df118
+          path: source
+      - uses: actions/download-artifact@v4
+        with:
+          name: colorscreen-deb-amd64
+          run-id: 35513870966
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: source/runtime-deb
+      - name: Verify exact core baseline and apply reviewed patch
+        run: |
+          git fetch --depth=1 origin c3af172163122867edfe32c88dd7350d69b8497e
+          git diff --exit-code c3af172163122867edfe32c88dd7350d69b8497e HEAD -- src/libcolorscreen configure.ac
+          mkdir -p runtime
+          dpkg-deb -x runtime-deb/*.deb runtime
+          ldd runtime/usr/local/lib/libcolorscreen.so
+          python3 ../transport/_agent_color_prepare.py
+          git diff > color-sections.diff
+          echo 'dd85952605308d6cfd33dffbcc479bb0d14c0b306fb4349ded096f12194d377c  color-sections.diff' | sha256sum -c -
+          git diff --stat
+      - name: Configure checking build
+        run: |
+          mkdir -p build-qt
+          cd build-qt
+          CXXFLAGS="-O0 -g1" CFLAGS="-O0 -g1" ../configure \
+            --enable-qtgui --enable-checking --disable-static-link
+      - name: Native real-panel smoke and negative controls
+        run: |
+          set -o pipefail
+          python3 ../transport/_agent_color_verify.py 2>&1 | tee color-section-verification.log
+      - name: Compile changed production GUI translation units
+        run: |
+          make -C build-qt/src/qtgui -j2 colorscreen_qt-ColorPanel.o \
+            colorscreen_qt-ContactCopyPanel.o colorscreen_qt-main.o
+      - name: Publish clean review branch
+        run: |
+          python3 - <<'PY'
+          import subprocess
+          allowed = {'src/qtgui/ColorPanel.cpp', 'src/qtgui/ContactCopyPanel.cpp',
+                     'src/qtgui/main.cpp', '.agents/qtgui.md',
+                     'doc/qtgui-workflow-roadmap.md', 'doc/qtgui-internal-cleanup.md'}
+          changed = set(subprocess.check_output(['git', 'diff', '--name-only'], text=True).splitlines())
+          if changed != allowed:
+              raise SystemExit(f'Unexpected diff: {changed ^ allowed}')
+          subprocess.run(['git', 'add', '--', *sorted(allowed)], check=True)
+          PY
+          git diff --cached --check
+          git checkout -b agent/qtgui-color-section-preferences
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -F - <<'EOF'
+          qtgui: remember Color and Contact Copy section folding
+
+          Give all five Color and four Contact Copy sections stable preference
+          keys. Keep user folding separate from process/simulation applicability,
+          parameter edits and other live inspectors. Move the Tone Curve wrapper
+          into Final adjustments so collapsing that section includes its editor
+          while retaining the shared detachable-dock lifecycle.
+
+          Exercise the real panels in beta smoke: all section identities,
+          alternating persisted folds, recreation, independent live panels,
+          programmatic changes, hidden sections, nested spectral applicability,
+          and the attached Tone Curve. Isolate and restore QSettings identity so
+          testing cannot overwrite operator preferences. Update GUI documentation
+          and both roadmap/cleanup trackers without changing tab organization.
+
+          Focused Ubuntu validation: 20 ordinary and 20 ASan/UBSan real-panel
+          iterations passed, and missing-key/escaped-curve negative controls were
+          rejected. GUI code was rebuilt against the unchanged CI-built core;
+          that reused core is not sanitizer-instrumented. All three changed
+          production translation units compile with checking enabled. Metadata
+          and whitespace checks pass. Full application/cross-platform validation
+          remains with the normal PR workflows.
+          EOF
+          git push origin HEAD:refs/heads/agent/qtgui-color-section-preferences
+          git log -1 --format=fuller
+          git show --stat --oneline HEAD
+      - name: Upload focused validation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: color-section-verification
+          path: |
+            source/color-section-verification.log
+            source/color-sections.diff
+            source/build-qt/config.log
+            source/build-qt/color-section-verification/probe.cpp
+          if-no-files-found: warn
