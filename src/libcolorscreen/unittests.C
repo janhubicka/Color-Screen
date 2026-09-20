@@ -2241,6 +2241,99 @@ test_screen_blur ()
 bool
 test_screen_sharpening ()
 {
+  /* Sharpness Preview must separate one forward capture transfer from the
+     optional digital filter.  In particular, effective mode None—including
+     Richardson-Lucy with zero iterations—must leave Sharpened identical to
+     Digitized.  Blur deconvolution is the intentional exception: it applies
+     the capture transfer a second time.  */
+  auto render_preview =
+      [] (const sharpen_parameters &sharpen, render_screen_tile_type type,
+          std::vector<uint8_t> *pixels)
+      {
+        constexpr int width = 96;
+        constexpr int height = 96;
+        pixels->assign (width * height * 3, 0);
+        tile_parameters tile;
+        tile.pixels = pixels->data ();
+        tile.rowstride = width * 3;
+        tile.pixelbytes = 3;
+        tile.width = width;
+        tile.height = height;
+        tile.pos = { 0, 0 };
+        tile.step = 1;
+
+        render_parameters rparam;
+        rparam.sharpen = sharpen;
+        return render_screen_tile (tile, Paget, rparam, (coord_t)0.01, type,
+                                   nullptr);
+      };
+
+  sharpen_parameters preview_sharpen;
+  preview_sharpen.scanner_mtf.f_stop = 8;
+  preview_sharpen.scanner_mtf.wavelength = 550;
+  preview_sharpen.scanner_mtf.pixel_pitch = 3.7;
+  preview_sharpen.scanner_mtf.scan_dpi = 4000;
+  preview_sharpen.scanner_mtf.defocus = 8;
+  preview_sharpen.scanner_mtf_scale = 1;
+
+  std::vector<uint8_t> original_preview;
+  std::vector<uint8_t> digitized_preview;
+  std::vector<uint8_t> sharpened_preview;
+  if (!render_preview (preview_sharpen, original_screen, &original_preview)
+      || !render_preview (preview_sharpen, blurred_screen,
+                          &digitized_preview)
+      || !render_preview (preview_sharpen, sharpened_screen,
+                          &sharpened_preview))
+    {
+      fprintf (stderr, "Sharpness preview rendering failed\n");
+      return false;
+    }
+  if (original_preview == digitized_preview)
+    {
+      fprintf (stderr,
+               "Sharpness Digitized preview did not apply capture transfer\n");
+      return false;
+    }
+  if (digitized_preview != sharpened_preview)
+    {
+      fprintf (stderr,
+               "Sharpening=None changed Digitized screen preview\n");
+      return false;
+    }
+
+  preview_sharpen.mode = sharpen_parameters::richardson_lucy_deconvolution;
+  preview_sharpen.richardson_lucy_iterations = 0;
+  if (preview_sharpen.get_mode () != sharpen_parameters::none
+      || !render_preview (preview_sharpen, sharpened_screen,
+                          &sharpened_preview)
+      || digitized_preview != sharpened_preview)
+    {
+      fprintf (stderr,
+               "Richardson-Lucy with zero iterations changed screen preview\n");
+      return false;
+    }
+
+  preview_sharpen.mode = sharpen_parameters::blur_deconvolution;
+  if (!render_preview (preview_sharpen, sharpened_screen,
+                       &sharpened_preview)
+      || digitized_preview == sharpened_preview)
+    {
+      fprintf (stderr,
+               "Blur deconvolution did not apply the intentional second blur\n");
+      return false;
+    }
+
+  preview_sharpen.mode = sharpen_parameters::richardson_lucy_deconvolution;
+  preview_sharpen.richardson_lucy_iterations = 2;
+  if (!render_preview (preview_sharpen, sharpened_screen,
+                       &sharpened_preview)
+      || digitized_preview == sharpened_preview)
+    {
+      fprintf (stderr,
+               "Positive Richardson-Lucy iterations did not affect preview\n");
+      return false;
+    }
+
   std::unique_ptr <screen> scr (new screen);
   std::unique_ptr <screen> mstr (new screen);
   mstr->initialize (Paget);
