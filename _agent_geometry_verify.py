@@ -53,8 +53,8 @@ int main(int argc, char **argv) {
 probe = work / 'probe.cpp'
 probe.write_text(headers + text[start:end] + main)
 units = ['ParameterPanel', 'ParameterState', 'GeometryPanel',
-         'DeformationChartWidget', 'FinetuneImagesPanel', 'ScalableImageLabel',
-         'Logging']
+         'DeformationChartWidget', 'CoordinateTransformer', 'FinetuneImagesPanel',
+         'ScalableImageLabel', 'Logging']
 sources = [gui / (unit + '.cpp') for unit in units]
 for unit in units + ['SmartSpinBox']:
     header = gui / (unit + '.h')
