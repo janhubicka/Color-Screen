@@ -334,6 +334,17 @@ Tasks that run in the background and report a final result (or series of interme
 
 Inherit from `WorkerBase` or `QObject` to implement a specific task. Use `QThread` to move the worker off the main thread.
 
+A QObject moved to a dedicated `QThread` must also be destroyed on that
+thread. Connect `QThread::finished` to the worker's `QObject::deleteLater`
+**before** starting the thread, then request `quit()` and `wait()` from the
+owner during teardown. After the join, clear any non-owning GUI-thread pointer
+but never `delete` the worker from the GUI thread. This is especially
+important for `WorkerBase`: `setScan()` queues assignment of `m_scan` to
+the worker thread, so cross-thread destruction can race that assignment even
+when the GUI thread subsequently waits for QThread to finish. The solver,
+color optimizer, histogram worker, and renderer ownership patterns follow this
+rule.
+
 ```cpp
 class MyWorker : public QObject {
     Q_OBJECT

@@ -369,6 +369,8 @@ MainWindow::MainWindow(const QString &recoveryDirectory, QWidget *parent)
   m_solverThread = new QThread(this);
   m_solverWorker = new GeometrySolverWorker(m_scan);
   m_solverWorker->moveToThread(m_solverThread);
+  connect(m_solverThread, &QThread::finished, m_solverWorker,
+          &QObject::deleteLater);
   m_solverThread->start();
 
   connect(m_solverWorker, &GeometrySolverWorker::finished, this,
@@ -402,6 +404,8 @@ MainWindow::MainWindow(const QString &recoveryDirectory, QWidget *parent)
   m_colorOptimizerThread = new QThread(this);
   m_colorOptimizerWorker = new ColorOptimizerWorker(m_scan);
   m_colorOptimizerWorker->moveToThread(m_colorOptimizerThread);
+  connect(m_colorOptimizerThread, &QThread::finished, m_colorOptimizerWorker,
+          &QObject::deleteLater);
   m_colorOptimizerThread->start();
 
   connect(m_colorOptimizerWorker, &ColorOptimizerWorker::finished, this,
@@ -461,17 +465,19 @@ MainWindow::~MainWindow() {
 
   m_backgroundThreads.shutdown(this);
 
+  // Workers have QObject affinity to their dedicated threads. Their
+  // QThread::finished connections perform deferred destruction there, after
+  // queued setScan()/work calls have either run or been discarded. Deleting
+  // them here on the GUI thread would race worker-thread member access.
   if (m_solverThread) {
     m_solverThread->quit();
     m_solverThread->wait();
-    delete m_solverWorker;
     m_solverWorker = nullptr;
   }
-  
+
   if (m_colorOptimizerThread) {
     m_colorOptimizerThread->quit();
     m_colorOptimizerThread->wait();
-    delete m_colorOptimizerWorker;
     m_colorOptimizerWorker = nullptr;
   }
 

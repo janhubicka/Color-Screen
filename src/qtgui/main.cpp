@@ -145,26 +145,39 @@ void sendKeySmokeEvent(QWidget &target, QEvent::Type type, int key) {
 bool backgroundThreadRegistryShutdownSmoke() {
   BackgroundThreadRegistry registry;
   QThread workerThread;
-  QObject worker;
   QThread *guiThread = QThread::currentThread();
   QObject *guiContext = QCoreApplication::instance();
   std::atomic<bool> enteredBlockingCall{false};
   std::atomic<bool> callbackServiced{false};
+  std::atomic<bool> workerResumedAfterCallback{false};
 
-  worker.moveToThread(&workerThread);
+  // Install all functors before start(): constructing an invokeMethod lambda
+  // on the worker publishes its captures through Qt's event queue, whose
+  // synchronization is not visible to TSan in the uninstrumented system Qt.
+  // QThread::started is emitted on the worker, in connection order. The direct
+  // slots touch only atomics; the middle slot still blocks on a GUI MetaCall,
+  // so shutdown must service that call rather than merely wait for the thread.
   QObject::connect(
-      &workerThread, &QThread::started, &worker,
-      [&worker, guiThread, guiContext, &enteredBlockingCall,
-       &callbackServiced]() {
+      &workerThread, &QThread::started, &workerThread,
+      [&enteredBlockingCall]() {
         enteredBlockingCall.store(true, std::memory_order_release);
-        QMetaObject::invokeMethod(
-            guiContext,
-            [&callbackServiced]() {
-              callbackServiced.store(true, std::memory_order_release);
-            },
-            Qt::BlockingQueuedConnection);
-        worker.moveToThread(guiThread);
-      });
+      },
+      Qt::DirectConnection);
+  QObject::connect(
+      &workerThread, &QThread::started, guiContext,
+      [&callbackServiced, guiThread]() {
+        callbackServiced.store(QThread::currentThread() == guiThread,
+                               std::memory_order_release);
+      },
+      Qt::BlockingQueuedConnection);
+  QObject::connect(
+      &workerThread, &QThread::started, &workerThread,
+      [&callbackServiced, &workerResumedAfterCallback]() {
+        workerResumedAfterCallback.store(
+            callbackServiced.load(std::memory_order_acquire),
+            std::memory_order_release);
+      },
+      Qt::DirectConnection);
 
   registry.track(&workerThread);
   workerThread.start();
@@ -186,6 +199,11 @@ bool backgroundThreadRegistryShutdownSmoke() {
   }
   if (!callbackServiced.load(std::memory_order_acquire)) {
     qCritical() << "Background-thread registry did not service blocking MetaCall";
+    return false;
+  }
+  if (!workerResumedAfterCallback.load(std::memory_order_acquire)) {
+    qCritical()
+        << "Background-thread registry worker did not resume after GUI callback";
     return false;
   }
   if (!registry.empty()) {
