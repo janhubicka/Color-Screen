@@ -18,7 +18,6 @@
 #include "FinetuneMisregisteredWorker.h"
 #include "FocusAnalysisWorker.h"
 #include "GeometryPanel.h"
-#include "GeometrySolverWorker.h"
 #include "ImageWidget.h"
 #include "InitialSetupGuideDialog.h"
 #include "NavigationView.h"
@@ -84,7 +83,6 @@
 #include <string>
 #include <utility>
 
-Q_DECLARE_METATYPE(MainWindow::SolverRequestData)
 Q_DECLARE_METATYPE(MainWindow::ColorOptimizerRequestData)
 Q_DECLARE_METATYPE(colorscreen::render_parameters)
 Q_DECLARE_METATYPE(colorscreen::render_type_parameters)
@@ -307,7 +305,6 @@ void MainWindow::setWorkspaceStatusBar(QStatusBar *sharedStatusBar) {
    the preferred window layout from QSettings.  */
 MainWindow::MainWindow(const QString &recoveryDirectory, QWidget *parent)
     : QMainWindow(parent), m_recoveryDir(recoveryDirectory) {
-  qRegisterMetaType<MainWindow::SolverRequestData>();
   qRegisterMetaType<MainWindow::ColorOptimizerRequestData>();
   qRegisterMetaType<colorscreen::render_parameters>();
   qRegisterMetaType<colorscreen::render_type_parameters>(
@@ -365,23 +362,22 @@ MainWindow::MainWindow(const QString &recoveryDirectory, QWidget *parent)
   // Initialize UI state
   updateUIFromState(getCurrentState());
 
-  // Initialize Solver Worker
-  m_solverThread = new QThread(this);
-  m_solverWorker = new GeometrySolverWorker(m_scan);
-  m_solverWorker->moveToThread(m_solverThread);
-  m_solverThread->start();
-
-  connect(m_solverWorker, &GeometrySolverWorker::finished, this,
-          &MainWindow::onSolverFinished);
-
-  // Solver Queue connections
-  connect(&m_solverQueue, &TaskQueue::triggerRender, this,
-          &MainWindow::onTriggerSolve);
-  connect(&m_solverQueue, &TaskQueue::progressStarted, this,
-          &MainWindow::addProgress);
-  connect(&m_solverQueue, &TaskQueue::progressFinished, this,
-          &MainWindow::removeProgress);
-
+  GeometrySolverController::Callbacks geometryCallbacks;
+  geometryCallbacks.progressStarted =
+      [this](std::shared_ptr<colorscreen::progress_info> progress) {
+        addProgress(std::move(progress));
+      };
+  geometryCallbacks.progressFinished =
+      [this](std::shared_ptr<colorscreen::progress_info> progress) {
+        removeProgress(std::move(progress));
+      };
+  geometryCallbacks.finished =
+      [this](int reqId, colorscreen::scr_to_img_parameters result,
+             bool success, bool cancelled, bool publishable) {
+        onSolverFinished(reqId, std::move(result), success, cancelled,
+                         publishable);
+      };
+  m_geometrySolver.initialize(this, m_scan, std::move(geometryCallbacks));
   m_oneShotOperations.configure(
       this,
       {[this]() { return m_closing; },
@@ -446,7 +442,7 @@ MainWindow::~MainWindow() {
   // workers before any document parameters or panels can disappear.
   m_closing = true;
   dismissOneShotPrompts();
-  m_solverQueue.cancelAll();
+  m_geometrySolver.shutdown();
   m_colorOptimizerQueue.cancelAll();
   m_oneShotOperations.cancelAll();
   m_fileRenderController.shutdown();
@@ -454,20 +450,11 @@ MainWindow::~MainWindow() {
   // Result delivery from persistent workers is no longer useful once teardown
   // starts. Disconnect before joining one-shot workers because shutdown may
   // service blocking queued calls from those workers.
-  if (m_solverWorker)
-    disconnect(m_solverWorker, nullptr, this, nullptr);
   if (m_colorOptimizerWorker)
     disconnect(m_colorOptimizerWorker, nullptr, this, nullptr);
 
   m_backgroundThreads.shutdown(this);
 
-  if (m_solverThread) {
-    m_solverThread->quit();
-    m_solverThread->wait();
-    delete m_solverWorker;
-    m_solverWorker = nullptr;
-  }
-  
   if (m_colorOptimizerThread) {
     m_colorOptimizerThread->quit();
     m_colorOptimizerThread->wait();
@@ -2415,8 +2402,7 @@ void MainWindow::onImageLoaded() {
   // Update UI components that depend on loaded image
   updateModeMenu();
   if (m_scan) {
-    if (m_solverWorker)
-      m_solverWorker->setScan(m_scan);
+    m_geometrySolver.setScan(m_scan);
     if (m_colorOptimizerWorker)
       m_colorOptimizerWorker->setScan(m_scan);
     m_navigationView->setImage(m_scan, &m_rparams, &m_scrToImgParams,
@@ -3538,7 +3524,8 @@ void MainWindow::updateWorkflowSummary() {
     // callbacks that refresh this summary again.
     m_geometryFit.pendingInputs.reset();
     m_geometryFit.pendingNonlinearEnabled.reset();
-    m_solverQueue.cancelAll();
+    m_geometryFit.pendingRequestId.reset();
+    m_geometrySolver.cancelAll();
   }
 
   if (m_profileCalibration.pendingInputs) {
@@ -4274,10 +4261,9 @@ void MainWindow::onRegistrationPointsToggled(bool checked) {
     image->setShowRegistrationPoints(checked);
 }
 
-/** Request a geometry optimisation via the solver queue.
-   Captures the current scr_to_img and solver parameters along with
-   the nonlinear mesh flag, and submits them to m_solverQueue which
-   will cancel any in-flight solve and start a new one.  */
+/** Request geometry optimisation through the persistent solver controller.
+   The controller owns worker/thread/queue transport; document provenance and
+   publication policy remain in MainWindow. */
 void MainWindow::onOptimizeGeometry(bool /*autoChecked*/) {
   if (!m_geometryPanel)
     return;
@@ -4286,7 +4272,7 @@ void MainWindow::onOptimizeGeometry(bool /*autoChecked*/) {
 
 /** Submit one geometry fit with independent mesh recomputation and UI-mode gates. */
 void MainWindow::requestGeometryOptimization(bool computeMesh) {
-  if (!m_scan || !m_solverWorker || !m_geometryPanel)
+  if (!m_scan || !m_geometryPanel || !m_geometrySolver.available())
     return;
 
   SolverRequestData data;
@@ -4294,62 +4280,35 @@ void MainWindow::requestGeometryOptimization(bool computeMesh) {
   data.solver = m_solverParams;
   data.computeMesh = computeMesh;
 
-  // The document snapshot and current nonlinear presentation mode form the
-  // domain-level stale gate beyond TaskQueue's newest-request check. The
-  // worker's COMPUTEMESH choice is deliberately independent: automatic screen
-  // detection can refine the remaining geometry while preserving its mesh.
-  m_geometryFit.pendingInputs = getCurrentState();
-  m_geometryFit.pendingNonlinearEnabled = m_geometryPanel->isNonlinearEnabled();
+  const ParameterState pendingInputs = getCurrentState();
+  const bool pendingNonlinearEnabled = m_geometryPanel->isNonlinearEnabled();
+  const int requestId = m_geometrySolver.request(std::move(data));
+  if (requestId <= 0)
+    return;
+
+  // Request identity owns cleanup; TaskQueue publishability is separate.
+  m_geometryFit.pendingInputs = pendingInputs;
+  m_geometryFit.pendingNonlinearEnabled = pendingNonlinearEnabled;
+  m_geometryFit.pendingRequestId = requestId;
   m_geometryFit.failureInputs.reset();
   updateWorkflowSummary();
-
-  m_solverQueue.requestRender(QVariant::fromValue(data));
 }
 
-/** TaskQueue callback that dispatches the solver request to the
-   GeometrySolverWorker running in m_solverThread.
-   Called on the main thread when the queue is ready to execute.
-   Invokes the worker's solve() method via QMetaObject for thread-safe
-   cross-thread invocation.  */
-void MainWindow::onTriggerSolve(
-    int reqId, std::shared_ptr<colorscreen::progress_info> progress,
-    const QVariant &userData) {
-  if (!m_scan || !m_solverWorker || !userData.canConvert<SolverRequestData>()) {
-    m_solverQueue.reportFinished(reqId, false);
-    m_geometryFit.pendingInputs.reset();
-    m_geometryFit.pendingNonlinearEnabled.reset();
-    updateWorkflowSummary();
-    return;
-  }
 
-  SolverRequestData data = userData.value<SolverRequestData>();
-
-  if (progress) {
-    progress->set_task("Optimizing geometry", 1);
-  }
-  // colorscreen::sub_task task (progress.get ());
-
-  // Invoke solver in worker
-  QMetaObject::invokeMethod(
-      m_solverWorker, "solve", Qt::QueuedConnection, Q_ARG(int, reqId),
-      Q_ARG(colorscreen::scr_to_img_parameters, data.scrToImg),
-      Q_ARG(colorscreen::solver_parameters, data.solver),
-      Q_ARG(std::shared_ptr<colorscreen::progress_info>, progress),
-      Q_ARG(bool, data.computeMesh));
-}
 
 /** Handle geometry solver completion.
    On success, merges the solver's optimised parameters (center, tilt,
    lens, perspective, mesh) into the current state and pushes an undo
    command.  On failure, shows a warning unless the solver was cancelled.  */
-void MainWindow::onSolverFinished(int reqId,
-                                  colorscreen::scr_to_img_parameters result,
-                                  bool success, bool cancelled) {
-  // TaskQueue suppresses superseded requests. The pending input snapshot adds
-  // a domain-level gate: even the newest request is obsolete if its geometry
-  // inputs changed without starting another solve.
-  const bool current = m_solverQueue.reportFinished(reqId, success);
-  if (!current || m_closing)
+void MainWindow::onSolverFinished(
+    int reqId, colorscreen::scr_to_img_parameters result, bool success,
+    bool cancelled, bool publishable) {
+  if (m_closing)
+    return;
+
+  // Request identity owns cleanup; publishability controls result publication.
+  if (!m_geometryFit.pendingRequestId ||
+      *m_geometryFit.pendingRequestId != reqId)
     return;
 
   const ParameterState now = getCurrentState();
@@ -4360,10 +4319,12 @@ void MainWindow::onSolverFinished(int reqId,
   const bool inputsStillCurrent =
       m_geometryFit.pendingInputs && nonlinearModeStillCurrent &&
       !geometryFitInputsDiffer(*m_geometryFit.pendingInputs, now);
+
   m_geometryFit.pendingInputs.reset();
   m_geometryFit.pendingNonlinearEnabled.reset();
+  m_geometryFit.pendingRequestId.reset();
 
-  if (cancelled || !inputsStillCurrent) {
+  if (!publishable || cancelled || !inputsStillCurrent) {
     updateWorkflowSummary();
     return;
   }

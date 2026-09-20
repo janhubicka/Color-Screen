@@ -42,6 +42,7 @@ set(SOURCES
     WorkspaceWindow.cpp
     ImageViewWindow.cpp
     MainWindow.cpp
+    GeometrySolverController.cpp
     BackgroundThreadRegistry.cpp
     DocumentProgressController.cpp
     FileRenderController.cpp
@@ -81,6 +82,7 @@ set(HEADERS
     WorkspaceWindow.h
     ImageViewWindow.h
     MainWindow.h
+    GeometrySolverController.h
     BackgroundThreadRegistry.h
     DocumentProgressController.h
     FileRenderController.h

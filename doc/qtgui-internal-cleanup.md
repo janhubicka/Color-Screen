@@ -485,7 +485,10 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   incomplete outputs during document teardown. Ad-hoc QThread workers that
   publish incremental results are tracked and joined by
   `BackgroundThreadRegistry`, including the BlockingQueuedConnection-safe
-  MetaCall drain required by misregistered-point workers. MainWindow still owns
+  MetaCall drain required by misregistered-point workers. Persistent geometry
+  solver thread/worker/TaskQueue transport lives in
+  `GeometrySolverController`; MainWindow keeps geometry-fit provenance,
+  stale-input policy, undo publication and failure UI. MainWindow still owns
   workspace/focus policy plus save-path/render-settings dialogs and document
   snapshots. Continue moving cohesive infrastructure behind focused
   controllers/services when the interface is similarly stable.
