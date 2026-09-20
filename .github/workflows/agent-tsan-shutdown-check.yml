@@ -1,0 +1,210 @@
+name: Temporary shutdown smoke verification
+
+on:
+  push:
+    branches: [agent/transport-tsan-shutdown-20260920]
+
+permissions:
+  contents: write
+  packages: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    container:
+      image: ghcr.io/janhubicka/color-screen-ci:ubuntu-24.04
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: be01fabc09198e4850a27e8f89da861e382e8573
+      - name: Install focused test compiler
+        run: |
+          set -euo pipefail
+          apt-get update
+          apt-get install -y --no-install-recommends clang-18 libclang-rt-18-dev llvm-18
+      - name: Apply exact smoke replacement and extract focused harnesses
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('src/qtgui/main.cpp')
+          source = path.read_text()
+          old = '''  QThread workerThread;
+            QObject worker;
+            QThread *guiThread = QThread::currentThread();
+            QObject *guiContext = QCoreApplication::instance();
+            std::atomic<bool> enteredBlockingCall{false};
+            std::atomic<bool> callbackServiced{false};
+
+            worker.moveToThread(&workerThread);
+            QObject::connect(
+                &workerThread, &QThread::started, &worker,
+                [&worker, guiThread, guiContext, &enteredBlockingCall,
+                 &callbackServiced]() {
+                  enteredBlockingCall.store(true, std::memory_order_release);
+                  QMetaObject::invokeMethod(
+                      guiContext,
+                      [&callbackServiced]() {
+                        callbackServiced.store(true, std::memory_order_release);
+                      },
+                      Qt::BlockingQueuedConnection);
+                  worker.moveToThread(guiThread);
+                });
+          '''
+          new = '''  QThread workerThread;
+            QThread *guiThread = QThread::currentThread();
+            QObject *guiContext = QCoreApplication::instance();
+            std::atomic<bool> enteredBlockingCall{false};
+            std::atomic<bool> callbackServiced{false};
+            std::atomic<bool> workerResumedAfterCallback{false};
+
+            // Install all functors before start(): constructing an invokeMethod lambda
+            // on the worker publishes its captures through Qt's event queue, whose
+            // synchronization is not visible to TSan in the uninstrumented system Qt.
+            // QThread::started is emitted on the worker, in connection order. The direct
+            // slots touch only atomics; the middle slot still blocks on a GUI MetaCall,
+            // so shutdown must service that call rather than merely wait for the thread.
+            QObject::connect(
+                &workerThread, &QThread::started, &workerThread,
+                [&enteredBlockingCall]() {
+                  enteredBlockingCall.store(true, std::memory_order_release);
+                },
+                Qt::DirectConnection);
+            QObject::connect(
+                &workerThread, &QThread::started, guiContext,
+                [&callbackServiced, guiThread]() {
+                  callbackServiced.store(QThread::currentThread() == guiThread,
+                                         std::memory_order_release);
+                },
+                Qt::BlockingQueuedConnection);
+            QObject::connect(
+                &workerThread, &QThread::started, &workerThread,
+                [&callbackServiced, &workerResumedAfterCallback]() {
+                  workerResumedAfterCallback.store(
+                      callbackServiced.load(std::memory_order_acquire),
+                      std::memory_order_release);
+                },
+                Qt::DirectConnection);
+          '''
+          old_check = '''  if (!registry.empty()) {
+              qCritical() << "Background-thread registry retained joined workers";
+          '''
+          new_check = '''  if (!workerResumedAfterCallback.load(std::memory_order_acquire)) {
+              qCritical()
+                  << "Background-thread registry worker did not resume after GUI callback";
+              return false;
+            }
+            if (!registry.empty()) {
+              qCritical() << "Background-thread registry retained joined workers";
+          '''
+          assert source.count(old) == 1, 'The shutdown smoke setup changed upstream'
+          assert source.count(old_check) == 1, 'The shutdown smoke checks changed upstream'
+          fixed = source.replace(old, new).replace(old_check, new_check)
+          path.write_text(fixed)
+          out = Path('build-qt/shutdown-probe')
+          out.mkdir(parents=True, exist_ok=True)
+          (out / 'original-main.cpp').write_text(source)
+          includes = '''#include "BackgroundThreadRegistry.h"
+          #include <QCoreApplication>
+          #include <QDebug>
+          #include <QMetaObject>
+          #include <QThread>
+          #include <atomic>
+          '''
+          driver = '''
+          int main(int argc, char **argv) {
+            QCoreApplication application(argc, argv);
+            for (int iteration = 0; iteration < 100; ++iteration)
+              if (!backgroundThreadRegistryShutdownSmoke())
+                return 1;
+            qInfo() << "PASS: 100 shutdown smoke iterations";
+            return 0;
+          }
+          '''
+          for name, text in [('original', source), ('fixed', fixed)]:
+              begin = text.index('/** Exercise deadlock-safe joining')
+              end = text.index('/** Exercise beta-critical', begin)
+              (out / (name + '.cpp')).write_text(includes + text[begin:end] + driver)
+          registry = Path('src/qtgui/BackgroundThreadRegistry.cpp').read_text()
+          drain = 'QCoreApplication::sendPostedEvents(callbackTarget, QEvent::MetaCall);'
+          assert registry.count(drain) == 1
+          (out / 'no-drain.cpp').write_text(registry.replace(drain, '(void)callbackTarget;'))
+          PY
+          git diff --check
+          test "$(git diff --name-only)" = src/qtgui/main.cpp
+          git diff -- src/qtgui/main.cpp | tee build-qt/shutdown-probe/fix.patch
+          sh build-aux/check-generated-build-metadata.sh
+      - name: Compile focused probes
+        run: |
+          set -euo pipefail
+          cd build-qt/shutdown-probe
+          for version in original fixed; do
+            clang++-18 -std=c++17 -O1 -g -fno-omit-frame-pointer -fno-optimize-sibling-calls -fsanitize=thread \
+              -I../../src/qtgui $(pkg-config --cflags Qt6Core) \
+              "$version.cpp" ../../src/qtgui/BackgroundThreadRegistry.cpp \
+              $(pkg-config --libs Qt6Core) -o "$version-tsan"
+          done
+          clang++-18 -std=c++17 -O2 -g -Wall -Wextra \
+            -I../../src/qtgui $(pkg-config --cflags Qt6Core) \
+            fixed.cpp ../../src/qtgui/BackgroundThreadRegistry.cpp \
+            $(pkg-config --libs Qt6Core) -o fixed-plain
+          clang++-18 -std=c++17 -O2 -g -Wall -Wextra \
+            -I../../src/qtgui $(pkg-config --cflags Qt6Core) \
+            fixed.cpp no-drain.cpp $(pkg-config --libs Qt6Core) -o no-drain
+      - name: Reproduce original race and verify corrected probe
+        env:
+          TSAN_OPTIONS: halt_on_error=1:second_deadlock_stack=1:ignore_noninstrumented_modules=1:external_symbolizer_path=/usr/bin/llvm-symbolizer-18
+        run: |
+          set -euo pipefail
+          cd build-qt/shutdown-probe
+          set +e
+          timeout 30s ./original-tsan > original-tsan.log 2>&1
+          original_status=$?
+          set -e
+          cat original-tsan.log
+          test "$original_status" = 66
+          grep -q 'WARNING: ThreadSanitizer: data race' original-tsan.log
+          grep -q 'backgroundThreadRegistryShutdownSmoke' original-tsan.log
+          timeout 30s ./fixed-tsan 2>&1 | tee fixed-tsan.log
+          timeout 30s ./fixed-plain 2>&1 | tee fixed-plain.log
+          set +e
+          timeout 5s ./no-drain > no-drain.log 2>&1
+          no_drain_status=$?
+          set -e
+          test "$no_drain_status" = 124
+          printf 'PASS: removing the MetaCall drain reproduces the expected deadlock (timeout 124)\n' | tee -a no-drain.log
+      - name: Commit only the verified project fix to its review branch
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = be01fabc09198e4850a27e8f89da861e382e8573
+          test "$(git diff --name-only)" = src/qtgui/main.cpp
+          git diff --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git switch -c agent/qtgui-fix-tsan-shutdown-smoke
+          git add src/qtgui/main.cpp
+          git commit -m 'qtgui: preconnect shutdown smoke callbacks for ThreadSanitizer' \
+            -m 'The Linux TSan lane reports publication of the smoke callback capture from a worker-side invokeMethod through uninstrumented system Qt. Install all started-signal functors before starting the worker instead. Preserve the real BlockingQueuedConnection and target-specific MetaCall drain; do not suppress sanitizer reports or change production thread shutdown.' \
+            -m 'Check that the callback runs on the GUI thread and that the worker resumes after it. The focused QtCore harness reproduces the original TSan report, passes 100 corrected iterations with TSan and 100 without it, and deadlocks as expected when the registry MetaCall drain is removed. Generated build metadata and git diff --check also pass.'
+          git push origin HEAD:refs/heads/agent/qtgui-fix-tsan-shutdown-smoke
+          git rev-parse HEAD | tee build-qt/shutdown-probe/fix-commit.txt
+      - name: Upload reproducible sources and validation logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: shutdown-smoke-verification
+          path: |
+            build-qt/shutdown-probe/*.cpp
+            build-qt/shutdown-probe/*.log
+            build-qt/shutdown-probe/*.patch
+            build-qt/shutdown-probe/*.txt
+            src/qtgui/main.cpp
+            src/qtgui/BackgroundThreadRegistry.cpp
+            src/qtgui/BackgroundThreadRegistry.h
