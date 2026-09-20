@@ -6034,8 +6034,11 @@ void MainWindow::startCoordinateAutodetection(bool addPointsAfterDetection) {
   const auto scan = m_scan;
   const ParameterState baseline = getCurrentState();
   auto result = std::make_shared<CoordinateAutodetectionResult>();
+  // Keep the coordinate stage's progress alive through onDone so a cancelled
+  // or failed operation can always clear its own Workflow marker. MainWindow
+  // itself still stores only a weak reference.
   auto workflowProgress =
-      std::make_shared<std::weak_ptr<colorscreen::progress_info>>();
+      std::make_shared<std::shared_ptr<colorscreen::progress_info>>();
 
   OneShotOperation operation;
   operation.description = tr("Autodetecting coordinates");
@@ -6074,8 +6077,8 @@ void MainWindow::startCoordinateAutodetection(bool addPointsAfterDetection) {
   operation.onDone = [this, addPointsAfterDetection, workflowProgress]() {
     if (!addPointsAfterDetection)
       return;
-    if (auto progress = workflowProgress->lock())
-      clearScreenAutodetectionProgress(progress);
+    if (*workflowProgress)
+      clearScreenAutodetectionProgress(*workflowProgress);
   };
 
   runOneShotOperation(
