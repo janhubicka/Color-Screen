@@ -3580,9 +3580,10 @@ void MainWindow::updateWorkflowSummary() {
         m_scrToImgParams, m_rparams, m_profileSpots};
     if (profileCalibrationInputsDiffer(*m_profileCalibration.pendingInputs,
                                        currentProfileInputs)) {
-      // As with geometry, reset first because cancellation can synchronously
-      // drive progress/UI callbacks.
+      // Reset identity first because cancellation can synchronously drive
+      // progress/UI callbacks.
       m_profileCalibration.pendingInputs.reset();
+      m_profileCalibration.pendingRequestId.reset();
       m_colorOptimizerQueue.cancelAll();
     }
   }
@@ -6601,10 +6602,15 @@ void MainWindow::onColorOptimizeRequested(bool /*autoMode*/) {
   // newer request still supersedes an older TaskQueue job, while unrelated
   // edits invalidate even the newest request before it can publish.
   ColorOptimizerRequestData d{m_scrToImgParams, m_rparams, state.profileSpots};
+  const int requestId =
+      m_colorOptimizerQueue.requestRender(QVariant::fromValue(d));
+  if (requestId <= 0)
+    return;
+
   m_profileCalibration.pendingInputs = d;
+  m_profileCalibration.pendingRequestId = requestId;
   m_profileCalibration.failureInputs.reset();
   updateWorkflowSummary();
-  m_colorOptimizerQueue.requestRender(QVariant::fromValue(d));
 }
 
 /** TaskQueue callback that dispatches the color optimisation request to
@@ -6615,9 +6621,11 @@ void MainWindow::onTriggerColorOptimize(
     const QVariant &userData) {
   if (!m_scan || !m_colorOptimizerWorker ||
       !userData.canConvert<ColorOptimizerRequestData>()) {
-    const bool current = m_colorOptimizerQueue.reportFinished(reqId, false);
-    if (current) {
+    m_colorOptimizerQueue.reportFinished(reqId, false);
+    if (m_profileCalibration.pendingRequestId &&
+        *m_profileCalibration.pendingRequestId == reqId) {
       m_profileCalibration.pendingInputs.reset();
+      m_profileCalibration.pendingRequestId.reset();
       updateWorkflowSummary();
     }
     return;
@@ -6643,8 +6651,15 @@ void MainWindow::onColorOptimizerFinished(
     int reqId, colorscreen::render_parameters updatedRparams,
     std::vector<colorscreen::color_match> results, bool success,
     bool cancelled) {
-  const bool current = m_colorOptimizerQueue.reportFinished(reqId, success);
-  if (!current || m_closing)
+  const bool publishable =
+      m_colorOptimizerQueue.reportFinished(reqId, success);
+  if (m_closing)
+    return;
+
+  // Request identity owns provenance cleanup. TaskQueue's boolean controls
+  // whether this result may publish into document state.
+  if (!m_profileCalibration.pendingRequestId ||
+      *m_profileCalibration.pendingRequestId != reqId)
     return;
 
   const ColorOptimizerRequestData now{
@@ -6654,8 +6669,9 @@ void MainWindow::onColorOptimizerFinished(
   const std::optional<ColorOptimizerRequestData> completedInputs =
       m_profileCalibration.pendingInputs;
   m_profileCalibration.pendingInputs.reset();
+  m_profileCalibration.pendingRequestId.reset();
 
-  if (cancelled || !inputsStillCurrent) {
+  if (!publishable || cancelled || !inputsStillCurrent) {
     updateWorkflowSummary();
     return;
   }
