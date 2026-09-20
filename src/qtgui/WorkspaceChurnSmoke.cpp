@@ -2514,6 +2514,91 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
 
         first->applyState(state->beforeReference);
         state->referenceDirectory.reset();
+        schedule(212, 0, 40);
+        return;
+      }
+
+      case 212: {
+        // Progressive adaptive sharpening cannot use OneShotOperation because
+        // its live chart cells are intentional publication. Exercise the
+        // equivalent generation/progress/snapshot ownership contract without
+        // running the expensive numerical analysis.
+        ParameterState adaptiveBaseline = first->getCurrentState();
+        auto acceptedCorrection =
+            std::make_shared<colorscreen::scanner_blur_correction_parameters>();
+        if (!acceptedCorrection->alloc(
+                2, 2,
+                colorscreen::scanner_blur_correction_parameters::blur_radius)) {
+          fail(QStringLiteral(
+              "Workspace churn could not allocate adaptive-sharpening fixture"));
+          return;
+        }
+        acceptedCorrection->set_correction(0, 0, 0.25);
+        acceptedCorrection->set_correction(1, 0, 0.5);
+        acceptedCorrection->set_correction(0, 1, 0.75);
+        acceptedCorrection->set_correction(1, 1, 1.0);
+        adaptiveBaseline.rparams.scanner_blur_correction = acceptedCorrection;
+        first->applyState(adaptiveBaseline);
+
+        auto olderProgress =
+            std::make_shared<colorscreen::progress_info>();
+        const uint64_t olderGeneration =
+            ++first->m_adaptiveSharpening.generation;
+        first->m_adaptiveSharpening.baseline = adaptiveBaseline;
+        first->m_adaptiveSharpening.scan = first->m_scan;
+        first->m_adaptiveSharpening.progress = olderProgress;
+        if (!first->adaptiveSharpeningRequestCurrent(
+                olderGeneration, olderProgress)) {
+          fail(QStringLiteral(
+              "Current adaptive-sharpening request failed its ownership gate"));
+          return;
+        }
+
+        // A replacement request must immediately invalidate the old
+        // generation/progress pair even before its worker unwinds.
+        auto newerProgress =
+            std::make_shared<colorscreen::progress_info>();
+        const uint64_t newerGeneration =
+            ++first->m_adaptiveSharpening.generation;
+        olderProgress->cancel();
+        first->m_adaptiveSharpening.baseline = adaptiveBaseline;
+        first->m_adaptiveSharpening.scan = first->m_scan;
+        first->m_adaptiveSharpening.progress = newerProgress;
+        if (!olderProgress->pool_cancel() ||
+            first->adaptiveSharpeningRequestCurrent(
+                olderGeneration, olderProgress) ||
+            !first->adaptiveSharpeningRequestCurrent(
+                newerGeneration, newerProgress)) {
+          fail(QStringLiteral(
+              "Adaptive-sharpening replacement lost request-local ownership"));
+          return;
+        }
+
+        // An accepted document edit cancels the newer request and clears its
+        // provenance. Restoring identical values afterwards must not resurrect
+        // either the final result or queued live chart cells.
+        ParameterState edited = adaptiveBaseline;
+        edited.rparams.brightness += 0.125;
+        first->applyState(edited);
+        if (!newerProgress->pool_cancel() ||
+            first->m_adaptiveSharpening.baseline ||
+            first->m_adaptiveSharpening.scan ||
+            !first->m_adaptiveSharpening.progress.expired() ||
+            first->adaptiveSharpeningRequestCurrent(
+                newerGeneration, newerProgress)) {
+          fail(QStringLiteral(
+              "Document edit did not invalidate adaptive sharpening"));
+          return;
+        }
+        first->applyState(adaptiveBaseline);
+        if (first->adaptiveSharpeningRequestCurrent(
+                newerGeneration, newerProgress)) {
+          fail(QStringLiteral(
+              "Restoring inputs resurrected stale adaptive sharpening"));
+          return;
+        }
+
+        first->applyState(state->beforeReference);
         workspace->activateDocument(first);
         workspace->cascadeDocuments();
         schedule(2, 50, 40);
