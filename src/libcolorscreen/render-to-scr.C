@@ -601,7 +601,15 @@ render_screen_tile (tile_parameters &tile, scr_type type,
       if (rst == blurred_screen
           || (rst == sharpened_screen
               && effective_mode == sharpen_parameters::none))
-        sp.mode = sharpen_parameters::blur_deconvolution;
+        {
+          /* Match reconstruction/color-loss simulation: USM_RADIUS is
+             overloaded by the periodic-screen helper as the legacy forward
+             Gaussian capture blur when no scanner MTF is active.  It must come
+             from SCREEN_BLUR_RADIUS here, not from the unrelated digital
+             Unsharp Mask radius.  */
+          sp.usm_radius = rparam.screen_blur_radius * pixel_size;
+          sp.mode = sharpen_parameters::blur_deconvolution;
+        }
     }
   std::shared_ptr<screen> scr = render_to_scr::get_screen (
       type, false, anticipate_sharpening, sp, rparam.red_strip_width,
