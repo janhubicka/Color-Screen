@@ -750,12 +750,14 @@ private:
   struct ProfileCalibrationState {
     std::optional<ColorOptimizerRequestData> baseline;
     std::optional<ColorOptimizerRequestData> pendingInputs;
+    std::optional<int> pendingRequestId;
     std::optional<ColorOptimizerRequestData> failureInputs;
     double averageDeltaE = -1;
 
     void clear() {
       baseline.reset();
       pendingInputs.reset();
+      pendingRequestId.reset();
       failureInputs.reset();
       averageDeltaE = -1;
     }
