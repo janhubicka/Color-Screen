@@ -3572,6 +3572,7 @@ void MainWindow::updateWorkflowSummary() {
     // callbacks that refresh this summary again.
     m_geometryFit.pendingInputs.reset();
     m_geometryFit.pendingNonlinearEnabled.reset();
+    m_geometryFit.pendingRequestId.reset();
     m_solverQueue.cancelAll();
   }
 
@@ -4335,6 +4336,7 @@ void MainWindow::requestGeometryOptimization(bool computeMesh) {
   // detection can refine the remaining geometry while preserving its mesh.
   m_geometryFit.pendingInputs = getCurrentState();
   m_geometryFit.pendingNonlinearEnabled = m_geometryPanel->isNonlinearEnabled();
+  m_geometryFit.pendingRequestId.reset();
   m_geometryFit.failureInputs.reset();
   updateWorkflowSummary();
 
@@ -4349,11 +4351,20 @@ void MainWindow::requestGeometryOptimization(bool computeMesh) {
 void MainWindow::onTriggerSolve(
     int reqId, std::shared_ptr<colorscreen::progress_info> progress,
     const QVariant &userData) {
+  // A pending queue request has no progress object yet, so bind its concrete
+  // identity when TaskQueue actually dispatches it.
+  if (m_geometryFit.pendingInputs)
+    m_geometryFit.pendingRequestId = reqId;
+
   if (!m_scan || !m_solverWorker || !userData.canConvert<SolverRequestData>()) {
     m_solverQueue.reportFinished(reqId, false);
-    m_geometryFit.pendingInputs.reset();
-    m_geometryFit.pendingNonlinearEnabled.reset();
-    updateWorkflowSummary();
+    if (m_geometryFit.pendingRequestId &&
+        *m_geometryFit.pendingRequestId == reqId) {
+      m_geometryFit.pendingInputs.reset();
+      m_geometryFit.pendingNonlinearEnabled.reset();
+      m_geometryFit.pendingRequestId.reset();
+      updateWorkflowSummary();
+    }
     return;
   }
 
@@ -4383,8 +4394,15 @@ void MainWindow::onSolverFinished(int reqId,
   // TaskQueue suppresses superseded requests. The pending input snapshot adds
   // a domain-level gate: even the newest request is obsolete if its geometry
   // inputs changed without starting another solve.
-  const bool current = m_solverQueue.reportFinished(reqId, success);
-  if (!current || m_closing)
+  const bool publishable = m_solverQueue.reportFinished(reqId, success);
+  if (m_closing)
+    return;
+
+  // reportFinished() deliberately rejects cancelled and superseded work.
+  // Request identity, not publishability, determines which completion owns
+  // cleanup of the session-local "fitting geometry" provenance.
+  if (!m_geometryFit.pendingRequestId ||
+      *m_geometryFit.pendingRequestId != reqId)
     return;
 
   const ParameterState now = getCurrentState();
@@ -4397,8 +4415,9 @@ void MainWindow::onSolverFinished(int reqId,
       !geometryFitInputsDiffer(*m_geometryFit.pendingInputs, now);
   m_geometryFit.pendingInputs.reset();
   m_geometryFit.pendingNonlinearEnabled.reset();
+  m_geometryFit.pendingRequestId.reset();
 
-  if (cancelled || !inputsStillCurrent) {
+  if (!publishable || cancelled || !inputsStillCurrent) {
     updateWorkflowSummary();
     return;
   }
