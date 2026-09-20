@@ -1,0 +1,109 @@
+name: Agent section preference verification
+
+on:
+  push:
+    branches: [agent/verify-section-preferences-20260920]
+
+permissions:
+  contents: write
+  packages: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    container:
+      image: ghcr.io/janhubicka/color-screen-ci:ubuntu-24.04
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    env:
+      LC_ALL: C.UTF-8
+      LANG: C.UTF-8
+      PATH: /usr/lib/qt6/libexec:/usr/lib/x86_64-linux-gnu/qt6/libexec:/usr/lib/qt6/bin:/usr/lib/x86_64-linux-gnu/qt6/bin:/usr/lib64/qt6/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    defaults:
+      run:
+        shell: bash
+        working-directory: source
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: transport
+      - uses: actions/checkout@v4
+        with:
+          ref: be01fabc09198e4850a27e8f89da861e382e8573
+          path: source
+      - name: Apply intended changes and check metadata
+        run: |
+          python3 ../transport/_agent_section_prepare.py
+          git diff --check
+          bash build-aux/check-generated-build-metadata.sh
+          git diff --stat
+      - name: Native Qt regression and negative controls
+        run: |
+          set -o pipefail
+          python3 ../transport/_agent_section_verify.py 2>&1 | tee section-verification.log
+      - name: Compile changed production GUI translation units
+        run: |
+          mkdir -p build-qt
+          cd build-qt
+          CXXFLAGS="-O0 -g" CFLAGS="-O0 -g" ../configure \
+            --enable-qtgui --enable-checking --disable-static-link
+          make -C src/qtgui -j2 \
+            colorscreen_qt-ParameterPanel.o colorscreen_qt-main.o \
+            colorscreen_qt-ScreenPanel.o colorscreen_qt-ImageLayerPanel.o
+      - name: Publish clean review branch
+        run: |
+          python3 - <<'PY'
+          import subprocess
+          allowed = {
+              'src/qtgui/ParameterPanel.cpp', 'src/qtgui/ParameterPanel.h',
+              'src/qtgui/ScreenPanel.cpp', 'src/qtgui/ImageLayerPanel.cpp',
+              'src/qtgui/main.cpp', 'doc/qtgui-workflow-roadmap.md',
+              'doc/qtgui-internal-cleanup.md', '.agents/qtgui.md',
+          }
+          changed = set(subprocess.check_output(
+              ['git', 'diff', '--name-only'], text=True).splitlines())
+          if changed != allowed:
+              raise SystemExit(f'Unexpected diff: {changed ^ allowed}')
+          subprocess.run(['git', 'add', '--', *sorted(allowed)], check=True)
+          PY
+          git diff --cached --check
+          git checkout -b agent/qtgui-section-preferences
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -F - <<'EOF'
+          qtgui: remember explicit inspector section folding
+
+          Add opt-in, untranslated section identities to ParameterPanel and store
+          user fold choices as QSettings presentation preferences. Migrate Screen
+          and Image Layer first, preserving unkeyed panels and existing layout
+          ownership. Reapply restored folding to newly populated rows without
+          resurrecting inapplicable controls or touching document parameters,
+          dirty state, recovery or Undo. Programmatic folding never writes the
+          preference; existing panels retain their own local presentation.
+
+          Add beta smoke coverage for renamed and repeated captions, independent
+          keys, recreated panels, late rows, applicability, programmatic changes
+          and zero document edits. Document the contract and correct the stale
+          slider-mapping cleanup item, whose shared mapper already exists.
+
+          Validation: exact helper/smoke extraction passed 100 ordinary and 100
+          ASan/UBSan Qt Widgets iterations; both deliberately broken controls
+          were rejected. The four changed GUI translation units compile with
+          checking enabled. Generated metadata and git diff --check pass.
+          Full application and cross-platform validation remain with PR CI.
+          EOF
+          git push origin HEAD:refs/heads/agent/qtgui-section-preferences
+          git log -1 --format=fuller
+          git show --stat --oneline HEAD
+      - name: Upload focused validation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: section-preference-verification
+          path: |
+            source/section-verification.log
+            source/build-qt/section-verification/*.cpp
+            source/build-qt/config.log
+          if-no-files-found: warn
