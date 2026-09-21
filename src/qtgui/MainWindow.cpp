@@ -3701,10 +3701,11 @@ QString MainWindow::profileCalibrationSummary() const {
     whose inputs changed is cancelled before it can publish an obsolete result. */
 void MainWindow::updateWorkflowSummary() {
   const ParameterState currentState = getCurrentState();
-  // Adaptive sharpening intentionally publishes live cells. A document edit
-  // invalidates both those cells and the eventual correction table even when
-  // the operator later undoes back to the same values.
+  // Progressive workers have their own publication ownership. Adaptive
+  // sharpening has an immutable baseline; registration discovery has an
+  // expected state that advances with each accepted worker-owned batch.
   cancelStaleAdaptiveSharpening(currentState);
+  cancelStaleRegistrationDiscovery(currentState);
 
   if (!m_workflowProcessLabel || !m_workflowRegistrationLabel ||
       !m_workflowCalibrationLabel || !m_workflowProfileLabel ||
@@ -5620,7 +5621,9 @@ void MainWindow::onAutomaticallyAddPointsInAreaRequested(
   if (!m_scan)
     return;
   if (!colorscreen::screen_geometry_configured_p(m_scrToImgParams)) {
-    statusBar()->showMessage(tr("Detect screen coordinates before adding registration points."), 3000);
+    statusBar()->showMessage(
+        tr("Detect screen coordinates before adding registration points."),
+        3000);
     return;
   }
 
@@ -5631,92 +5634,7 @@ void MainWindow::onAutomaticallyAddPointsInAreaRequested(
 
         const colorscreen::int_image_area crop = {
             area.x(), area.y(), area.width(), area.height()};
-
-        auto progress = std::make_shared<colorscreen::progress_info>();
-        progress->set_task("Finding missing registration points", 1);
-        colorscreen::sub_task task(progress.get());
-        addUserVisibleProgress(
-            progress, tr("Automatically add points to area"),
-            ProgressAction::Stop);
-
-        auto *worker = new FinetuneMisregisteredWorker(
-            m_solverParams, m_rparams, m_scrToImgParams, m_scan, crop, progress,
-            params, m_geometryPanel->isNonlinearEnabled());
-        auto *thread = new QThread(this);
-        worker->moveToThread(thread);
-        m_backgroundThreads.track(thread);
-
-        connect(thread, &QThread::started, worker,
-                &FinetuneMisregisteredWorker::run);
-        connect(worker, &FinetuneMisregisteredWorker::finished, thread,
-                &QThread::quit, Qt::DirectConnection);
-        connect(thread, &QThread::finished, worker, &QObject::deleteLater);
-        connect(thread, &QThread::finished, thread, &QObject::deleteLater);
-
-        // Points and geometry are intentionally applied in batches while the
-        // operation is running.  Stopping therefore keeps everything already
-        // visible instead of rolling the document back.
-        connect(
-            worker, &FinetuneMisregisteredWorker::pointsReady, this,
-            [this, progress](
-                std::vector<colorscreen::solver_parameters::solver_point_t>
-                    points) {
-              if (m_closing || (progress && progress->pool_cancel()))
-                return;
-              if (points.empty())
-                return;
-
-              ParameterState oldState = getCurrentState();
-              for (const auto &point : points)
-                m_solverParams.add_or_modify_point(point.img, point.scr,
-                                                   point.color);
-              m_imageWidget->updateParameters(
-                  &m_rparams, &m_scrToImgParams, &m_detectParams,
-                  &m_renderTypeParams, &m_solverParams);
-              m_imageWidget->update();
-              ParameterState newState = getCurrentState();
-              m_undoStack->push(new ChangeParametersCommand(
-                  this, oldState, newState, "Add registration points"));
-              updateRegistrationActions();
-            });
-        connect(worker, &FinetuneMisregisteredWorker::geometryReady, this,
-                [this, progress](colorscreen::scr_to_img_parameters result) {
-                  if (m_closing || (progress && progress->pool_cancel()))
-                    return;
-                  ParameterState newState = getCurrentState();
-                  newState.scrToImg.merge_solver_solution(result);
-                  changeParameters(
-                      newState,
-                      "Automatically add points to area (Geometry update)");
-                  m_geometryFit.baseline = getCurrentState();
-                  updateScreenCoordinateToolPresentation();
-                  m_geometryFit.failureInputs.reset();
-                  updateWorkflowSummary();
-                });
-        connect(worker, &FinetuneMisregisteredWorker::requestCurrentPoints,
-                this,
-                [this](std::vector<colorscreen::solver_parameters::solver_point_t>
-                           *points) {
-                  if (points)
-                    *points = m_closing
-                                  ? std::vector<colorscreen::solver_parameters::solver_point_t>()
-                                  : m_solverParams.points;
-                },
-                Qt::BlockingQueuedConnection);
-        connect(worker, &FinetuneMisregisteredWorker::finished, this,
-                [this, progress](bool success) {
-                  if (!m_closing)
-                    removeProgress(progress);
-
-                  if (!m_closing && !success &&
-                      (!progress || !progress->pool_cancel())) {
-                    QMessageBox::warning(
-                        this, tr("Optimization Failed"),
-                        tr("Automatically add points to area failed."));
-                  }
-                });
-
-        thread->start();
+        startRegistrationDiscovery(crop, params, false, false, true);
       });
 }
 
@@ -5750,140 +5668,257 @@ void MainWindow::onAutomaticallyAddPointsRequested(
   startAutomaticPointDiscovery(params, false);
 }
 
-/** Add registration points across the entire cropped image area.
+/** Return whether GENERATION/PROGRESS still own the progressive registration
+    request and the live document matches the worker's evolving accepted state. */
+bool MainWindow::registrationDiscoveryRequestCurrent(
+    uint64_t generation,
+    const std::shared_ptr<colorscreen::progress_info> &progress) const {
+  if (m_closing || !progress || progress->pool_cancel() ||
+      progress->cancelled() ||
+      generation != m_registrationDiscovery.generation)
+    return false;
+  if (m_registrationDiscovery.progress.lock() != progress ||
+      !m_registrationDiscovery.expectedState ||
+      m_registrationDiscovery.scan != m_scan)
+    return false;
+  return *m_registrationDiscovery.expectedState == getCurrentState();
+}
 
-    SCREENAUTODETECTION is true only for the combined Screen -> Detect screen
-    workflow. While it is true, point and geometry batches may still update the
-    live GUI, but Workflow keeps one stable wait/Stop hint until this worker
-    finishes. */
-void MainWindow::startAutomaticPointDiscovery(
+/** Cancel progressive registration after an unrelated document edit.
+
+    Batches already accepted into the document remain ordinary Undo history.
+    Generation advances before cooperative cancellation so queued point/geometry
+    signals from the old worker cannot publish after the edit. */
+void MainWindow::cancelStaleRegistrationDiscovery(
+    const ParameterState &currentState) {
+  if (!m_registrationDiscovery.expectedState)
+    return;
+  if (m_registrationDiscovery.scan == m_scan &&
+      *m_registrationDiscovery.expectedState == currentState)
+    return;
+
+  const auto progress = m_registrationDiscovery.progress.lock();
+  ++m_registrationDiscovery.generation;
+  m_registrationDiscovery.clearRequest();
+  if (progress)
+    progress->cancel();
+
+  const auto workflowProgress = m_screenAutodetectionProgress.lock();
+  if (progress && workflowProgress == progress) {
+    m_screenAutodetectionProgress.reset();
+    m_screenAutodetectionUsesStop = false;
+  }
+
+  if (!m_closing)
+    statusBar()->showMessage(
+        tr("Automatic point discovery stopped because its inputs changed."),
+        3000);
+}
+
+/** Launch one progressive point/geometry discovery request over AREA.
+
+    Worker-owned batches advance EXPECTEDSTATE before they are applied through
+    Undo, so applyState()/updateWorkflowSummary() recognizes them as current.
+    A user edit, Undo, image replacement or another discovery request instead
+    invalidates the generation and prevents all later live publication. */
+void MainWindow::startRegistrationDiscovery(
+    const colorscreen::int_image_area &area,
     const colorscreen::finetune_area_parameters &params,
-    bool screenAutodetection) {
-  if (!m_scan) {
+    bool screenAutodetection, bool allowRegistrationBootstrap,
+    bool selectedArea) {
+  if (!m_scan ||
+      !colorscreen::screen_geometry_configured_p(m_scrToImgParams))
     return;
-  }
-  if (!colorscreen::screen_geometry_configured_p(m_scrToImgParams)) {
-    statusBar()->showMessage(tr("Detect screen coordinates before adding registration points."), 3000);
-    return;
+
+  const auto scan = m_scan;
+  const ParameterState baseline = getCurrentState();
+
+  const auto previousProgress = m_registrationDiscovery.progress.lock();
+  const uint64_t generation = ++m_registrationDiscovery.generation;
+  if (previousProgress)
+    previousProgress->cancel();
+  if (previousProgress &&
+      m_screenAutodetectionProgress.lock() == previousProgress) {
+    m_screenAutodetectionProgress.reset();
+    m_screenAutodetectionUsesStop = false;
   }
 
-  // Get current scan crop
-  colorscreen::int_image_area crop =
-      m_rparams.get_scan_crop(m_scan->width, m_scan->height);
-
-  // Create progress info
   auto progress = std::make_shared<colorscreen::progress_info>();
-  progress->set_task("Finding missing registration points", 1);
-  colorscreen::sub_task task(progress.get());
-  addUserVisibleProgress(progress, tr("Automatically add points"),
-                         ProgressAction::Stop);
+  progress->set_task("finding missing registration points", 1);
+  m_registrationDiscovery.expectedState = baseline;
+  m_registrationDiscovery.scan = scan;
+  m_registrationDiscovery.progress = progress;
+
+  const QString progressTitle =
+      selectedArea ? tr("Automatically add points to area")
+                   : tr("Automatically add points");
+  const QString pointDescription =
+      selectedArea ? tr("Add registration points in area")
+                   : tr("Add registration points");
+  const QString geometryDescription =
+      selectedArea
+          ? tr("Automatically add points to area (Geometry update)")
+          : tr("Automatically add points (Geometry update)");
+
+  addUserVisibleProgress(progress, progressTitle, ProgressAction::Stop);
   if (screenAutodetection)
     setScreenAutodetectionProgress(progress, true);
 
-  // Create worker and thread
-  FinetuneMisregisteredWorker *worker = new FinetuneMisregisteredWorker(
-      m_solverParams, m_rparams, m_scrToImgParams, m_scan, crop, progress,
-      params, m_geometryPanel->isNonlinearEnabled(), true);
-  QThread *thread = new QThread(this);
+  const bool computeMesh =
+      m_geometryPanel && m_geometryPanel->isNonlinearEnabled();
+  auto *worker = new FinetuneMisregisteredWorker(
+      baseline.solver, baseline.rparams, baseline.scrToImg, scan, area,
+      progress, params, computeMesh, allowRegistrationBootstrap);
+  auto *thread = new QThread(this);
   worker->moveToThread(thread);
   m_backgroundThreads.track(thread);
 
-  // Connect signals
-  connect(thread, &QThread::started, worker, &FinetuneMisregisteredWorker::run);
+  connect(thread, &QThread::started, worker,
+          &FinetuneMisregisteredWorker::run);
   connect(worker, &FinetuneMisregisteredWorker::finished, thread,
           &QThread::quit, Qt::DirectConnection);
   connect(thread, &QThread::finished, worker, &QObject::deleteLater);
   connect(thread, &QThread::finished, thread, &QObject::deleteLater);
 
-  // Connect to our slot to handle results
   connect(
       worker, &FinetuneMisregisteredWorker::pointsReady, this,
-      [this, progress](
+      [this, generation, progress, pointDescription](
           std::vector<colorscreen::solver_parameters::solver_point_t> points) {
-        if (m_closing || (progress && progress->pool_cancel()))
+        if (!registrationDiscoveryRequestCurrent(generation, progress)) {
+          progress->cancel();
+          return;
+        }
+        if (points.empty())
           return;
 
-        if (!points.empty()) {
-          ParameterState oldState = getCurrentState();
-          for (const auto &point : points) {
-            m_solverParams.add_or_modify_point(point.img, point.scr,
-                                               point.color);
-          }
-          m_imageWidget->updateParameters(&m_rparams, &m_scrToImgParams,
-                                          &m_detectParams, &m_renderTypeParams,
-                                          &m_solverParams);
-          m_imageWidget->update();
-          ParameterState newState = getCurrentState();
-          m_undoStack->push(new ChangeParametersCommand(
-              this, oldState, newState, "Add registration points"));
-          updateRegistrationActions();
+        const ParameterState oldState = getCurrentState();
+        ParameterState newState = oldState;
+        for (const auto &point : points)
+          newState.solver.add_or_modify_point(point.img, point.scr, point.color);
+        if (newState == oldState)
+          return;
+
+        // Advance ownership before QUndoStack::push() synchronously calls
+        // applyState(newState), whose workflow refresh checks for staleness.
+        m_registrationDiscovery.expectedState = newState;
+        changeParameters(newState, pointDescription);
+      });
+
+  connect(
+      worker, &FinetuneMisregisteredWorker::geometryReady, this,
+      [this, generation, progress, geometryDescription](
+          colorscreen::scr_to_img_parameters result) {
+        if (!registrationDiscoveryRequestCurrent(generation, progress)) {
+          progress->cancel();
+          return;
+        }
+
+        const ParameterState oldState = getCurrentState();
+        ParameterState newState = oldState;
+        newState.scrToImg.merge_solver_solution(result);
+        if (newState == oldState)
+          return;
+
+        m_registrationDiscovery.expectedState = newState;
+        changeParameters(newState, geometryDescription);
+        m_geometryFit.baseline = getCurrentState();
+        m_geometryFit.failureInputs.reset();
+        updateScreenCoordinateToolPresentation();
+        updateWorkflowSummary();
+      });
+
+  connect(
+      worker, &FinetuneMisregisteredWorker::requestCurrentPoints, this,
+      [this, generation, progress](
+          std::vector<colorscreen::solver_parameters::solver_point_t> *points) {
+        if (!points)
+          return;
+        if (!registrationDiscoveryRequestCurrent(generation, progress)) {
+          progress->cancel();
+          points->clear();
+          return;
+        }
+        *points = m_solverParams.points;
+      },
+      Qt::BlockingQueuedConnection);
+
+  connect(
+      worker, &FinetuneMisregisteredWorker::finished, this,
+      [this, generation, progress, screenAutodetection](bool success) {
+        const bool ownsRequest =
+            generation == m_registrationDiscovery.generation &&
+            m_registrationDiscovery.progress.lock() == progress;
+        const bool publishable =
+            registrationDiscoveryRequestCurrent(generation, progress);
+        const bool cancelled =
+            progress && (progress->pool_cancel() || progress->cancelled());
+
+        if (ownsRequest)
+          m_registrationDiscovery.clearRequest();
+
+        if (!m_closing)
+          removeProgress(progress);
+        if (!m_closing && screenAutodetection)
+          clearScreenAutodetectionProgress(progress);
+
+        if (!m_closing && ownsRequest && publishable &&
+            screenAutodetection && success && !cancelled && m_scan) {
+          const auto currentScan = m_scan;
+          const ParameterState current = getCurrentState();
+          presentScreenDetectionSuggestions(
+              currentScan, current, current.scrToImg, false,
+              [this, current](bool updateColorModel, bool updateDpi,
+                              double screenDpi) {
+                ParameterState newState = current;
+                QStringList changes;
+                if (updateColorModel) {
+                  const auto previous = newState.rparams.color_model;
+                  if (newState.rparams.auto_color_model(
+                          newState.scrToImg.type) &&
+                      newState.rparams.color_model != previous)
+                    changes << tr("preferred color model");
+                }
+                if (updateDpi && screenDpi > 0) {
+                  newState.rparams.sharpen.scanner_mtf.scan_dpi = screenDpi;
+                  changes << tr("screen-derived resolution");
+                }
+                if (!changes.isEmpty())
+                  changeParameters(
+                      newState, tr("Use %1").arg(changes.join(", ")));
+              });
+        }
+
+        if (!m_closing && ownsRequest && publishable && !success &&
+            !cancelled) {
+          QMessageBox::warning(
+              this, tr("Optimization Failed"),
+              tr("Automatically add registration points failed."));
         }
       });
-  connect(worker, &FinetuneMisregisteredWorker::geometryReady, this,
-          [this, progress](colorscreen::scr_to_img_parameters result) {
-            if (m_closing || (progress && progress->pool_cancel()))
-              return;
-            ParameterState newState = getCurrentState();
-            newState.scrToImg.merge_solver_solution(result);
-            changeParameters(newState,
-                             "Automatically add points (Geometry update)");
-            m_geometryFit.baseline = getCurrentState();
-            updateScreenCoordinateToolPresentation();
-            m_geometryFit.failureInputs.reset();
-            updateWorkflowSummary();
-          });
-  connect(worker, &FinetuneMisregisteredWorker::requestCurrentPoints, this,
-          [this](std::vector<colorscreen::solver_parameters::solver_point_t> *points) {
-            if (points)
-              *points = m_closing
-                            ? std::vector<colorscreen::solver_parameters::solver_point_t>()
-                            : m_solverParams.points;
-          }, Qt::BlockingQueuedConnection);
-  connect(worker, &FinetuneMisregisteredWorker::finished, this,
-          [this, progress, screenAutodetection](bool success) {
-            if (!m_closing)
-              removeProgress(progress);
-            if (!m_closing && screenAutodetection)
-              clearScreenAutodetectionProgress(progress);
 
-            const bool cancelled = progress && progress->pool_cancel();
-            if (!m_closing && screenAutodetection && success && !cancelled &&
-                m_scan) {
-              const auto scan = m_scan;
-              const ParameterState baseline = getCurrentState();
-              presentScreenDetectionSuggestions(
-                  scan, baseline, baseline.scrToImg, false,
-                  [this, baseline](bool updateColorModel, bool updateDpi,
-                                   double screenDpi) {
-                    ParameterState newState = baseline;
-                    QStringList changes;
-                    if (updateColorModel) {
-                      const auto previous = newState.rparams.color_model;
-                      if (newState.rparams.auto_color_model(
-                              newState.scrToImg.type) &&
-                          newState.rparams.color_model != previous)
-                        changes << tr("preferred color model");
-                    }
-                    if (updateDpi && screenDpi > 0) {
-                      newState.rparams.sharpen.scanner_mtf.scan_dpi =
-                          screenDpi;
-                      changes << tr("screen-derived resolution");
-                    }
-                    if (!changes.isEmpty())
-                      changeParameters(
-                          newState,
-                          tr("Use %1").arg(changes.join(", ")));
-                  });
-            }
-
-            if (!m_closing && !success && !cancelled) {
-              QMessageBox::warning(this, "Optimization Failed",
-                                   "Automatically add points failed.");
-            }
-          });
-
-  // Start thread
   thread->start();
+}
+
+/** Add registration points across the entire cropped image area.
+
+    SCREENAUTODETECTION is true only for the combined Screen -> Detect screen
+    workflow. While it is true, accepted point and geometry batches advance one
+    evolving request snapshot, while Workflow keeps a stable wait/Stop hint. */
+void MainWindow::startAutomaticPointDiscovery(
+    const colorscreen::finetune_area_parameters &params,
+    bool screenAutodetection) {
+  if (!m_scan)
+    return;
+  if (!colorscreen::screen_geometry_configured_p(m_scrToImgParams)) {
+    statusBar()->showMessage(
+        tr("Detect screen coordinates before adding registration points."),
+        3000);
+    return;
+  }
+
+  const colorscreen::int_image_area crop =
+      m_rparams.get_scan_crop(m_scan->width, m_scan->height);
+  startRegistrationDiscovery(crop, params, screenAutodetection, true, false);
 }
 
 /** Launch automatic screen detection.

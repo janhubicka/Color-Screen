@@ -2599,6 +2599,61 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         }
 
         first->applyState(state->beforeReference);
+        schedule(213, 0, 40);
+        return;
+      }
+
+      case 213: {
+        // Registration discovery differs from immutable progressive analysis:
+        // its own accepted point/geometry batches advance the document state.
+        // Verify that advancing EXPECTEDSTATE keeps the request current, while
+        // an unrelated edit cancels it and cannot be resurrected by restoring
+        // identical values.
+        const ParameterState baseline = first->getCurrentState();
+        auto progress = std::make_shared<colorscreen::progress_info>();
+        const uint64_t generation =
+            ++first->m_registrationDiscovery.generation;
+        first->m_registrationDiscovery.expectedState = baseline;
+        first->m_registrationDiscovery.scan = first->m_scan;
+        first->m_registrationDiscovery.progress = progress;
+        if (!first->registrationDiscoveryRequestCurrent(generation, progress)) {
+          fail(QStringLiteral(
+              "Current registration-discovery request failed its ownership gate"));
+          return;
+        }
+
+        ParameterState workerOwned = baseline;
+        workerOwned.rparams.brightness += 0.03125;
+        first->m_registrationDiscovery.expectedState = workerOwned;
+        first->applyState(workerOwned);
+        if (progress->pool_cancel() ||
+            !first->registrationDiscoveryRequestCurrent(generation, progress)) {
+          fail(QStringLiteral(
+              "Worker-owned progressive state invalidated registration discovery"));
+          return;
+        }
+
+        ParameterState userEdited = workerOwned;
+        userEdited.rparams.brightness += 0.125;
+        first->applyState(userEdited);
+        if (!progress->pool_cancel() ||
+            first->m_registrationDiscovery.expectedState ||
+            first->m_registrationDiscovery.scan ||
+            !first->m_registrationDiscovery.progress.expired() ||
+            first->registrationDiscoveryRequestCurrent(generation, progress)) {
+          fail(QStringLiteral(
+              "Unrelated document edit did not cancel registration discovery"));
+          return;
+        }
+
+        first->applyState(workerOwned);
+        if (first->registrationDiscoveryRequestCurrent(generation, progress)) {
+          fail(QStringLiteral(
+              "Restoring inputs resurrected stale registration discovery"));
+          return;
+        }
+
+        first->applyState(state->beforeReference);
         workspace->activateDocument(first);
         workspace->cascadeDocuments();
         schedule(2, 50, 40);

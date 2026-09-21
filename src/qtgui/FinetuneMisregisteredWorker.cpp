@@ -32,7 +32,7 @@ void FinetuneMisregisteredWorker::run() {
   bool stalled = false;
 
   auto cancelled = [this]() {
-    return m_progress && m_progress->cancelled();
+    return m_progress && m_progress->cancel_requested();
   };
 
   auto solveGeometry =
