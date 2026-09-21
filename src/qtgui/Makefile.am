@@ -8,6 +8,7 @@ colorscreen_qt_SOURCES = \
     WorkspaceWindow.cpp \
     ImageViewWindow.cpp \
     MainWindow.cpp \
+    MainWindowAnalysis.cpp \
     BackgroundThreadRegistry.cpp \
     DocumentProgressController.cpp \
     FileRenderController.cpp \
