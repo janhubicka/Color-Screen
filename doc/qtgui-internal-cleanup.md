@@ -427,10 +427,17 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   its helper returns only points produced from the captured solver/render/geometry
   snapshot, and exact scan/`ParameterState` plus finetune-control validation
   prevents those points from being appended after an intervening edit or a
-  change to the operation's spacing/tolerance controls. `FinetuneMisregisteredWorker`
-  remains a dedicated `QThread` because its point and geometry batches are
-  intentionally visible while it is still running. Adaptive sharpening now
-  follows the same explicit *progressive* ownership rule: generation, exact
+  change to the operation's spacing/tolerance controls. The progressive
+  `FinetuneMisregisteredWorker` remains a dedicated `QThread` because its
+  point and geometry batches are intentionally visible and undoable while it is
+  still running. Full-image and selected-area discovery now share one launcher
+  and one lifecycle state: generation, exact progress identity and source scan
+  stay fixed, while `expectedState` advances before each accepted worker-owned
+  point/geometry edit. Any other state change, Undo, image replacement or newer
+  discovery request cancels the worker; queued batches, current-point callbacks
+  and old completion paths all use the same ownership gate. Stop still preserves
+  batches already accepted into ordinary Undo history. Adaptive sharpening uses
+  the analogous *immutable* progressive ownership rule: generation, exact
   progress identity, source scan and full input snapshot gate every coarse/dense
   chart signal as well as the final correction. Starting another analysis or
   editing its inputs cancels the old request before queued cells can repaint the
@@ -540,11 +547,14 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   controllers/services when the interface is similarly stable.
 - Give long-lived analysis state explicit structs rather than parallel member
   variables. Profile-calibration, geometry-fit, measured-MTF fit, automatic
-  multi-area focus analysis, and progressive adaptive sharpening now each live
-  in one lifecycle struct instead of parallel request/result/presentation
-  members. Adaptive sharpening groups its generation, immutable baseline, scan,
-  and progress identity because both live chart cells and the final correction
-  share that ownership. Reference views likewise group the mutex-published
+  multi-area focus analysis, progressive adaptive sharpening, and progressive
+  registration discovery now each live in one lifecycle struct instead of
+  parallel request/result/presentation members. Adaptive sharpening groups its
+  generation, immutable baseline, scan, and progress identity because both live
+  chart cells and the final correction share that ownership. Registration
+  discovery groups generation, scan, progress identity and the evolving
+  expected document state because accepted worker batches are themselves
+  undoable edits. Reference views likewise group the mutex-published
   reference-load handoff and each reference-MTF request. Keep applying this
   pattern when another analysis has coupled session-local members that are
   always saved, cleared, or restored together.
