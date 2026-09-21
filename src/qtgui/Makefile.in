@@ -2620,6 +2620,7 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-MTFChartWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-MTFFitDialog.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-MainWindow.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-MainWindowAnalysis.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-BackgroundThreadRegistry.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-DocumentProgressController.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-FileRenderController.Po
@@ -2772,6 +2773,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-MTFChartWidget.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-MTFFitDialog.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-MainWindow.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-MainWindowAnalysis.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-BackgroundThreadRegistry.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-DocumentProgressController.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-FileRenderController.Po
