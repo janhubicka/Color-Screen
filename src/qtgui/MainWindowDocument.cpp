@@ -1,26 +1,39 @@
 #include "MainWindow.h"
 #include "../libcolorscreen/include/base.h"
 #include "../libcolorscreen/include/render-parameters.h"
+#include "../libcolorscreen/include/stitch.h"
 #include "ColorScreenApplication.h"
 #include "GeometryPanel.h"
 #include "ImageWidget.h"
 #include "InitialSetupGuideDialog.h"
 
+#include <QApplication>
 #include <QCloseEvent>
 #include <QCoreApplication>
+#include <QDialog>
 #include <QDir>
 #include <QFile>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QFuture>
+#include <QFutureWatcher>
 #include <QMessageBox>
+#include <QObject>
+#include <QPointer>
 #include <QSaveFile>
+#include <QScreen>
 #include <QSettings>
+#include <QSignalBlocker>
+#include <QSize>
 #include <QStatusBar>
+#include <QStringList>
 #include <QTextStream>
 #include <QTimer>
 #include <QUndoStack>
+#include <QtConcurrent>
 
 #include <algorithm>
+#include <exception>
 #include <memory>
 #include <utility>
 
