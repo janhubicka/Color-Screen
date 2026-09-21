@@ -532,7 +532,13 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
 
 - Split very large source files by responsibility rather than by arbitrary line
   count. `MainWindow` retains document-specific snapshots, UI decisions and
-  publication. Stable replaceable one-shot queue/publication mechanics live in
+  publication. The first physical split is now complete:
+  `MainWindowAnalysis.cpp` contains registration discovery, screen detection
+  and recommendations, adaptive-sharpening analysis, and coordinate
+  autodetection/refinement, while the same `MainWindow` object still owns all
+  state and policy. This removes about one thousand lines from the original
+  translation unit without introducing a second owner/controller abstraction.
+  Stable replaceable one-shot queue/publication mechanics live in
   `OneShotOperationController`; transient/dedicated task presentation,
   switching, delayed visibility and row bookkeeping live in
   `DocumentProgressController`; accepted file-render jobs, future/watcher
@@ -561,8 +567,11 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
 - Keep linear/gamma/logarithmic slider conversions centralized in
   `SliderValueMapping`; do not reintroduce separate mapping formulas in stateful
   and stateless helpers.
-- Replace remaining UI lookups by `objectName` with typed panel APIs whenever
-  practical.
+- Production panel reach-through by `objectName` is now eliminated.
+  `MainWindow` uses typed panel APIs; remaining `findChild`/`objectName`
+  lookups are smoke-test introspection or `WorkspaceWindow::documentTabBar()`,
+  where Qt exposes no typed `QMdiArea` tab-bar accessor. Keep `objectName`
+  for stable automation/smoke identities, not production panel control.
 
 ## Robustness checklist for new features
 
