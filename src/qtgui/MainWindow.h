@@ -711,6 +711,25 @@ private slots:
       const colorscreen::finetune_area_parameters &params,
       bool screenAutodetection);
 
+  /** Launch one progressive registration-discovery worker over AREA.
+      SELECTEDAREA chooses user-facing text; ALLOWREGISTRATIONBOOTSTRAP is used
+      only by full-image discovery. */
+  void startRegistrationDiscovery(
+      const colorscreen::int_image_area &area,
+      const colorscreen::finetune_area_parameters &params,
+      bool screenAutodetection, bool allowRegistrationBootstrap,
+      bool selectedArea);
+
+  /** Return true while GENERATION/PROGRESS own the evolving registration
+      request and the live document still equals its expected accepted state. */
+  bool registrationDiscoveryRequestCurrent(
+      uint64_t generation,
+      const std::shared_ptr<colorscreen::progress_info> &progress) const;
+
+  /** Cancel progressive registration discovery after an unrelated document
+      edit while preserving batches already accepted into Undo. */
+  void cancelStaleRegistrationDiscovery(const ParameterState &currentState);
+
   /** Publish/clear the progress request currently owning Detect-screen
       guidance. Identity checks make coordinate-to-point handoff race-safe. */
   void setScreenAutodetectionProgress(
@@ -799,6 +818,24 @@ private:
     }
   };
   AdaptiveSharpeningState m_adaptiveSharpening;
+
+  /** Session-local ownership for incremental registration discovery.
+      EXPECTEDSTATE evolves after each accepted worker-owned point/geometry
+      batch. Any other document edit makes the live state diverge and cancels
+      the worker before another batch can publish. */
+  struct RegistrationDiscoveryState {
+    uint64_t generation = 0;
+    std::optional<ParameterState> expectedState;
+    std::shared_ptr<colorscreen::image_data> scan;
+    std::weak_ptr<colorscreen::progress_info> progress;
+
+    void clearRequest() {
+      expectedState.reset();
+      scan.reset();
+      progress.reset();
+    }
+  };
+  RegistrationDiscoveryState m_registrationDiscovery;
 
   // Crash recovery
   QString m_recoveryDir;
