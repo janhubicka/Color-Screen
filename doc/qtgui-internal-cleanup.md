@@ -551,6 +551,11 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   workspace/focus policy plus save-path/render-settings dialogs and document
   snapshots. Continue moving cohesive infrastructure behind focused
   controllers/services when the interface is similarly stable.
+  Keep secondary build manifests in lockstep with the maintained Automake
+  executable manifest. The standalone Qt CMake target is now resynchronized
+  with all current GUI sources, headers and resources (including split
+  `MainWindow` translation units) and with the static libcolorscreen image-I/O
+  dependencies it must link explicitly.
 - Give long-lived analysis state explicit structs rather than parallel member
   variables. Profile-calibration, geometry-fit, measured-MTF fit, automatic
   multi-area focus analysis, progressive adaptive sharpening, and progressive
