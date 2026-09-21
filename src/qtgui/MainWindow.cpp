@@ -5784,8 +5784,11 @@ void MainWindow::startRegistrationDiscovery(
       worker, &FinetuneMisregisteredWorker::pointsReady, this,
       [this, generation, progress, pointDescription](
           std::vector<colorscreen::solver_parameters::solver_point_t> points) {
-        if (!registrationDiscoveryRequestCurrent(generation, progress) ||
-            points.empty())
+        if (!registrationDiscoveryRequestCurrent(generation, progress)) {
+          progress->cancel();
+          return;
+        }
+        if (points.empty())
           return;
 
         const ParameterState oldState = getCurrentState();
@@ -5805,8 +5808,10 @@ void MainWindow::startRegistrationDiscovery(
       worker, &FinetuneMisregisteredWorker::geometryReady, this,
       [this, generation, progress, geometryDescription](
           colorscreen::scr_to_img_parameters result) {
-        if (!registrationDiscoveryRequestCurrent(generation, progress))
+        if (!registrationDiscoveryRequestCurrent(generation, progress)) {
+          progress->cancel();
           return;
+        }
 
         const ParameterState oldState = getCurrentState();
         ParameterState newState = oldState;
