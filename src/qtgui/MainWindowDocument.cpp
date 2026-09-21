@@ -2,10 +2,13 @@
 #include "../libcolorscreen/include/base.h"
 #include "../libcolorscreen/include/render-parameters.h"
 #include "../libcolorscreen/include/stitch.h"
+#include "ColorOptimizerWorker.h"
 #include "ColorScreenApplication.h"
 #include "GeometryPanel.h"
+#include "GeometrySolverWorker.h"
 #include "ImageWidget.h"
 #include "InitialSetupGuideDialog.h"
+#include "NavigationView.h"
 
 #include <QApplication>
 #include <QCloseEvent>
@@ -17,6 +20,7 @@
 #include <QFileInfo>
 #include <QFuture>
 #include <QFutureWatcher>
+#include <QMenu>
 #include <QMessageBox>
 #include <QObject>
 #include <QPointer>
@@ -25,6 +29,7 @@
 #include <QSettings>
 #include <QSignalBlocker>
 #include <QSize>
+#include <QSplitter>
 #include <QStatusBar>
 #include <QStringList>
 #include <QTextStream>
