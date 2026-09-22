@@ -1505,11 +1505,10 @@ QToolButton *ParameterPanel::addSeparator(const QString &title,
   return arrowBtn;
 }
 
-/** Register logical applicability for the form row containing WIDGET. */
-void ParameterPanel::setParameterApplicability(
-    QWidget *widget,
-    std::function<bool(const ParameterState &)> applicableCheck) {
-  if (!widget || !applicableCheck)
+/** Set logical applicability for the complete form row containing WIDGET. */
+void ParameterPanel::setParameterRowApplicable(QWidget *widget,
+                                               bool applicable) {
+  if (!widget)
     return;
 
   QFormLayout *form = nullptr;
@@ -1545,21 +1544,34 @@ void ParameterPanel::setParameterApplicability(
     return;
 
   QWidget *labelWidget = form->labelForField(rowWidget);
-  m_widgetStateUpdaters.push_back(
-      [this, form, rowWidget, labelWidget,
-       applicableCheck = std::move(applicableCheck)]() {
-        const bool applicable = applicableCheck(m_stateGetter());
-        const QVariant expandedValue =
-            form->property(parameterSectionExpandedProperty);
-        const bool sectionExpanded =
-            !expandedValue.isValid() || expandedValue.toBool();
+  const QVariant expandedValue =
+      form->property(parameterSectionExpandedProperty);
+  const bool sectionExpanded =
+      !expandedValue.isValid() || expandedValue.toBool();
 
-        rowWidget->setProperty(parameterApplicableProperty, applicable);
-        rowWidget->setVisible(applicable && sectionExpanded);
-        if (labelWidget) {
-          labelWidget->setProperty(parameterApplicableProperty, applicable);
-          labelWidget->setVisible(applicable && sectionExpanded);
-        }
+  rowWidget->setProperty(parameterApplicableProperty, applicable);
+  rowWidget->setVisible(applicable && sectionExpanded);
+  if (labelWidget) {
+    labelWidget->setProperty(parameterApplicableProperty, applicable);
+    labelWidget->setVisible(applicable && sectionExpanded);
+  }
+}
+
+/** Register state-derived logical applicability for the row containing WIDGET. */
+void ParameterPanel::setParameterApplicability(
+    QWidget *widget,
+    std::function<bool(const ParameterState &)> applicableCheck) {
+  if (!widget || !applicableCheck)
+    return;
+
+  const QPointer<QWidget> guardedWidget = widget;
+  m_widgetStateUpdaters.push_back(
+      [this, guardedWidget,
+       applicableCheck = std::move(applicableCheck)]() {
+        if (!guardedWidget)
+          return;
+        setParameterRowApplicable(
+            guardedWidget, applicableCheck(m_stateGetter()));
       });
 }
 

@@ -789,8 +789,8 @@ To maintain consistency across different UI actions, use the following standardi
 in `QSettings` under `inspector/sections/<sectionKey>/expanded`. Supply a stable,
 untranslated key scoped to the panel (for example `screen.denoise.pre`), never
 an image filename, translated title, row index, or saved `parameterKey`.
-Screen, Image Layer, Color, Contact Copy, and Geometry now use explicit
-section keys.
+Digital Capture, Sharpness, Screen, Image Layer, Color, Contact Copy, and
+Geometry now use explicit section keys.
 Color's five sections and Contact Copy's four specialist sections keep their
 process/simulation applicability separate from restored folding. The Tone Curve
 detachable wrapper belongs inside Final adjustments, so folding that section
@@ -820,6 +820,17 @@ folds, recreation, independent live inspectors, applicability changes, the neste
 spectral chart, and the attached Tone Curve. This probe runs before document
 creation without pumping GUI events; it must never alter operator preferences
 or invoke the document state setter.
+
+Digital Capture uses five stable sections: `capture.source`,
+`capture.optics`, `capture.sensor`, `capture.wavelengths`, and
+`capture.corrections`. Metadata/EXIF rows are dynamic presentation state:
+use `setParameterRowApplicable()` rather than direct `setVisible()` so they
+compose with section folding. Sharpness uses eight stable `sharpness.*`
+section keys. Its numeric saved MTF/deconvolution controls opt into
+default/modified/Reset presentation; diagnostic rows such as finetune images
+and the adaptive chart must register applicability separately from folding.
+Live adaptive analysis may make its chart row applicable, but must never expand
+the section programmatically.
 
 Geometry's five section preferences follow the same contract. Its four fit
 prerequisite messages are rows inside Geometry fit, applicable only while their

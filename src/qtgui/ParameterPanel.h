@@ -247,6 +247,12 @@ protected:
       QWidget *widget,
       std::function<bool(const ParameterState &)> applicableCheck);
 
+  /** Set the current logical applicability of the complete form row containing
+      WIDGET. This imperative variant is for derived presentation state such as
+      detected metadata or analysis results that cannot be expressed solely as
+      a ParameterState predicate. It still composes with a section's fold. */
+  void setParameterRowApplicable(QWidget *widget, bool applicable);
+
   /** Add opt-in default/modified/reset presentation to a keyed numeric
       FIELD. The reset target comes from a fresh ParameterState so there is
       no second table of defaults. Reset is intentionally a separate undo

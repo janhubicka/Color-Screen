@@ -385,6 +385,15 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   outer form, preventing that editor from escaping the section's fold. Nested
   spectral-chart applicability and simulation-dependent Contact Copy groups
   remain independent of the remembered presentation.
+  Digital Capture now follows the same section contract with five groups:
+  Source, Resolution and optics, Sensor, Spectral wavelengths, and Capture
+  corrections. Its detected/EXIF metadata rows use the shared imperative
+  row-applicability helper so a metadata refresh cannot reopen a collapsed
+  section. Sharpness now gives stable keys to all eight existing sections.
+  Numeric MTF/deconvolution controls opt into the same real-default metadata
+  and Reset affordance as Digital Capture. Finetune and adaptive diagnostic
+  rows keep derived availability separate from folding; starting live adaptive
+  analysis marks its chart applicable without forcing the section open.
   Geometry's five sections now follow the same contract. Its fit-status labels
   belong inside Geometry fit rather than the outer form. Message presence and
   all four chart rows use registered applicability, including point batches

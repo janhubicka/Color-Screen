@@ -215,7 +215,8 @@ void SharpnessPanel::setupUi() {
       }, nullptr, "Select the sharpening algorithm. \"None\" disables sharpening, \"Wiener\" and \"Richardson-Lucy\" use the MTF model, \"Unsharp mask\" is a classic edge enhancement.",
       QStringLiteral("sharpness.mode"));
 
-  m_scannerCameraSeparatorToggle = addSeparator("Scanner/Camera properties");
+  m_scannerCameraSeparatorToggle = addSeparator(
+      "Scanner/Camera properties", QStringLiteral("sharpness.capture"));
   m_scannerCameraSeparatorToggle->setObjectName(
       QStringLiteral("ScannerCameraPropertiesToggle"));
 
@@ -296,7 +297,7 @@ void SharpnessPanel::setupUi() {
       [](ParameterState &s, double v) {
         s.rparams.sharpen.scanner_mtf.sigma = v;
       }, 1.0, nullptr, false, "Residual compact Gaussian blur. In the physical model it is applied after diffraction and defocus; in the empirical fallback it is the compact core blur.",
-      QStringLiteral("sharpness.capture.sigma"));
+      QStringLiteral("sharpness.capture.sigma"), true);
 
 
 
@@ -316,7 +317,7 @@ void SharpnessPanel::setupUi() {
       [](const ParameterState &s) {
         return s.rparams.sharpen.scanner_mtf.simulate_diffraction_p();
       }, false, "Image-plane focus displacement in millimeters. The physical model evaluates the signed incoherent OTF of a defocused circular pupil.",
-      QStringLiteral("sharpness.capture.defocus"));
+      QStringLiteral("sharpness.capture.defocus"), true);
 
   /* Broad halo parameters fitted by the physical model.  They are placed next
      to the other optical parameters so the result of the fitting dialog is
@@ -337,7 +338,7 @@ void SharpnessPanel::setupUi() {
       },
       false,
       "Fraction of optical energy redistributed into the broad symmetric halo. Zero disables the halo without discarding its radius.",
-      QStringLiteral("sharpness.capture.halo_fraction"));
+      QStringLiteral("sharpness.capture.halo_fraction"), true);
 
   addSliderParameter(
       "Halo radius", 0.0, 256.0, 1000.0, 3, "pixels", "not set",
@@ -353,7 +354,7 @@ void SharpnessPanel::setupUi() {
       },
       false,
       "Gaussian standard deviation of the broad symmetric halo in output pixels. It has no effect while the halo fraction is zero.",
-      QStringLiteral("sharpness.capture.halo_sigma"));
+      QStringLiteral("sharpness.capture.halo_sigma"), true);
 
   // Blur diameter
   // Range 0.0 - 20.0 pixels
@@ -371,7 +372,7 @@ void SharpnessPanel::setupUi() {
       [](const ParameterState &s) {
         return !s.rparams.sharpen.scanner_mtf.simulate_diffraction_p();
       }, false, "Simulates a uniform \"box\" blur of a specific diameter in pixels. Used when diffraction simulation is disabled.",
-      QStringLiteral("sharpness.capture.blur_diameter"));
+      QStringLiteral("sharpness.capture.blur_diameter"), true);
 
   addButtonParameter(
       "", "Open slanted edge reference",
@@ -417,9 +418,9 @@ void SharpnessPanel::setupUi() {
       [](ParameterState &s, double v) {
         s.rparams.sharpen.scanner_mtf_scale = v;
       }, 1.0, nullptr, false, "Global intensity of the deconvolution-based sharpening. 0.0 disables it, 1.0 is standard.",
-      QStringLiteral("sharpness.capture.mtf_scale"));
+      QStringLiteral("sharpness.capture.mtf_scale"), true);
 
-  addSeparator("Measurements");
+  addSeparator("Measurements", QStringLiteral("sharpness.measurements"));
 
   auto *inspectWidget = new QWidget(this);
   auto *inspectLayout = new QHBoxLayout(inspectWidget);
@@ -481,7 +482,7 @@ void SharpnessPanel::setupUi() {
   else
       m_form->addRow(measContainer);
 
-  addSeparator("Deconvolution");
+  addSeparator("Deconvolution", QStringLiteral("sharpness.deconvolution"));
 
   // Supersample
   // Range 1 - 16, integer
@@ -493,7 +494,7 @@ void SharpnessPanel::setupUi() {
       [](ParameterState &s, double v) {
         s.rparams.sharpen.supersample = (int)v;
       }, 1.0, nullptr, false, "Process the sharpening at a higher resolution than the original scan to reduce aliasing artifacts. Increases computation time significantly.",
-      QStringLiteral("sharpness.deconvolution.supersample"));
+      QStringLiteral("sharpness.deconvolution.supersample"), true);
 
   // Reconstruction kernel used only when supersampling is active. Lanczos 3
   // is the practical default for lens-limited scans; Lanczos 8 is retained for
@@ -516,7 +517,7 @@ void SharpnessPanel::setupUi() {
       "better preserves frequencies very close to two-dimensional Nyquist.",
       QStringLiteral("sharpness.deconvolution.kernel"));
 
-  addSeparator("Wiener filter");
+  addSeparator("Wiener filter", QStringLiteral("sharpness.wiener"));
 
   // Signal to noise ratio
   // Range 0 - 65535, slow at start (gamma 2.0)
@@ -526,9 +527,10 @@ void SharpnessPanel::setupUi() {
       [](ParameterState &s, double v) { s.rparams.sharpen.scanner_snr = v; },
       2.0, // Gamma (slow start)
       nullptr, false, "Used by the Wiener filter to balance between sharpening detail and amplifying image noise. Higher values result in stronger sharpening.",
-      QStringLiteral("sharpness.wiener.snr"));
+      QStringLiteral("sharpness.wiener.snr"), true);
 
-  addSeparator("Richardson–Lucy deconvolution");
+  addSeparator("Richardson–Lucy deconvolution",
+               QStringLiteral("sharpness.richardson_lucy"));
 
   // Richardson-Lucy iterations
   // Range 0 - 50000, integer, slow at beginning (gamma 2.0)
@@ -542,7 +544,7 @@ void SharpnessPanel::setupUi() {
       },
       2.0, // Gamma (slow start)
       nullptr, false, "Number of Richardson-Lucy iterations. Zero disables Richardson-Lucy sharpening; more iterations generally produce sharper results but may introduce \"ringing\" or \"halos\".",
-      QStringLiteral("sharpness.richardson_lucy.iterations"));
+      QStringLiteral("sharpness.richardson_lucy.iterations"), true);
 
   // Richardson-Lucy sigma
   // Range 0.0 - 2.0, floating point
@@ -554,9 +556,9 @@ void SharpnessPanel::setupUi() {
       [](ParameterState &s, double v) {
         s.rparams.sharpen.richardson_lucy_sigma = v;
       }, 1.0, nullptr, false, "Damping factor for the Richardson-Lucy algorithm to suppress noise amplification in dark areas.",
-      QStringLiteral("sharpness.richardson_lucy.sigma"));
+      QStringLiteral("sharpness.richardson_lucy.sigma"), true);
 
-  addSeparator("Unsharp mask");
+  addSeparator("Unsharp mask", QStringLiteral("sharpness.unsharp"));
 
   // Unsharp mask radius
   // Range 0.0 - 20.0, Pixels
@@ -570,7 +572,7 @@ void SharpnessPanel::setupUi() {
       [](const ParameterState &s) {
         return s.rparams.sharpen.mode == sharpen_mode::unsharp_mask;
       }, false, "The radius of the unsharp mask (edge enhancement) in pixels.",
-      QStringLiteral("sharpness.unsharp.radius"));
+      QStringLiteral("sharpness.unsharp.radius"), true);
 
   addSliderParameter(
       "Amount", 0.0, 100.0, 100.0, 1, "", "",
@@ -580,9 +582,9 @@ void SharpnessPanel::setupUi() {
       [](const ParameterState &s) {
         return s.rparams.sharpen.mode == sharpen_mode::unsharp_mask;
       }, false, "The strength of the unsharp mask enhancement.",
-      QStringLiteral("sharpness.unsharp.amount"));
+      QStringLiteral("sharpness.unsharp.amount"), true);
 
-  addSeparator("Focus analyzer");
+  addSeparator("Focus analyzer", QStringLiteral("sharpness.focus"));
   
   QCheckBox *optimizeSigmaCheck = addCheckboxParameter(
       "Optimize Sigma",
@@ -660,14 +662,20 @@ void SharpnessPanel::setupUi() {
                               m_finetuneImagesPanel);
   finetuneImagesContainer->addWidget(detachableFI);
   
-  m_finetuneImagesWrapper->hide();
+  m_finetuneImagesWrapper->setObjectName(
+      QStringLiteral("SharpnessFinetuneImagesRow"));
 
   if (m_currentGroupForm)
     m_currentGroupForm->addRow(m_finetuneImagesWrapper);
   else
     m_form->addRow(m_finetuneImagesWrapper);
+  setParameterApplicability(
+      m_finetuneImagesWrapper, [this](const ParameterState &) {
+        return m_finetuneImagesAvailable;
+      });
 
-  addSeparator("Adaptive sharpening");
+  addSeparator("Adaptive sharpening",
+               QStringLiteral("sharpness.adaptive"));
   
   addButtonParameter("", tr("Analyze displacements"),
       [this]() { onAnalyzeDisplacements(); },
@@ -686,12 +694,18 @@ void SharpnessPanel::setupUi() {
   QWidget *detachableChart =
       createDetachableSection("Adaptive Sharpening Chart", m_adaptiveChart);
   adaptiveChartContainer->addWidget(detachableChart);
-  m_adaptiveChartWrapper->hide();
+  m_adaptiveChartWrapper->setObjectName(
+      QStringLiteral("SharpnessAdaptiveChartRow"));
   
   if (m_currentGroupForm)
       m_currentGroupForm->addRow(m_adaptiveChartWrapper);
   else
       m_form->addRow(m_adaptiveChartWrapper);
+  setParameterApplicability(
+      m_adaptiveChartWrapper, [this](const ParameterState &state) {
+        return m_adaptiveAnalysisRunning
+            || state.rparams.scanner_blur_correction != nullptr;
+      });
 }
 
 void SharpnessPanel::updateMTFChart() {
@@ -773,14 +787,12 @@ void SharpnessPanel::onParametersRefreshed(const ParameterState &state) {
   updateMtfCalibrationStatus();
   updateScreenTiles();
 
-  // Update Adaptive Sharpening Chart visibility
-  bool hasAdaptiveData = state.rparams.scanner_blur_correction != nullptr;
-  if (m_adaptiveChartWrapper) {
-    // Only hide if not already visible (to avoid hiding it while analysis is running)
-    // or if we explicitly want to follow the state.
-    // If we have data, we show it. If not, we only hide if we're not expecting data soon.
-    m_adaptiveChartWrapper->setVisible(hasAdaptiveData);
-  }
+  // The row's logical applicability is independent of its section fold.
+  if (m_adaptiveChartWrapper)
+    setParameterRowApplicable(
+        m_adaptiveChartWrapper,
+        m_adaptiveAnalysisRunning
+            || state.rparams.scanner_blur_correction != nullptr);
 }
 
 std::vector<std::pair<render_screen_tile_type, QString>>
@@ -1249,20 +1261,22 @@ void SharpnessPanel::updateMeasurementList() {
         m_measurementsLayout->addWidget(row);
     }
 }
-void SharpnessPanel::updateFinetuneImages(const colorscreen::finetune_result& result) {
-    if (m_finetuneImagesPanel) {
-        m_finetuneImagesPanel->setFinetuneResult(result);
-        m_finetuneImagesPanel->show();
-    }
-    if (m_finetuneImagesWrapper) {
-        m_finetuneImagesWrapper->show();
-    }
+void SharpnessPanel::updateFinetuneImages(
+    const colorscreen::finetune_result &result) {
+  if (m_finetuneImagesPanel)
+    m_finetuneImagesPanel->setFinetuneResult(result);
+  m_finetuneImagesAvailable = true;
+  updateWidgetStates();
 }
 
 void SharpnessPanel::showAdaptiveChart() {
-    if (m_adaptiveChartWrapper) {
-        m_adaptiveChartWrapper->show();
-    }
+  setAdaptiveAnalysisRunning(true);
+}
+
+/** Keep live adaptive diagnostics visible without bypassing section folding. */
+void SharpnessPanel::setAdaptiveAnalysisRunning(bool running) {
+  m_adaptiveAnalysisRunning = running;
+  updateWidgetStates();
 }
 
 void SharpnessPanel::setFocusAnalysisChecked(bool checked) {

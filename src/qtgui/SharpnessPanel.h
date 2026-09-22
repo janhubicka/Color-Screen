@@ -62,6 +62,9 @@ public:
   void refreshMtfCalibrationStatus();
   AdaptiveSharpeningChart *getAdaptiveChart() const;
   void showAdaptiveChart();
+  /** Mark live adaptive analysis so its chart row remains logically available
+      while respecting the saved Adaptive sharpening section fold. */
+  void setAdaptiveAnalysisRunning(bool running);
 
 public slots:
   void onAnalyzeDisplacements();
@@ -116,6 +119,7 @@ private:
   bool m_measurementUiInitialized = false;
   FinetuneImagesPanel *m_finetuneImagesPanel = nullptr;
   QWidget *m_finetuneImagesWrapper = nullptr;
+  bool m_finetuneImagesAvailable = false;
   std::vector<colorscreen::mtf_measurement> m_lastMeasurements;
 
   // Cached parameters for change detection (moved from private to be used in
@@ -139,6 +143,7 @@ private:
   bool m_adaptiveSharpeningParametersInitialized = false;
   QPointer<AdaptiveSharpeningChart> m_adaptiveChart;
   QWidget *m_adaptiveChartWrapper = nullptr;
+  bool m_adaptiveAnalysisRunning = false;
 };
 
 #endif // SHARPNESS_PANEL_H

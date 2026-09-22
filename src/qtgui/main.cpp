@@ -3,6 +3,7 @@
 #include "GeometryPanel.h"
 #include "BackgroundThreadRegistry.h"
 #include "ColorScreenApplication.h"
+#include "CapturePanel.h"
 #include "ColorPanel.h"
 #include "ContactCopyPanel.h"
 #include "MainWindow.h"
@@ -374,10 +375,10 @@ bool parameterSectionPreferencesSmoke() {
   return true;
 }
 
-/** Exercise persisted folding in the real Color and Contact Copy panels. */
+/** Exercise persisted folding in representative real processing panels. */
 bool colorSectionPreferencesSmoke() {
   auto fail = [](const QString &reason) {
-    qCritical() << "Color/Contact Copy section smoke failed:" << reason;
+    qCritical() << "Processing-panel section smoke failed:" << reason;
     return false;
   };
 
@@ -489,6 +490,26 @@ bool colorSectionPreferencesSmoke() {
     std::function<std::unique_ptr<ParameterPanel>()> create;
   };
   const std::vector<PanelProbe> probes = {
+      {{QStringLiteral("capture.source"), QStringLiteral("capture.optics"),
+        QStringLiteral("capture.sensor"),
+        QStringLiteral("capture.wavelengths"),
+        QStringLiteral("capture.corrections")},
+       [&]() {
+         return std::make_unique<CapturePanel>(
+             getState, setState, noImage, []() {});
+       }},
+      {{QStringLiteral("sharpness.capture"),
+        QStringLiteral("sharpness.measurements"),
+        QStringLiteral("sharpness.deconvolution"),
+        QStringLiteral("sharpness.wiener"),
+        QStringLiteral("sharpness.richardson_lucy"),
+        QStringLiteral("sharpness.unsharp"),
+        QStringLiteral("sharpness.focus"),
+        QStringLiteral("sharpness.adaptive")},
+       [&]() {
+         return std::make_unique<SharpnessPanel>(
+             getState, setState, noImage);
+       }},
       {{QStringLiteral("color.process"), QStringLiteral("color.backlight"),
         QStringLiteral("color.dyes"), QStringLiteral("color.viewing"),
         QStringLiteral("color.final")},
@@ -586,6 +607,36 @@ bool colorSectionPreferencesSmoke() {
         color->updateUI();
         if (!spectra->isHidden())
           return fail(QStringLiteral("expanded dyes resurrected inapplicable chart"));
+      }
+
+      if (auto *sharpness = qobject_cast<SharpnessPanel *>(second.get())) {
+        auto *adaptiveToggle =
+            toggleFor(*sharpness, QStringLiteral("sharpness.adaptive"));
+        auto *adaptiveRow = sharpness->findChild<QWidget *>(
+            QStringLiteral("SharpnessAdaptiveChartRow"));
+        if (!adaptiveToggle || !adaptiveRow || !adaptiveRow->isHidden()
+            || adaptiveRow->property("parameterApplicable").toBool())
+          return fail(QStringLiteral(
+              "Sharpness exposed adaptive diagnostics without data"));
+
+        // Live analysis makes the row applicable, but never overrides folding.
+        adaptiveToggle->click();
+        const bool adaptiveExpanded = adaptiveToggle->isChecked();
+        sharpness->setAdaptiveAnalysisRunning(true);
+        if (!adaptiveRow->property("parameterApplicable").toBool()
+            || !adaptiveRow->isHidden())
+          return fail(QStringLiteral(
+              "Live adaptive analysis escaped a collapsed Sharpness section"));
+        adaptiveToggle->click();
+        if (adaptiveToggle->isChecked() == adaptiveExpanded
+            || adaptiveRow->isHidden())
+          return fail(QStringLiteral(
+              "Expanded Sharpness section lost its live adaptive chart"));
+        sharpness->setAdaptiveAnalysisRunning(false);
+        if (!adaptiveRow->isHidden()
+            || adaptiveRow->property("parameterApplicable").toBool())
+          return fail(QStringLiteral(
+              "Finished adaptive analysis retained an empty diagnostic row"));
       }
 
       // An explicit choice in the new inspector affects future panels only.
