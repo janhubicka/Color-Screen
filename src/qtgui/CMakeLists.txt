@@ -18,7 +18,10 @@ pkg_check_modules(TIFF REQUIRED libtiff-4) # or libtiff
 pkg_check_modules(LCMS2 REQUIRED lcms2)
 pkg_check_modules(LIBRAW libraw)
 pkg_check_modules(LIBZIP libzip)
-pkg_check_modules(FFTW3 fftw3)
+pkg_check_modules(FFTW3 REQUIRED fftw3)
+pkg_check_modules(EXIV2 REQUIRED exiv2)
+pkg_check_modules(OPENJPEG REQUIRED libopenjp2)
+pkg_check_modules(LIBPNG REQUIRED libpng)
 
 set(LIBCOLORSCREEN_SOURCE_DIR "${CMAKE_SOURCE_DIR}/../libcolorscreen")
 set(LIBCOLORSCREEN_BUILD_DIR "${CMAKE_SOURCE_DIR}/../../build/src/libcolorscreen")
@@ -34,22 +37,30 @@ include_directories(
     ${LIBRAW_INCLUDE_DIRS}
     ${LIBZIP_INCLUDE_DIRS}
     ${FFTW3_INCLUDE_DIRS}
+    ${EXIV2_INCLUDE_DIRS}
+    ${OPENJPEG_INCLUDE_DIRS}
+    ${LIBPNG_INCLUDE_DIRS}
 )
 
 set(SOURCES
     main.cpp
+    DocumentLifecycleSmoke.cpp
+    WorkspaceChurnSmoke.cpp
     ColorScreenApplication.cpp
     WorkspaceWindow.cpp
     ImageViewWindow.cpp
     MainWindow.cpp
+    MainWindowAnalysis.cpp
+    MainWindowDocument.cpp
     BackgroundThreadRegistry.cpp
     DocumentProgressController.cpp
     FileRenderController.cpp
     OneShotOperationController.cpp
     InitialSetupGuideDialog.cpp
     ImageWidget.cpp
-    NavigationView.cpp
+    BacklightChartWidget.cpp
     Renderer.cpp
+    NavigationView.cpp
     ParameterState.cpp
     CapturePanel.cpp
     ParameterPanel.cpp
@@ -59,27 +70,56 @@ set(SOURCES
     MTFFitDialog.cpp
     SlantedEdgeDialog.cpp
     ScreenPanel.cpp
-    ColorPanel.cpp
-    MTFChartWidget.cpp
-    SpectraChartWidget.cpp
-    CIEChartWidget.cpp
-    ThamesAnimation.cpp
-    PagetAnimation.cpp
     GeometryPanel.cpp
     GeometrySolverWorker.cpp
     DetectScreenWorker.cpp
+    FlatFieldWorker.cpp
     FinetuneWorker.cpp
+    FinetuneMisregisteredWorker.cpp
     WorkerBase.cpp
+    ContactCopyPanel.cpp
+    HDCurveWidget.cpp
+    InteractiveChartWidget.cpp
+    ToneCurveWidget.cpp
+    ColorPanel.cpp
+    MTFChartWidget.cpp
+    DeformationChartWidget.cpp
+    SpectraChartWidget.cpp
+    CIEChartWidget.cpp
+    FinetuneImagesPanel.cpp
+    ThamesAnimation.cpp
+    PagetAnimation.cpp
+    JolyAnimation.cpp
+    HurleyAnimation.cpp
     TaskQueue.cpp
+    HistogramWorker.cpp
+    FlowLayout.cpp
+    MultiLineTabWidget.cpp
     Logging.cpp
     SubtitleOverlay.cpp
     CoordinateTransformer.cpp
+    ScalableImageLabel.cpp
+    FocusAnalysisWorker.cpp
+    AdaptiveSharpeningWorker.cpp
+    AdaptiveSharpeningChart.cpp
+    RenderDialog.cpp
+    ProfilePanel.cpp
+    ColorOptimizerWorker.cpp
+    CoordinateOptimizationWorker.cpp
+    TilesPanel.cpp
+    ImageLayerPanel.cpp
+    MeasureDialog.cpp
+    resources.qrc
 )
 
 set(HEADERS
     ColorScreenApplication.h
+    DocumentLifecycleSmoke.h
+    WorkspaceChurnSmoke.h
     WorkspaceWindow.h
     ImageViewWindow.h
+    ImageWidget.h
+    CapturePanel.h
     MainWindow.h
     BackgroundThreadRegistry.h
     DocumentProgressController.h
@@ -87,32 +127,60 @@ set(HEADERS
     OneShotOperationController.h
     ChangeParametersCommand.h
     InitialSetupGuideDialog.h
-    ImageWidget.h
-    Renderer.h
-    NavigationView.h
-    CapturePanel.h
-    ParameterPanel.h
-    TilePreviewPanel.h
-    SharpnessPanel.h
-    AdaptiveSharpeningDialog.h
-    MTFFitDialog.h
-    SlantedEdgeDialog.h
-    ScreenPanel.h
-    ColorPanel.h
     MTFChartWidget.h
+    DeformationChartWidget.h
+    FinetuneImagesPanel.h
+    BacklightChartWidget.h
+    ColorUtils.h
+    NavigationView.h
+    ParameterPanel.h
+    ParameterState.h
+    Renderer.h
+    SynchronizedRunnable.h
+    SharpnessPanel.h
+    SmartSpinBox.h
+    TilePreviewPanel.h
+    ScreenPanel.h
+    GeometryPanel.h
+    GeometrySolverWorker.h
+    DetectScreenWorker.h
+    FlatFieldWorker.h
+    FinetuneWorker.h
+    FinetuneMisregisteredWorker.h
+    WorkerBase.h
+    ContactCopyPanel.h
+    HDCurveWidget.h
+    InteractiveChartWidget.h
+    ToneCurveWidget.h
+    ColorPanel.h
     SpectraChartWidget.h
     CIEChartWidget.h
     ThamesAnimation.h
     PagetAnimation.h
-    GeometryPanel.h
-    GeometrySolverWorker.h
-    DetectScreenWorker.h
-    FinetuneWorker.h
-    WorkerBase.h
+    JolyAnimation.h
+    HurleyAnimation.h
     TaskQueue.h
     SubtitleOverlay.h
-    SmartSpinBox.h
     Logging.h
+    AdaptiveSharpeningWorker.h
+    AdaptiveSharpeningParameters.h
+    AdaptiveSharpeningChart.h
+    AdaptiveSharpeningDialog.h
+    RenderDialog.h
+    ProfilePanel.h
+    CoordinateOptimizationWorker.h
+    ColorOptimizerWorker.h
+    CoordinateTransformer.h
+    FlowLayout.h
+    FocusAnalysisWorker.h
+    HistogramWorker.h
+    MultiLineTabWidget.h
+    ScalableImageLabel.h
+    TilesPanel.h
+    ImageLayerPanel.h
+    MeasureDialog.h
+    MTFFitDialog.h
+    SlantedEdgeDialog.h
 )
 
 add_executable(colorscreen-qt
@@ -133,6 +201,9 @@ target_link_libraries(colorscreen-qt PRIVATE
     ${LIBRAW_LIBRARIES}
     ${LIBZIP_LIBRARIES}
     ${FFTW3_LIBRARIES}
+    ${EXIV2_LIBRARIES}
+    ${OPENJPEG_LIBRARIES}
+    ${LIBPNG_LIBRARIES}
     jpeg
     turbojpeg
     m

@@ -535,9 +535,12 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   publication. The first physical split is now complete:
   `MainWindowAnalysis.cpp` contains registration discovery, screen detection
   and recommendations, adaptive-sharpening analysis, and coordinate
-  autodetection/refinement, while the same `MainWindow` object still owns all
-  state and policy. This removes about one thousand lines from the original
-  translation unit without introducing a second owner/controller abstraction.
+  autodetection/refinement. `MainWindowDocument.cpp` now contains image and
+  parameter open/save/recent handling, post-load setup, close/save policy,
+  window persistence, recovery files, and transactional parameter loading.
+  The same `MainWindow` object still owns all state and policy; these are
+  physical responsibility splits, not new controller/ownership layers. Together
+  they remove more than two thousand lines from the original translation unit.
   Stable replaceable one-shot queue/publication mechanics live in
   `OneShotOperationController`; transient/dedicated task presentation,
   switching, delayed visibility and row bookkeeping live in
@@ -551,6 +554,11 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   workspace/focus policy plus save-path/render-settings dialogs and document
   snapshots. Continue moving cohesive infrastructure behind focused
   controllers/services when the interface is similarly stable.
+  Keep secondary build manifests in lockstep with the maintained Automake
+  executable manifest. The standalone Qt CMake target is now resynchronized
+  with all current GUI sources, headers and resources (including split
+  `MainWindow` translation units) and with the static libcolorscreen image-I/O
+  dependencies it must link explicitly.
 - Give long-lived analysis state explicit structs rather than parallel member
   variables. Profile-calibration, geometry-fit, measured-MTF fit, automatic
   multi-area focus analysis, progressive adaptive sharpening, and progressive
