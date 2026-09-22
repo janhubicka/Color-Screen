@@ -498,7 +498,8 @@ void CapturePanel::setupUi()
         &m_useDetectedWavelengthsBtn,
         [onUseDetectedWavelengths]() { onUseDetectedWavelengths(); });
 
-    auto updateInfoLabels = [this, sensorWidthSlider](const ParameterState &state) {
+    auto updateInfoLabels =
+        [this, sensorWidthSlider, labelForField](const ParameterState &state) {
         auto img = m_imageGetter();
 
         // The stored parameter can come from another image. Rebuild the
