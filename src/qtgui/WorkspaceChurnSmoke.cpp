@@ -821,6 +821,13 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
                      .arg(key));
             return;
           }
+          QToolButton *reset = findParameterResetButton(key);
+          if (!reset || !reset->property("parameterDefaultValue").isValid()) {
+            fail(QStringLiteral(
+                     "Workspace churn lost Image Layer default/reset metadata for %1")
+                     .arg(key));
+            return;
+          }
         }
         if (!imageLayerSourceChoice ||
             imageLayerSourceChoice->property("parameterKey").toString() !=
