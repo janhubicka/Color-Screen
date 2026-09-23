@@ -875,6 +875,29 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
             return;
           }
         }
+        const QStringList screenDefaultKeys = {
+            QStringLiteral("screen.red_strip_width"),
+            QStringLiteral("screen.green_strip_width"),
+            QStringLiteral("screen.collection_threshold"),
+            QStringLiteral("screen.denoise.pre.strength"),
+            QStringLiteral("screen.denoise.pre.patch_radius"),
+            QStringLiteral("screen.denoise.pre.search_radius"),
+            QStringLiteral("screen.denoise.pre.bilateral_sigma_s"),
+            QStringLiteral("screen.denoise.pre.bilateral_sigma_r"),
+            QStringLiteral("screen.denoise.post.strength"),
+            QStringLiteral("screen.denoise.post.patch_radius"),
+            QStringLiteral("screen.denoise.post.search_radius"),
+            QStringLiteral("screen.denoise.post.bilateral_sigma_s"),
+            QStringLiteral("screen.denoise.post.bilateral_sigma_r")};
+        for (const QString &key : screenDefaultKeys) {
+          QToolButton *reset = findParameterResetButton(key);
+          if (!reset || !reset->property("parameterDefaultValue").isValid()) {
+            fail(QStringLiteral(
+                     "Workspace churn lost Screen default/reset metadata for %1")
+                     .arg(key));
+            return;
+          }
+        }
 
         // Pre- and post-demosaic denoising intentionally reuse visible labels.
         // Rapid changes in different stages must therefore remain separate Undo

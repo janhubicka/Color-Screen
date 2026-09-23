@@ -381,7 +381,7 @@ void ScreenPanel::setupUi() {
       "Threshold for identifying screen elements based on their color density. "
       "Smaller values require stronger color enhancement and may result in edge "
       "artefacts. Too large values may result in no data being collected at all.",
-      QStringLiteral("screen.collection_threshold"));
+      QStringLiteral("screen.collection_threshold"), true);
 
   // Collection Quality
   addEnumParameter("Collection quality", 
@@ -441,7 +441,7 @@ void ScreenPanel::setupUi() {
         return s.rparams.screen_denoise.mode == denoise_parameters::nl_means ||
                s.rparams.screen_denoise.mode == denoise_parameters::nl_fast;
       }, false, "Patch-distance scale for Non-local means denoising. Larger values accept less-similar patches and therefore smooth more strongly.",
-      QStringLiteral("screen.denoise.pre.strength"));
+      QStringLiteral("screen.denoise.pre.strength"), true);
 
   // Patch Radius
   addSliderParameter(
@@ -453,7 +453,7 @@ void ScreenPanel::setupUi() {
         return s.rparams.screen_denoise.mode == denoise_parameters::nl_means ||
                s.rparams.screen_denoise.mode == denoise_parameters::nl_fast;
       }, false, "Radius of the patch used for similarity comparison, measured in common physical screen coordinates before demosaicing.",
-      QStringLiteral("screen.denoise.pre.patch_radius"));
+      QStringLiteral("screen.denoise.pre.patch_radius"), true);
 
   // Search Radius
   addSliderParameter(
@@ -465,7 +465,7 @@ void ScreenPanel::setupUi() {
         return s.rparams.screen_denoise.mode == denoise_parameters::nl_means ||
                s.rparams.screen_denoise.mode == denoise_parameters::nl_fast;
       }, false, "Radius of the search window in common physical screen coordinates before demosaicing. Larger values are slower.",
-      QStringLiteral("screen.denoise.pre.search_radius"));
+      QStringLiteral("screen.denoise.pre.search_radius"), true);
 
   // Bilateral Sigma S
   addSliderParameter(
@@ -475,7 +475,7 @@ void ScreenPanel::setupUi() {
       1.0,
       [](const ParameterState &s) { return s.rparams.screen_denoise.mode == denoise_parameters::bilateral; },
       false, "Spatial standard deviation for Bilateral filter. Controls the size of the smoothing neighborhood.",
-      QStringLiteral("screen.denoise.pre.bilateral_sigma_s"));
+      QStringLiteral("screen.denoise.pre.bilateral_sigma_s"), true);
 
   // Bilateral Sigma R
   addSliderParameter(
@@ -485,7 +485,7 @@ void ScreenPanel::setupUi() {
       1.0,
       [](const ParameterState &s) { return s.rparams.screen_denoise.mode == denoise_parameters::bilateral; },
       false, "Range standard deviation for Bilateral filter. Controls how much intensity difference is allowed while smoothing.",
-      QStringLiteral("screen.denoise.pre.bilateral_sigma_r"));
+      QStringLiteral("screen.denoise.pre.bilateral_sigma_r"), true);
 
   addSeparator("Post-demosaic denoising",
                    QStringLiteral("screen.denoise.post"));
@@ -509,7 +509,7 @@ void ScreenPanel::setupUi() {
                && (s.rparams.demosaiced_denoise.mode == denoise_parameters::nl_means ||
                    s.rparams.demosaiced_denoise.mode == denoise_parameters::nl_fast);
       }, false, "RMS RGB patch-distance scale for Non-local means. One similarity weight is applied to the whole RGB vector.",
-      QStringLiteral("screen.denoise.post.strength"));
+      QStringLiteral("screen.denoise.post.strength"), true);
 
   addSliderParameter(
       "Patch Radius", 1, 10, 1, 0, "", "",
@@ -521,7 +521,7 @@ void ScreenPanel::setupUi() {
                && (s.rparams.demosaiced_denoise.mode == denoise_parameters::nl_means ||
                    s.rparams.demosaiced_denoise.mode == denoise_parameters::nl_fast);
       }, false, "Radius of RGB patches used for post-demosaic similarity comparison.",
-      QStringLiteral("screen.denoise.post.patch_radius"));
+      QStringLiteral("screen.denoise.post.patch_radius"), true);
 
   addSliderParameter(
       "Search Radius", 1, 30, 1, 0, "", "",
@@ -533,7 +533,7 @@ void ScreenPanel::setupUi() {
                && (s.rparams.demosaiced_denoise.mode == denoise_parameters::nl_means ||
                    s.rparams.demosaiced_denoise.mode == denoise_parameters::nl_fast);
       }, false, "Radius of the search window in the demosaiced color field.",
-      QStringLiteral("screen.denoise.post.search_radius"));
+      QStringLiteral("screen.denoise.post.search_radius"), true);
 
   addSliderParameter(
       "Bilateral Spatial Sigma", 0.1, 10.0, 10.0, 1, "", "",
@@ -543,7 +543,7 @@ void ScreenPanel::setupUi() {
       [](const ParameterState &s) { return postDemosaicDenoiseAvailable (s)
                                       && s.rparams.demosaiced_denoise.mode == denoise_parameters::bilateral; },
       false, "Spatial standard deviation for post-demosaic vector bilateral filtering.",
-      QStringLiteral("screen.denoise.post.bilateral_sigma_s"));
+      QStringLiteral("screen.denoise.post.bilateral_sigma_s"), true);
 
   addSliderParameter(
       "Bilateral Range Sigma", 0.01, 1.0, 100.0, 2, "", "",
@@ -553,7 +553,7 @@ void ScreenPanel::setupUi() {
       [](const ParameterState &s) { return postDemosaicDenoiseAvailable (s)
                                       && s.rparams.demosaiced_denoise.mode == denoise_parameters::bilateral; },
       false, "RMS RGB range standard deviation for post-demosaic vector bilateral filtering.",
-      QStringLiteral("screen.denoise.post.bilateral_sigma_r"));
+      QStringLiteral("screen.denoise.post.bilateral_sigma_r"), true);
 
   updateUI();
 }
