@@ -1478,6 +1478,7 @@ bool runBetaInvariantSmoke() {
   QDoubleSpinBox *darkPoint =
       findTileSpin(QStringLiteral("tiles.0.0.dark_point"));
   QToolButton *tileAdjustmentsToggle = nullptr;
+  QGroupBox *tileAdjustmentsGroup = nullptr;
   for (QToolButton *button : tiles.findChildren<QToolButton *>()) {
     if (button->property("sectionKey").toString() ==
         QStringLiteral("tiles.adjustments")) {
@@ -1486,8 +1487,17 @@ bool runBetaInvariantSmoke() {
       tileAdjustmentsToggle = button;
     }
   }
+  for (QGroupBox *group : tiles.findChildren<QGroupBox *>()) {
+    if (group->property("sectionKey").toString() ==
+        QStringLiteral("tiles.adjustments")) {
+      if (tileAdjustmentsGroup)
+        return fail("duplicate Tile adjustments group key");
+      tileAdjustmentsGroup = group;
+    }
+  }
   if (!tile0Selector || !tile1Selector || !tile0Enabled || !tile1Enabled ||
       !exposure || !darkPoint || !tileAdjustmentsToggle ||
+      !tileAdjustmentsGroup ||
       tile0Enabled->property("parameterKey").toString() !=
           QStringLiteral("tiles.0.0.enabled") ||
       tile1Enabled->property("parameterKey").toString() !=
@@ -1502,12 +1512,14 @@ bool runBetaInvariantSmoke() {
       tileAdjustmentsToggle->isChecked();
   tileAdjustmentsToggle->setChecked(true);
   tiles.updateUI();
-  if (exposure->isHidden() || darkPoint->isHidden() ||
+  if (!exposure->isVisibleTo(tileAdjustmentsGroup) ||
+      !darkPoint->isVisibleTo(tileAdjustmentsGroup) ||
       tile0Selector->isHidden())
     return fail("expanded Tile adjustments did not expose its editors");
   tileAdjustmentsToggle->setChecked(false);
   tiles.updateUI();
-  if (!exposure->isHidden() || !darkPoint->isHidden() ||
+  if (exposure->isVisibleTo(tileAdjustmentsGroup) ||
+      darkPoint->isVisibleTo(tileAdjustmentsGroup) ||
       tile0Selector->isHidden())
     return fail("collapsed Tile adjustments did not own only its editors");
   tileAdjustmentsToggle->setChecked(originalTileAdjustmentsExpanded);
