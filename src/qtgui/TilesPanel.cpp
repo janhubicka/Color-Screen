@@ -35,7 +35,8 @@ void TilesPanel::setupUi() {
 
   m_currentGroupForm = nullptr;
 
-  addSeparator(tr("Tile adjustments"));
+  addSeparator(tr("Tile adjustments"),
+               QStringLiteral("tiles.adjustments"));
 
   m_exposureRow = addSliderParameter(
       tr("Exposure"), 0.01, 10.0, 100, 3, "", "",
@@ -92,6 +93,9 @@ void TilesPanel::setupUi() {
         return tileParameterKey(currentTileX(), currentTileY(),
                                 QStringLiteral("dark_point"));
       });
+
+  // Apply a restored section fold after the slider rows have been populated.
+  updateUI();
 }
 
 void TilesPanel::updateForNewImage() {

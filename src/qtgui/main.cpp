@@ -1447,6 +1447,26 @@ bool runBetaInvariantSmoke() {
                                   QStringLiteral("smoke.tiles.setup"));
   undoStack->clear();
 
+  const QString tileSectionSetting =
+      QStringLiteral("inspector/sections/tiles.adjustments/expanded");
+  QSettings tileSettings;
+  struct TileSectionSettingGuard {
+    QString key;
+    bool existed;
+    QVariant value;
+    /** Restore the operator/test-harness preference on every exit path. */
+    ~TileSectionSettingGuard() {
+      QSettings settings;
+      if (existed)
+        settings.setValue(key, value);
+      else
+        settings.remove(key);
+    }
+  } tileSectionSettingGuard{tileSectionSetting,
+                            tileSettings.contains(tileSectionSetting),
+                            tileSettings.value(tileSectionSetting)};
+  tileSettings.setValue(tileSectionSetting, false);
+
   TilesPanel tiles(
       [&window]() { return window.documentStateSnapshot(); },
       [&window](const ParameterState &state, const QString &description,
@@ -1477,8 +1497,19 @@ bool runBetaInvariantSmoke() {
       findTileSpin(QStringLiteral("tiles.0.0.exposure"));
   QDoubleSpinBox *darkPoint =
       findTileSpin(QStringLiteral("tiles.0.0.dark_point"));
+  QToolButton *tileAdjustmentsToggle = nullptr;
+  for (QToolButton *button : tiles.findChildren<QToolButton *>()) {
+    if (button->property("sectionKey").toString()
+        == QStringLiteral("tiles.adjustments")) {
+      if (tileAdjustmentsToggle)
+        return fail("duplicate Tile adjustments section key");
+      tileAdjustmentsToggle = button;
+    }
+  }
   if (!tile0Selector || !tile1Selector || !tile0Enabled || !tile1Enabled ||
-      !exposure || !darkPoint ||
+      !exposure || !darkPoint || !tileAdjustmentsToggle ||
+      tileAdjustmentsToggle->isChecked() || !exposure->isHidden() ||
+      !darkPoint->isHidden() ||
       tile0Enabled->property("parameterKey").toString() !=
           QStringLiteral("tiles.0.0.enabled") ||
       tile1Enabled->property("parameterKey").toString() !=
@@ -1486,6 +1517,12 @@ bool runBetaInvariantSmoke() {
       tile0Selector->property("parameterKey").isValid() ||
       tile1Selector->property("parameterKey").isValid())
     return fail("tile keys crossed the document/selection-state boundary");
+
+  tileAdjustmentsToggle->click();
+  if (!tileAdjustmentsToggle->isChecked() || exposure->isHidden()
+      || darkPoint->isHidden()
+      || !QSettings().value(tileSectionSetting, false).toBool())
+    return fail("Tile adjustments did not restore/expand as a real section");
 
   const double tile0Before = exposure->value();
   const colorscreen::luminosity_t tile0After =
