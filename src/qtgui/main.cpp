@@ -464,11 +464,21 @@ bool colorSectionPreferencesSmoke() {
           group->layout()->itemAt(1)->layout());
       if (!form || form->rowCount() == 0)
         return fail(QStringLiteral("missing section rows: %1").arg(keys[i]));
-      auto rowsMatch = [](auto self, QLayoutItem *item, bool open) -> bool {
+      auto rowsRespectPresentation =
+          [](auto self, QLayoutItem *item, bool open) -> bool {
         if (QWidget *widget = item->widget()) {
           const QVariant applicable = widget->property("parameterApplicable");
-          return !widget->isHidden()
-              == (open && (!applicable.isValid() || applicable.toBool()));
+          // A collapsed section must hide every row, and an explicitly
+          // inapplicable row must stay hidden. Expanded sections may still
+          // contain independently hidden diagnostics (for example a preview
+          // with no scan), so do not mistake that presentation state for a
+          // folding failure.
+          if (!open && !widget->isHidden())
+            return false;
+          if (applicable.isValid() && !applicable.toBool()
+              && !widget->isHidden())
+            return false;
+          return true;
         }
         if (QLayout *layout = item->layout())
           for (int row = 0; row < layout->count(); ++row)
@@ -477,8 +487,10 @@ bool colorSectionPreferencesSmoke() {
         return true;
       };
       for (int row = 0; row < form->count(); ++row)
-        if (!rowsMatch(rowsMatch, form->itemAt(row), expanded[i]))
-          return fail(QStringLiteral("row escaped section folding: %1")
+        if (!rowsRespectPresentation(rowsRespectPresentation,
+                                     form->itemAt(row), expanded[i]))
+          return fail(QStringLiteral(
+                          "row escaped section folding/applicability: %1")
                           .arg(keys[i]));
     }
     return true;
