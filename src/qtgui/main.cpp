@@ -8,6 +8,7 @@
 #include "MainWindow.h"
 #include "MultiLineTabWidget.h"
 #include "ParameterPanel.h"
+#include "ProfilePanel.h"
 #include "ImageViewWindow.h"
 #include "ImageWidget.h"
 #include "InitialSetupGuideDialog.h"
@@ -1008,6 +1009,172 @@ bool initialSetupGuideScreenDetectionSmoke() {
   return true;
 }
 
+/** Exercise real Profile section ownership and persisted folding. */
+bool profileSectionPreferencesSmoke() {
+  auto fail = [](const QString &reason) {
+    qCritical() << "Profile section smoke failed:" << reason;
+    return false;
+  };
+
+  QTemporaryDir temporary;
+  if (!temporary.isValid())
+    return fail(QStringLiteral("could not allocate isolated settings identity"));
+  struct SettingsIdentityGuard {
+    QString organization = QCoreApplication::organizationName();
+    QString domain = QCoreApplication::organizationDomain();
+    QString application = QCoreApplication::applicationName();
+    /** Remove probe settings and restore the application identity. */
+    ~SettingsIdentityGuard() {
+      QSettings settings;
+      settings.clear();
+      settings.sync();
+      QCoreApplication::setOrganizationName(organization);
+      QCoreApplication::setOrganizationDomain(domain);
+      QCoreApplication::setApplicationName(application);
+    }
+  } settingsGuard;
+  const QString identity = QStringLiteral("ColorScreenProfileSmoke-%1")
+      .arg(QFileInfo(temporary.path()).fileName());
+  QCoreApplication::setOrganizationName(identity);
+  QCoreApplication::setOrganizationDomain(identity + QStringLiteral(".invalid"));
+  QCoreApplication::setApplicationName(QStringLiteral("ProfileSections"));
+
+  ParameterState state;
+  state.scrToImg.type = colorscreen::Dufay;
+  state.scrToImg.coordinate1 = {8, 0};
+  state.scrToImg.coordinate2 = {0, 8};
+  const ParameterState initialState = state;
+  int documentEdits = 0;
+  int optimizeRequests = 0;
+  int addSpotRequests = 0;
+  auto getState = [&]() { return state; };
+  auto setState = [&](const ParameterState &, const QString &, const QString &) {
+    ++documentEdits;
+  };
+  auto noImage = []() { return std::shared_ptr<colorscreen::image_data>(); };
+  auto createPanel = [&]() {
+    auto panel = std::make_unique<ProfilePanel>(getState, setState, noImage);
+    QObject::connect(panel.get(), &ProfilePanel::optimizeColorRequested,
+                     panel.get(), [&](bool) { ++optimizeRequests; });
+    QObject::connect(panel.get(), &ProfilePanel::addSpotModeRequested,
+                     panel.get(), [&](bool) { ++addSpotRequests; });
+    return panel;
+  };
+
+  const QString spotsKey = QStringLiteral("profile.spots");
+  const QString optimizationKey = QStringLiteral("profile.optimization");
+  auto settingKey = [](const QString &key) {
+    return QStringLiteral("inspector/sections/%1/expanded").arg(key);
+  };
+  auto toggleFor = [](ProfilePanel &panel, const QString &key) {
+    QToolButton *result = nullptr;
+    for (auto *button : panel.findChildren<QToolButton *>()) {
+      if (button->property("sectionKey").toString() == key) {
+        if (result)
+          return static_cast<QToolButton *>(nullptr);
+        result = button;
+      }
+    }
+    return result;
+  };
+  auto groupFor = [](ProfilePanel &panel, const QString &key) {
+    QGroupBox *result = nullptr;
+    for (auto *group : panel.findChildren<QGroupBox *>()) {
+      if (group->property("sectionKey").toString() == key) {
+        if (result)
+          return static_cast<QGroupBox *>(nullptr);
+        result = group;
+      }
+    }
+    return result;
+  };
+  auto verifyOwnership = [&](ProfilePanel &panel) {
+    auto *spots = groupFor(panel, spotsKey);
+    auto *optimization = groupFor(panel, optimizationKey);
+    auto *spotCount =
+        panel.findChild<QLabel *>(QStringLiteral("ProfileSpotCount"));
+    auto *showSpots =
+        panel.findChild<QCheckBox *>(QStringLiteral("ProfileShowSpotsCheck"));
+    auto *optimize =
+        panel.findChild<QPushButton *>(QStringLiteral("ProfileOptimizeButton"));
+    auto *status =
+        panel.findChild<QLabel *>(QStringLiteral("ProfileCalibrationStatus"));
+    auto *quality =
+        panel.findChild<QLabel *>(QStringLiteral("ProfileCalibrationQuality"));
+    if (!spots || !optimization || !spotCount || !showSpots || !optimize
+        || !status || !quality || !spots->isAncestorOf(spotCount)
+        || !spots->isAncestorOf(showSpots)
+        || !optimization->isAncestorOf(optimize)
+        || !optimization->isAncestorOf(status)
+        || !optimization->isAncestorOf(quality))
+      return fail(QStringLiteral("Profile controls escaped their sections"));
+    return true;
+  };
+
+  auto first = createPanel();
+  if (!verifyOwnership(*first))
+    return false;
+  auto *firstSpots = toggleFor(*first, spotsKey);
+  auto *firstOptimization = toggleFor(*first, optimizationKey);
+  if (!firstSpots || !firstOptimization || !firstSpots->isChecked()
+      || !firstOptimization->isChecked()
+      || QSettings().contains(settingKey(spotsKey))
+      || QSettings().contains(settingKey(optimizationKey)))
+    return fail(QStringLiteral("Profile initial section state is incorrect"));
+
+  firstSpots->click();
+  first->updateUI();
+  auto *firstSpotCount =
+      first->findChild<QLabel *>(QStringLiteral("ProfileSpotCount"));
+  if (!firstSpotCount || !firstSpotCount->isHidden()
+      || QSettings().value(settingKey(spotsKey), true).toBool())
+    return fail(QStringLiteral("Profile spots fold did not persist"));
+
+  auto second = createPanel();
+  if (!verifyOwnership(*second))
+    return false;
+  auto *secondSpots = toggleFor(*second, spotsKey);
+  auto *secondOptimization = toggleFor(*second, optimizationKey);
+  auto *secondSpotCount =
+      second->findChild<QLabel *>(QStringLiteral("ProfileSpotCount"));
+  auto *secondOptimize =
+      second->findChild<QPushButton *>(QStringLiteral("ProfileOptimizeButton"));
+  if (!secondSpots || !secondOptimization || !secondSpotCount || !secondOptimize
+      || secondSpots->isChecked() || !secondSpotCount->isHidden()
+      || !secondOptimization->isChecked() || secondOptimize->isHidden())
+    return fail(QStringLiteral("Recreated Profile panel lost saved fold"));
+
+  // A programmatic change is local and does not become an application choice.
+  firstSpots->setChecked(true);
+  first->updateUI();
+  if (!firstSpots->isChecked() || firstSpotCount->isHidden()
+      || secondSpots->isChecked()
+      || QSettings().value(settingKey(spotsKey), true).toBool())
+    return fail(QStringLiteral("Programmatic Profile fold leaked between panels"));
+
+  secondOptimization->click();
+  second->updateUI();
+  if (secondOptimization->isChecked() || !secondOptimize->isHidden()
+      || QSettings().value(settingKey(optimizationKey), true).toBool())
+    return fail(QStringLiteral("Profile optimization fold did not persist"));
+
+  second.reset();
+  auto reopened = createPanel();
+  if (!verifyOwnership(*reopened))
+    return false;
+  auto *reopenedSpots = toggleFor(*reopened, spotsKey);
+  auto *reopenedOptimization = toggleFor(*reopened, optimizationKey);
+  if (!reopenedSpots || !reopenedOptimization || reopenedSpots->isChecked()
+      || reopenedOptimization->isChecked())
+    return fail(QStringLiteral("Profile fold preferences were not restored"));
+
+  if (documentEdits != 0 || optimizeRequests != 0 || addSpotRequests != 0
+      || state != initialState)
+    return fail(QStringLiteral(
+        "Profile construction/folding entered document or operation state"));
+  return true;
+}
+
 /** Exercise beta-critical non-rendering UI/document invariants. */
 bool runBetaInvariantSmoke() {
   auto fail = [](const char *reason) {
@@ -1019,6 +1186,7 @@ bool runBetaInvariantSmoke() {
       || !parameterSectionPreferencesSmoke()
       || !colorSectionPreferencesSmoke()
       || !geometrySectionPreferencesSmoke()
+      || !profileSectionPreferencesSmoke()
       || !initialSetupGuideScreenDetectionSmoke())
     return false;
 
