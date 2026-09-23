@@ -203,7 +203,7 @@ void GeometryPanel::setupUi() {
       "allows it anywhere inside the image, and values above 1 allow it "
       "proportionally outside the image. Useful when a scanner image is a "
       "crop far from the scanner lens optical axis.",
-      QStringLiteral("geometry.fit.lens_center_distance"));
+      QStringLiteral("geometry.fit.lens_center_distance"), true);
 
   m_lensMessageLabel = new QLabel();
   configureDynamicStatusLabel(
@@ -259,7 +259,7 @@ void GeometryPanel::setupUi() {
       "Continuous rotation in degrees in the libcolorscreen final plane. "
       "Unlike scan rotation this is not restricted to 90-degree steps and is "
       "saved in the parameter file.",
-      QStringLiteral("geometry.final.rotation"));
+      QStringLiteral("geometry.final.rotation"), true);
   QCheckBox *finalMirrorCheck = addCheckboxParameter(
       "Mirror final image",
       [](const ParameterState &s) { return s.scrToImg.final_mirror; },
