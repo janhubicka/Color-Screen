@@ -35,7 +35,8 @@ void TilesPanel::setupUi() {
 
   m_currentGroupForm = nullptr;
 
-  addSeparator(tr("Tile adjustments"));
+  addSeparator(tr("Tile adjustments"),
+               QStringLiteral("tiles.adjustments"));
 
   m_exposureRow = addSliderParameter(
       tr("Exposure"), 0.01, 10.0, 100, 3, "", "",
@@ -92,6 +93,11 @@ void TilesPanel::setupUi() {
         return tileParameterKey(currentTileX(), currentTileY(),
                                 QStringLiteral("dark_point"));
       });
+
+  // The adjustment rows are added after the section header. Replay restored
+  // folding before the panel is first shown so a saved collapsed section
+  // cannot briefly expose the shared tile editors.
+  updateUI();
 }
 
 void TilesPanel::updateForNewImage() {

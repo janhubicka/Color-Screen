@@ -1477,8 +1477,17 @@ bool runBetaInvariantSmoke() {
       findTileSpin(QStringLiteral("tiles.0.0.exposure"));
   QDoubleSpinBox *darkPoint =
       findTileSpin(QStringLiteral("tiles.0.0.dark_point"));
+  QToolButton *tileAdjustmentsToggle = nullptr;
+  for (QToolButton *button : tiles.findChildren<QToolButton *>()) {
+    if (button->property("sectionKey").toString() ==
+        QStringLiteral("tiles.adjustments")) {
+      if (tileAdjustmentsToggle)
+        return fail("duplicate Tile adjustments section key");
+      tileAdjustmentsToggle = button;
+    }
+  }
   if (!tile0Selector || !tile1Selector || !tile0Enabled || !tile1Enabled ||
-      !exposure || !darkPoint ||
+      !exposure || !darkPoint || !tileAdjustmentsToggle ||
       tile0Enabled->property("parameterKey").toString() !=
           QStringLiteral("tiles.0.0.enabled") ||
       tile1Enabled->property("parameterKey").toString() !=
@@ -1486,6 +1495,23 @@ bool runBetaInvariantSmoke() {
       tile0Selector->property("parameterKey").isValid() ||
       tile1Selector->property("parameterKey").isValid())
     return fail("tile keys crossed the document/selection-state boundary");
+
+  // Folding is presentation-only and must own the shared tile editors without
+  // touching the independent tile-selector grid or document state.
+  const bool originalTileAdjustmentsExpanded =
+      tileAdjustmentsToggle->isChecked();
+  tileAdjustmentsToggle->setChecked(true);
+  tiles.updateUI();
+  if (exposure->isHidden() || darkPoint->isHidden() ||
+      tile0Selector->isHidden())
+    return fail("expanded Tile adjustments did not expose its editors");
+  tileAdjustmentsToggle->setChecked(false);
+  tiles.updateUI();
+  if (!exposure->isHidden() || !darkPoint->isHidden() ||
+      tile0Selector->isHidden())
+    return fail("collapsed Tile adjustments did not own only its editors");
+  tileAdjustmentsToggle->setChecked(originalTileAdjustmentsExpanded);
+  tiles.updateUI();
 
   const double tile0Before = exposure->value();
   const colorscreen::luminosity_t tile0After =
