@@ -1506,10 +1506,12 @@ bool runBetaInvariantSmoke() {
       tileAdjustmentsToggle = button;
     }
   }
+  QWidget *exposureRow = exposure ? exposure->parentWidget() : nullptr;
+  QWidget *darkPointRow = darkPoint ? darkPoint->parentWidget() : nullptr;
   if (!tile0Selector || !tile1Selector || !tile0Enabled || !tile1Enabled ||
-      !exposure || !darkPoint || !tileAdjustmentsToggle ||
-      tileAdjustmentsToggle->isChecked() || !exposure->isHidden() ||
-      !darkPoint->isHidden() ||
+      !exposure || !darkPoint || !exposureRow || !darkPointRow ||
+      !tileAdjustmentsToggle || tileAdjustmentsToggle->isChecked() ||
+      !exposureRow->isHidden() || !darkPointRow->isHidden() ||
       tile0Enabled->property("parameterKey").toString() !=
           QStringLiteral("tiles.0.0.enabled") ||
       tile1Enabled->property("parameterKey").toString() !=
@@ -1519,8 +1521,8 @@ bool runBetaInvariantSmoke() {
     return fail("tile keys crossed the document/selection-state boundary");
 
   tileAdjustmentsToggle->click();
-  if (!tileAdjustmentsToggle->isChecked() || exposure->isHidden()
-      || darkPoint->isHidden()
+  if (!tileAdjustmentsToggle->isChecked() || exposureRow->isHidden()
+      || darkPointRow->isHidden()
       || !QSettings().value(tileSectionSetting, false).toBool())
     return fail("Tile adjustments did not restore/expand as a real section");
 
