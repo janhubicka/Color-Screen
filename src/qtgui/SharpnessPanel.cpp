@@ -706,6 +706,11 @@ void SharpnessPanel::setupUi() {
         return m_adaptiveAnalysisRunning
             || state.rparams.scanner_blur_correction != nullptr;
       });
+
+  // Rows are populated after their section headers. Replay parameter values,
+  // applicability and restored folding once construction is complete so a
+  // saved collapsed state is correct before the inspector is first shown.
+  updateUI();
 }
 
 void SharpnessPanel::updateMTFChart() {
