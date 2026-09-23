@@ -76,7 +76,7 @@ void ColorPanel::setupUi() {
       [](const ParameterState &s) { return s.rparams.dark_point; },
       [](ParameterState &s, double v) { s.rparams.dark_point = v; }, 3.0,
       nullptr, false, "Scanner or camera dark point. This value is subtracted from the scan before processing.",
-      QStringLiteral("color.process.black"));
+      QStringLiteral("color.process.black"), true);
 
   // Presaturation
   addSliderParameter(
@@ -84,7 +84,7 @@ void ColorPanel::setupUi() {
       [](const ParameterState &s) { return s.rparams.presaturation; },
       [](ParameterState &s, double v) { s.rparams.presaturation = v; }, 3.0, 
       nullptr, false, "Increase saturation of the scan before applying the color model. Useful for quick preview of colors before sharpness is configured correctly.",
-      QStringLiteral("color.process.presaturation"));
+      QStringLiteral("color.process.presaturation"), true);
 
   // White Balance
   addSliderParameter(
@@ -92,21 +92,21 @@ void ColorPanel::setupUi() {
       [](const ParameterState &s) { return s.rparams.white_balance.red; },
       [](ParameterState &s, double v) { s.rparams.white_balance.red = v; }, 3.0,
       nullptr, false, "Adjust the white balance by scaling the individual process red channel.",
-      QStringLiteral("color.process.white_balance.red"));
+      QStringLiteral("color.process.white_balance.red"), true);
 
   addSliderParameter(
       "White balance green", 0, 10, 100, 2, "", "",
       [](const ParameterState &s) { return s.rparams.white_balance.green; },
       [](ParameterState &s, double v) { s.rparams.white_balance.green = v; }, 3.0,
       nullptr, false, "Adjust the white balance by scaling the individual process green channel.",
-      QStringLiteral("color.process.white_balance.green"));
+      QStringLiteral("color.process.white_balance.green"), true);
 
   addSliderParameter(
       "White balance blue", 0, 10, 100, 2, "", "",
       [](const ParameterState &s) { return s.rparams.white_balance.blue; },
       [](ParameterState &s, double v) { s.rparams.white_balance.blue = v; }, 3.0,
       nullptr, false, "Adjust the white balance by scaling the individual process blue channel.",
-      QStringLiteral("color.process.white_balance.blue"));
+      QStringLiteral("color.process.white_balance.blue"), true);
 
   // Neutral Area Button
   m_setNeutralAreaBtn = addToggleButtonParameter(
@@ -127,7 +127,7 @@ void ColorPanel::setupUi() {
       [](const ParameterState &s) { return s.rparams.brightness; },
       [](ParameterState &s, double v) { s.rparams.brightness = v; }, 3.0,
       nullptr, true, "Overall brightness of the backlight. Affects the intensity of the viewing light source.",
-      QStringLiteral("color.backlight.intensity"));
+      QStringLiteral("color.backlight.intensity"), true);
 
   // Auto Levels Button
   m_setAutoLevelsBtn = addToggleButtonParameter(
@@ -143,7 +143,7 @@ void ColorPanel::setupUi() {
       [](const ParameterState &s) { return s.rparams.backlight_temperature; },
       [](ParameterState &s, double v) { s.rparams.backlight_temperature = v; },
       3.0, nullptr, false, "Color temperature of the backlight in Kelvin. Higher values are bluer (daylight), lower values are yellower (tungsten).",
-      QStringLiteral("color.backlight.temperature"));
+      QStringLiteral("color.backlight.temperature"), true);
 
   m_currentGroupForm = nullptr; // End Backlight section
   auto historicalCaptureApplicable = [this](const ParameterState &state) {
