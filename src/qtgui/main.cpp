@@ -93,6 +93,7 @@ public:
   using ParameterPanel::addCheckboxParameter;
   using ParameterPanel::addCheckboxWithReset;
   using ParameterPanel::addCorrelatedRGBParameter;
+  using ParameterPanel::addEnumParameter;
   using ParameterPanel::addSeparator;
   using ParameterPanel::addSlider;
   using ParameterPanel::addSliderParameter;
@@ -1238,6 +1239,80 @@ bool profileSectionPreferencesSmoke() {
   return true;
 }
 
+/** Exercise opt-in default/modified/Reset for saved discrete values. */
+bool discreteDefaultPresentationSmoke() {
+  auto fail = [](const char *reason) {
+    qCritical() << "Discrete-default smoke failed:" << reason;
+    return false;
+  };
+
+  ParameterState state;
+  int edits = 0;
+  auto getState = [&]() { return state; };
+  auto setState = [&](const ParameterState &next, const QString &,
+                      const QString &) {
+    state = next;
+    ++edits;
+  };
+  auto noImage = []() { return std::shared_ptr<colorscreen::image_data>(); };
+
+  CheckboxSemanticsProbe panel(getState, setState, noImage, nullptr, false);
+  const ParameterState defaults;
+  QComboBox *mode = panel.addEnumParameter(
+      QStringLiteral("Mode"),
+      {{0, QStringLiteral("Zero")}, {1, QStringLiteral("One")}},
+      [](const ParameterState &s) { return s.rparams.scan_mirror ? 1 : 0; },
+      [](ParameterState &s, int value) { s.rparams.scan_mirror = value != 0; },
+      nullptr, QString(), QStringLiteral("smoke.discrete.mode"), true);
+  QCheckBox *mirror = panel.addCheckboxParameter(
+      QStringLiteral("Mirror"),
+      [](const ParameterState &s) { return s.scrToImg.final_mirror; },
+      [](ParameterState &s, bool value) { s.scrToImg.final_mirror = value; },
+      nullptr, QString(), QStringLiteral("smoke.discrete.mirror"), true);
+  panel.updateUI();
+
+  auto resetFor = [&panel](const QString &key) {
+    for (QToolButton *button : panel.findChildren<QToolButton *>())
+      if (button->objectName() == QStringLiteral("ParameterResetButton") &&
+          button->property("parameterKey").toString() == key)
+        return button;
+    return static_cast<QToolButton *>(nullptr);
+  };
+  QToolButton *modeReset = resetFor(QStringLiteral("smoke.discrete.mode"));
+  QToolButton *mirrorReset =
+      resetFor(QStringLiteral("smoke.discrete.mirror"));
+  QWidget *modeField = mode ? mode->parentWidget() : nullptr;
+  QWidget *mirrorField = mirror ? mirror->parentWidget() : nullptr;
+  if (!mode || !mirror || !modeReset || !mirrorReset || !modeField ||
+      !mirrorField || !modeReset->isHidden() || !mirrorReset->isHidden() ||
+      modeField->property("parameterModified").toBool() ||
+      mirrorField->property("parameterModified").toBool())
+    return fail("default discrete values did not start unmodified");
+
+  const int nonDefaultMode = defaults.rparams.scan_mirror ? 0 : 1;
+  mode->setCurrentIndex(mode->findData(nonDefaultMode));
+  QMetaObject::invokeMethod(mode, "activated", Qt::DirectConnection,
+                            Q_ARG(int, mode->currentIndex()));
+  mirror->setChecked(!defaults.scrToImg.final_mirror);
+  panel.updateUI();
+  if (modeReset->isHidden() || mirrorReset->isHidden() ||
+      !modeField->property("parameterModified").toBool() ||
+      !mirrorField->property("parameterModified").toBool())
+    return fail("modified discrete values did not expose Reset");
+
+  modeReset->click();
+  mirrorReset->click();
+  panel.updateUI();
+  if (state.rparams.scan_mirror != defaults.rparams.scan_mirror ||
+      state.scrToImg.final_mirror != defaults.scrToImg.final_mirror ||
+      !modeReset->isHidden() || !mirrorReset->isHidden() ||
+      modeField->property("parameterModified").toBool() ||
+      mirrorField->property("parameterModified").toBool() || edits != 4)
+    return fail("discrete Reset did not restore fresh defaults");
+
+  return true;
+}
+
 /** Exercise beta-critical non-rendering UI/document invariants. */
 bool runBetaInvariantSmoke() {
   auto fail = [](const char *reason) {
@@ -1246,6 +1321,7 @@ bool runBetaInvariantSmoke() {
   };
 
   if (!backgroundThreadRegistryShutdownSmoke()
+      || !discreteDefaultPresentationSmoke()
       || !parameterSectionPreferencesSmoke()
       || !colorSectionPreferencesSmoke()
       || !geometrySectionPreferencesSmoke()

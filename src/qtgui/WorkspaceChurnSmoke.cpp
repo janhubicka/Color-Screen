@@ -789,7 +789,8 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         }
         const QStringList geometryDefaultKeys = {
             QStringLiteral("geometry.fit.lens_center_distance"),
-            QStringLiteral("geometry.final.rotation")};
+            QStringLiteral("geometry.final.rotation"),
+            QStringLiteral("geometry.final.mirror")};
         for (const QString &key : geometryDefaultKeys) {
           QToolButton *reset = findParameterResetButton(key);
           if (!reset || !reset->property("parameterDefaultValue").isValid()) {
@@ -913,6 +914,21 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
           if (!reset || !reset->property("parameterDefaultValue").isValid()) {
             fail(QStringLiteral(
                      "Workspace churn lost Screen default/reset metadata for %1")
+                     .arg(key));
+            return;
+          }
+        }
+        const QStringList screenDiscreteDefaultKeys = {
+            QStringLiteral("screen.collection_quality"),
+            QStringLiteral("screen.demosaic"),
+            QStringLiteral("screen.demosaiced_scaling"),
+            QStringLiteral("screen.denoise.pre.mode"),
+            QStringLiteral("screen.denoise.post.mode")};
+        for (const QString &key : screenDiscreteDefaultKeys) {
+          QToolButton *reset = findParameterResetButton(key);
+          if (!reset || !reset->property("parameterDefaultValue").isValid()) {
+            fail(QStringLiteral(
+                     "Workspace churn lost Screen discrete reset metadata for %1")
                      .arg(key));
             return;
           }
@@ -1116,6 +1132,14 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
                      .arg(key));
             return;
           }
+        }
+        QToolButton *sharpnessModeReset =
+            findParameterResetButton(QStringLiteral("sharpness.mode"));
+        if (!sharpnessModeReset ||
+            !sharpnessModeReset->property("parameterDefaultValue").isValid()) {
+          fail(QStringLiteral(
+              "Workspace churn lost Sharpness mode default/reset metadata"));
+          return;
         }
         const QStringList sharpnessDefaultKeys = {
             QStringLiteral("sharpness.capture.sigma"),

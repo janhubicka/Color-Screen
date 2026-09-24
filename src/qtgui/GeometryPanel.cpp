@@ -267,7 +267,7 @@ void GeometryPanel::setupUi() {
       hasFinalGeometry,
       "Mirror the final-coordinate image horizontally before Final rotation. "
       "This is part of geometry and is saved in the parameter file.",
-      QStringLiteral("geometry.final.mirror"));
+      QStringLiteral("geometry.final.mirror"), true);
   finalMirrorCheck->setObjectName(QStringLiteral("GeometryFinalMirrorCheck"));
 
   // Ensure Finetune widget is separate from the geometry-fit group
