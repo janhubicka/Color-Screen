@@ -1771,6 +1771,13 @@ bool runBetaInvariantSmoke() {
         return spin;
     return static_cast<QDoubleSpinBox *>(nullptr);
   };
+  auto findTileReset = [&tiles](const QString &parameterKey) {
+    for (QToolButton *button : tiles.findChildren<QToolButton *>())
+      if (button->objectName() == QStringLiteral("ParameterResetButton") &&
+          button->property("parameterKey").toString() == parameterKey)
+        return button;
+    return static_cast<QToolButton *>(nullptr);
+  };
 
   auto *tile0Selector =
       tiles.findChild<QPushButton *>(QStringLiteral("TileSelector_0_0"));
@@ -1829,36 +1836,73 @@ bool runBetaInvariantSmoke() {
       darkPoint->isVisibleTo(tileAdjustmentsGroup) ||
       tile0Selector->isHidden())
     return fail("collapsed Tile adjustments did not own only its editors");
-  tileAdjustmentsToggle->setChecked(originalTileAdjustmentsExpanded);
+  tileAdjustmentsToggle->setChecked(true);
   tiles.updateUI();
+
+  QToolButton *exposureReset =
+      findTileReset(QStringLiteral("tiles.0.0.exposure"));
+  QToolButton *darkPointReset =
+      findTileReset(QStringLiteral("tiles.0.0.dark_point"));
+  if (!exposureReset || !darkPointReset || !exposureReset->isHidden() ||
+      !darkPointReset->isHidden() ||
+      !exposureReset->property("parameterDefaultValue").isValid() ||
+      !darkPointReset->property("parameterDefaultValue").isValid())
+    return fail("default Tile adjustments did not expose reset metadata");
 
   const double tile0Before = exposure->value();
   const colorscreen::luminosity_t tile0After =
       static_cast<colorscreen::luminosity_t>(
           tile0Before <= 9.98 ? tile0Before + 0.01 : tile0Before - 0.01);
   exposure->setValue(tile0After);
+  tiles.updateUI();
+  if (exposureReset->isHidden() ||
+      exposureReset->property("parameterKey").toString() !=
+          QStringLiteral("tiles.0.0.exposure"))
+    return fail("modified tile 0 did not expose its dynamic Reset");
 
   tile1Selector->setChecked(true);
   if (!tile1Selector->isChecked() ||
       exposure->property("parameterKey").toString() !=
           QStringLiteral("tiles.1.0.exposure") ||
       darkPoint->property("parameterKey").toString() !=
-          QStringLiteral("tiles.1.0.dark_point"))
-    return fail("tile selector did not retarget the shared editor key");
+          QStringLiteral("tiles.1.0.dark_point") ||
+      exposureReset->property("parameterKey").toString() !=
+          QStringLiteral("tiles.1.0.exposure") ||
+      darkPointReset->property("parameterKey").toString() !=
+          QStringLiteral("tiles.1.0.dark_point") ||
+      !exposureReset->isHidden() || !darkPointReset->isHidden())
+    return fail("tile selector did not retarget shared Reset metadata");
 
   const double tile1Before = exposure->value();
   const colorscreen::luminosity_t tile1After =
       static_cast<colorscreen::luminosity_t>(
           tile1Before <= 9.96 ? tile1Before + 0.02 : tile1Before - 0.02);
   exposure->setValue(tile1After);
+  tiles.updateUI();
+  if (exposureReset->isHidden() ||
+      exposureReset->property("parameterKey").toString() !=
+          QStringLiteral("tiles.1.0.exposure"))
+    return fail("modified tile 1 did not expose its dynamic Reset");
 
-  const ParameterState afterTileEdits = window.documentStateSnapshot();
-  if (undoStack->count() != 2 ||
-      std::abs(afterTileEdits.rparams.get_tile_adjustment(0, 0).exposure -
+  exposureReset->click();
+  tiles.updateUI();
+  const ParameterState afterTileReset = window.documentStateSnapshot();
+  if (undoStack->count() != 3 || !exposureReset->isHidden() ||
+      std::abs(afterTileReset.rparams.get_tile_adjustment(0, 0).exposure -
                tile0After) > 1e-8 ||
-      std::abs(afterTileEdits.rparams.get_tile_adjustment(1, 0).exposure -
+      std::abs(afterTileReset.rparams.get_tile_adjustment(1, 0).exposure -
+               tile1Before) > 1e-8)
+    return fail("dynamic Tile Reset did not target only the selected tile");
+
+  // Reset is deliberately its own Undo gesture, then the two keyed edits remain
+  // independently undoable in reverse tile order.
+  undoStack->undo();
+  const ParameterState afterResetUndo = window.documentStateSnapshot();
+  if (std::abs(afterResetUndo.rparams.get_tile_adjustment(0, 0).exposure -
+               tile0After) > 1e-8 ||
+      std::abs(afterResetUndo.rparams.get_tile_adjustment(1, 0).exposure -
                tile1After) > 1e-8)
-    return fail("tile exposure edits did not produce two keyed document actions");
+    return fail("Undo did not restore the pre-Reset tile 1 value");
 
   undoStack->undo();
   const ParameterState afterTile1Undo = window.documentStateSnapshot();
@@ -1876,6 +1920,8 @@ bool runBetaInvariantSmoke() {
                tile1Before) > 1e-8)
     return fail("second tile Undo did not restore both exposure baselines");
 
+  tileAdjustmentsToggle->setChecked(originalTileAdjustmentsExpanded);
+  tiles.updateUI();
   return true;
 }
 

@@ -61,7 +61,7 @@ void TilesPanel::setupUi() {
       2.0, nullptr, -1,
       "Brightness adjustment for the selected tile. Use this to compensate for "
       "variations in illumination during capture.",
-      QString(), false, std::nullopt, [this]() {
+      QString(), true, std::nullopt, [this]() {
         return tileParameterKey(currentTileX(), currentTileY(),
                                 QStringLiteral("exposure"));
       });
@@ -89,7 +89,7 @@ void TilesPanel::setupUi() {
       3.0, nullptr, -1,
       "Black level adjustment for the selected tile. Use this to unify the "
       "black point across stitched tiles.",
-      QString(), false, std::nullopt, [this]() {
+      QString(), true, std::nullopt, [this]() {
         return tileParameterKey(currentTileX(), currentTileY(),
                                 QStringLiteral("dark_point"));
       });

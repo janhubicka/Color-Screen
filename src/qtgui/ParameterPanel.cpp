@@ -616,6 +616,80 @@ void ParameterPanel::addNumericDefaultPresentation(
 }
 
 
+/** Add modified/default/reset UI for a numeric editor with a dynamic target. */
+void ParameterPanel::addDynamicNumericDefaultPresentation(
+    QWidget *field, QHBoxLayout *layout, const QString &label,
+    ParameterKeyGetter parameterKeyGetter,
+    std::function<double(const ParameterState &)> getter,
+    std::function<void(ParameterState &, double)> setter,
+    double tolerance) {
+  Q_ASSERT(field);
+  Q_ASSERT(layout);
+  Q_ASSERT(parameterKeyGetter);
+
+  auto *resetButton = new QToolButton(field);
+  resetButton->setObjectName(QStringLiteral("ParameterResetButton"));
+  resetButton->setText(tr("Reset"));
+  resetButton->setAutoRaise(true);
+  resetButton->setToolTip(tr("Reset %1 to its default value").arg(label));
+  resetButton->setProperty(parameterModifiedProperty, false);
+  resetButton->hide();
+  layout->addWidget(resetButton, 0);
+
+  QWidget *labelWidget = nullptr;
+  if (m_currentGroupForm)
+    labelWidget = m_currentGroupForm->labelForField(field);
+  if (!labelWidget && m_form)
+    labelWidget = m_form->labelForField(field);
+  if (!labelWidget) {
+    for (QFormLayout *form : m_groupForms) {
+      labelWidget = form ? form->labelForField(field) : nullptr;
+      if (labelWidget)
+        break;
+    }
+  }
+
+  const QFont normalFont = labelWidget ? labelWidget->font() : QFont();
+  QFont modifiedFont = normalFont;
+  if (modifiedFont.weight() < QFont::DemiBold)
+    modifiedFont.setWeight(QFont::DemiBold);
+
+  connect(resetButton, &QToolButton::clicked, this,
+          [this, getter, setter, label]() {
+            const double defaultValue = getter(ParameterState());
+            applyChange(
+                [setter, defaultValue](ParameterState &state) {
+                  setter(state, defaultValue);
+                },
+                tr("Reset %1").arg(label), QString());
+          });
+
+  m_paramUpdaters.push_back(
+      [field, labelWidget, resetButton, parameterKeyGetter, getter, tolerance,
+       normalFont, modifiedFont](const ParameterState &state) {
+        const QString parameterKey = parameterKeyGetter();
+        const double defaultValue = getter(ParameterState());
+        const double value = getter(state);
+        bool modified = value != defaultValue;
+        if (std::isfinite(value) && std::isfinite(defaultValue))
+          modified = std::abs(value - defaultValue) > tolerance;
+
+        setParameterKey(field, parameterKey);
+        field->setProperty(parameterDefaultValueProperty, defaultValue);
+        field->setProperty(parameterModifiedProperty, modified);
+        resetButton->setProperty(parameterKeyProperty, parameterKey);
+        resetButton->setProperty(parameterDefaultValueProperty, defaultValue);
+        resetButton->setProperty(parameterModifiedProperty, modified);
+        resetButton->setVisible(modified);
+        if (labelWidget) {
+          labelWidget->setProperty(parameterDefaultValueProperty, defaultValue);
+          labelWidget->setProperty(parameterModifiedProperty, modified);
+          labelWidget->setFont(modified ? modifiedFont : normalFont);
+        }
+      });
+}
+
+
 /** Add opt-in modified/default presentation for a discrete saved value. */
 void ParameterPanel::addDiscreteDefaultPresentation(
     QWidget *field, QHBoxLayout *layout, QWidget *labelWidget,
@@ -795,7 +869,7 @@ ParameterPanel::SliderWidgets ParameterPanel::addSliderParameterControls(
     std::optional<double> specialMinimumValue,
     ParameterKeyGetter parameterKeyGetter) {
   Q_ASSERT(parameterKey.isEmpty() || !parameterKeyGetter);
-  Q_ASSERT(!showDefaultReset || !parameterKeyGetter);
+  Q_ASSERT(!showDefaultReset || !parameterKey.isEmpty() || parameterKeyGetter);
   Q_ASSERT(!specialMinimumValue.has_value() ||
            *specialMinimumValue <= min);
 
@@ -856,12 +930,18 @@ ParameterPanel::SliderWidgets ParameterPanel::addSliderParameterControls(
   }
 
   if (showDefaultReset) {
-    Q_ASSERT(!parameterKey.isEmpty());
-    const double defaultValue = getter(ParameterState());
     const double tolerance =
         scale > 0 ? 0.5 / scale : std::numeric_limits<double>::epsilon();
-    addNumericDefaultPresentation(container, hLayout, label, parameterKey,
-                                  defaultValue, getter, setter, tolerance);
+    if (parameterKeyGetter) {
+      addDynamicNumericDefaultPresentation(
+          container, hLayout, label, parameterKeyGetter, getter, setter,
+          tolerance);
+    } else {
+      Q_ASSERT(!parameterKey.isEmpty());
+      const double defaultValue = getter(ParameterState());
+      addNumericDefaultPresentation(container, hLayout, label, parameterKey,
+                                    defaultValue, getter, setter, tolerance);
+    }
   }
 
   // Synchronization
