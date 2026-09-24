@@ -550,8 +550,9 @@ specialist stages.
   defaults even when the ordinary numeric editing range starts above zero;
 - standardize collapsible Common/Diagnostics/Advanced sections;
 - remember expansion state through stable, untranslated section keys.
-  Digital Capture, Sharpness, Screen, Image Layer, Color, Contact Copy, and
-  Geometry use this contract: explicitly
+  All nine processing panels now use this contract: Digital Capture, Tiles,
+  Sharpness, Image Layer, Contact Copy, Screen, Geometry, Color, and Profile.
+  Explicitly
   folding a section is an application preference restored in subsequently
   created panels, including after restart. Existing open panels keep their own
   local fold state.
@@ -571,6 +572,13 @@ specialist stages.
   Other panels keep the previous initially-expanded behavior until their
   sections receive explicit keys;
 - add consistent per-module reset/bypass only where semantically valid.
+  The standard numeric Reset/default presentation now covers straightforward
+  saved controls in Digital Capture, Sharpness, Color, Image Layer, Screen,
+  Geometry, and Contact Copy's simulated-darkroom values. Coupled calibration
+  editors such as Contact Copy's H&D/Richards curve remain deliberately outside
+  the generic per-field Reset convention; Contact Copy instead exposes one
+  calibration-level Reset that restores the complete characteristic curve
+  atomically.
 
 ### Phase D — navigation consolidation
 

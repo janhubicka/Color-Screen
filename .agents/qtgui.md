@@ -821,6 +821,16 @@ spectral chart, and the attached Tone Curve. This probe runs before document
 creation without pumping GUI events; it must never alter operator preferences
 or invoke the document state setter.
 
+Contact Copy's generic Reset policy is intentionally narrower than its stable
+parameter-key coverage. `contact_copy.preflash`, `contact_copy.exposure`,
+and `contact_copy.density_boost` are independent numeric darkroom values and
+use the standard fresh-`ParameterState` default/modified presentation. The
+H&D graph, manual point coordinates, Richards parameters, inverse mode, and
+curve presets are views/edits of one coupled characteristic-curve calibration;
+do not add independent generic Reset buttons to those controls. Use the
+Film-characteristics calibration-level Reset action, which restores the whole
+curve to the fresh-ParameterState default as one undoable edit.
+
 Digital Capture uses five stable sections: `capture.source`,
 `capture.optics`, `capture.sensor`, `capture.wavelengths`, and
 `capture.corrections`. Metadata/EXIF rows are dynamic presentation state:

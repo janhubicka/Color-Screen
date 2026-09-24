@@ -7,6 +7,7 @@
 #include <QFormLayout>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QPushButton>
 #include <QVBoxLayout>
 #include "HistogramWorker.h"
 #include "../libcolorscreen/include/sensitivity.h"
@@ -122,6 +123,31 @@ void ContactCopyPanel::setupUi() {
           }, "Apply characteristic curve preset");
       }
   });
+
+  // The characteristic curve is one coupled calibration object even though it
+  // has graph, point, Richards, inverse, and preset editing surfaces. Reset it
+  // atomically instead of giving those individual views independent resets.
+  QPushButton *resetCurveBtn = addButtonParameter(
+      "", tr("Reset characteristic curve"),
+      [this]() {
+        applyChange([](ParameterState &state) {
+          const ParameterState defaults;
+          state.rparams.contact_copy.emulsion_characteristic_curve =
+              defaults.rparams.contact_copy.emulsion_characteristic_curve;
+        }, tr("Reset characteristic curve"));
+      });
+  resetCurveBtn->setObjectName(
+      QStringLiteral("ContactCopyResetCurveButton"));
+  resetCurveBtn->setToolTip(
+      tr("Restore the complete H&D characteristic curve to its application "
+         "default as one undoable calibration change."));
+  setParameterApplicability(
+      resetCurveBtn, [](const ParameterState &state) {
+        const ParameterState defaults;
+        return state.rparams.contact_copy.simulate &&
+               !(state.rparams.contact_copy.emulsion_characteristic_curve ==
+                 defaults.rparams.contact_copy.emulsion_characteristic_curve);
+      });
 
   // Wrap it nicely to center or align it.
   QWidget *chartWrapper = new QWidget();
@@ -321,7 +347,7 @@ void ContactCopyPanel::setupUi() {
       [](const ParameterState &s) { return s.rparams.contact_copy.preflash; },
       [](ParameterState &s, double v) { s.rparams.contact_copy.preflash = v; },
       1.0, [](const ParameterState &s) { return s.rparams.contact_copy.simulate; },
-      false, QString(), "contact_copy.preflash");
+      false, QString(), "contact_copy.preflash", true);
   {
       QFormLayout *layout = m_currentGroupForm ? m_currentGroupForm : m_form;
       if (layout->count() >= 2) {
@@ -335,7 +361,7 @@ void ContactCopyPanel::setupUi() {
       [](const ParameterState &s) { return s.rparams.contact_copy.exposure; },
       [](ParameterState &s, double v) { s.rparams.contact_copy.exposure = v; },
       3.0, [](const ParameterState &s) { return s.rparams.contact_copy.simulate; },
-      true, QString(), "contact_copy.exposure");
+      true, QString(), "contact_copy.exposure", true);
   {
       QFormLayout *layout = m_currentGroupForm ? m_currentGroupForm : m_form;
       if (layout->count() >= 2) {
@@ -349,7 +375,7 @@ void ContactCopyPanel::setupUi() {
       [](const ParameterState &s) { return s.rparams.contact_copy.boost; },
       [](ParameterState &s, double v) { s.rparams.contact_copy.boost = v; },
       3.0, [](const ParameterState &s) { return s.rparams.contact_copy.simulate; },
-      false, QString(), "contact_copy.density_boost");
+      false, QString(), "contact_copy.density_boost", true);
   {
       QFormLayout *layout = m_currentGroupForm ? m_currentGroupForm : m_form;
       if (layout->count() >= 2) {

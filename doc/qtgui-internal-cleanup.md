@@ -368,6 +368,14 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   scoped blockers throughout the parameter panels, document window and
   secondary image views. The remaining direct `blockSignals()` call is the
   intentional undo-stack teardown suppression, which is lifetime-specific.
+- Keep generic numeric Reset scoped to independent document values. Contact Copy
+  now opts Preflash, Enlarger exposure, and Density boost into the standard
+  fresh-`ParameterState` default/modified presentation. Its H&D graph, manual
+  coordinate points, Richards parameters, inverse mode, and presets all edit one
+  coupled characteristic-curve calibration and intentionally do not get
+  per-field generic Reset controls. The Film characteristics section instead
+  provides one Reset characteristic curve action that replaces the whole curve
+  with the fresh-ParameterState default in one undoable edit.
 - Keep group folding as presentation state only: a collapsed/expanded section
   must compose with each row's logical applicability instead of overwriting it.
   `addSeparator()` now accepts an optional stable `sectionKey`, distinct from
