@@ -787,6 +787,18 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
               "Geometry stable keys crossed the document/UI-state boundary"));
           return;
         }
+        const QStringList geometryDefaultKeys = {
+            QStringLiteral("geometry.fit.lens_center_distance"),
+            QStringLiteral("geometry.final.rotation")};
+        for (const QString &key : geometryDefaultKeys) {
+          QToolButton *reset = findParameterResetButton(key);
+          if (!reset || !reset->property("parameterDefaultValue").isValid()) {
+            fail(QStringLiteral(
+                     "Workspace churn lost Geometry default/reset metadata for %1")
+                     .arg(key));
+            return;
+          }
+        }
 
         // Image Layer is another complete stable-key panel. Its source choice
         // and RGB-mix values are saved ParameterState; the three area/channel
