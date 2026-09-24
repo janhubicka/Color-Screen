@@ -12,29 +12,24 @@ ImageLayerPanel::ImageLayerPanel(StateGetter stateGetter, StateSetter stateSette
 ImageLayerPanel::~ImageLayerPanel() = default;
 
 void ImageLayerPanel::setupUi() {
-  m_ignoreInfraredCheck = new QCheckBox(tr("Use simulated RGB image layer"), this);
-  m_ignoreInfraredCheck->setObjectName(
-      QStringLiteral("ImageLayerUseSimulatedRgbCheck"));
-  m_ignoreInfraredCheck->setProperty(
-      "parameterKey", QStringLiteral("image_layer.use_simulated_rgb"));
-  m_ignoreInfraredCheck->setToolTip(
+  m_ignoreInfraredCheck = addCheckboxParameter(
+      tr("Use simulated RGB image layer"),
+      [](const ParameterState &state) { return state.rparams.ignore_infrared; },
+      [](ParameterState &state, bool checked) {
+        state.rparams.ignore_infrared = checked;
+      },
+      nullptr,
       tr("When the capture contains both RGB and a native grayscale/infrared "
          "channel, use a weighted RGB simulation as the image layer instead. "
-         "Leave this unchecked to use the native grayscale/infrared channel."));
-  m_form->addRow(m_ignoreInfraredCheck);
+         "Leave this unchecked to use the native grayscale/infrared channel."),
+      QStringLiteral("image_layer.use_simulated_rgb"), true);
+  m_ignoreInfraredCheck->setObjectName(
+      QStringLiteral("ImageLayerUseSimulatedRgbCheck"));
   setParameterApplicability(
       m_ignoreInfraredCheck, [this](const ParameterState &) {
         const auto img = m_imageGetter();
         return img && img->has_rgb() && img->has_grayscale_or_ir();
       });
-
-  connect(m_ignoreInfraredCheck, &QCheckBox::toggled, this, [this](bool checked) {
-    ParameterState s = m_stateGetter();
-    s.rparams.ignore_infrared = checked;
-    m_stateSetter(s, tr("Use simulated RGB image layer %1")
-                        .arg(checked ? tr("on") : tr("off")),
-                  QStringLiteral("image_layer.use_simulated_rgb"));
-  });
 
   QToolButton *simulatedSectionToggle =
       addSeparator(tr("Simulated image layer from RGB"),
