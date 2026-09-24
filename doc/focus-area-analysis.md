@@ -95,8 +95,8 @@ still reporting a physically non-identifiable decomposition.
 
 ## Qt workflow
 
-The Sharpness panel exposes **Find focus analysis areas** and **Analyze
-sharpness in areas**.  Candidate rectangles, independent-fit state, the selected
+The Sharpness panel exposes **Find focus areas** and **Analyze
+focus areas**.  Candidate rectangles, independent-fit state, the selected
 subset, and held-out residual labels are transient state owned by the current
 `MainWindow`; they are never stored globally and follow whichever ordinary view
 is currently presenting that document's inspector.  Changing crop or screen

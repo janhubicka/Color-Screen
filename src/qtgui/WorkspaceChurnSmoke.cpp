@@ -268,7 +268,7 @@ void startWorkspaceChurnSmoke(ColorScreenApplication &app,
             QStringLiteral("Sharpness"), QStringLiteral("Image Layer"),
             QStringLiteral("Contact copy"), QStringLiteral("Screen"),
             QStringLiteral("Geometry"), QStringLiteral("Color"),
-            QStringLiteral("Profile")};
+            QStringLiteral("Profile calibration")};
         QStringList actualProcessingTabs;
         if (processingTabs) {
           for (int i = 0; i < processingTabs->count(); ++i)
@@ -351,6 +351,12 @@ QLabel *profileCalibrationStatus = inspector->findChild<QLabel *>(
     QStringLiteral("ProfileCalibrationStatus"));
 QPushButton *profileOptimizeButton = inspector->findChild<QPushButton *>(
     QStringLiteral("ProfileOptimizeButton"));
+QPushButton *mtfMeasureButton = inspector->findChild<QPushButton *>(
+    QStringLiteral("MtfMeasureButton"));
+QPushButton *findFocusAreasButton = inspector->findChild<QPushButton *>(
+    QStringLiteral("SharpnessFindFocusAreasButton"));
+QPushButton *analyzeFocusAreasButton = inspector->findChild<QPushButton *>(
+    QStringLiteral("SharpnessAnalyzeFocusAreasButton"));
 QLabel *mtfCalibrationStatus = inspector->findChild<QLabel *>(
     QStringLiteral("MtfCalibrationStatus"));
 QComboBox *mtfMeasurementSelector = inspector->findChild<QComboBox *>(
@@ -482,6 +488,17 @@ const bool profileApplicable =
     first->sharedImageData()->has_rgb() &&
     colorscreen::render_parameters::capture_supports_screen_detection_p(
         profileCapture);
+
+if (!profileOptimizeButton || !mtfMeasureButton ||
+    !findFocusAreasButton || !analyzeFocusAreasButton ||
+    profileOptimizeButton->text() != QStringLiteral("Optimize profile") ||
+    mtfMeasureButton->text() != QStringLiteral("Measure MTF from edge") ||
+    findFocusAreasButton->text() != QStringLiteral("Find focus areas") ||
+    analyzeFocusAreasButton->text() != QStringLiteral("Analyze focus areas")) {
+  fail(QStringLiteral(
+      "Workspace churn lost canonical Profile/Sharpness operation wording"));
+  return;
+}
 
 if (!workflowSummary || !workflowToggle || !workflowStages ||
     !processSummary || !registrationSummary || !calibrationSummary ||

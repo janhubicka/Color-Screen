@@ -1075,8 +1075,8 @@ screen-primary scanner responses are frozen while only the omitted tile's local
 phase and three transmission factors may move.  Held-out objective values are
 reported relative to observed tile colour magnitude.
 
-Qt now exposes document-local **Find focus analysis areas** and **Analyze
-sharpness in areas** actions in the Sharpness panel.  Candidate/selected
+Qt now exposes document-local **Find focus areas** and **Analyze
+focus areas** actions in the Sharpness panel.  Candidate/selected
 rectangles are overlays owned by `MainWindow`, fitting runs off the GUI thread,
 and the measured focus is applied only after explicit user confirmation through
 the normal undo path.

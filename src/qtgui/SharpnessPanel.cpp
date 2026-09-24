@@ -381,9 +381,12 @@ void SharpnessPanel::setupUi() {
       "current document's shared sharpening parameters and measurements.");
 
   // Measure MTF button
-  m_measureMtfBtn = addToggleButtonParameter("", "Measure mtf of an edge", [this](bool checked) {
-    emit measureMtfRequested(checked);
-  }, nullptr, nullptr, "Select an area containing a slanted edge to compute its MTF.");
+  m_measureMtfBtn = addToggleButtonParameter(
+      "", tr("Measure MTF from edge"), [this](bool checked) {
+        emit measureMtfRequested(checked);
+      }, nullptr, nullptr,
+      tr("Select an area containing a slanted edge to compute its MTF."));
+  m_measureMtfBtn->setObjectName(QStringLiteral("MtfMeasureButton"));
 
   // Add the explicit model-fitting dialog when measured data is available.
   m_fitMtfBtn = addButtonParameter(
@@ -616,7 +619,9 @@ void SharpnessPanel::setupUi() {
     return colorscreen::screen_geometry_configured_p(s.scrToImg);
   }, "Experimental tool that attempts to find the best Focus/Sigma by analyzing the local contrast and sharpness of the selected area.");
 
-  m_findFocusAreasBtn = new QPushButton(tr("Find focus analysis areas"), this);
+  m_findFocusAreasBtn = new QPushButton(tr("Find focus areas"), this);
+  m_findFocusAreasBtn->setObjectName(
+      QStringLiteral("SharpnessFindFocusAreasButton"));
   m_findFocusAreasBtn->setToolTip(
       tr("Search a linear interpolated reconstruction for locally uniform "
          "colour regions suitable for robust multi-area focus analysis."));
@@ -627,8 +632,10 @@ void SharpnessPanel::setupUi() {
   else
     m_form->addRow(m_findFocusAreasBtn);
 
-  m_analyzeFocusAreasBtn
-      = new QPushButton(tr("Analyze sharpness in areas"), this);
+  m_analyzeFocusAreasBtn =
+      new QPushButton(tr("Analyze focus areas"), this);
+  m_analyzeFocusAreasBtn->setObjectName(
+      QStringLiteral("SharpnessAnalyzeFocusAreasButton"));
   m_analyzeFocusAreasBtn->setEnabled(false);
   m_analyzeFocusAreasBtn->setToolTip(
       tr("Verify the discovered regions independently, choose a "
