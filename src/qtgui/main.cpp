@@ -1747,7 +1747,7 @@ bool runBetaInvariantSmoke() {
       inspectorSettings.contains(inspectorPanelSetting),
       inspectorSettings.value(inspectorPanelSetting)};
   inspectorSettings.setValue(inspectorPanelSetting,
-                             QStringLiteral("geometry"));
+                             QStringLiteral("sharpness"));
 
   const FlatFieldAnalysisResult missingFlatField = FlatFieldWorker::analyze(
       recovery.filePath(QStringLiteral("missing-flat-field-reference.tif")),
@@ -1761,43 +1761,44 @@ bool runBetaInvariantSmoke() {
       window.findChild<MultiLineTabWidget *>(QStringLiteral("ConfigTabs"));
   if (!configTabs ||
       configTabs->tabKey(configTabs->currentIndex()) !=
-          QStringLiteral("geometry"))
-    return fail("new document did not restore preferred inspector stage");
+          QStringLiteral("sharpness"))
+    return fail("new document did not restore available preferred inspector stage");
 
-  const int colorTab =
-      configTabs->indexOfKey(QStringLiteral("color"));
-  const int screenTab =
-      configTabs->indexOfKey(QStringLiteral("screen"));
-  if (colorTab < 0 || screenTab < 0)
+  const int imageLayerTab =
+      configTabs->indexOfKey(QStringLiteral("image_layer"));
+  const int captureTab =
+      configTabs->indexOfKey(QStringLiteral("digital_capture"));
+  if (imageLayerTab < 0 || captureTab < 0)
     return fail("document inspector lost stable stage keys");
 
-  configTabs->setCurrentIndex(colorTab);
-  if (configTabs->currentIndex() != colorTab ||
+  configTabs->setCurrentIndex(imageLayerTab);
+  if (configTabs->currentIndex() != imageLayerTab ||
       QSettings().value(inspectorPanelSetting).toString() !=
-          QStringLiteral("geometry"))
+          QStringLiteral("sharpness"))
     return fail("programmatic inspector navigation overwrote preference");
 
-  QPushButton *screenTabButton = nullptr;
+  QPushButton *captureTabButton = nullptr;
   for (QPushButton *button : configTabs->findChildren<QPushButton *>())
-    if (button->property("tabKey").toString() == QStringLiteral("screen")) {
-      screenTabButton = button;
+    if (button->property("tabKey").toString() ==
+        QStringLiteral("digital_capture")) {
+      captureTabButton = button;
       break;
     }
-  if (!screenTabButton)
-    return fail("document inspector did not expose stable Screen tab key");
-  screenTabButton->click();
-  if (configTabs->currentIndex() != screenTab ||
+  if (!captureTabButton)
+    return fail("document inspector did not expose stable Capture tab key");
+  captureTabButton->click();
+  if (configTabs->currentIndex() != captureTab ||
       QSettings().value(inspectorPanelSetting).toString() !=
-          QStringLiteral("screen"))
+          QStringLiteral("digital_capture"))
     return fail("user inspector activation was not persisted");
 
-  configTabs->setTabVisible(screenTab, false);
-  if (configTabs->currentIndex() == screenTab ||
+  configTabs->setTabVisible(captureTab, false);
+  if (configTabs->currentIndex() == captureTab ||
       QSettings().value(inspectorPanelSetting).toString() !=
-          QStringLiteral("screen"))
+          QStringLiteral("digital_capture"))
     return fail("hidden inspector fallback overwrote preferred stage");
-  configTabs->setTabVisible(screenTab, true);
-  configTabs->setCurrentIndex(screenTab);
+  configTabs->setTabVisible(captureTab, true);
+  configTabs->setCurrentIndex(captureTab);
 
   QUndoStack *undoStack = window.findChild<QUndoStack *>();
   if (!undoStack)
