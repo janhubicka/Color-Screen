@@ -550,8 +550,8 @@ specialist stages.
   defaults even when the ordinary numeric editing range starts above zero;
 - standardize collapsible Common/Diagnostics/Advanced sections;
 - remember expansion state through stable, untranslated section keys.
-  Screen, Image Layer, Color, Contact Copy, and Geometry use this contract:
-  explicitly
+  Digital Capture, Sharpness, Screen, Image Layer, Color, Contact Copy, and
+  Geometry use this contract: explicitly
   folding a section is an application preference restored in subsequently
   created panels, including after restart. Existing open panels keep their own
   local fold state.
@@ -559,7 +559,13 @@ specialist stages.
   not overwrite that choice. Color includes all five existing groups and keeps
   the Tone Curve inside Final adjustments. Contact Copy includes all four
   specialist groups; switching simulation off and on does not change their
-  saved folds. Geometry includes all five existing groups; fit-prerequisite
+  saved folds. Digital Capture now groups Source, Resolution and optics,
+  Sensor, Spectral wavelengths, and Capture corrections; metadata-derived rows
+  keep their logical applicability independent of folding. Sharpness remembers
+  all eight existing groups; live focus/adaptive diagnostics cannot punch
+  through collapsed sections, and keyed numeric sharpening controls expose the
+  same default/modified/Reset presentation piloted in Digital Capture.
+  Geometry includes all five existing groups; fit-prerequisite
   messages and visualization charts respect both applicability and the saved
   fold during incremental updates. Finetune Diagnostic Images remains separate.
   Other panels keep the previous initially-expanded behavior until their

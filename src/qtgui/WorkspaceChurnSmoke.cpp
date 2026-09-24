@@ -1058,6 +1058,28 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
             return;
           }
         }
+        const QStringList sharpnessDefaultKeys = {
+            QStringLiteral("sharpness.capture.sigma"),
+            QStringLiteral("sharpness.capture.defocus"),
+            QStringLiteral("sharpness.capture.halo_fraction"),
+            QStringLiteral("sharpness.capture.halo_sigma"),
+            QStringLiteral("sharpness.capture.blur_diameter"),
+            QStringLiteral("sharpness.capture.mtf_scale"),
+            QStringLiteral("sharpness.deconvolution.supersample"),
+            QStringLiteral("sharpness.wiener.snr"),
+            QStringLiteral("sharpness.richardson_lucy.iterations"),
+            QStringLiteral("sharpness.richardson_lucy.sigma"),
+            QStringLiteral("sharpness.unsharp.radius"),
+            QStringLiteral("sharpness.unsharp.amount")};
+        for (const QString &key : sharpnessDefaultKeys) {
+          QToolButton *button = findParameterResetButton(key);
+          if (!button || !button->property("parameterDefaultValue").isValid()) {
+            fail(QStringLiteral(
+                     "Workspace churn lost Sharpness default/reset metadata for %1")
+                     .arg(key));
+            return;
+          }
+        }
         if (!sharpnessSignedOtfCheck || !sharpnessOptimizeSigmaCheck ||
             !sharpnessOptimizeDefocusCheck || !mtfFitButton ||
             !mtfMeasurementSelector ||

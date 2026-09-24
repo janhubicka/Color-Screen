@@ -24,6 +24,42 @@ CapturePanel::~CapturePanel() = default;
 
 void CapturePanel::setupUi()
 {
+    // Keep manually constructed rows in the current foldable section, matching
+    // ParameterPanel's stateful helpers.
+    auto addFieldRow = [this](const QString &label, QWidget *field) {
+        if (m_currentGroupForm)
+            m_currentGroupForm->addRow(label, field);
+        else
+            m_form->addRow(label, field);
+    };
+    auto addWidgetRow = [this](QWidget *field) {
+        if (m_currentGroupForm)
+            m_currentGroupForm->addRow(field);
+        else
+            m_form->addRow(field);
+    };
+    auto labelForField = [this](QWidget *field) -> QLabel * {
+        auto findInForm = [this, field](QFormLayout *form) -> QLabel * {
+            if (!form || !field)
+                return nullptr;
+            for (QWidget *candidate = field; candidate && candidate != this;
+                 candidate = candidate->parentWidget()) {
+                int row = -1;
+                QFormLayout::ItemRole role = QFormLayout::FieldRole;
+                form->getWidgetPosition(candidate, &row, &role);
+                if (row >= 0 && role != QFormLayout::LabelRole)
+                    return qobject_cast<QLabel *>(form->labelForField(candidate));
+            }
+            return nullptr;
+        };
+        if (QLabel *label = findInForm(m_form))
+            return label;
+        for (QFormLayout *groupForm : m_groupForms)
+            if (QLabel *label = findInForm(groupForm))
+                return label;
+        return nullptr;
+    };
+
     auto onUseGamma = [this]() {
         auto img = m_imageGetter();
         if (img && img->gamma >= 0) {
@@ -96,8 +132,10 @@ void CapturePanel::setupUi()
             connect(*useBtn, &QPushButton::clicked, this, onUse);
         }
 
-        m_form->addRow(label, container);
+        addFieldRow(label, container);
     };
+
+    addSeparator(tr("Source"), QStringLiteral("capture.source"));
 
     // Capture type is the top-level workflow choice: it determines whether
     // historical color-screen restoration is meaningful for this document.
@@ -121,7 +159,7 @@ void CapturePanel::setupUi()
         tr("Physical capture/material type. This selects the applicable "
            "restoration path; ordinary images use capture correction and "
            "sharpening but not historical color-screen reconstruction."));
-    m_form->addRow(tr("Capture type"), m_captureTypeCombo);
+    addFieldRow(tr("Capture type"), m_captureTypeCombo);
     connect(m_captureTypeCombo, QOverload<int>::of(&QComboBox::activated),
             this, [this](int index) {
       const auto capture =
@@ -161,7 +199,7 @@ void CapturePanel::setupUi()
     m_reloadDemosaicBtn->setVisible(false);
     demosaicHLayout->addWidget(m_reloadDemosaicBtn, 0);
 
-    m_form->addRow("Demosaic", demosaicContainer);
+    addFieldRow(tr("Demosaic"), demosaicContainer);
 
     connect(m_demosaicCombo, QOverload<int>::of(&QComboBox::activated), this, [this](int index) {
         int val = m_demosaicCombo->itemData(index).toInt();
@@ -199,6 +237,9 @@ void CapturePanel::setupUi()
 
     // 2. Detected gamma (Label) + Use
     addValueWithUseButton("Detected gamma", &m_detectedGammaValue, &m_useDetectedGammaBtn, [this, onUseGamma]() { onUseGamma(); });
+
+    addSeparator(tr("Resolution and optics"),
+                 QStringLiteral("capture.optics"));
 
     // 3. Resolution (Slider)
     addSliderParameter(
@@ -250,17 +291,17 @@ void CapturePanel::setupUi()
     // 7. Camera model (Label)
     m_cameraModelValue = new QLabel();
     m_cameraModelValue->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    m_form->addRow("Camera model", m_cameraModelValue);
+    addFieldRow(tr("Camera model"), m_cameraModelValue);
 
     // 8. Lens (Label)
     m_lensValue = new QLabel();
     m_lensValue->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    m_form->addRow("Lens", m_lensValue);
+    addFieldRow(tr("Lens"), m_lensValue);
 
     // 8b. Software (Label)
     m_softwareValue = new QLabel();
     m_softwareValue->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    m_form->addRow("Software", m_softwareValue);
+    addFieldRow(tr("Software"), m_softwareValue);
 
     // 9. Nominal f-stop (Slider)
     addSliderParameter(
@@ -280,12 +321,14 @@ void CapturePanel::setupUi()
     // 11. Focal length (Label)
     m_focalLengthValue = new QLabel();
     m_focalLengthValue->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    m_form->addRow("Focal length", m_focalLengthValue);
+    addFieldRow(tr("Focal length"), m_focalLengthValue);
 
     // 12. Focal length (35mm) (Label)
     m_focalLength35mmValue = new QLabel();
     m_focalLength35mmValue->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    m_form->addRow("Focal length (35mm)", m_focalLength35mmValue);
+    addFieldRow(tr("Focal length (35mm)"), m_focalLength35mmValue);
+
+    addSeparator(tr("Sensor"), QStringLiteral("capture.sensor"));
 
     // 12b. Mirroring (Label) + Use
     addValueWithUseButton("Mirroring", &m_mirrorValue, &m_useMirrorBtn, [this, onUseMirror]() { onUseMirror(); });
@@ -317,7 +360,7 @@ void CapturePanel::setupUi()
         }
         presets->setCurrentIndex(0);
     });
-    m_form->addRow("Sensor presets", presets);
+    addFieldRow(tr("Sensor presets"), presets);
 
     // 13. Sensor width (Slider)
     // Sensor width is a derived presentation of the saved pixel-pitch
@@ -351,7 +394,7 @@ void CapturePanel::setupUi()
     m_assumeRotationBox = new QCheckBox("Assume 90 degrees rotation");
     m_assumeRotationBox->setObjectName(
         QStringLiteral("CaptureAssumeRotationCheck"));
-    m_form->addRow("", m_assumeRotationBox);
+    addFieldRow(QString(), m_assumeRotationBox);
     connect(m_assumeRotationBox, &QCheckBox::toggled, this, [this]() {
         updateUI();
     });
@@ -363,7 +406,7 @@ void CapturePanel::setupUi()
     noticeFont.setItalic(true);
     noticeFont.setPointSize(noticeFont.pointSize() - 1);
     m_sensorWidthNotice->setFont(noticeFont);
-    m_form->addRow("", m_sensorWidthNotice);
+    addFieldRow(QString(), m_sensorWidthNotice);
 
     // 14. Sensor pixel pitch (Slider)
     addSliderParameter(
@@ -401,6 +444,9 @@ void CapturePanel::setupUi()
             }, "Use detected sensor fill");
         }
     });
+
+    addSeparator(tr("Spectral wavelengths"),
+                 QStringLiteral("capture.wavelengths"));
 
     // 17. Scanner MTF Wavelengths
     m_redWavelengthWidget = addSliderParameter(
@@ -452,7 +498,8 @@ void CapturePanel::setupUi()
         &m_useDetectedWavelengthsBtn,
         [onUseDetectedWavelengths]() { onUseDetectedWavelengths(); });
 
-    auto updateInfoLabels = [this, sensorWidthSlider](const ParameterState &state) {
+    auto updateInfoLabels =
+        [this, sensorWidthSlider, labelForField](const ParameterState &state) {
         auto img = m_imageGetter();
 
         // The stored parameter can come from another image. Rebuild the
@@ -490,10 +537,8 @@ void CapturePanel::setupUi()
           m_captureTypeCombo->setCurrentIndex(captureIndex);
         signalBlocker1.unblock();
         
-        auto setVisibleRow = [&](QWidget *field, bool visible) {
-            field->setVisible(visible);
-            if (auto lab = m_form->labelForField(field))
-                lab->setVisible(visible);
+        auto setVisibleRow = [this](QWidget *field, bool visible) {
+            setParameterRowApplicable(field, visible);
         };
 
         // 1 & 2. Gamma
@@ -525,11 +570,11 @@ void CapturePanel::setupUi()
             setVisibleRow(m_irWavelengthWidget, has_ir);
             
             if (has_ir && !has_rgb) {
-                if (auto lab = qobject_cast<QLabel*>(m_form->labelForField(m_irWavelengthWidget))) {
+                if (auto lab = labelForField(m_irWavelengthWidget)) {
                     lab->setText("Wavelength");
                 }
             } else if (has_ir && has_rgb) {
-                if (auto lab = qobject_cast<QLabel*>(m_form->labelForField(m_irWavelengthWidget))) {
+                if (auto lab = labelForField(m_irWavelengthWidget)) {
                     lab->setText("IR wavelength");
                 }
             }
@@ -708,8 +753,8 @@ void CapturePanel::setupUi()
 
         // Rotation box / notice visibility
         bool showRotationTools = img && (img->width > 0 || img->height > 0);
-        m_assumeRotationBox->setVisible(showRotationTools);
-        m_sensorWidthNotice->setVisible(showRotationTools);
+        setVisibleRow(m_assumeRotationBox, showRotationTools);
+        setVisibleRow(m_sensorWidthNotice, showRotationTools);
     };
 
     m_paramUpdaters.push_back(updateInfoLabels);
@@ -723,12 +768,15 @@ void CapturePanel::setupUi()
       nullptr, true);
 #endif
     
+    addSeparator(tr("Capture corrections"),
+                 QStringLiteral("capture.corrections"));
+
     addButtonParameter("Flat field", "Set reference", [this]() { emit flatFieldRequested(); });
     
     m_backlightWidget = new BacklightChartWidget();
     QWidget *backlightSection =
         createDetachableSection("Backlight", m_backlightWidget);
-    m_form->addRow(backlightSection);
+    addWidgetRow(backlightSection);
     
     m_cropBtn = addToggleButtonParameter(
         "Crop image", "Change crop",
@@ -741,7 +789,7 @@ void CapturePanel::setupUi()
         auto scan = m_imageGetter();
         ParameterState s = m_stateGetter();
         bool visible = scan != nullptr && s.rparams.backlight_correction != nullptr;
-        backlightSection->setVisible(visible);
+        setParameterRowApplicable(backlightSection, visible);
         if (visible && m_backlightWidget) {
             m_backlightWidget->setBacklightData(s.rparams.backlight_correction,
                                               scan->width, scan->height,

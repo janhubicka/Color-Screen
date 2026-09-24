@@ -668,6 +668,7 @@ void MainWindow::restoreAdaptiveSharpeningChart() {
     chart->clear();
     chart->setCorrection(m_rparams.scanner_blur_correction);
   }
+  m_sharpnessPanel->setAdaptiveAnalysisRunning(false);
 }
 
 /** Cancel a progressive adaptive-sharpening request when CURRENTSTATE no
@@ -841,8 +842,10 @@ void MainWindow::onAdaptiveSharpeningFinished(
       this, oldState, newState, "Adaptive Sharpening Analysis"));
 
   // applyState() already refreshes panel/chart state through the undo command.
-  if (m_sharpnessPanel && m_sharpnessPanel->getAdaptiveChart())
+  if (m_sharpnessPanel && m_sharpnessPanel->getAdaptiveChart()) {
     m_sharpnessPanel->getAdaptiveChart()->setCorrection(result);
+    m_sharpnessPanel->setAdaptiveAnalysisRunning(false);
+  }
 
   QMessageBox::information(this, tr("Adaptive Sharpening"),
                            tr("Analysis completed successfully."));
