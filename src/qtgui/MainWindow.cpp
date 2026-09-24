@@ -945,7 +945,8 @@ void MainWindow::setupUi() {
   m_configTabs->addTab(m_geometryPanel, "Geometry",
                        QStringLiteral("geometry"));
   m_configTabs->addTab(m_colorPanel, "Color", QStringLiteral("color"));
-  m_configTabs->addTab(m_profilePanel, "Profile", QStringLiteral("profile"));
+  m_configTabs->addTab(m_profilePanel, "Profile calibration",
+                       QStringLiteral("profile"));
 
   m_configTabs->setTabToolTip(0, "Capture — configure demosaicking, resolution, "
                                  "sensor parameters, and image gamma.");
@@ -4908,7 +4909,7 @@ void MainWindow::onColorOptimizerFinished(
     newState.rparams.profiled_red = updatedRparams.profiled_red;
     newState.rparams.profiled_green = updatedRparams.profiled_green;
     newState.rparams.profiled_blue = updatedRparams.profiled_blue;
-    changeParameters(newState, tr("Optimize color"));
+    changeParameters(newState, tr("Optimize profile"));
 
     m_profileSpotResults = results;
     if (m_profilePanel)

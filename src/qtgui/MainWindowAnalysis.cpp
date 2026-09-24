@@ -269,15 +269,14 @@ void MainWindow::startRegistrationDiscovery(
   m_registrationDiscovery.progress = progress;
 
   const QString progressTitle =
-      selectedArea ? tr("Automatically add points to area")
-                   : tr("Automatically add points");
+      selectedArea ? tr("Find registration points in area")
+                   : tr("Find registration points");
   const QString pointDescription =
       selectedArea ? tr("Add registration points in area")
                    : tr("Add registration points");
   const QString geometryDescription =
-      selectedArea
-          ? tr("Automatically add points to area (Geometry update)")
-          : tr("Automatically add points (Geometry update)");
+      selectedArea ? tr("Update geometry from registration points in area")
+                   : tr("Update geometry from registration points");
 
   addUserVisibleProgress(progress, progressTitle, ProgressAction::Stop);
   if (screenAutodetection)
@@ -914,8 +913,8 @@ void MainWindow::startCoordinateAutodetection(bool addPointsAfterDetection) {
   };
   operation.applyResult = [this, result, addPointsAfterDetection]() {
     if (!result->success) {
-      QMessageBox::warning(this, tr("Autodetect Coordinates"),
-                           tr("Autodetect coordinates failed."));
+      QMessageBox::warning(this, tr("Detect Screen Coordinates"),
+                           tr("Screen coordinate detection failed."));
       return;
     }
 
@@ -923,9 +922,9 @@ void MainWindow::startCoordinateAutodetection(bool addPointsAfterDetection) {
     newState.scrToImg = result->coordinates;
     // Switch before applyState refreshes the canvas with accepted geometry.
     m_renderTypeParams.type = colorscreen::render_type_interpolated;
-    changeParameters(newState, "Autodetect Coordinates");
+    changeParameters(newState, tr("Detect screen coordinates"));
     m_imageWidget->update();
-    statusBar()->showMessage(tr("Autodetect coordinates finished"), 3000);
+    statusBar()->showMessage(tr("Screen coordinates detected."), 3000);
 
     if (addPointsAfterDetection && m_geometryPanel)
       startAutomaticPointDiscovery(m_geometryPanel->finetuneAreaParams(), true);

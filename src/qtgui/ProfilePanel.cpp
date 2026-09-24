@@ -79,13 +79,13 @@ void ProfilePanel::setupUi()
           this, &ProfilePanel::showProfileSpotsChanged);
 
   // ── Optimization section ───────────────────────────────────────────────────
-  addSeparator("Color optimization", QStringLiteral("profile.optimization"));
+  addSeparator("Profile optimization", QStringLiteral("profile.optimization"));
 
   m_autoCheck = new QCheckBox(tr("Auto optimize"), this);
   m_autoCheck->setObjectName("autoColorOptBox");
   addWidgetRow(m_autoCheck);
 
-  m_optimizeBtn = new QPushButton(tr("Optimize color"), this);
+  m_optimizeBtn = new QPushButton(tr("Optimize profile"), this);
   m_optimizeBtn->setObjectName(QStringLiteral("ProfileOptimizeButton"));
   addWidgetRow(m_optimizeBtn);
 
