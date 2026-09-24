@@ -16,7 +16,9 @@ class MultiLineTabWidget : public QWidget
 public:
     explicit MultiLineTabWidget(QWidget *parent = nullptr);
 
-    int addTab(QWidget *page, const QString &label);
+    /** Add a tab with optional stable KEY used for application preferences. */
+    int addTab(QWidget *page, const QString &label,
+               const QString &key = QString());
     void setTabVisible(int index, bool visible);
     int indexOf(QWidget *page) const;
     void setCurrentIndex(int index);
@@ -30,8 +32,18 @@ public:
     /** Return the label of tab INDEX, or an empty string for an invalid index. */
     QString tabText(int index) const;
 
+    /** Return the stable key of tab INDEX, or an empty string if unavailable. */
+    QString tabKey(int index) const;
+
+    /** Return the tab index for stable KEY, or -1 when no tab has that key. */
+    int indexOfKey(const QString &key) const;
+
 signals:
+    /** Emitted for every logical tab change, including programmatic changes. */
     void currentChanged(int index);
+
+    /** Emitted only when the user activates a tab button. */
+    void tabActivated(int index);
 
 private slots:
     void onTabClicked(int id);
@@ -45,6 +57,7 @@ private:
     struct TabInfo {
         QPushButton *button;
         QWidget *page;
+        QString key;
     };
     QList<TabInfo> m_tabs;
 };

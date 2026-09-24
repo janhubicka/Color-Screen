@@ -861,8 +861,9 @@ void MainWindow::setupUi() {
 
 
 
-  m_configTabs->addTab(m_capturePanel, "Digital capture");
-  m_configTabs->addTab(m_tilesPanel, "Tiles");
+  m_configTabs->addTab(m_capturePanel, "Digital capture",
+                       QStringLiteral("digital_capture"));
+  m_configTabs->addTab(m_tilesPanel, "Tiles", QStringLiteral("tiles"));
   connect(m_capturePanel, &CapturePanel::cropRequested, this,
           &MainWindow::onCropRequested);
   connect(m_capturePanel, &CapturePanel::measureRequested, this,
@@ -916,13 +917,17 @@ void MainWindow::setupUi() {
             }
           });
   connect(m_imageWidget, &ImageWidget::distanceMeasured, this, &MainWindow::onDistanceMeasured);
-  m_configTabs->addTab(m_sharpnessPanel, "Sharpness");
-  m_configTabs->addTab(m_imageLayerPanel, "Image Layer");
-  m_configTabs->addTab(m_contactCopyPanel, "Contact copy");
-  m_configTabs->addTab(m_screenPanel, "Screen");
-  m_configTabs->addTab(m_geometryPanel, "Geometry");
-  m_configTabs->addTab(m_colorPanel, "Color");
-  m_configTabs->addTab(m_profilePanel, "Profile");
+  m_configTabs->addTab(m_sharpnessPanel, "Sharpness",
+                       QStringLiteral("sharpness"));
+  m_configTabs->addTab(m_imageLayerPanel, "Image Layer",
+                       QStringLiteral("image_layer"));
+  m_configTabs->addTab(m_contactCopyPanel, "Contact copy",
+                       QStringLiteral("contact_copy"));
+  m_configTabs->addTab(m_screenPanel, "Screen", QStringLiteral("screen"));
+  m_configTabs->addTab(m_geometryPanel, "Geometry",
+                       QStringLiteral("geometry"));
+  m_configTabs->addTab(m_colorPanel, "Color", QStringLiteral("color"));
+  m_configTabs->addTab(m_profilePanel, "Profile", QStringLiteral("profile"));
 
   m_configTabs->setTabToolTip(0, "Capture — configure demosaicking, resolution, "
                                  "sensor parameters, and image gamma.");
@@ -945,6 +950,28 @@ void MainWindow::setupUi() {
                                  "presaturation, and dye model parameters.");
   m_configTabs->setTabToolTip(
       8, "Color calibration — optimize a profile and manage calibration spots.");
+
+  // The preferred stage is application presentation state, not document state.
+  // Persist a semantic key rather than a numeric index so later tab reordering
+  // or translated labels cannot change its meaning. Only explicit user clicks
+  // update the preference; programmatic fallback from a hidden Tiles tab does
+  // not replace the user's preferred stage.
+  {
+    QSettings settings;
+    const QString preferredPanel =
+        settings.value(QStringLiteral("inspector/activePanel")).toString();
+    const int preferredIndex = m_configTabs->indexOfKey(preferredPanel);
+    if (preferredIndex >= 0)
+      m_configTabs->setCurrentIndex(preferredIndex);
+  }
+  connect(m_configTabs, &MultiLineTabWidget::tabActivated, this,
+          [this](int index) {
+            const QString key = m_configTabs->tabKey(index);
+            if (key.isEmpty())
+              return;
+            QSettings settings;
+            settings.setValue(QStringLiteral("inspector/activePanel"), key);
+          });
 
   connect(m_profilePanel, &ProfilePanel::optimizeColorRequested, this,
           &MainWindow::onColorOptimizeRequested);
