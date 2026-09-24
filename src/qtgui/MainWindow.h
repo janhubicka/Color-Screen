@@ -421,6 +421,11 @@ private:
       bool suggestDetectedMetadata);
 
   void setupUi();
+
+  /** Select the saved application-wide inspector stage when it is currently
+      available. Hidden-stage fallback never changes the saved preference. */
+  void restorePreferredInspectorPanel();
+
   void createMenus();
   QRect getImageArea(QRect area, ImageWidget *imageWidget = nullptr);
   void pivotViewport(int oldRot, int newRot);
