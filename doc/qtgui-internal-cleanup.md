@@ -356,12 +356,15 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   Tiles is the fourth complete migration and exercises a different invariant:
   its shared Exposure/Dark point editors change saved target with the selected
   stitch tile, so `ParameterKeyGetter` resolves them to coordinate-specific
-  `tiles.<x>.<y>.*` keys at edit time. Per-tile enable checkboxes use the same
-  namespace, while the current-tile selector remains unkeyed presentation
-  state. The beta smoke edits Exposure on two tiles back-to-back and verifies
-  that one Undo restores only the second tile, then the next Undo restores the
-  first. Workspace churn continues to check the other document/operation-state
-  ownership boundaries.
+  `tiles.<x>.<y>.*` keys at edit time. The same shared editors now use dynamic
+  default/modified/Reset metadata: selecting another tile retargets the Reset
+  key and recomputes the fresh-state default before presentation or Reset.
+  Per-tile enable checkboxes use the same namespace, while the current-tile
+  selector remains unkeyed presentation state. The beta smoke edits Exposure on
+  two tiles back-to-back, verifies Reset follows the selected tile, checks that
+  Reset changes only that tile, then verifies Reset and both edits remain three
+  independent Undo gestures. Workspace churn continues to check the other
+  document/operation-state ownership boundaries.
 - Subsequent complete stable-key migrations are Digital Capture (fifth), Contact Copy (sixth), Color (seventh), and Sharpness (eighth). Capture's derived Sensor width shares the pixel-pitch identity while its rotation assumption remains presentation-only. Contact Copy gives each H&D editing surface its own gesture identity. Color adds `color.*` keys for every saved editor, including custom whitepoint/tone-curve widgets. Correlated RGB controls expand their base key to per-channel `.red/.green/.blue` identities; Link channels and Color's area/chart-view controls remain deliberately unkeyed. Sharpness uses `sharpness.*` for saved MTF/deconvolution controls and target-specific `sharpness.measurements.<index>.*` identities for repeated measurement metadata rows; chart presentation, measurement navigation/actions, and focus-analysis setup remain unkeyed. Workspace smoke verifies both the complete Sharpness key set and that adjacent name edits on two measurements require two Undo steps.
 - Prefer `QSignalBlocker` for temporary signal suppression. Central
   `ParameterPanel` synchronization and ordinary refresh/update paths now use

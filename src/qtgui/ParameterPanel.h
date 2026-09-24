@@ -83,7 +83,8 @@ protected:
     the first explicit numeric value. PARAMETERKEYGETTER is for the unusual
     case where one editor targets different saved parameters as panel selection
     changes; it must return the complete logical key for the current target.
-    Do not combine it with a static PARAMETERKEY or default/reset presentation.
+    Do not combine it with a static PARAMETERKEY. Default/reset presentation is
+    allowed: its key, default and modified metadata retarget with the editor.
   */
   QWidget *addSliderParameter(
       const QString &label, double min, double max, double scale, int decimals,
@@ -272,6 +273,16 @@ protected:
   void addNumericDefaultPresentation(
       QWidget *field, QHBoxLayout *layout, const QString &label,
       const QString &parameterKey, double defaultValue,
+      std::function<double(const ParameterState &)> getter,
+      std::function<void(ParameterState &, double)> setter,
+      double tolerance);
+
+  /** Add numeric default/modified/reset presentation for an editor whose saved
+      target key changes with panel selection. The current key and fresh-state
+      default are resolved on every refresh and again when Reset is clicked. */
+  void addDynamicNumericDefaultPresentation(
+      QWidget *field, QHBoxLayout *layout, const QString &label,
+      ParameterKeyGetter parameterKeyGetter,
       std::function<double(const ParameterState &)> getter,
       std::function<void(ParameterState &, double)> setter,
       double tolerance);

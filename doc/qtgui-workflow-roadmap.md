@@ -573,8 +573,11 @@ specialist stages.
   sections receive explicit keys;
 - add consistent per-module reset/bypass only where semantically valid.
   The standard numeric Reset/default presentation now covers straightforward
-  saved controls in Digital Capture, Sharpness, Color, Image Layer, Screen,
-  Geometry, and Contact Copy's simulated-darkroom values. Coupled calibration
+  saved controls in Digital Capture, Tiles, Sharpness, Color, Image Layer,
+  Screen, Geometry, and Contact Copy's simulated-darkroom values. Tiles also
+  exercises the context-dependent case: its shared Exposure/Dark point editors
+  retarget Reset metadata and the fresh-state default when another tile is
+  selected. Coupled calibration
   editors such as Contact Copy's H&D/Richards curve remain deliberately outside
   the generic per-field Reset convention; Contact Copy instead exposes one
   calibration-level Reset that restores the complete characteristic curve
