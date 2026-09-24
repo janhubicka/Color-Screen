@@ -1739,6 +1739,74 @@ bool runBetaInvariantSmoke() {
   if (window.documentStateSnapshot() != rotated)
     return fail("redo did not restore both independent user actions");
 
+  // Calibration results are not ordinary numeric defaults. They need explicit
+  // undoable Clear actions that remove only the accepted result.
+  auto *clearFlatField = window.findChild<QPushButton *>(
+      QStringLiteral("CaptureClearFlatFieldButton"));
+  auto *clearAdaptive = window.findChild<QPushButton *>(
+      QStringLiteral("SharpnessClearAdaptiveCorrectionButton"));
+  if (!clearFlatField || !clearAdaptive)
+    return fail("calibration Clear actions were not constructed");
+
+  ParameterState calibrationBaseline = window.documentStateSnapshot();
+  ParameterState calibrated = calibrationBaseline;
+  // The Qt executable deliberately cannot construct the library-private
+  // backlight-correction payload directly. The Clear path treats the accepted
+  // calibration as an opaque shared handle, so use an aliasing non-null handle
+  // here without constructing or dereferencing the payload type.
+  auto flatCorrectionOwner = std::make_shared<int>(0);
+  auto flatCorrection =
+      std::shared_ptr<colorscreen::backlight_correction_parameters>(
+          flatCorrectionOwner,
+          reinterpret_cast<colorscreen::backlight_correction_parameters *>(
+              flatCorrectionOwner.get()));
+  calibrated.rparams.backlight_correction = flatCorrection;
+
+  auto adaptiveCorrection =
+      std::make_shared<colorscreen::scanner_blur_correction_parameters>();
+  if (!adaptiveCorrection->alloc(
+          2, 2,
+          colorscreen::scanner_blur_correction_parameters::blur_radius))
+    return fail("could not allocate adaptive correction fixture");
+  adaptiveCorrection->set_correction(0, 0, 0.25);
+  adaptiveCorrection->set_correction(1, 0, 0.5);
+  adaptiveCorrection->set_correction(0, 1, 0.75);
+  adaptiveCorrection->set_correction(1, 1, 1.0);
+  calibrated.rparams.scanner_blur_correction = adaptiveCorrection;
+
+  window.applyState(calibrated);
+  undoStack->clear();
+  if (!clearFlatField->isEnabled() || !clearAdaptive->isEnabled())
+    return fail("accepted calibrations did not enable their Clear actions");
+
+  clearFlatField->click();
+  const ParameterState afterFlatClear = window.documentStateSnapshot();
+  if (afterFlatClear.rparams.backlight_correction ||
+      afterFlatClear.rparams.scanner_blur_correction != adaptiveCorrection)
+    return fail("Clear flat field changed the wrong calibration");
+  undoStack->undo();
+  if (window.documentStateSnapshot().rparams.backlight_correction !=
+          flatCorrection ||
+      window.documentStateSnapshot().rparams.scanner_blur_correction !=
+          adaptiveCorrection)
+    return fail("Undo did not restore the flat-field calibration");
+
+  undoStack->clear();
+  clearAdaptive->click();
+  const ParameterState afterAdaptiveClear = window.documentStateSnapshot();
+  if (afterAdaptiveClear.rparams.scanner_blur_correction ||
+      afterAdaptiveClear.rparams.backlight_correction != flatCorrection)
+    return fail("Clear adaptive correction changed the wrong calibration");
+  undoStack->undo();
+  if (window.documentStateSnapshot().rparams.scanner_blur_correction !=
+          adaptiveCorrection ||
+      window.documentStateSnapshot().rparams.backlight_correction !=
+          flatCorrection)
+    return fail("Undo did not restore the adaptive sharpening calibration");
+
+  window.applyState(calibrationBaseline);
+  undoStack->clear();
+
   // Tiles deliberately reuse one pair of editors for the currently selected
   // stitch tile. The parameter key must therefore include the tile coordinates:
   // a fast edit on tile 0 followed by the same visible Exposure control on tile
