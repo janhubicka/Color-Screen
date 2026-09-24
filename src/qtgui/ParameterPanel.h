@@ -3,6 +3,8 @@
 
 #include "ParameterState.h"
 #include <QComboBox>
+#include <QHash>
+#include <QPointer>
 #include <QString>
 #include <QToolButton>
 #include <QVariant>
@@ -20,6 +22,7 @@ class image_data;
 class QVBoxLayout;
 class QHBoxLayout;
 class QFormLayout;
+class QEvent;
 class QGroupBox;
 class QCheckBox;
 class QDoubleSpinBox;
@@ -44,6 +47,10 @@ public:
   virtual void updateUI();
 
 protected:
+  /** Consume a left-button double click on a reset-enabled numeric label/value
+      by invoking that row's standard Reset action. */
+  bool eventFilter(QObject *watched, QEvent *event) override;
+
   /** Refresh registered widget availability and folding only. Incremental
       presentation updates can use this without applying parameter values or
       recursively invoking onParametersRefreshed(). */
@@ -287,6 +294,10 @@ protected:
       std::function<void(ParameterState &, double)> setter,
       double tolerance);
 
+  /** Register standard Reset-enabled numeric rows for the centralized
+      double-click-to-reset gesture. Safe to call repeatedly. */
+  void registerNumericDoubleClickResetTargets();
+
   /** Add the same modified/default/Reset presentation to a keyed discrete
       FIELD. LABELWIDGET may be an external form label or the inline label used
       by checkbox rows. */
@@ -325,6 +336,7 @@ protected:
 
   std::vector<std::function<void(const ParameterState &)>> m_paramUpdaters;
   std::vector<std::function<void()>> m_widgetStateUpdaters;
+  QHash<QObject *, QPointer<QToolButton>> m_doubleClickResetTargets;
 
   virtual void onParametersRefreshed(const ParameterState &state) {}
 };

@@ -1239,6 +1239,85 @@ bool profileSectionPreferencesSmoke() {
   return true;
 }
 
+/** Exercise centralized double-click Reset for numeric rows only. */
+bool numericDoubleClickResetSmoke() {
+  auto fail = [](const char *reason) {
+    qCritical() << "Numeric double-click Reset smoke failed:" << reason;
+    return false;
+  };
+
+  ParameterState state;
+  int edits = 0;
+  auto getState = [&]() { return state; };
+  auto setState = [&](const ParameterState &next, const QString &,
+                      const QString &) {
+    state = next;
+    ++edits;
+  };
+  auto noImage = []() { return std::shared_ptr<colorscreen::image_data>(); };
+
+  CheckboxSemanticsProbe panel(getState, setState, noImage, nullptr, false);
+  QWidget *row = panel.addSliderParameter(
+      QStringLiteral("Gain"), 0.0, 2.0, 100.0, 2, QString(), QString(),
+      [](const ParameterState &s) { return s.rparams.brightness; },
+      [](ParameterState &s, double value) { s.rparams.brightness = value; },
+      1.0, nullptr, false, QString(), QStringLiteral("smoke.numeric.gain"),
+      true);
+  panel.updateUI();
+
+  QDoubleSpinBox *spin =
+      row ? row->findChild<QDoubleSpinBox *>() : nullptr;
+  QLabel *label = nullptr;
+  for (QLabel *candidate : panel.findChildren<QLabel *>())
+    if (candidate && candidate->text() == QStringLiteral("Gain")) {
+      label = candidate;
+      break;
+    }
+  QToolButton *reset = nullptr;
+  for (QToolButton *button : panel.findChildren<QToolButton *>())
+    if (button->objectName() == QStringLiteral("ParameterResetButton") &&
+        button->property("parameterKey").toString() ==
+            QStringLiteral("smoke.numeric.gain")) {
+      reset = button;
+      break;
+    }
+  if (!row || !spin || !label || !reset || !reset->isHidden())
+    return fail("numeric Reset row was not constructed as expected");
+
+  const double defaultValue = ParameterState().rparams.brightness;
+  const double changedValue =
+      defaultValue < 1.99 ? defaultValue + 0.01 : defaultValue - 0.01;
+
+  spin->setValue(changedValue);
+  panel.updateUI();
+  if (reset->isHidden() || edits != 1)
+    return fail("modified numeric value did not expose Reset");
+
+  sendPointerSmokeEvent(*spin, QEvent::MouseButtonDblClick, {4, 4},
+                        Qt::LeftButton, Qt::LeftButton);
+  panel.updateUI();
+  if (std::abs(state.rparams.brightness - defaultValue) > 1e-12 ||
+      !reset->isHidden() || edits != 2)
+    return fail("double-clicking numeric value did not reset it");
+
+  spin->setValue(changedValue);
+  panel.updateUI();
+  sendPointerSmokeEvent(*label, QEvent::MouseButtonDblClick, {4, 4},
+                        Qt::LeftButton, Qt::LeftButton);
+  panel.updateUI();
+  if (std::abs(state.rparams.brightness - defaultValue) > 1e-12 ||
+      !reset->isHidden() || edits != 4)
+    return fail("double-clicking numeric label did not reset it");
+
+  // At the default there is no active Reset gesture.
+  sendPointerSmokeEvent(*label, QEvent::MouseButtonDblClick, {4, 4},
+                        Qt::LeftButton, Qt::LeftButton);
+  if (edits != 4)
+    return fail("double-clicking a default numeric row created an edit");
+
+  return true;
+}
+
 /** Exercise opt-in default/modified/Reset for saved discrete values. */
 bool discreteDefaultPresentationSmoke() {
   auto fail = [](const char *reason) {
@@ -1321,6 +1400,7 @@ bool runBetaInvariantSmoke() {
   };
 
   if (!backgroundThreadRegistryShutdownSmoke()
+      || !numericDoubleClickResetSmoke()
       || !discreteDefaultPresentationSmoke()
       || !parameterSectionPreferencesSmoke()
       || !colorSectionPreferencesSmoke()

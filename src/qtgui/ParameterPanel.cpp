@@ -14,6 +14,7 @@
 #include <QIcon>
 #include <QLabel>
 #include <QMainWindow>
+#include <QMouseEvent>
 #include <QPointer>
 #include <QRegularExpression>
 #include <QPushButton>
@@ -511,9 +512,93 @@ ParameterPanel::ParameterPanel(StateGetter stateGetter, StateSetter stateSetter,
   }
 }
 
-ParameterPanel::~ParameterPanel() = default;
+ParameterPanel::~ParameterPanel() {
+  // QWidget destroys child editors only after the derived C++ members have
+  // been torn down. Detach filters while the target map is still alive.
+  const QList<QObject *> resetTargets = m_doubleClickResetTargets.keys();
+  for (QObject *target : resetTargets) {
+    if (!target)
+      continue;
+    target->removeEventFilter(this);
+    QObject::disconnect(target, nullptr, this, nullptr);
+  }
+  m_doubleClickResetTargets.clear();
+}
+
+/** Reset a modified numeric parameter on a left-button double click. */
+bool ParameterPanel::eventFilter(QObject *watched, QEvent *event) {
+  if (event && event->type() == QEvent::MouseButtonDblClick) {
+    const auto it = m_doubleClickResetTargets.constFind(watched);
+    if (it != m_doubleClickResetTargets.cend() && it.value()) {
+      auto *mouseEvent = static_cast<QMouseEvent *>(event);
+      QToolButton *resetButton = it.value().data();
+      QWidget *field = resetButton ? resetButton->parentWidget() : nullptr;
+      QDoubleSpinBox *spin =
+          field ? field->findChild<QDoubleSpinBox *>() : nullptr;
+      if (mouseEvent->button() == Qt::LeftButton && resetButton &&
+          resetButton->property(parameterModifiedProperty).toBool() &&
+          resetButton->isEnabled() && (!spin || spin->isEnabled())) {
+        resetButton->click();
+        event->accept();
+        return true;
+      }
+    }
+  }
+  return QWidget::eventFilter(watched, event);
+}
+
+/** Discover standard numeric Reset rows and attach their common double-click
+    gesture to the value editor and form label. */
+void ParameterPanel::registerNumericDoubleClickResetTargets() {
+  for (QToolButton *resetButton : findChildren<QToolButton *>()) {
+    if (!resetButton ||
+        resetButton->objectName() != QStringLiteral("ParameterResetButton"))
+      continue;
+
+    QWidget *field = resetButton->parentWidget();
+    QDoubleSpinBox *spin =
+        field ? field->findChild<QDoubleSpinBox *>() : nullptr;
+    if (!field || !spin)
+      continue; // Discrete Reset rows keep their ordinary interaction.
+
+    QWidget *labelWidget = nullptr;
+    if (m_form)
+      labelWidget = m_form->labelForField(field);
+    if (!labelWidget) {
+      for (QFormLayout *form : m_groupForms) {
+        labelWidget = form ? form->labelForField(field) : nullptr;
+        if (labelWidget)
+          break;
+      }
+    }
+
+    auto registerTarget = [this, resetButton](QObject *target) {
+      if (!target)
+        return;
+      const auto existing = m_doubleClickResetTargets.constFind(target);
+      if (existing != m_doubleClickResetTargets.cend() &&
+          existing.value() == resetButton)
+        return;
+      target->installEventFilter(this);
+      m_doubleClickResetTargets.insert(target,
+                                       QPointer<QToolButton>(resetButton));
+      connect(target, &QObject::destroyed, this, [this, target]() {
+        m_doubleClickResetTargets.remove(target);
+      });
+    };
+
+    registerTarget(labelWidget);
+    registerTarget(spin);
+    for (QWidget *child : spin->findChildren<QWidget *>())
+      registerTarget(child);
+  }
+}
 
 void ParameterPanel::updateUI() {
+  // Derived panels may add Reset-enabled rows late during construction.
+  // Discover them lazily so the gesture requires no panel-specific wiring.
+  registerNumericDoubleClickResetTargets();
+
   ParameterState state = m_stateGetter();
 
   // Update Param Updaters

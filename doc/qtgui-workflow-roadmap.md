@@ -340,8 +340,11 @@ metaphor.
 ### Double-click/default gestures
 
 Photographers often expect double-click on a slider label/value to reset it.
-This can be added later through `ParameterPanel` once reset metadata is explicit.
-Do not implement ad-hoc reset gestures panel by panel.
+`ParameterPanel` now provides this centrally for numeric rows that explicitly
+opt into default/modified/Reset metadata. A left-button double click on the
+numeric value or its form label invokes the same standard Reset action; default
+or disabled rows retain their ordinary double-click behavior. Do not implement
+ad-hoc reset gestures panel by panel.
 
 ### Numeric entry remains first-class
 
