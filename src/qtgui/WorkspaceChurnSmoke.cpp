@@ -682,6 +682,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         // H&D graph/point/Richards editors all mutate one coupled curve object,
         // so resetting one field there would have non-local calibration effects.
         const QStringList contactCopyDefaultKeys = {
+            QStringLiteral("contact_copy.simulate"),
             QStringLiteral("contact_copy.preflash"),
             QStringLiteral("contact_copy.exposure"),
             QStringLiteral("contact_copy.density_boost")};
@@ -895,7 +896,11 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
             return;
           }
         }
-        if (!imageLayerSourceChoice ||
+        QToolButton *imageLayerSourceReset =
+            findParameterResetButton(
+                QStringLiteral("image_layer.use_simulated_rgb"));
+        if (!imageLayerSourceChoice || !imageLayerSourceReset ||
+            !imageLayerSourceReset->property("parameterDefaultValue").isValid() ||
             imageLayerSourceChoice->property("parameterKey").toString() !=
                 QStringLiteral("image_layer.use_simulated_rgb") ||
             !imageLayerDarkAreaButton || !imageLayerNeutralAreaButton ||
@@ -1188,10 +1193,14 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         }
         QToolButton *sharpnessModeReset =
             findParameterResetButton(QStringLiteral("sharpness.mode"));
-        if (!sharpnessModeReset ||
-            !sharpnessModeReset->property("parameterDefaultValue").isValid()) {
+        QToolButton *measuredMtfReset =
+            findParameterResetButton(
+                QStringLiteral("sharpness.capture.use_measured_mtf"));
+        if (!sharpnessModeReset || !measuredMtfReset ||
+            !sharpnessModeReset->property("parameterDefaultValue").isValid() ||
+            !measuredMtfReset->property("parameterDefaultValue").isValid()) {
           fail(QStringLiteral(
-              "Workspace churn lost Sharpness mode default/reset metadata"));
+              "Workspace churn lost Sharpness discrete default/reset metadata"));
           return;
         }
         const QStringList sharpnessDefaultKeys = {

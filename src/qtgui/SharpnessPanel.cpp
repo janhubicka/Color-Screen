@@ -276,7 +276,7 @@ void SharpnessPanel::setupUi() {
       },
       nullptr,
       "Use a measured MTF curve directly instead of the fitted analytical physical or fallback model.",
-      QStringLiteral("sharpness.capture.use_measured_mtf"));
+      QStringLiteral("sharpness.capture.use_measured_mtf"), true);
   useMeasuredMtf->setObjectName(QStringLiteral("MtfUseMeasuredCheck"));
   setParameterApplicability(useMeasuredMtf, [](const ParameterState &state) {
     return !state.rparams.sharpen.scanner_mtf.measurements.empty();

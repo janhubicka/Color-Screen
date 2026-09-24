@@ -581,7 +581,10 @@ specialist stages.
   editors such as Contact Copy's H&D/Richards curve remain deliberately outside
   the generic per-field Reset convention; Contact Copy instead exposes one
   calibration-level Reset that restores the complete characteristic curve
-  atomically.
+  atomically. Saved checkbox choices follow the same opt-in convention:
+  Contact copy simulation resets to bypass/off without discarding its configured
+  curve or darkroom values, Sharpness Use measured MTF resets to the fitted
+  model, and Image Layer Use simulated RGB resets to the native channel source.
 
 ### Phase D — navigation consolidation
 
