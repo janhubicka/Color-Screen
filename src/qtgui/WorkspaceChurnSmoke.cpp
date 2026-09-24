@@ -1031,6 +1031,23 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
           return;
         }
 
+        const QStringList colorDefaultKeys = {
+            QStringLiteral("color.process.black"),
+            QStringLiteral("color.process.presaturation"),
+            QStringLiteral("color.process.white_balance.red"),
+            QStringLiteral("color.process.white_balance.green"),
+            QStringLiteral("color.process.white_balance.blue"),
+            QStringLiteral("color.backlight.intensity"),
+            QStringLiteral("color.backlight.temperature")};
+        for (const QString &key : colorDefaultKeys) {
+          QToolButton *button = findParameterResetButton(key);
+          if (!button || !button->property("parameterDefaultValue").isValid()) {
+            fail(QStringLiteral(
+                     "Workspace churn lost Color default/reset metadata for %1")
+                     .arg(key));
+            return;
+          }
+        }
 
         // Sharpness is the eighth complete stable-key migration. Saved
         // deconvolution/MTF controls carry sharpness.* identities, while chart
