@@ -17,12 +17,27 @@ ProfilePanel::~ProfilePanel() = default;
 
 void ProfilePanel::setupUi()
 {
+  // Keep manually constructed Profile rows inside the active foldable section.
+  auto addFieldRow = [this](const QString &label, QWidget *field) {
+    if (m_currentGroupForm)
+      m_currentGroupForm->addRow(label, field);
+    else
+      m_form->addRow(label, field);
+  };
+  auto addWidgetRow = [this](QWidget *field) {
+    if (m_currentGroupForm)
+      m_currentGroupForm->addRow(field);
+    else
+      m_form->addRow(field);
+  };
+
   // ── Spots section ─────────────────────────────────────────────────────────
-  addSeparator("Profile spots");
+  addSeparator("Profile spots", QStringLiteral("profile.spots"));
 
   // Spot count label
   m_spotCountLabel = new QLabel(tr("No spots"), this);
-  m_form->addRow(tr("Spots:"), m_spotCountLabel);
+  m_spotCountLabel->setObjectName(QStringLiteral("ProfileSpotCount"));
+  addFieldRow(tr("Spots:"), m_spotCountLabel);
 
   // Add spot toggle button + Clear all side by side
   {
@@ -32,6 +47,7 @@ void ProfilePanel::setupUi()
     hlay->setSpacing(6);
 
     m_addSpotBtn = new QPushButton(tr("Add spot"), row);
+    m_addSpotBtn->setObjectName(QStringLiteral("ProfileAddSpotButton"));
     m_addSpotBtn->setCheckable(true);
     m_addSpotBtn->setToolTip(tr("Click image to add profile spots (right-click to remove)"));
     hlay->addWidget(m_addSpotBtn, 1);
@@ -39,7 +55,7 @@ void ProfilePanel::setupUi()
     auto *clearBtn = new QPushButton(tr("Clear all"), row);
     hlay->addWidget(clearBtn, 1);
 
-    m_form->addRow(row);
+    addWidgetRow(row);
 
     connect(m_addSpotBtn, &QPushButton::toggled, this, [this](bool checked) {
       m_addSpotActive = checked;
@@ -55,32 +71,35 @@ void ProfilePanel::setupUi()
 
   // Show profile spots checkbox
   m_showProfileSpotsCheck = new QCheckBox(tr("Show profile spots"), this);
-  m_form->addRow(m_showProfileSpotsCheck);
+  m_showProfileSpotsCheck->setObjectName(
+      QStringLiteral("ProfileShowSpotsCheck"));
+  addWidgetRow(m_showProfileSpotsCheck);
   m_showProfileSpotsCheck->setChecked(true); // on by default
   connect(m_showProfileSpotsCheck, &QCheckBox::toggled,
           this, &ProfilePanel::showProfileSpotsChanged);
 
   // ── Optimization section ───────────────────────────────────────────────────
-  addSeparator("Color optimization");
+  addSeparator("Color optimization", QStringLiteral("profile.optimization"));
 
   m_autoCheck = new QCheckBox(tr("Auto optimize"), this);
   m_autoCheck->setObjectName("autoColorOptBox");
-  m_form->addRow(m_autoCheck);
+  addWidgetRow(m_autoCheck);
 
   m_optimizeBtn = new QPushButton(tr("Optimize color"), this);
   m_optimizeBtn->setObjectName(QStringLiteral("ProfileOptimizeButton"));
-  m_form->addRow(m_optimizeBtn);
+  addWidgetRow(m_optimizeBtn);
 
   m_calibrationStatusLabel = new QLabel(tr("Profile: no calibration spots"), this);
   m_calibrationStatusLabel->setObjectName(
       QStringLiteral("ProfileCalibrationStatus"));
   m_calibrationStatusLabel->setWordWrap(true);
-  m_form->addRow(tr("Status:"), m_calibrationStatusLabel);
+  addFieldRow(tr("Status:"), m_calibrationStatusLabel);
 
   // Numerical quality belongs beside, but is distinct from, freshness.
   m_resultLabel = new QLabel(tr("—"), this);
+  m_resultLabel->setObjectName(QStringLiteral("ProfileCalibrationQuality"));
   m_resultLabel->setWordWrap(true);
-  m_form->addRow(tr("Quality:"), m_resultLabel);
+  addFieldRow(tr("Quality:"), m_resultLabel);
 
   connect(m_optimizeBtn, &QPushButton::clicked, this, [this]() {
     emit optimizeColorRequested(m_autoCheck->isChecked());
@@ -96,6 +115,10 @@ void ProfilePanel::setupUi()
     if (m_lastAutoSpots.size() >= 4)
       emit optimizeColorRequested(true);
   });
+
+  // Rows are populated after the section headers. Apply restored folds before
+  // this panel is first shown, matching the other persistent-section panels.
+  updateUI();
 }
 
 bool ProfilePanel::isAutoEnabled() const
