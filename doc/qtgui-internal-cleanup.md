@@ -371,6 +371,13 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   scoped blockers throughout the parameter panels, document window and
   secondary image views. The remaining direct `blockSignals()` call is the
   intentional undo-stack teardown suppression, which is lifetime-specific.
+- Numeric rows that opt into standard Reset also share one centralized
+  double-click gesture. `ParameterPanel::updateUI()` lazily discovers standard
+  numeric Reset rows, installs one event filter on the form label and numeric
+  value editor (including the spin box's internal editor), and invokes the same
+  Reset action only while the row is modified and enabled. This deliberately
+  does not apply to enums, checkboxes, calibration-level Reset actions or
+  operation/session controls.
 - Keep generic numeric Reset scoped to independent document values. Contact Copy
   now opts Preflash, Enlarger exposure, and Density boost into the standard
   fresh-`ParameterState` default/modified presentation. Its H&D graph, manual
