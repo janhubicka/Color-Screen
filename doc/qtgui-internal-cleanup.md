@@ -371,6 +371,14 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   scoped blockers throughout the parameter panels, document window and
   secondary image views. The remaining direct `blockSignals()` call is the
   intentional undo-stack teardown suppression, which is lifetime-specific.
+- Finish the ordinary saved-checkbox Reset rollout without conflating it with
+  session state. Contact Copy's simulation master, Sharpness Use measured MTF,
+  and Image Layer Use simulated RGB image layer use fresh-`ParameterState`
+  default/modified presentation. Resetting the Contact Copy master is a
+  non-destructive bypass: subordinate curve and darkroom values remain stored.
+  Geometry Auto fit/nonlinear-request and Sharpness focus-analyzer option
+  checkboxes remain session/presentation state and intentionally have no saved
+  default Reset.
 - Keep generic numeric Reset scoped to independent document values. Contact Copy
   now opts Preflash, Enlarger exposure, and Density boost into the standard
   fresh-`ParameterState` default/modified presentation. Its H&D graph, manual
