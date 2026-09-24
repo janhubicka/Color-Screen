@@ -7,6 +7,7 @@
 #include <QFormLayout>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QPushButton>
 #include <QVBoxLayout>
 #include "HistogramWorker.h"
 #include "../libcolorscreen/include/sensitivity.h"
