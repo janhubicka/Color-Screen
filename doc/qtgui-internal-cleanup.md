@@ -379,6 +379,13 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   Geometry Auto fit/nonlinear-request and Sharpness focus-analyzer option
   checkboxes remain session/presentation state and intentionally have no saved
   default Reset.
+- Numeric rows that opt into standard Reset share one centralized
+  double-click gesture. `ParameterPanel::updateUI()` lazily discovers standard
+  numeric Reset rows, installs the panel event filter on the form label and
+  numeric value editor (including the spin box's internal editor), and invokes
+  the same Reset action only while the row is modified and enabled. Enums,
+  checkboxes, calibration-level Clear/Reset actions, and session/operation
+  controls deliberately retain their ordinary double-click behavior.
 - Keep generic numeric Reset scoped to independent document values. Contact Copy
   now opts Preflash, Enlarger exposure, and Density boost into the standard
   fresh-`ParameterState` default/modified presentation. Its H&D graph, manual
