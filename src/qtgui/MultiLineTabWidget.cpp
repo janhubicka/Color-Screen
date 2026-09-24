@@ -49,13 +49,17 @@ MultiLineTabWidget::MultiLineTabWidget(QWidget *parent)
     );
 }
 
-int MultiLineTabWidget::addTab(QWidget *page, const QString &label)
+int MultiLineTabWidget::addTab(QWidget *page, const QString &label,
+                               const QString &key)
 {
+    Q_ASSERT(key.isEmpty() || indexOfKey(key) < 0);
     QPushButton *btn = new QPushButton(label);
     btn->setCheckable(true);
+    if (!key.isEmpty())
+        btn->setProperty("tabKey", key);
     
     int id = m_tabs.size();
-    m_tabs.append({btn, page});
+    m_tabs.append({btn, page, key});
     m_group->addButton(btn, id);
     m_tabLayout->addWidget(btn);
     m_stack->addWidget(page);
@@ -143,10 +147,30 @@ QString MultiLineTabWidget::tabText(int index) const
     return QString();
 }
 
+/** Return stable application-preference key for INDEX. */
+QString MultiLineTabWidget::tabKey(int index) const
+{
+    if (index >= 0 && index < m_tabs.size())
+        return m_tabs[index].key;
+    return QString();
+}
+
+/** Resolve stable application-preference KEY to its current tab index. */
+int MultiLineTabWidget::indexOfKey(const QString &key) const
+{
+    if (key.isEmpty())
+        return -1;
+    for (int i = 0; i < m_tabs.size(); ++i)
+        if (m_tabs[i].key == key)
+            return i;
+    return -1;
+}
+
 void MultiLineTabWidget::onTabClicked(int id)
 {
     if (id >= 0 && id < m_tabs.size()) {
         m_stack->setCurrentIndex(id);
         emit currentChanged(id);
+        emit tabActivated(id);
     }
 }

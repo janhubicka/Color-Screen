@@ -221,6 +221,9 @@ void MainWindow::onImageLoaded() {
   applyState(getCurrentState());
   updateRegistrationActions();
   updateRegistrationGroupVisibility();
+  // A preferred specialist stage can be hidden while the document is empty.
+  // Re-apply it only after image/capture-dependent tab visibility is known.
+  restorePreferredInspectorPanel();
   m_renderAction->setEnabled(m_scan != nullptr);
 }
 

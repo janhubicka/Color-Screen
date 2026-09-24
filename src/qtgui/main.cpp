@@ -1334,28 +1334,57 @@ bool runBetaInvariantSmoke() {
   // probe, reproducing inspector reparent/detach transitions.
   QWidget hiddenHost;
   MultiLineTabWidget tabs(&hiddenHost);
-  const int firstTab = tabs.addTab(new QWidget, QStringLiteral("First"));
-  const int secondTab = tabs.addTab(new QWidget, QStringLiteral("Second"));
-  const int thirdTab = tabs.addTab(new QWidget, QStringLiteral("Third"));
+  const int firstTab =
+      tabs.addTab(new QWidget, QStringLiteral("First"),
+                  QStringLiteral("first"));
+  const int secondTab =
+      tabs.addTab(new QWidget, QStringLiteral("Second"),
+                  QStringLiteral("second"));
+  const int thirdTab =
+      tabs.addTab(new QWidget, QStringLiteral("Third"),
+                  QStringLiteral("third"));
   hiddenHost.hide();
 
+  if (tabs.tabKey(secondTab) != QStringLiteral("second") ||
+      tabs.indexOfKey(QStringLiteral("third")) != thirdTab ||
+      tabs.indexOfKey(QStringLiteral("missing")) != -1)
+    return fail("stable inspector tab-key lookup is inconsistent");
+
+  int logicalChanges = 0;
+  int userActivations = 0;
+  QObject::connect(&tabs, &MultiLineTabWidget::currentChanged, &tabs,
+                   [&logicalChanges](int) { ++logicalChanges; });
+  QObject::connect(&tabs, &MultiLineTabWidget::tabActivated, &tabs,
+                   [&userActivations](int) { ++userActivations; });
+
   tabs.setCurrentIndex(secondTab);
-  if (tabs.currentIndex() != secondTab)
-    return fail("hidden ancestor blocked logical tab selection");
+  if (tabs.currentIndex() != secondTab || logicalChanges != 1 ||
+      userActivations != 0)
+    return fail("programmatic tab selection looked like user activation");
 
   tabs.setTabVisible(firstTab, false);
   tabs.setTabVisible(secondTab, false);
-  if (tabs.currentIndex() != thirdTab)
-    return fail("hidden current tab did not fall back while ancestor was hidden");
+  if (tabs.currentIndex() != thirdTab || logicalChanges != 2 ||
+      userActivations != 0)
+    return fail("hidden current tab fallback overwrote user activation semantics");
 
   tabs.setCurrentIndex(firstTab);
-  if (tabs.currentIndex() != thirdTab)
+  if (tabs.currentIndex() != thirdTab || userActivations != 0)
     return fail("programmatic selection entered an explicitly hidden tab");
 
   tabs.setTabVisible(secondTab, true);
-  tabs.setCurrentIndex(secondTab);
-  if (tabs.currentIndex() != secondTab)
-    return fail("logically visible tab stayed unavailable under hidden ancestor");
+  QPushButton *secondButton = nullptr;
+  for (QPushButton *button : tabs.findChildren<QPushButton *>())
+    if (button->property("tabKey").toString() == QStringLiteral("second")) {
+      secondButton = button;
+      break;
+    }
+  if (!secondButton)
+    return fail("stable inspector tab key was not exposed on its button");
+  secondButton->click();
+  if (tabs.currentIndex() != secondTab || logicalChanges != 3 ||
+      userActivations != 1)
+    return fail("user inspector activation was not distinguished from fallback");
 
   // Checkbox enabledCheck must match the rest of ParameterPanel: a missing
   // prerequisite disables a still-visible row. Logical disappearance is an
@@ -1695,6 +1724,31 @@ bool runBetaInvariantSmoke() {
   if (!recovery.isValid())
     return fail("could not create temporary recovery directory");
 
+  // New documents restore the last explicitly chosen inspector stage by a
+  // semantic key. Programmatic changes (including hidden-tab fallback) must not
+  // rewrite that application preference.
+  const QString inspectorPanelSetting =
+      QStringLiteral("inspector/activePanel");
+  QSettings inspectorSettings;
+  struct InspectorPanelSettingGuard {
+    QString key;
+    bool existed;
+    QVariant value;
+    /** Restore the operator's active-panel preference on every smoke exit. */
+    ~InspectorPanelSettingGuard() {
+      QSettings settings;
+      if (existed)
+        settings.setValue(key, value);
+      else
+        settings.remove(key);
+    }
+  } inspectorPanelSettingGuard{
+      inspectorPanelSetting,
+      inspectorSettings.contains(inspectorPanelSetting),
+      inspectorSettings.value(inspectorPanelSetting)};
+  inspectorSettings.setValue(inspectorPanelSetting,
+                             QStringLiteral("sharpness"));
+
   const FlatFieldAnalysisResult missingFlatField = FlatFieldWorker::analyze(
       recovery.filePath(QStringLiteral("missing-flat-field-reference.tif")),
       QString(), 1.0, colorscreen::image_data::demosaic_none, nullptr);
@@ -1703,6 +1757,49 @@ bool runBetaInvariantSmoke() {
     return fail("flat-field helper did not report a missing reference cleanly");
 
   MainWindow window(recovery.path());
+  auto *configTabs =
+      window.findChild<MultiLineTabWidget *>(QStringLiteral("ConfigTabs"));
+  if (!configTabs ||
+      configTabs->tabKey(configTabs->currentIndex()) !=
+          QStringLiteral("sharpness"))
+    return fail("new document did not restore available preferred inspector stage");
+
+  const int imageLayerTab =
+      configTabs->indexOfKey(QStringLiteral("image_layer"));
+  const int captureTab =
+      configTabs->indexOfKey(QStringLiteral("digital_capture"));
+  if (imageLayerTab < 0 || captureTab < 0)
+    return fail("document inspector lost stable stage keys");
+
+  configTabs->setCurrentIndex(imageLayerTab);
+  if (configTabs->currentIndex() != imageLayerTab ||
+      QSettings().value(inspectorPanelSetting).toString() !=
+          QStringLiteral("sharpness"))
+    return fail("programmatic inspector navigation overwrote preference");
+
+  QPushButton *captureTabButton = nullptr;
+  for (QPushButton *button : configTabs->findChildren<QPushButton *>())
+    if (button->property("tabKey").toString() ==
+        QStringLiteral("digital_capture")) {
+      captureTabButton = button;
+      break;
+    }
+  if (!captureTabButton)
+    return fail("document inspector did not expose stable Capture tab key");
+  captureTabButton->click();
+  if (configTabs->currentIndex() != captureTab ||
+      QSettings().value(inspectorPanelSetting).toString() !=
+          QStringLiteral("digital_capture"))
+    return fail("user inspector activation was not persisted");
+
+  configTabs->setTabVisible(captureTab, false);
+  if (configTabs->currentIndex() == captureTab ||
+      QSettings().value(inspectorPanelSetting).toString() !=
+          QStringLiteral("digital_capture"))
+    return fail("hidden inspector fallback overwrote preferred stage");
+  configTabs->setTabVisible(captureTab, true);
+  configTabs->setCurrentIndex(captureTab);
+
   QUndoStack *undoStack = window.findChild<QUndoStack *>();
   if (!undoStack)
     return fail("document undo stack was not found");
