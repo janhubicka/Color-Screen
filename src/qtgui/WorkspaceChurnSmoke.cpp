@@ -457,6 +457,8 @@ QWidget *contactCopyManualGroup = inspector->findChild<QWidget *>(
     QStringLiteral("ContactCopyManualPointsGroup"));
 QWidget *contactCopyDarkroomGroup = inspector->findChild<QWidget *>(
     QStringLiteral("ContactCopyDarkroomGroup"));
+QPushButton *contactCopyResetCurveButton = inspector->findChild<QPushButton *>(
+    QStringLiteral("ContactCopyResetCurveButton"));
 QWidget *colorScreenDyesGroup = inspector->findChild<QWidget *>(
     QStringLiteral("ColorScreenDyesGroup"));
 QWidget *colorViewingCorrectionGroup = inspector->findChild<QWidget *>(
@@ -675,6 +677,57 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
             return;
           }
         }
+
+        // Only the independent simulated-darkroom values use generic Reset.
+        // H&D graph/point/Richards editors all mutate one coupled curve object,
+        // so resetting one field there would have non-local calibration effects.
+        const QStringList contactCopyDefaultKeys = {
+            QStringLiteral("contact_copy.preflash"),
+            QStringLiteral("contact_copy.exposure"),
+            QStringLiteral("contact_copy.density_boost")};
+        for (const QString &key : contactCopyDefaultKeys) {
+          QToolButton *reset = findParameterResetButton(key);
+          if (!reset || !reset->property("parameterDefaultValue").isValid()) {
+            fail(QStringLiteral(
+                     "Workspace churn lost Contact Copy default/reset metadata for %1")
+                     .arg(key));
+            return;
+          }
+        }
+
+        if (!contactCopyResetCurveButton ||
+            contactCopyResetCurveButton->property("parameterKey").isValid()) {
+          fail(QStringLiteral(
+              "Workspace churn lost Contact Copy calibration-level Reset"));
+          return;
+        }
+
+        // Reset the complete characteristic curve, never one coupled view of it.
+        const ParameterState curveBaseline = first->documentStateSnapshot();
+        const ParameterState curveDefaults;
+        ParameterState modifiedCurve = curveBaseline;
+        modifiedCurve.rparams.contact_copy.simulate = true;
+        modifiedCurve.rparams.contact_copy.emulsion_characteristic_curve =
+            curveDefaults.rparams.contact_copy.emulsion_characteristic_curve;
+        modifiedCurve.rparams.contact_copy.emulsion_characteristic_curve.maxy +=
+            0.25;
+        first->applyState(modifiedCurve);
+        if (contactCopyResetCurveButton->isHidden() ||
+            !contactCopyResetCurveButton->isEnabled()) {
+          fail(QStringLiteral(
+              "Modified Contact Copy curve did not expose calibration Reset"));
+          return;
+        }
+        contactCopyResetCurveButton->click();
+        if (!(first->documentStateSnapshot()
+                  .rparams.contact_copy.emulsion_characteristic_curve ==
+              curveDefaults.rparams.contact_copy.emulsion_characteristic_curve) ||
+            !contactCopyResetCurveButton->isHidden()) {
+          fail(QStringLiteral(
+              "Contact Copy calibration Reset did not restore the whole curve"));
+          return;
+        }
+        first->applyState(curveBaseline);
 
         const auto sectionImage = first->sharedImageData();
         const auto sectionCapture =
