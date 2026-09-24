@@ -4372,8 +4372,8 @@ void MainWindow::onFlatFieldRequested() {
       ParameterState newState = getCurrentState();
       newState.rparams.backlight_correction = result->correction;
       changeParameters(newState, tr("Flat field"));
-      QMessageBox::information(this, tr("Flat Field"),
-                               tr("Flat field analysis successful."));
+      statusBar()->showMessage(
+          tr("Flat-field correction applied."), 4000);
     };
 
     runOneShotOperation(
@@ -4557,8 +4557,8 @@ void MainWindow::onAnalyzeFocusAreasRequested(uint64_t flags) {
   if (!m_scan || m_focusAreaAnalysis.running)
     return;
   if (m_focusAreaAnalysis.candidates.size() < 3) {
-    QMessageBox::information(this, tr("Focus analysis areas"),
-                             tr("Find at least three candidate areas first."));
+    statusBar()->showMessage(
+        tr("Find at least three focus areas before analyzing them."), 4000);
     return;
   }
   const uint64_t focusMask = colorscreen::finetune_screen_blur
@@ -4566,9 +4566,8 @@ void MainWindow::onAnalyzeFocusAreasRequested(uint64_t flags) {
       | colorscreen::finetune_scanner_mtf_defocus;
   flags &= focusMask;
   if (!flags) {
-    QMessageBox::information(
-        this, tr("Focus analysis areas"),
-        tr("Enable at least one scalar blur/focus parameter to optimize."));
+    statusBar()->showMessage(
+        tr("Enable at least one blur/focus parameter before analysis."), 4000);
     return;
   }
 
