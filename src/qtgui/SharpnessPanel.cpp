@@ -213,7 +213,7 @@ void SharpnessPanel::setupUi() {
       [](ParameterState &s, int v) {
         s.rparams.sharpen.mode = (sharpen_mode)v;
       }, nullptr, "Select the sharpening algorithm. \"None\" disables sharpening, \"Wiener\" and \"Richardson-Lucy\" use the MTF model, \"Unsharp mask\" is a classic edge enhancement.",
-      QStringLiteral("sharpness.mode"));
+      QStringLiteral("sharpness.mode"), true);
 
   m_scannerCameraSeparatorToggle = addSeparator(
       "Scanner/Camera properties", QStringLiteral("sharpness.capture"));

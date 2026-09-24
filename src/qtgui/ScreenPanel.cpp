@@ -392,7 +392,7 @@ void ScreenPanel::setupUi() {
       nullptr,
       "Algorithmic precision for collecting and averaging color information "
       "from the screen elements.",
-      QStringLiteral("screen.collection_quality"));
+      QStringLiteral("screen.collection_quality"), true);
 
   // Screen Demosaic
   addEnumParameter("Screen demosaicing",
@@ -403,7 +403,7 @@ void ScreenPanel::setupUi() {
       nullptr,
       "Interpolation algorithm used to fill in missing color information "
       "between the screen elements.",
-      QStringLiteral("screen.demosaic"));
+      QStringLiteral("screen.demosaic"), true);
 
   // Demosaiced Image Scaling Algorithm
   addEnumParameter("Demosaiced image scaling",
@@ -414,7 +414,7 @@ void ScreenPanel::setupUi() {
       nullptr,
       "Method used to rescale the internally reconstructed image to the final "
       "output resolution.",
-      QStringLiteral("screen.demosaiced_scaling"));
+      QStringLiteral("screen.demosaiced_scaling"), true);
 
 
   addSeparator("Pre-demosaic denoising",
@@ -429,7 +429,7 @@ void ScreenPanel::setupUi() {
       nullptr,
       "Denoise collected screen-element colors before demosaicing. Collection "
       "support is used so weak/sub-pixel measurements have less authority.",
-      QStringLiteral("screen.denoise.pre.mode"));
+      QStringLiteral("screen.denoise.pre.mode"), true);
 
   // Strength (h)
   addSliderParameter(
@@ -497,7 +497,7 @@ void ScreenPanel::setupUi() {
       [](ParameterState &s, int v) { s.rparams.demosaiced_denoise.mode = (denoise_parameters::denoise_mode)v; },
       postDemosaicDenoiseAvailable,
       "Denoise the complete demosaiced color field before it is resampled and combined with the high-resolution B&W detail. RGB similarity weights are shared by all three channels. This stage currently requires the materialized advanced Paget/Dufay demosaicing path.",
-      QStringLiteral("screen.denoise.post.mode"));
+      QStringLiteral("screen.denoise.post.mode"), true);
 
   addSliderParameter(
       "Strength", 0.0, 1.0, 10000.0, 4, "", "",

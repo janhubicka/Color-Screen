@@ -5,6 +5,7 @@
 #include <QComboBox>
 #include <QString>
 #include <QToolButton>
+#include <QVariant>
 #include <QWidget>
 #include <functional>
 #include <map>
@@ -127,13 +128,16 @@ protected:
       double gamma = 1.0, bool logarithmic = false,
       const QString &tooltip = QString());
 
+  /** Add a saved enum. SHOWDEFAULTRESET opts a keyed enum into the standard
+      fresh-ParameterState modified/default presentation. */
   QComboBox *addEnumParameter(
       const QString &label, const std::map<int, QString> &options,
       std::function<int(const ParameterState &)> getter,
       std::function<void(ParameterState &, int)> setter,
       std::function<bool(const ParameterState &)> enabledCheck = nullptr,
       const QString &tooltip = QString(),
-      const QString &parameterKey = QString());
+      const QString &parameterKey = QString(),
+      bool showDefaultReset = false);
 
   template <typename T>
   void addEnumTooltips(QComboBox *combo, const T *names, int max) {
@@ -155,7 +159,8 @@ protected:
       std::function<void(ParameterState &, int)> setter,
       std::function<bool(const ParameterState &)> enabledCheck = nullptr,
       const QString &tooltip = QString(),
-      const QString &parameterKey = QString()) {
+      const QString &parameterKey = QString(),
+      bool showDefaultReset = false) {
     std::map<int, QString> options;
     for (int i = 0; i < max; ++i) {
       if (names[i].pretty_name && names[i].pretty_name[0]) {
@@ -165,8 +170,9 @@ protected:
       }
     }
 
-    QComboBox *combo = addEnumParameter(label, options, getter, setter,
-                                        enabledCheck, tooltip, parameterKey);
+    QComboBox *combo = addEnumParameter(
+        label, options, getter, setter, enabledCheck, tooltip, parameterKey,
+        showDefaultReset);
     addEnumTooltips(combo, names, max);
     return combo;
   }
@@ -177,22 +183,28 @@ protected:
       std::function<void(ParameterState &, int)> setter,
       std::function<bool(const ParameterState &)> enabledCheck = nullptr,
       const QString &tooltip = QString(),
-      const QString &parameterKey = QString()) {
+      const QString &parameterKey = QString(),
+      bool showDefaultReset = false) {
     return addEnumParameter(label, Names, Max, getter, setter, enabledCheck,
-                            tooltip, parameterKey);
+                            tooltip, parameterKey, showDefaultReset);
   }
 
   /** Add a stateful checkbox row. ENABLEDCHECK controls enablement only;
-      use setParameterApplicability() when the concept should disappear. */
+      use setParameterApplicability() when the concept should disappear.
+      SHOWDEFAULTRESET opts a keyed saved checkbox into fresh-ParameterState
+      modified/default presentation. */
   QCheckBox *addCheckboxParameter(
       const QString &label, std::function<bool(const ParameterState &)> getter,
       std::function<void(ParameterState &, bool)> setter,
       std::function<bool(const ParameterState &)> enabledCheck = nullptr,
       const QString &tooltip = QString(),
-      const QString &parameterKey = QString());
+      const QString &parameterKey = QString(),
+      bool showDefaultReset = false);
 
-  /** Add a stateful checkbox with an explicit Reset action. ENABLEDCHECK
-      has the same enable-only semantics as every other parameter helper. */
+  /** Add a stateful checkbox with a domain-specific explicit Reset action.
+      Use ordinary addCheckboxParameter(..., showDefaultReset=true) when Reset
+      simply means restoring the fresh ParameterState boolean default.
+      ENABLEDCHECK has the same enable-only semantics as every other helper. */
   QCheckBox *addCheckboxWithReset(
       const QString &label, std::function<bool(const ParameterState &)> getter,
       std::function<void(ParameterState &, bool)> setter,
@@ -263,6 +275,16 @@ protected:
       std::function<double(const ParameterState &)> getter,
       std::function<void(ParameterState &, double)> setter,
       double tolerance);
+
+  /** Add the same modified/default/Reset presentation to a keyed discrete
+      FIELD. LABELWIDGET may be an external form label or the inline label used
+      by checkbox rows. */
+  void addDiscreteDefaultPresentation(
+      QWidget *field, QHBoxLayout *layout, QWidget *labelWidget,
+      const QString &label, const QString &parameterKey,
+      const QVariant &defaultValue,
+      std::function<QVariant(const ParameterState &)> getter,
+      std::function<void(ParameterState &, const QVariant &)> setter);
 
   /** Wrap CONTENT in the standard detachable-panel presentation.
       The returned section owns the floating QDockWidget lifecycle and

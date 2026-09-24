@@ -615,6 +615,64 @@ void ParameterPanel::addNumericDefaultPresentation(
       });
 }
 
+
+/** Add opt-in modified/default presentation for a discrete saved value. */
+void ParameterPanel::addDiscreteDefaultPresentation(
+    QWidget *field, QHBoxLayout *layout, QWidget *labelWidget,
+    const QString &label, const QString &parameterKey,
+    const QVariant &defaultValue,
+    std::function<QVariant(const ParameterState &)> getter,
+    std::function<void(ParameterState &, const QVariant &)> setter) {
+  Q_ASSERT(field);
+  Q_ASSERT(layout);
+  Q_ASSERT(!parameterKey.isEmpty());
+
+  field->setProperty(parameterDefaultValueProperty, defaultValue);
+  field->setProperty(parameterModifiedProperty, false);
+
+  auto *resetButton = new QToolButton(field);
+  resetButton->setObjectName(QStringLiteral("ParameterResetButton"));
+  resetButton->setText(tr("Reset"));
+  resetButton->setAutoRaise(true);
+  resetButton->setToolTip(tr("Reset %1 to its default value").arg(label));
+  resetButton->setProperty(parameterKeyProperty, parameterKey);
+  resetButton->setProperty(parameterDefaultValueProperty, defaultValue);
+  resetButton->setProperty(parameterModifiedProperty, false);
+  resetButton->hide();
+  layout->addWidget(resetButton, 0);
+
+  const QFont normalFont = labelWidget ? labelWidget->font() : QFont();
+  QFont modifiedFont = normalFont;
+  if (modifiedFont.weight() < QFont::DemiBold)
+    modifiedFont.setWeight(QFont::DemiBold);
+  if (labelWidget) {
+    labelWidget->setProperty(parameterDefaultValueProperty, defaultValue);
+    labelWidget->setProperty(parameterModifiedProperty, false);
+  }
+
+  connect(resetButton, &QToolButton::clicked, this,
+          [this, setter, defaultValue, label]() {
+            applyChange(
+                [setter, defaultValue](ParameterState &state) {
+                  setter(state, defaultValue);
+                },
+                tr("Reset %1").arg(label), QString());
+          });
+
+  m_paramUpdaters.push_back(
+      [field, labelWidget, resetButton, getter, defaultValue, normalFont,
+       modifiedFont](const ParameterState &state) {
+        const bool modified = getter(state) != defaultValue;
+        field->setProperty(parameterModifiedProperty, modified);
+        resetButton->setProperty(parameterModifiedProperty, modified);
+        resetButton->setVisible(modified);
+        if (labelWidget) {
+          labelWidget->setProperty(parameterModifiedProperty, modified);
+          labelWidget->setFont(modified ? modifiedFont : normalFont);
+        }
+      });
+}
+
 void ParameterPanel::addDoubleParameter(
     const QString &label, double min, double max,
     std::function<double(const ParameterState &)> getter,
@@ -979,7 +1037,8 @@ QComboBox *ParameterPanel::addEnumParameter(
     std::function<int(const ParameterState &)> getter,
     std::function<void(ParameterState &, int)> setter,
     std::function<bool(const ParameterState &)> enabledCheck,
-    const QString &tooltip, const QString &parameterKey) {
+    const QString &tooltip, const QString &parameterKey,
+    bool showDefaultReset) {
   QComboBox *combo = new QComboBox();
   if (!tooltip.isEmpty())
     combo->setToolTip(tooltip);
@@ -987,58 +1046,81 @@ QComboBox *ParameterPanel::addEnumParameter(
   combo->setMinimumContentsLength(10);
   combo->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
   setParameterKey(combo, parameterKey);
-  for (auto const &[val, text] : options) {
+  for (auto const &[val, text] : options)
     combo->addItem(text, val);
+
+  QWidget *fieldWidget = combo;
+  QWidget *container = nullptr;
+  QHBoxLayout *defaultLayout = nullptr;
+  if (showDefaultReset) {
+    Q_ASSERT(!parameterKey.isEmpty());
+    container = new QWidget();
+    defaultLayout = new QHBoxLayout(container);
+    defaultLayout->setContentsMargins(0, 0, 0, 0);
+    defaultLayout->setSpacing(4);
+    defaultLayout->addWidget(combo, 1);
+    setParameterKey(container, parameterKey);
+    fieldWidget = container;
   }
 
-  if (m_currentGroupForm) {
-    m_currentGroupForm->addRow(label, combo);
-  } else {
-    m_form->addRow(label, combo);
+  QFormLayout *form = m_currentGroupForm ? m_currentGroupForm : m_form;
+  form->addRow(label, fieldWidget);
+  QWidget *labelWidget = form->labelForField(fieldWidget);
+
+  if (showDefaultReset) {
+    const int defaultValue = getter(ParameterState());
+    addDiscreteDefaultPresentation(
+        container, defaultLayout, labelWidget, label, parameterKey,
+        QVariant(defaultValue),
+        [getter](const ParameterState &state) {
+          return QVariant(getter(state));
+        },
+        [setter](ParameterState &state, const QVariant &value) {
+          setter(state, value.toInt());
+        });
   }
 
   // Connect changes: UI -> State
   connect(combo, QOverload<int>::of(&QComboBox::activated), this,
           [this, combo, setter, label, parameterKey](int index) {
             int val = combo->itemData(index).toInt();
-            applyChange([setter, val](ParameterState &s) { setter(s, val); },
+            applyChange([setter, val](ParameterState &state) {
+                          setter(state, val);
+                        },
                         label, parameterKey);
           });
 
   // Updater: State -> UI
   m_paramUpdaters.push_back([combo, getter](const ParameterState &state) {
-    int val = getter(state);
-    QSignalBlocker signalBlocker9(combo);
-    int idx = combo->findData(val);
+    const int val = getter(state);
+    QSignalBlocker signalBlocker(combo);
+    const int idx = combo->findData(val);
     if (idx != -1)
       combo->setCurrentIndex(idx);
-    signalBlocker9.unblock();
   });
 
-  // Enable Update
   if (enabledCheck) {
-    m_widgetStateUpdaters.push_back([this, combo, enabledCheck]() {
-      ParameterState state = m_stateGetter();
-      bool en = enabledCheck(state);
-      combo->setEnabled(en);
-      QWidget *labelWidget = m_form->labelForField(combo);
-      if (labelWidget)
-        labelWidget->setEnabled(en);
-    });
+    m_widgetStateUpdaters.push_back(
+        [this, fieldWidget, labelWidget, enabledCheck]() {
+          const bool enabled = enabledCheck(m_stateGetter());
+          fieldWidget->setEnabled(enabled);
+          if (labelWidget)
+            labelWidget->setEnabled(enabled);
+        });
   }
   return combo;
 }
-
 
 QCheckBox *ParameterPanel::addCheckboxParameter(
     const QString &label, std::function<bool(const ParameterState &)> getter,
     std::function<void(ParameterState &, bool)> setter,
     std::function<bool(const ParameterState &)> enabledCheck,
-    const QString &tooltip, const QString &parameterKey) {
-  // Create container with label on left, checkbox on right
+    const QString &tooltip, const QString &parameterKey,
+    bool showDefaultReset) {
   QWidget *container = new QWidget();
   QHBoxLayout *hLayout = new QHBoxLayout(container);
   hLayout->setContentsMargins(0, 0, 0, 0);
+  hLayout->setSpacing(4);
 
   QCheckBox *checkbox = new QCheckBox();
   QLabel *textLabel = new QLabel(label);
@@ -1050,38 +1132,44 @@ QCheckBox *ParameterPanel::addCheckboxParameter(
     textLabel->setToolTip(tooltip);
   }
 
-  hLayout->addWidget(checkbox, 0);  // Checkbox fixed size on left
-  hLayout->addWidget(textLabel, 1); // Label expands to fill space
+  hLayout->addWidget(checkbox, 0);
+  hLayout->addWidget(textLabel, 1);
 
-  // Add to form (single column - container spans both label and field)
-  if (m_currentGroupForm) {
-    m_currentGroupForm->addRow(container);
-  } else {
-    m_form->addRow(container);
+  QFormLayout *form = m_currentGroupForm ? m_currentGroupForm : m_form;
+  form->addRow(container);
+
+  if (showDefaultReset) {
+    Q_ASSERT(!parameterKey.isEmpty());
+    const bool defaultValue = getter(ParameterState());
+    addDiscreteDefaultPresentation(
+        container, hLayout, textLabel, label, parameterKey,
+        QVariant(defaultValue),
+        [getter](const ParameterState &state) {
+          return QVariant(getter(state));
+        },
+        [setter](ParameterState &state, const QVariant &value) {
+          setter(state, value.toBool());
+        });
   }
 
-  // Connect changes: UI -> State
   connect(checkbox, &QCheckBox::toggled, this,
           [this, setter, label, parameterKey](bool checked) {
-    applyChange([setter, checked](ParameterState &s) { setter(s, checked); },
+            applyChange(
+                [setter, checked](ParameterState &state) {
+                  setter(state, checked);
+                },
                 label, parameterKey);
-  });
+          });
 
-  // Updater: State -> UI
   m_paramUpdaters.push_back([checkbox, getter](const ParameterState &state) {
-    bool val = getter(state);
-    QSignalBlocker signalBlocker10(checkbox);
+    const bool val = getter(state);
+    QSignalBlocker signalBlocker(checkbox);
     checkbox->setChecked(val);
-    signalBlocker10.unblock();
   });
 
-  // Enablement is independent of applicability/visibility. Disabling the
-  // container keeps the inline label (and Reset control, when present) in the
-  // same prerequisite state as the checkbox itself.
   if (enabledCheck) {
     m_widgetStateUpdaters.push_back([this, container, enabledCheck]() {
-      const bool enabled = enabledCheck(m_stateGetter());
-      container->setEnabled(enabled);
+      container->setEnabled(enabledCheck(m_stateGetter()));
     });
   }
   return checkbox;
