@@ -62,21 +62,21 @@ void ImageLayerPanel::setupUi() {
       [](const ParameterState &s) { return s.rparams.mix_dark.red; },
       [](ParameterState &s, double v) { s.rparams.mix_dark.red = v; },
       3.0, enableSimulated, false, QString(),
-      QStringLiteral("image_layer.mix_dark.red"));
+      QStringLiteral("image_layer.mix_dark.red"), true);
 
   addSliderParameter(
       tr("Mix dark (green)"), -3.0, 1.0, 1, 4, "", "",
       [](const ParameterState &s) { return s.rparams.mix_dark.green; },
       [](ParameterState &s, double v) { s.rparams.mix_dark.green = v; },
       3.0, enableSimulated, false, QString(),
-      QStringLiteral("image_layer.mix_dark.green"));
+      QStringLiteral("image_layer.mix_dark.green"), true);
 
   addSliderParameter(
       tr("Mix dark (blue)"), -3.0, 1.0, 1, 4, "", "",
       [](const ParameterState &s) { return s.rparams.mix_dark.blue; },
       [](ParameterState &s, double v) { s.rparams.mix_dark.blue = v; },
       3.0, enableSimulated, false, QString(),
-      QStringLiteral("image_layer.mix_dark.blue"));
+      QStringLiteral("image_layer.mix_dark.blue"), true);
 
   // Dark Area Button
   m_setDarkAreaBtn = addToggleButtonParameter(
@@ -92,21 +92,21 @@ void ImageLayerPanel::setupUi() {
       [](const ParameterState &s) { return s.rparams.mix_red; },
       [](ParameterState &s, double v) { s.rparams.mix_red = v; },
       1.0, enableSimulated, false, QString(),
-      QStringLiteral("image_layer.mix.red"));
+      QStringLiteral("image_layer.mix.red"), true);
 
   addSliderParameter(
       tr("Mix green"), -10.0, 10.0, 1, 2, "", "",
       [](const ParameterState &s) { return s.rparams.mix_green; },
       [](ParameterState &s, double v) { s.rparams.mix_green = v; },
       1.0, enableSimulated, false, QString(),
-      QStringLiteral("image_layer.mix.green"));
+      QStringLiteral("image_layer.mix.green"), true);
 
   addSliderParameter(
       tr("Mix blue"), -10.0, 10.0, 1, 2, "", "",
       [](const ParameterState &s) { return s.rparams.mix_blue; },
       [](ParameterState &s, double v) { s.rparams.mix_blue = v; },
       1.0, enableSimulated, false, QString(),
-      QStringLiteral("image_layer.mix.blue"));
+      QStringLiteral("image_layer.mix.blue"), true);
 
   // Neutral Area Button
   m_setNeutralAreaBtn = addToggleButtonParameter(
