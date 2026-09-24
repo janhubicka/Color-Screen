@@ -56,7 +56,7 @@ void ContactCopyPanel::setupUi() {
       [](const ParameterState &s) { return s.rparams.contact_copy.simulate; },
       [](ParameterState &s, bool v) { s.rparams.contact_copy.simulate = v; },
       nullptr, "Enable physics-based simulation of photographic contact printing. This models the response of a photographic glass plate to the light transmitted through the digitized color screen.",
-      "contact_copy.simulate");
+      "contact_copy.simulate", true);
   simulationCheck->setObjectName(QStringLiteral("ContactCopySimulationCheck"));
 
   // Contact-copy parameters are specialist controls. Keep only the master
