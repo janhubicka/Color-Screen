@@ -506,6 +506,24 @@ MainWindow::~MainWindow() {
    panels, ImageWidget, NavigationView, and MainWindow. Detachable panel
    sections own their dock lifecycle in ParameterPanel; the document window
    no longer duplicates that presentation machinery. */
+/** Restore the saved inspector stage when that stage is currently available.
+
+    Specialist panels may be hidden until an image and its capture type are
+    known. setCurrentIndex() deliberately ignores hidden tabs, so calling this
+    both during construction and after image load preserves a hidden preference
+    through temporary fallback without forcing an inapplicable panel visible. */
+void MainWindow::restorePreferredInspectorPanel() {
+  if (!m_configTabs)
+    return;
+
+  QSettings settings;
+  const QString preferredPanel =
+      settings.value(QStringLiteral("inspector/activePanel")).toString();
+  const int preferredIndex = m_configTabs->indexOfKey(preferredPanel);
+  if (preferredIndex >= 0)
+    m_configTabs->setCurrentIndex(preferredIndex);
+}
+
 void MainWindow::setupUi() {
 
   m_mainSplitter = new QSplitter(Qt::Horizontal, this);
@@ -954,16 +972,9 @@ void MainWindow::setupUi() {
   // The preferred stage is application presentation state, not document state.
   // Persist a semantic key rather than a numeric index so later tab reordering
   // or translated labels cannot change its meaning. Only explicit user clicks
-  // update the preference; programmatic fallback from a hidden Tiles tab does
-  // not replace the user's preferred stage.
-  {
-    QSettings settings;
-    const QString preferredPanel =
-        settings.value(QStringLiteral("inspector/activePanel")).toString();
-    const int preferredIndex = m_configTabs->indexOfKey(preferredPanel);
-    if (preferredIndex >= 0)
-      m_configTabs->setCurrentIndex(preferredIndex);
-  }
+  // update the preference; programmatic fallback from a hidden tab does not
+  // replace the user's preferred stage.
+  restorePreferredInspectorPanel();
   connect(m_configTabs, &MultiLineTabWidget::tabActivated, this,
           [this](int index) {
             const QString key = m_configTabs->tabKey(index);
