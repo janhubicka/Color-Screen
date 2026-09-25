@@ -5,6 +5,7 @@
 #include "../libcolorscreen/include/render-type-parameters.h"
 #include "../libcolorscreen/include/scr-to-img-parameters.h"
 #include <QDialog>
+#include <QString>
 
 class QComboBox;
 class QCheckBox;
@@ -53,7 +54,6 @@ private:
   colorscreen::render_type_parameters m_rtparams;
   colorscreen::scr_to_img_parameters  m_scrParams;
   const colorscreen::image_data      *m_scan;
-  QString m_outputPath;
   bool m_isDng = false;
 
   QComboBox *m_modeCombo     = nullptr;
