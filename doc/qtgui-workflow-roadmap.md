@@ -539,7 +539,10 @@ specialist stages.
 
 ### Phase B — terminology and summaries
 
-- add stage labels and one-line process/geometry/MTF/profile summaries;
+- add stage labels and one-line process/image-layer/geometry/MTF/profile
+  summaries. The persistent Workflow card reports the actual scalar
+  analysis/reconstruction source as native grayscale/IR (with wavelength when
+  known) or the active simulated RGB mix;
 - standardize operation wording: Detect, Measure, Fit, Optimize, Reset;
 - make prerequisites visible;
 - add explicit stale/result states where analyses depend on changing inputs.

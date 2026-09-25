@@ -292,6 +292,18 @@ though the spots were unchanged.  Other unrelated edits could do the same.
 The panel now snapshots the profile-spot coordinates and auto-runs only when the
 spot set actually changes.  Manual **Optimize color** remains unchanged.
 
+### Workflow now names the active image layer
+
+The persistent Workflow card includes an explicit Image layer line. It
+distinguishes a captured native grayscale/infrared plane from an RGB-derived
+scalar layer and shows the current RGB weights (plus whether dark offsets are
+set) when simulation is active. The line is derived from the same
+`render_parameters` and image capabilities used by Image Layer itself, so it
+is presentation only: there is no duplicated processing state or additional
+Undo identity. Like the other live workflow labels it ignores horizontal size
+hints and wraps inside the existing inspector allocation. Workspace churn checks
+both the derived source classification and splitter sizing.
+
 ## Panel framework cleanup priorities
 
 `ParameterPanel` is high-leverage code: a small mistake in a helper is copied to
