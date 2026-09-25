@@ -1924,6 +1924,9 @@ bool runBetaInvariantSmoke() {
       QStringLiteral("SharpnessClearAdaptiveCorrectionButton"));
   if (!clearFlatField || !clearAdaptive)
     return fail("calibration Clear actions were not constructed");
+  if (clearFlatField->property("parameterApplicable").toBool() ||
+      clearAdaptive->property("parameterApplicable").toBool())
+    return fail("empty document exposed calibration Clear actions");
 
   ParameterState calibrationBaseline = window.documentStateSnapshot();
   ParameterState calibrated = calibrationBaseline;
@@ -1953,33 +1956,45 @@ bool runBetaInvariantSmoke() {
 
   window.applyState(calibrated);
   undoStack->clear();
-  if (!clearFlatField->isEnabled() || !clearAdaptive->isEnabled())
-    return fail("accepted calibrations did not enable their Clear actions");
+  if (!clearFlatField->property("parameterApplicable").toBool() ||
+      !clearAdaptive->property("parameterApplicable").toBool() ||
+      !clearFlatField->isEnabled() || !clearAdaptive->isEnabled())
+    return fail("accepted calibrations did not expose their Clear actions");
 
   clearFlatField->click();
   const ParameterState afterFlatClear = window.documentStateSnapshot();
   if (afterFlatClear.rparams.backlight_correction ||
-      afterFlatClear.rparams.scanner_blur_correction != adaptiveCorrection)
-    return fail("Clear flat field changed the wrong calibration");
+      afterFlatClear.rparams.scanner_blur_correction != adaptiveCorrection ||
+      clearFlatField->property("parameterApplicable").toBool() ||
+      !clearAdaptive->property("parameterApplicable").toBool())
+    return fail("Clear flat field changed the wrong calibration/presentation");
   undoStack->undo();
   if (window.documentStateSnapshot().rparams.backlight_correction !=
           flatCorrection ||
       window.documentStateSnapshot().rparams.scanner_blur_correction !=
-          adaptiveCorrection)
-    return fail("Undo did not restore the flat-field calibration");
+          adaptiveCorrection ||
+      !clearFlatField->property("parameterApplicable").toBool() ||
+      !clearAdaptive->property("parameterApplicable").toBool())
+    return fail("Undo did not restore the flat-field calibration/presentation");
 
   undoStack->clear();
   clearAdaptive->click();
   const ParameterState afterAdaptiveClear = window.documentStateSnapshot();
   if (afterAdaptiveClear.rparams.scanner_blur_correction ||
-      afterAdaptiveClear.rparams.backlight_correction != flatCorrection)
-    return fail("Clear adaptive correction changed the wrong calibration");
+      afterAdaptiveClear.rparams.backlight_correction != flatCorrection ||
+      clearAdaptive->property("parameterApplicable").toBool() ||
+      !clearFlatField->property("parameterApplicable").toBool())
+    return fail(
+        "Clear adaptive correction changed the wrong calibration/presentation");
   undoStack->undo();
   if (window.documentStateSnapshot().rparams.scanner_blur_correction !=
           adaptiveCorrection ||
       window.documentStateSnapshot().rparams.backlight_correction !=
-          flatCorrection)
-    return fail("Undo did not restore the adaptive sharpening calibration");
+          flatCorrection ||
+      !clearAdaptive->property("parameterApplicable").toBool() ||
+      !clearFlatField->property("parameterApplicable").toBool())
+    return fail(
+        "Undo did not restore the adaptive sharpening calibration/presentation");
 
   window.applyState(calibrationBaseline);
   undoStack->clear();

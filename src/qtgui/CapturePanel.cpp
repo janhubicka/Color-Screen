@@ -783,13 +783,15 @@ void CapturePanel::setupUi()
               },
               tr("Clear flat-field correction"));
         },
-        [](const ParameterState &state) {
-          return state.rparams.backlight_correction != nullptr;
-        },
+        nullptr,
         tr("Remove the accepted flat-field calibration from this document. "
            "The action is undoable; it does not alter capture metadata."));
     clearFlatField->setObjectName(
         QStringLiteral("CaptureClearFlatFieldButton"));
+    setParameterApplicability(
+        clearFlatField, [](const ParameterState &state) {
+          return state.rparams.backlight_correction != nullptr;
+        });
     
     m_backlightWidget = new BacklightChartWidget();
     QWidget *backlightSection =

@@ -700,13 +700,15 @@ void SharpnessPanel::setupUi() {
             },
             tr("Clear adaptive sharpening correction"));
       },
-      [](const ParameterState &state) {
-        return state.rparams.scanner_blur_correction != nullptr;
-      },
+      nullptr,
       tr("Remove the accepted spatially varying sharpening correction. "
          "The action is undoable and leaves the analysis settings unchanged."));
   clearAdaptiveCorrection->setObjectName(
       QStringLiteral("SharpnessClearAdaptiveCorrectionButton"));
+  setParameterApplicability(
+      clearAdaptiveCorrection, [](const ParameterState &state) {
+        return state.rparams.scanner_blur_correction != nullptr;
+      });
 
   m_adaptiveChart = new AdaptiveSharpeningChart(this);
   m_adaptiveChart->initialize(10, 10); // Default size until real data comes
