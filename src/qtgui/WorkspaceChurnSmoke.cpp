@@ -298,6 +298,8 @@ QToolButton *workflowToggle = inspector->findChild<QToolButton *>(
     QStringLiteral("WorkflowSummaryToggle"));
 QLabel *workflowStages =
     inspector->findChild<QLabel *>(QStringLiteral("WorkflowStages"));
+QLabel *captureSummary = inspector->findChild<QLabel *>(
+    QStringLiteral("WorkflowCaptureSummary"));
 QLabel *processSummary = inspector->findChild<QLabel *>(
     QStringLiteral("WorkflowProcessSummary"));
 QLabel *imageLayerSummary = inspector->findChild<QLabel *>(
@@ -519,13 +521,15 @@ const bool imageLayerSummaryMatches =
             imageLayerSummary->text().contains(QStringLiteral("simulated RGB"))));
 
 if (!workflowSummary || !workflowToggle || !workflowStages ||
-    !processSummary || !imageLayerSummary || !registrationSummary ||
+    !captureSummary || !processSummary || !imageLayerSummary ||
+    !registrationSummary ||
     !calibrationSummary || !profileSummary || !nextStepSummary ||
     !captureTypeCombo || !imageLayerSummaryMatches ||
     !workflowStages->text().contains(QStringLiteral("Capture")) ||
     !workflowStages->text().contains(QStringLiteral("Sharpen")) ||
     !workflowStages->text().contains(QStringLiteral("Image layer")) ||
     !workflowStages->text().contains(QStringLiteral("Register")) ||
+    !captureSummary->text().startsWith(QStringLiteral("Capture:")) ||
     !processSummary->text().startsWith(QStringLiteral("Process:")) ||
     !registrationSummary->text().startsWith(
         QStringLiteral("Registration:")) ||
@@ -544,6 +548,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         (int)colorscreen::render_parameters::capture_unknown) < 0 ||
     captureTypeCombo->findData(
         (int)colorscreen::render_parameters::capture_plain_image) < 0 ||
+    captureSummary->font().weight() < QFont::DemiBold ||
     processSummary->font().weight() < QFont::DemiBold ||
     imageLayerSummary->font().weight() < QFont::DemiBold ||
     registrationSummary->font().weight() < QFont::DemiBold ||
@@ -551,10 +556,13 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
     profileSummary->font().weight() < QFont::DemiBold) {
   const QString detail = QStringLiteral(
       "Workspace churn source document lost the persistent workflow "
-      "summary; stages=[%1], process=[%2], image-layer=[%3], "
-      "registration=[%4], calibration=[%5], next=[%6]")
+      "summary; stages=[%1], capture=[%2], process=[%3], image-layer=[%4], "
+      "registration=[%5], calibration=[%6], next=[%7]")
                              .arg(workflowStages
                                       ? workflowStages->text()
+                                      : QStringLiteral("<missing>"),
+                                  captureSummary
+                                      ? captureSummary->text()
                                       : QStringLiteral("<missing>"),
                                   processSummary
                                       ? processSummary->text()
@@ -610,7 +618,9 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
               colorscreen::render_parameters::capture_transparency;
           first->m_scrToImgParams.type = colorscreen::Random;
           first->updateWorkflowSummary();
-          if (!imageLayerSummary->text().contains(
+          if (!captureSummary->text().contains(
+                  QStringLiteral("resolution not set")) ||
+              !imageLayerSummary->text().contains(
                   QStringLiteral("native grayscale/IR")) ||
               !imageLayerSummary->text().contains(QStringLiteral("550 nm")) ||
               registrationSummary->text().contains(
@@ -625,6 +635,30 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
                 "Workflow contradicted monochrome stochastic-screen recovery"));
             return;
           }
+
+          auto flatCorrection =
+              std::make_shared<colorscreen::backlight_correction_parameters>();
+          bool flatChannels[4] = {true, true, true, true};
+          if (!flatCorrection->alloc(2, 2, flatChannels)) {
+            fail(QStringLiteral(
+                "Workspace churn could not allocate Workflow flat-field fixture"));
+            return;
+          }
+          first->m_rparams.sharpen.scanner_mtf.scan_dpi = 3200;
+          first->m_rparams.scan_crop.set = true;
+          first->m_rparams.backlight_correction = flatCorrection;
+          first->updateWorkflowSummary();
+          if (!captureSummary->text().contains(QStringLiteral("3200.0 PPI")) ||
+              !captureSummary->text().contains(QStringLiteral("crop set")) ||
+              !captureSummary->text().contains(
+                  QStringLiteral("flat-field correction set"))) {
+            fail(QStringLiteral(
+                "Workflow lost current Capture correction state"));
+            return;
+          }
+          first->m_rparams.sharpen.scanner_mtf.scan_dpi = 0;
+          first->m_rparams.scan_crop.set = false;
+          first->m_rparams.backlight_correction.reset();
 
           // A line screen is a genuine regular-lattice monochrome path. With no
           // mapping yet, Geometry is the unambiguous next stage.
