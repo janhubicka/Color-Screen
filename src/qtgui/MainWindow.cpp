@@ -5147,6 +5147,9 @@ void MainWindow::onColorOptimizerFinished(
    click-drags to define a distance; ImageWidget emits distanceMeasured
    which is handled by onDistanceMeasured.  */
 void MainWindow::onMeasureRequested() {
+  if (!m_scan)
+    return;
+
   saveInteractionMode();
   inspectorImageWidget()->setInteractionMode(ImageWidget::MeasureMode);
   statusBar()->showMessage(
@@ -5190,6 +5193,12 @@ void MainWindow::onDistanceMeasured(colorscreen::point_t p1, colorscreen::point_
     because oversampling, LSF support and windowing change the stored curve and
     cannot be altered later by the model-fitting dialog.  */
 void MainWindow::onMeasureMtfRequested(bool checked) {
+  if (checked && !m_scan) {
+    if (m_sharpnessPanel)
+      m_sharpnessPanel->setMeasureMtfChecked(false);
+    return;
+  }
+
   if (checked) {
     ParameterState currentState = getCurrentState();
     const colorscreen::mtf_parameters currentMtf =

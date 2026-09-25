@@ -768,6 +768,10 @@ precise numeric entry.
    reference examples. Focus analyzer uses one shared readiness predicate for
    both Analyze area and Find focus areas, and its Requirement row distinguishes
    missing image data from missing geometry before disappearing when ready.
+   When the reason is obvious from the document state (for example Measure,
+   Crop, or Measure MTF with no image loaded), prefer a normal `enabledCheck`
+   rather than another explanatory row. Keep the receiving MainWindow handler
+   guarded too so shortcuts/programmatic calls cannot bypass the prerequisite.
 
 ---
 
