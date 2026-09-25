@@ -539,10 +539,11 @@ specialist stages.
 
 ### Phase B — terminology and summaries
 
-- add stage labels and one-line process/image-layer/geometry/MTF/profile
-  summaries. The persistent Workflow card reports the actual scalar
-  analysis/reconstruction source as native grayscale/IR (with wavelength when
-  known) or the active simulated RGB mix.
+- add stage labels and one-line capture/process/image-layer/geometry/MTF/profile
+  summaries. The persistent Workflow card reports Capture resolution and the
+  presence of crop/flat-field correction directly from document state, plus the
+  actual scalar analysis/reconstruction source as native grayscale/IR (with
+  wavelength when known) or the active simulated RGB mix.
   Negative captures also report whether Contact-copy positive conversion is
   still off or already active, so the persistent state line agrees with the
   next-step handoff into the simulated darkroom. When a `Next:` recommendation names
