@@ -10,6 +10,7 @@
 #include "MultiLineTabWidget.h"
 #include "ParameterPanel.h"
 #include "ProfilePanel.h"
+#include "RenderDialog.h"
 #include "ImageViewWindow.h"
 #include "ImageWidget.h"
 #include "InitialSetupGuideDialog.h"
@@ -39,6 +40,7 @@
 #include <QDebug>
 #include <QDockWidget>
 #include <QDoubleSpinBox>
+#include <QFile>
 #include <QFileInfo>
 #include <QFormLayout>
 #include <QGroupBox>
@@ -1511,6 +1513,63 @@ QStringList conflictingSmokeActionOptions(const QStringList &explicitOptions,
   return conflicts;
 }
 
+/** Exercise the Render Settings output-contract summary without native dialogs. */
+bool renderDialogOutputSummarySmoke() {
+  auto fail = [](const char *reason) {
+    qCritical() << "Render output-summary smoke failed:" << reason;
+    return false;
+  };
+
+  QTemporaryDir temporary;
+  if (!temporary.isValid())
+    return fail("could not create temporary render-output directory");
+
+  const QString existingTiff =
+      temporary.filePath(QStringLiteral("existing-output.tif"));
+  {
+    QFile file(existingTiff);
+    if (!file.open(QIODevice::WriteOnly) || file.write("x", 1) != 1)
+      return fail("could not create existing output fixture");
+  }
+
+  auto scan = std::make_shared<colorscreen::image_data>();
+  if (!scan->set_dimensions(40, 30, true, false))
+    return fail("could not allocate render-output scan fixture");
+
+  colorscreen::render_type_parameters renderType;
+  colorscreen::render_parameters render;
+  render.scan_crop = colorscreen::int_image_area(2, 3, 20, 10);
+  colorscreen::scr_to_img_parameters geometry;
+
+  RenderDialog tiff(renderType, render, geometry, scan.get(), existingTiff,
+                    false);
+  auto text = [&tiff](const char *name) {
+    QLabel *label = tiff.findChild<QLabel *>(QString::fromLatin1(name));
+    return label ? label->text() : QString();
+  };
+  if (text("RenderOutputDestination") != QFileInfo(existingTiff).absoluteFilePath()
+      || text("RenderOutputFormat") != QStringLiteral("TIFF")
+      || !text("RenderOutputOverwrite").contains(QStringLiteral("confirmed"))
+      || !text("RenderOutputCrop").contains(QStringLiteral("20 × 10"))
+      || !text("RenderOutputCoordinates").contains(QStringLiteral("Scan"))
+      || !text("RenderOutputSharpening").contains(
+          QStringLiteral("no separate export-only sharpening")))
+    return fail("TIFF dialog did not expose the accepted output contract");
+
+  const QString newDng = temporary.filePath(QStringLiteral("new-output.dng"));
+  RenderDialog dng(renderType, render, geometry, scan.get(), newDng, true);
+  auto dngText = [&dng](const char *name) {
+    QLabel *label = dng.findChild<QLabel *>(QString::fromLatin1(name));
+    return label ? label->text() : QString();
+  };
+  if (dngText("RenderOutputFormat") != QStringLiteral("DNG")
+      || dngText("RenderOutputOverwrite") != QStringLiteral("New file")
+      || !dngText("RenderOutputCoordinates").contains(QStringLiteral("DNG")))
+    return fail("DNG dialog did not expose format/destination semantics");
+
+  return true;
+}
+
 /** Exercise beta-critical non-rendering UI/document invariants. */
 bool runBetaInvariantSmoke() {
   auto fail = [](const char *reason) {
@@ -1536,6 +1595,7 @@ bool runBetaInvariantSmoke() {
     return fail("workspace smoke conflict classification lost a real action");
 
   if (!backgroundThreadRegistryShutdownSmoke()
+      || !renderDialogOutputSummarySmoke()
       || !numericDoubleClickResetSmoke()
       || !discreteDefaultPresentationSmoke()
       || !parameterSectionPreferencesSmoke()
