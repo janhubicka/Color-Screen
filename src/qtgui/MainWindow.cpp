@@ -4966,8 +4966,8 @@ void MainWindow::onRender() {
     // Keep the dialog parent-owned and asynchronous: a nested event loop can
     // otherwise let this document be destroyed while a stack child still exists.
     auto *dialog = new RenderDialog(m_renderTypeParams, m_rparams,
-                                    m_scrToImgParams, m_scan.get(), isDng,
-                                    this);
+                                    m_scrToImgParams, m_scan.get(), outputPath,
+                                    isDng, this);
     dialog->setAttribute(Qt::WA_DeleteOnClose);
     connect(dialog, &QDialog::accepted, this,
             [this, dialog, outputPath, isDng]() {
