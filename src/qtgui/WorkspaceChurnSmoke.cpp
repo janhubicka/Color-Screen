@@ -576,6 +576,118 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
   return;
 }
 
+        // Exercise the beta-gate capture matrix with synthetic channel layouts.
+        // Workflow is derived from channel capabilities plus ParameterState, so
+        // these tiny allocations are sufficient and avoid fixture/file I/O.
+        {
+          const auto savedScan = first->m_scan;
+          const auto savedRParams = first->m_rparams;
+          const auto savedGeometry = first->m_scrToImgParams;
+          const auto savedSolver = first->m_solverParams;
+          const auto savedRenderType = first->m_renderTypeParams.type;
+          const auto savedGeometryFit = first->m_geometryFit;
+          const auto savedProfileCalibration = first->m_profileCalibration;
+
+          auto resetWorkflowProbe = [first]() {
+            first->m_rparams = colorscreen::render_parameters();
+            first->m_scrToImgParams = colorscreen::scr_to_img_parameters();
+            first->m_solverParams = colorscreen::solver_parameters();
+            first->m_geometryFit.clear();
+            first->m_profileCalibration.clear();
+            first->m_renderTypeParams.type = colorscreen::render_type_original;
+          };
+
+          auto mono = std::make_shared<colorscreen::image_data>();
+          if (!mono->set_dimensions(4, 4, false, true)) {
+            fail(QStringLiteral(
+                "Workspace churn could not allocate monochrome Workflow fixture"));
+            return;
+          }
+          mono->wavelengths[3] = 550;
+          resetWorkflowProbe();
+          first->m_scan = mono;
+          first->m_rparams.capture_type =
+              colorscreen::render_parameters::capture_transparency;
+          first->m_scrToImgParams.type = colorscreen::Random;
+          first->updateWorkflowSummary();
+          if (!imageLayerSummary->text().contains(
+                  QStringLiteral("native grayscale/IR")) ||
+              !imageLayerSummary->text().contains(QStringLiteral("550 nm")) ||
+              registrationSummary->text().contains(
+                  QStringLiteral("reconstruct from detected screen colours")) ||
+              !registrationSummary->text().contains(
+                  QStringLiteral("monochrome capture")) ||
+              !nextStepSummary->text().contains(
+                  QStringLiteral("original regular Screen type")) ||
+              openWorkflowStageButton->property("targetPanelKey").toString() !=
+                  QStringLiteral("screen")) {
+            fail(QStringLiteral(
+                "Workflow contradicted monochrome stochastic-screen recovery"));
+            return;
+          }
+
+          // A line screen is a genuine regular-lattice monochrome path. With no
+          // mapping yet, Geometry is the unambiguous next stage.
+          first->m_scrToImgParams.type = colorscreen::Joly;
+          first->updateWorkflowSummary();
+          if (!registrationSummary->text().contains(
+                  QStringLiteral("geometry not configured")) ||
+              !nextStepSummary->text().contains(
+                  QStringLiteral("Geometry — detect screen coordinates")) ||
+              openWorkflowStageButton->property("targetPanelKey").toString() !=
+                  QStringLiteral("geometry")) {
+            fail(QStringLiteral(
+                "Workflow lost the monochrome line-screen Geometry path"));
+            return;
+          }
+
+          auto rgbIr = std::make_shared<colorscreen::image_data>();
+          if (!rgbIr->set_dimensions(4, 4, true, true)) {
+            fail(QStringLiteral(
+                "Workspace churn could not allocate RGB+IR Workflow fixture"));
+            return;
+          }
+          rgbIr->wavelengths[3] = 850;
+          resetWorkflowProbe();
+          first->m_scan = rgbIr;
+          first->m_rparams.capture_type =
+              colorscreen::render_parameters::
+                  capture_transparency_with_screen_and_infrared;
+          first->m_scrToImgParams.type = colorscreen::Paget;
+          first->updateWorkflowSummary();
+          if (!imageLayerSummary->text().contains(
+                  QStringLiteral("native grayscale/IR")) ||
+              !imageLayerSummary->text().contains(QStringLiteral("850 nm")) ||
+              !nextStepSummary->text().contains(
+                  QStringLiteral("auto-detected screen filter")) ||
+              !openWorkflowStageButton->isHidden()) {
+            fail(QStringLiteral(
+                "Workflow lost RGB+IR native-layer/two-path guidance"));
+            return;
+          }
+
+          first->m_rparams.ignore_infrared = true;
+          first->updateWorkflowSummary();
+          if (!imageLayerSummary->text().contains(
+                  QStringLiteral("simulated RGB")) ||
+              !nextStepSummary->text().contains(
+                  QStringLiteral("auto-detected screen filter")) ||
+              !openWorkflowStageButton->isHidden()) {
+            fail(QStringLiteral(
+                "Workflow lost RGB+IR simulated-layer/two-path guidance"));
+            return;
+          }
+
+          first->m_scan = savedScan;
+          first->m_rparams = savedRParams;
+          first->m_scrToImgParams = savedGeometry;
+          first->m_solverParams = savedSolver;
+          first->m_renderTypeParams.type = savedRenderType;
+          first->m_geometryFit = savedGeometryFit;
+          first->m_profileCalibration = savedProfileCalibration;
+          first->updateWorkflowSummary();
+        }
+
         // Workflow sharpening must describe the selected/effective algorithm,
         // not merely whether the physical MTF metadata happens to be complete.
         const ParameterState sharpeningSummaryBaseline =

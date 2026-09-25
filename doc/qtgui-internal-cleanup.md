@@ -690,7 +690,11 @@ minimum is:
 7. save/load/recovery round trips for a representative parameter file;
 8. a small fixture test for each nontrivial parameter-widget mapping;
 9. manual workflow passes for at least one regular screen, one line screen and
-   one RGB+IR or monochrome capture.
+   one RGB+IR or monochrome capture. Workspace churn provides a synthetic
+   automated floor for these capability branches: monochrome stochastic-screen
+   rejection, the Joly/line-screen Geometry path, and RGB+IR native-versus-
+   simulated image-layer guidance are checked without file I/O. Manual passes
+   remain necessary for visual/operator judgement.
 
 For manual beta checks, record not only whether the final image looks right but
 whether the operator can tell what stage is being edited, why a control is

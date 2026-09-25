@@ -23,6 +23,11 @@ inspector target. Store the target as a stable `MultiLineTabWidget` semantic
 key, never as a numeric tab index. Clicking it is explicit user navigation and
 therefore updates `inspector/activePanel`; ambiguous choices and non-panel
 actions stay text-only.
+ Registration text must obey the same capture-capability distinction as
+`Next:`: stochastic screen-colour recovery is valid only when the effective
+capture supports screen-colour detection. A monochrome-through-screen capture
+with a stochastic type is an incompatible state and must direct the operator
+back to an original regular screen type, never advertise detected colours.
 
 The application is essentially a special-purpose non-destructive image editor.
 It uses Qt's standard multiple-document model. `ColorScreenApplication` owns
