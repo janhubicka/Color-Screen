@@ -26,6 +26,7 @@
 #include <QMessageBox>
 #include <QPointer>
 #include <QPushButton>
+#include <QSettings>
 #include <QStatusBar>
 #include <QSizePolicy>
 #include <QSplitter>
@@ -309,6 +310,8 @@ QLabel *profileSummary = inspector->findChild<QLabel *>(
     QStringLiteral("WorkflowProfileSummary"));
 QLabel *nextStepSummary = inspector->findChild<QLabel *>(
     QStringLiteral("WorkflowNextStepSummary"));
+QPushButton *openWorkflowStageButton = inspector->findChild<QPushButton *>(
+    QStringLiteral("WorkflowOpenStageButton"));
 QComboBox *captureTypeCombo = inspector->findChild<QComboBox *>(
     QStringLiteral("CaptureTypeCombo"));
 QComboBox *captureDemosaicCombo = inspector->findChild<QComboBox *>(
@@ -1516,7 +1519,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         }
         if (legacyTryLuck || !screenSwapColorsButton ||
             !showRegistrationPointsBox || !nextStepSummary ||
-            !first->m_screenPanel ||
+            !openWorkflowStageButton || !first->m_screenPanel ||
             !first->m_screenPanel->isAncestorOf(screenSwapColorsButton)) {
           fail(QStringLiteral(
               "Workspace churn lost the consolidated screen-registration workflow controls"));
@@ -1552,21 +1555,72 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         if (!nextStepSummary->text().contains(
                 QStringLiteral("auto-detected screen filter")) ||
             nextStepSummary->text().contains(
-                QStringLiteral("Geometry — detect screen coordinates"))) {
+                QStringLiteral("Geometry — detect screen coordinates")) ||
+            !openWorkflowStageButton->isHidden()) {
           fail(QStringLiteral(
               "Workflow forced Geometry before offering RGB screen-colour reconstruction"));
           return;
         }
 
+        const int sharpnessTab =
+            processingTabs->indexOfKey(QStringLiteral("sharpness"));
+        const int screenTab =
+            processingTabs->indexOfKey(QStringLiteral("screen"));
+        if (sharpnessTab < 0 || screenTab < 0) {
+          fail(QStringLiteral(
+              "Workflow navigation smoke lost stable inspector stage keys"));
+          return;
+        }
+        processingTabs->setCurrentIndex(sharpnessTab);
         first->m_renderTypeParams.type = colorscreen::render_type_realistic_scr;
         first->updateWorkflowSummary();
         if (!nextStepSummary->text().contains(
                 QStringLiteral("screen-colour detection is selected")) ||
             !nextStepSummary->text().contains(
-                QStringLiteral("Geometry is optional"))) {
+                QStringLiteral("Geometry is optional")) ||
+            openWorkflowStageButton->isHidden() ||
+            openWorkflowStageButton->property("targetPanelKey").toString() !=
+                QStringLiteral("screen") ||
+            !openWorkflowStageButton->text().contains(
+                QStringLiteral("Screen"))) {
           fail(QStringLiteral(
               "Workflow did not recognize selected geometry-free RGB reconstruction"));
           return;
+        }
+
+        // Open stage is explicit user navigation. It follows the semantic tab
+        // key, updates the preferred inspector stage, and then disappears once
+        // the recommended stage is already current. Restore the operator's
+        // pre-smoke preference on every exit from this scope.
+        {
+          QSettings settings;
+          const QString activePanelKey =
+              QStringLiteral("inspector/activePanel");
+          const bool hadPreference = settings.contains(activePanelKey);
+          const QVariant previousPreference = settings.value(activePanelKey);
+          struct ActivePanelPreferenceGuard {
+            QString key;
+            bool existed;
+            QVariant value;
+            /** Restore the real application preference after this probe. */
+            ~ActivePanelPreferenceGuard() {
+              QSettings settings;
+              if (existed)
+                settings.setValue(key, value);
+              else
+                settings.remove(key);
+            }
+          } preferenceGuard{activePanelKey, hadPreference, previousPreference};
+
+          openWorkflowStageButton->click();
+          if (processingTabs->currentIndex() != screenTab ||
+              QSettings().value(activePanelKey).toString() !=
+                  QStringLiteral("screen") ||
+              !openWorkflowStageButton->isHidden()) {
+            fail(QStringLiteral(
+                "Workflow Open stage did not navigate/persist by semantic key"));
+            return;
+          }
         }
 
         ParameterState workflowReady = workflowBaseline;

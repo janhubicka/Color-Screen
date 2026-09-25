@@ -631,6 +631,7 @@ private:
   QLabel *m_workflowCalibrationLabel = nullptr;
   QLabel *m_workflowProfileLabel = nullptr;
   QLabel *m_workflowNextStepLabel = nullptr;
+  QPushButton *m_workflowNextStepButton = nullptr;
 
   QToolBar *m_toolbar;        // New toolbar
   QComboBox *m_modeComboBox;  // Mode selector
