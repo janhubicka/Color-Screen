@@ -550,6 +550,11 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   Geometry/color optimizer queues and workers that intentionally publish
   intermediate results retain their separate lifecycle contracts; do not force
   them through `OneShotOperation` merely to remove another queue.
+- The persistent Workflow card now includes a compact **Capture** line. It
+  reports saved physical resolution plus crop and flat-field presence directly
+  from document state, complementing the existing Process, Image layer,
+  Registration, Sharpening/MTF and Profile summaries without claiming analysis
+  provenance that is not tracked.
 - Workflow guidance now has a conservative navigation affordance: when
   `Next:` points to one specific inspector stage, **Open stage** resolves that
   destination through the stable semantic tab key and records the click as the
