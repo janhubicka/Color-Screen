@@ -52,8 +52,10 @@ void ProfilePanel::setupUi()
     m_addSpotBtn->setToolTip(tr("Click image to add profile spots (right-click to remove)"));
     hlay->addWidget(m_addSpotBtn, 1);
 
-    auto *clearBtn = new QPushButton(tr("Clear all"), row);
-    hlay->addWidget(clearBtn, 1);
+    m_clearSpotsBtn = new QPushButton(tr("Clear all"), row);
+    m_clearSpotsBtn->setObjectName(
+        QStringLiteral("ProfileClearSpotsButton"));
+    hlay->addWidget(m_clearSpotsBtn, 1);
 
     addWidgetRow(row);
 
@@ -62,7 +64,7 @@ void ProfilePanel::setupUi()
       emit addSpotModeRequested(checked);
     });
 
-    connect(clearBtn, &QPushButton::clicked, this, [this]() {
+    connect(m_clearSpotsBtn, &QPushButton::clicked, this, [this]() {
       applyChange([](ParameterState &s) {
         s.profileSpots.clear();
       }, "Clear profile spots");
@@ -88,6 +90,12 @@ void ProfilePanel::setupUi()
   m_optimizeBtn = new QPushButton(tr("Optimize profile"), this);
   m_optimizeBtn->setObjectName(QStringLiteral("ProfileOptimizeButton"));
   addWidgetRow(m_optimizeBtn);
+
+  m_prerequisiteLabel = new QLabel(this);
+  m_prerequisiteLabel->setObjectName(
+      QStringLiteral("ProfileOptimizationPrerequisite"));
+  m_prerequisiteLabel->setWordWrap(true);
+  addFieldRow(tr("Requirement:"), m_prerequisiteLabel);
 
   m_calibrationStatusLabel = new QLabel(tr("Profile: no calibration spots"), this);
   m_calibrationStatusLabel->setObjectName(
@@ -134,20 +142,40 @@ void ProfilePanel::onParametersRefreshed(const ParameterState &state)
       colorscreen::screen_geometry_configured_p(state.scrToImg);
   const bool hasImage = m_imageGetter() != nullptr;
   if (m_addSpotBtn) {
-    if (!geometryReady && m_addSpotBtn->isChecked())
+    if ((!geometryReady || !hasImage) && m_addSpotBtn->isChecked())
       m_addSpotBtn->setChecked(false);
     m_addSpotBtn->setEnabled(geometryReady && hasImage);
   }
   if (m_autoCheck)
-    m_autoCheck->setEnabled(geometryReady);
+    m_autoCheck->setEnabled(geometryReady && hasImage);
 
-  // Update spot count label
+  // Update spot count label and explain the first unmet prerequisite locally.
   int n = (int)state.profileSpots.size();
   m_spotCountLabel->setText(n == 0 ? tr("No spots") :
                             n == 1 ? tr("1 spot")    :
                             tr("%1 spots").arg(n));
+  if (m_clearSpotsBtn)
+    m_clearSpotsBtn->setEnabled(n > 0);
   if (m_optimizeBtn)
     m_optimizeBtn->setEnabled(geometryReady && n >= 4 && hasImage);
+
+  if (m_prerequisiteLabel) {
+    QString prerequisite;
+    if (!hasImage) {
+      prerequisite = tr("Load an image to add profile spots.");
+    } else if (!geometryReady) {
+      prerequisite = tr("Fit screen geometry before adding profile spots.");
+    } else if (n < 4) {
+      const int missing = 4 - n;
+      prerequisite =
+          missing == 1
+              ? tr("Add 1 more profile spot to optimize the profile.")
+              : tr("Add %1 more profile spots to optimize the profile.")
+                    .arg(missing);
+    }
+    m_prerequisiteLabel->setText(prerequisite);
+    setParameterRowApplicable(m_prerequisiteLabel, !prerequisite.isEmpty());
+  }
 
   // Auto-trigger only when the profile-spot set itself changed.  Parameter
   // refreshes also happen when an optimization result is applied; treating
