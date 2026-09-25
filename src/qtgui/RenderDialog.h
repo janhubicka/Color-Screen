@@ -21,6 +21,7 @@ public:
       const colorscreen::render_parameters &rparams,
       const colorscreen::scr_to_img_parameters &scrParams,
       const colorscreen::image_data *scan,
+      const QString &outputPath,
       bool isDng,
       QWidget *parent = nullptr);
 
@@ -43,6 +44,7 @@ private slots:
   void onModeChanged(int index);
   void updateSizePreview();
   void updateControlStates();
+  void updateOutputSummary();
 
 private:
   bool screenGeometryActive() const;
@@ -51,6 +53,8 @@ private:
   colorscreen::render_type_parameters m_rtparams;
   colorscreen::scr_to_img_parameters  m_scrParams;
   const colorscreen::image_data      *m_scan;
+  QString m_outputPath;
+  bool m_isDng = false;
 
   QComboBox *m_modeCombo     = nullptr;
   QComboBox *m_profileCombo  = nullptr;
@@ -71,6 +75,14 @@ private:
   QSpinBox       *m_widthSpin       = nullptr;
   QSpinBox       *m_heightSpin      = nullptr;
   QLabel         *m_sizePreviewLabel = nullptr;
+
+  // Read-only accepted output contract selected before this settings dialog.
+  QLabel         *m_outputDestinationLabel = nullptr;
+  QLabel         *m_outputFormatLabel = nullptr;
+  QLabel         *m_outputOverwriteLabel = nullptr;
+  QLabel         *m_outputCropLabel = nullptr;
+  QLabel         *m_outputCoordinatesLabel = nullptr;
+  QLabel         *m_outputSharpeningLabel = nullptr;
 
   bool m_updatingSliders = false; // re-entrancy guard
 };
