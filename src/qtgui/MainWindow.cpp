@@ -599,6 +599,15 @@ void MainWindow::setupUi() {
     label->setMinimumWidth(0);
   };
 
+  m_workflowCaptureLabel = new QLabel(workflowSummary);
+  m_workflowCaptureLabel->setObjectName(
+      QStringLiteral("WorkflowCaptureSummary"));
+  configureDynamicWorkflowLabel(m_workflowCaptureLabel);
+  m_workflowCaptureLabel->setToolTip(tr(
+      "Current digitization state: physical resolution, crop and flat-field "
+      "correction. These values come directly from the document state."));
+  workflowLayout->addWidget(m_workflowCaptureLabel);
+
   m_workflowProcessLabel = new QLabel(workflowSummary);
   m_workflowProcessLabel->setObjectName(
       QStringLiteral("WorkflowProcessSummary"));
@@ -640,10 +649,11 @@ void MainWindow::setupUi() {
       "profile from calibration spots and is not part of sharpening."));
   workflowLayout->addWidget(m_workflowProfileLabel);
 
-  QFont workflowSectionFont = m_workflowProcessLabel->font();
+  QFont workflowSectionFont = m_workflowCaptureLabel->font();
   workflowSectionFont.setWeight(QFont::DemiBold);
   if (workflowSectionFont.pointSizeF() > 1.0)
     workflowSectionFont.setPointSizeF(workflowSectionFont.pointSizeF() - 0.5);
+  m_workflowCaptureLabel->setFont(workflowSectionFont);
   m_workflowProcessLabel->setFont(workflowSectionFont);
   m_workflowImageLayerLabel->setFont(workflowSectionFont);
   m_workflowRegistrationLabel->setFont(workflowSectionFont);
@@ -697,6 +707,7 @@ void MainWindow::setupUi() {
       [this, workflowToggle, workflowStages, workflowNextRow](bool expanded) {
         workflowToggle->setArrowType(expanded ? Qt::DownArrow : Qt::RightArrow);
         workflowStages->setVisible(expanded);
+        m_workflowCaptureLabel->setVisible(expanded);
         m_workflowProcessLabel->setVisible(expanded);
         m_workflowImageLayerLabel->setVisible(expanded);
         m_workflowRegistrationLabel->setVisible(expanded);
@@ -2975,8 +2986,9 @@ void MainWindow::updateWorkflowSummary() {
   cancelStaleAdaptiveSharpening(currentState);
   cancelStaleRegistrationDiscovery(currentState);
 
-  if (!m_workflowProcessLabel || !m_workflowImageLayerLabel ||
-      !m_workflowRegistrationLabel || !m_workflowCalibrationLabel ||
+  if (!m_workflowCaptureLabel || !m_workflowProcessLabel ||
+      !m_workflowImageLayerLabel || !m_workflowRegistrationLabel ||
+      !m_workflowCalibrationLabel ||
       !m_workflowProfileLabel || !m_workflowNextStepLabel)
     return;
 
@@ -3055,6 +3067,25 @@ void MainWindow::updateWorkflowSummary() {
       colorscreen::scr_names[typeIndex].pretty_name)
     screenName =
         QString::fromUtf8(colorscreen::scr_names[typeIndex].pretty_name);
+
+  QString captureSummary;
+  if (!m_scan) {
+    captureSummary = tr("Capture: load an image");
+  } else {
+    QStringList captureDetails;
+    const double scanDpi = m_rparams.sharpen.scanner_mtf.scan_dpi;
+    if (colorscreen::my_isfinite(scanDpi) && scanDpi > 0)
+      captureDetails << tr("%1 PPI").arg(scanDpi, 0, 'f', 1);
+    else
+      captureDetails << tr("resolution not set");
+    if (m_rparams.scan_crop.set)
+      captureDetails << tr("crop set");
+    if (m_rparams.backlight_correction)
+      captureDetails << tr("flat-field correction set");
+    captureSummary =
+        tr("Capture: %1").arg(captureDetails.join(QStringLiteral(" • ")));
+  }
+  m_workflowCaptureLabel->setText(captureSummary);
 
   QString processSummary;
   if (capture == colorscreen::render_parameters::capture_unknown) {
