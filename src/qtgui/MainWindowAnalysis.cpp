@@ -846,8 +846,8 @@ void MainWindow::onAdaptiveSharpeningFinished(
     m_sharpnessPanel->setAdaptiveAnalysisRunning(false);
   }
 
-  QMessageBox::information(this, tr("Adaptive Sharpening"),
-                           tr("Analysis completed successfully."));
+  statusBar()->showMessage(
+      tr("Adaptive sharpening analysis completed."), 4000);
 }
 
 /** Set the screen coordinate system center to the clicked image position.
