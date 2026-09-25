@@ -1804,6 +1804,17 @@ void ParameterPanel::setParameterRowApplicable(QWidget *widget,
 
   rowWidget->setProperty(parameterApplicableProperty, applicable);
   rowWidget->setVisible(applicable && sectionExpanded);
+
+  // Preserve applicability on the logical widget the caller registered too.
+  // Stateful helpers may wrap that widget in an inline row container (for
+  // example a checkbox + label + Reset button). The row owns presentation,
+  // while the original control still needs the same metadata/hidden contract
+  // used by callers and smoke probes.
+  if (widget != rowWidget) {
+    widget->setProperty(parameterApplicableProperty, applicable);
+    widget->setVisible(applicable && sectionExpanded);
+  }
+
   if (labelWidget) {
     labelWidget->setProperty(parameterApplicableProperty, applicable);
     labelWidget->setVisible(applicable && sectionExpanded);
