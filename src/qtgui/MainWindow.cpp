@@ -3126,18 +3126,92 @@ void MainWindow::updateWorkflowSummary() {
   }
   m_workflowRegistrationLabel->setText(registration);
 
-  const auto &mtf = m_rparams.sharpen.scanner_mtf;
-  QStringList missingLensData;
-  if (!colorscreen::my_isfinite(mtf.pixel_pitch) || mtf.pixel_pitch <= 0)
-    missingLensData << tr("pixel pitch");
-  if (!colorscreen::my_isfinite(mtf.f_stop) || mtf.f_stop <= 0)
-    missingLensData << tr("f-stop");
-  if (!colorscreen::my_isfinite(mtf.scan_dpi) || mtf.scan_dpi <= 0)
-    missingLensData << tr("resolution");
-  const QString sharpenSummary = missingLensData.isEmpty()
-      ? tr("Sharpening: ready")
-      : tr("Sharpening: needs %1")
-            .arg(missingLensData.join(", "));
+  const auto &sharpen = currentState.rparams.sharpen;
+  const auto &mtf = sharpen.scanner_mtf;
+  using sharpen_mode = colorscreen::sharpen_parameters::sharpen_mode;
+  const sharpen_mode configuredSharpenMode = sharpen.mode;
+  const sharpen_mode effectiveSharpenMode = sharpen.get_mode();
+
+  auto sharpenModeName = [](sharpen_mode mode) {
+    const int index = static_cast<int>(mode);
+    if (index >= 0 &&
+        index < static_cast<int>(sharpen_mode::sharpen_mode_max) &&
+        colorscreen::sharpen_parameters::sharpen_mode_names[index].pretty_name)
+      return QString::fromUtf8(
+          colorscreen::sharpen_parameters::sharpen_mode_names[index]
+              .pretty_name);
+    return QStringLiteral("Sharpening");
+  };
+  auto positiveFinite = [](double value) {
+    return colorscreen::my_isfinite(value) && value > 0;
+  };
+
+  QString sharpenSummary;
+  if (configuredSharpenMode == sharpen_mode::none) {
+    sharpenSummary = tr("Sharpening: off");
+  } else if (effectiveSharpenMode == sharpen_mode::none) {
+    QStringList missingActivation;
+    switch (configuredSharpenMode) {
+    case sharpen_mode::unsharp_mask:
+      if (!positiveFinite(sharpen.usm_radius))
+        missingActivation << tr("radius");
+      if (!positiveFinite(sharpen.usm_amount))
+        missingActivation << tr("amount");
+      break;
+    case sharpen_mode::wiener_deconvolution:
+      if (!positiveFinite(sharpen.scanner_mtf_scale))
+        missingActivation << tr("MTF scale");
+      if (!positiveFinite(sharpen.scanner_snr))
+        missingActivation << tr("SNR");
+      break;
+    case sharpen_mode::richardson_lucy_deconvolution:
+      if (!positiveFinite(sharpen.scanner_mtf_scale))
+        missingActivation << tr("MTF scale");
+      if (sharpen.richardson_lucy_iterations <= 0)
+        missingActivation << tr("iterations");
+      break;
+    case sharpen_mode::blur_deconvolution:
+      if (!positiveFinite(sharpen.scanner_mtf_scale))
+        missingActivation << tr("MTF scale");
+      break;
+    case sharpen_mode::none:
+    case sharpen_mode::sharpen_mode_max:
+      break;
+    }
+
+    sharpenSummary =
+        tr("Sharpening: %1 inactive").arg(sharpenModeName(configuredSharpenMode));
+    if (!missingActivation.isEmpty())
+      sharpenSummary +=
+          tr(" — set %1").arg(missingActivation.join(", "));
+  } else if (effectiveSharpenMode == sharpen_mode::unsharp_mask) {
+    sharpenSummary = tr("Sharpening: Unsharp mask active");
+  } else {
+    QString transferSummary;
+    if (mtf.use_measured_mtf()) {
+      transferSummary = tr("measured MTF");
+    } else if (mtf.simulate_diffraction_p()) {
+      transferSummary = tr("physical MTF");
+    } else {
+      transferSummary = tr("empirical MTF");
+      if (mtf.model != colorscreen::mtf_model::empirical_fallback) {
+        QStringList missingPhysicalInputs;
+        if (!positiveFinite(mtf.pixel_pitch))
+          missingPhysicalInputs << tr("pixel pitch");
+        if (!positiveFinite(mtf.f_stop))
+          missingPhysicalInputs << tr("f-stop");
+        if (!positiveFinite(mtf.scan_dpi))
+          missingPhysicalInputs << tr("resolution");
+        if (!missingPhysicalInputs.isEmpty())
+          transferSummary +=
+              tr(" (physical model needs %1)")
+                  .arg(missingPhysicalInputs.join(", "));
+      }
+    }
+    sharpenSummary =
+        tr("Sharpening: %1 • %2")
+            .arg(sharpenModeName(effectiveSharpenMode), transferSummary);
+  }
 
   // Preserve #251's richer calibration/provenance summary rather than
   // collapsing it back to a saved-measurement count.

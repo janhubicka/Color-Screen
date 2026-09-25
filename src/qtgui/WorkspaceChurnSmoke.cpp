@@ -573,6 +573,84 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
   return;
 }
 
+        // Workflow sharpening must describe the selected/effective algorithm,
+        // not merely whether the physical MTF metadata happens to be complete.
+        const ParameterState sharpeningSummaryBaseline =
+            first->getCurrentState();
+
+        ParameterState sharpeningOff = sharpeningSummaryBaseline;
+        sharpeningOff.rparams.sharpen.mode =
+            colorscreen::sharpen_parameters::none;
+        first->applyState(sharpeningOff);
+        if (!calibrationSummary->text().contains(
+                QStringLiteral("Sharpening: off"))) {
+          fail(QStringLiteral(
+              "Workflow summary did not report disabled sharpening"));
+          return;
+        }
+
+        ParameterState unsharpActive = sharpeningSummaryBaseline;
+        unsharpActive.rparams.sharpen.mode =
+            colorscreen::sharpen_parameters::unsharp_mask;
+        unsharpActive.rparams.sharpen.usm_radius = 1.0;
+        unsharpActive.rparams.sharpen.usm_amount = 1.0;
+        unsharpActive.rparams.sharpen.scanner_mtf.pixel_pitch = 0;
+        unsharpActive.rparams.sharpen.scanner_mtf.f_stop = 0;
+        unsharpActive.rparams.sharpen.scanner_mtf.scan_dpi = 0;
+        first->applyState(unsharpActive);
+        if (!calibrationSummary->text().contains(
+                QStringLiteral("Sharpening: Unsharp mask active")) ||
+            calibrationSummary->text().contains(QStringLiteral("needs"))) {
+          fail(QStringLiteral(
+              "Workflow summary incorrectly required MTF metadata for Unsharp mask"));
+          return;
+        }
+
+        ParameterState rlInactive = sharpeningSummaryBaseline;
+        rlInactive.rparams.sharpen.mode =
+            colorscreen::sharpen_parameters::richardson_lucy_deconvolution;
+        rlInactive.rparams.sharpen.scanner_mtf_scale = 1.0;
+        rlInactive.rparams.sharpen.richardson_lucy_iterations = 0;
+        first->applyState(rlInactive);
+        if (!calibrationSummary->text().contains(
+                QStringLiteral("Richardson-Lucy deconvolution inactive")) ||
+            !calibrationSummary->text().contains(QStringLiteral("iterations"))) {
+          fail(QStringLiteral(
+              "Workflow summary did not explain inactive Richardson-Lucy sharpening"));
+          return;
+        }
+
+        ParameterState measuredWiener = sharpeningSummaryBaseline;
+        measuredWiener.rparams.sharpen.mode =
+            colorscreen::sharpen_parameters::wiener_deconvolution;
+        measuredWiener.rparams.sharpen.scanner_mtf_scale = 1.0;
+        measuredWiener.rparams.sharpen.scanner_snr = 2000;
+        measuredWiener.rparams.sharpen.scanner_mtf.pixel_pitch = 0;
+        measuredWiener.rparams.sharpen.scanner_mtf.f_stop = 0;
+        measuredWiener.rparams.sharpen.scanner_mtf.scan_dpi = 0;
+        auto &measuredCurves =
+            measuredWiener.rparams.sharpen.scanner_mtf.measurements;
+        measuredCurves.clear();
+        colorscreen::mtf_measurement measuredCurve;
+        measuredCurve.add_value(0.0, 100.0);
+        measuredCurve.add_value(0.25, 80.0);
+        measuredCurve.add_value(0.5, 50.0);
+        measuredCurves.push_back(measuredCurve);
+        measuredWiener.rparams.sharpen.scanner_mtf.measured_mtf_idx = 0;
+        first->applyState(measuredWiener);
+        if (!calibrationSummary->text().contains(
+                QStringLiteral("Wiener deconvolution")) ||
+            !calibrationSummary->text().contains(
+                QStringLiteral("measured MTF")) ||
+            calibrationSummary->text().contains(
+                QStringLiteral("physical model needs"))) {
+          fail(QStringLiteral(
+              "Workflow summary ignored direct measured-MTF sharpening"));
+          return;
+        }
+
+        first->applyState(sharpeningSummaryBaseline);
+
         auto ignoresHorizontalHint = [](QWidget *widget) {
           return widget &&
                  widget->sizePolicy().horizontalPolicy() == QSizePolicy::Ignored &&
