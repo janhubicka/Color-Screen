@@ -4,6 +4,7 @@
 #include <QComboBox>
 #include <QDialogButtonBox>
 #include <QDoubleSpinBox>
+#include <QFileInfo>
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
@@ -60,9 +61,15 @@ RenderDialog::RenderDialog(
     const render_parameters &rparams,
     const scr_to_img_parameters &scrParams,
     const image_data *scan,
+    const QString &outputPath,
     bool isDng,
     QWidget *parent)
-  : QDialog(parent), m_rtparams(rtparams), m_scrParams(scrParams), m_scan(scan)
+  : QDialog(parent),
+    m_rtparams(rtparams),
+    m_scrParams(scrParams),
+    m_scan(scan),
+    m_outputPath(outputPath),
+    m_isDng(isDng)
 {
   setWindowTitle(tr("Render Settings"));
   setMinimumWidth(460);
@@ -108,6 +115,59 @@ RenderDialog::RenderDialog(
   if (idx >= 0) m_modeCombo->setCurrentIndex(idx);
   topForm->addRow(tr("Mode:"), m_modeCombo);
 
+  // ── Accepted output contract ──────────────────────────────────────────────
+  auto *outputGroup = new QGroupBox(tr("Output"), this);
+  auto *outputForm = new QFormLayout(outputGroup);
+  mainLayout->addWidget(outputGroup);
+
+  auto makeSummaryLabel = [outputGroup](const QString &objectName) {
+    auto *label = new QLabel(outputGroup);
+    label->setObjectName(objectName);
+    label->setWordWrap(true);
+    label->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    return label;
+  };
+  m_outputDestinationLabel =
+      makeSummaryLabel(QStringLiteral("RenderOutputDestination"));
+  m_outputFormatLabel =
+      makeSummaryLabel(QStringLiteral("RenderOutputFormat"));
+  m_outputOverwriteLabel =
+      makeSummaryLabel(QStringLiteral("RenderOutputOverwrite"));
+  m_outputCropLabel =
+      makeSummaryLabel(QStringLiteral("RenderOutputCrop"));
+  m_outputCoordinatesLabel =
+      makeSummaryLabel(QStringLiteral("RenderOutputCoordinates"));
+  m_outputSharpeningLabel =
+      makeSummaryLabel(QStringLiteral("RenderOutputSharpening"));
+
+  outputForm->addRow(tr("Destination:"), m_outputDestinationLabel);
+  outputForm->addRow(tr("File format:"), m_outputFormatLabel);
+  outputForm->addRow(tr("Overwrite:"), m_outputOverwriteLabel);
+  outputForm->addRow(tr("Crop:"), m_outputCropLabel);
+  outputForm->addRow(tr("Output coordinates:"), m_outputCoordinatesLabel);
+  outputForm->addRow(tr("Output sharpening:"), m_outputSharpeningLabel);
+
+  m_outputDestinationLabel->setText(QFileInfo(outputPath).absoluteFilePath());
+  m_outputFormatLabel->setText(isDng ? tr("DNG") : tr("TIFF"));
+  m_outputOverwriteLabel->setText(
+      QFileInfo::exists(outputPath)
+          ? tr("Existing file — overwrite confirmed in file chooser")
+          : tr("New file"));
+  if (scan && rparams.scan_crop.set) {
+    const int_image_area crop =
+        rparams.get_scan_crop(scan->width, scan->height);
+    m_outputCropLabel->setText(
+        tr("Document crop — x=%1, y=%2, %3 × %4 px")
+            .arg(crop.x)
+            .arg(crop.y)
+            .arg(crop.width)
+            .arg(crop.height));
+  } else {
+    m_outputCropLabel->setText(tr("Full scan"));
+  }
+  m_outputSharpeningLabel->setText(
+      tr("Document processing pipeline; no separate export-only sharpening"));
+
   // ── Non-DNG options ───────────────────────────────────────────────────────
   m_nonDngWidget = new QWidget(this);
   auto *nonDngForm = new QFormLayout(m_nonDngWidget);
@@ -136,7 +196,7 @@ RenderDialog::RenderDialog(
     for (int i = 0; i < (int)render_to_file_params::max_geometry; ++i)
       m_geometryCombo->addItem(render_to_file_params::geometry_names[i].name, i);
     m_geometryCombo->setCurrentIndex((int)render_to_file_params::default_geometry);
-    nonDngForm->addRow(tr("Geometry:"), m_geometryCombo);
+    nonDngForm->addRow(tr("Output coordinates:"), m_geometryCombo);
     connect(m_geometryCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &RenderDialog::onGeometryChanged);
   }
@@ -292,6 +352,7 @@ RenderDialog::RenderDialog(
   onGeometryChanged(-1);
   updateControlStates();
   updateSizePreview();
+  updateOutputSummary();
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -315,11 +376,44 @@ void RenderDialog::onGeometryChanged(int)
     m_screenScaleRow->setVisible(screenGeometryActive());
   updateControlStates();
   updateSizePreview();
+  updateOutputSummary();
 }
 
 void RenderDialog::onModeChanged(int)
 {
   onGeometryChanged(-1); // re-evaluate screen geometry visibility
+}
+
+/** Refresh the read-only accepted output contract shown above render controls. */
+void RenderDialog::updateOutputSummary()
+{
+  if (!m_outputCoordinatesLabel || !m_modeCombo)
+    return;
+
+  if (m_isDng) {
+    m_outputCoordinatesLabel->setText(tr("DNG/raw output coordinates"));
+    return;
+  }
+
+  render_to_file_params::output_geometry selected = geometry();
+  if (selected == render_to_file_params::default_geometry) {
+    const int type = m_modeCombo->currentData().toInt();
+    const bool screenDefault =
+        type >= 0 && type < render_type_max &&
+        (render_type_properties[type].flags &
+         render_type_property::NEEDS_SCR_TO_IMG);
+    m_outputCoordinatesLabel->setText(
+        screenDefault ? tr("Screen coordinates (mode default)")
+                      : tr("Scan coordinates (mode default)"));
+    return;
+  }
+
+  const int index = static_cast<int>(selected);
+  if (index >= 0 && index < static_cast<int>(render_to_file_params::max_geometry))
+    m_outputCoordinatesLabel->setText(
+        QString::fromUtf8(render_to_file_params::geometry_names[index].pretty_name));
+  else
+    m_outputCoordinatesLabel->setText(tr("Default"));
 }
 
 void RenderDialog::updateControlStates()
