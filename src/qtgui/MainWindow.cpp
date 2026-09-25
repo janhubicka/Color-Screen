@@ -650,19 +650,51 @@ void MainWindow::setupUi() {
   m_workflowCalibrationLabel->setFont(workflowSectionFont);
   m_workflowProfileLabel->setFont(workflowSectionFont);
 
-  m_workflowNextStepLabel = new QLabel(workflowSummary);
+  QWidget *workflowNextRow = new QWidget(workflowSummary);
+  auto *workflowNextLayout = new QHBoxLayout(workflowNextRow);
+  workflowNextLayout->setContentsMargins(0, 0, 0, 0);
+  workflowNextLayout->setSpacing(6);
+
+  m_workflowNextStepLabel = new QLabel(workflowNextRow);
   m_workflowNextStepLabel->setObjectName(
       QStringLiteral("WorkflowNextStepSummary"));
   configureDynamicWorkflowLabel(m_workflowNextStepLabel);
   QFont nextStepFont = m_workflowNextStepLabel->font();
   nextStepFont.setBold(true);
   m_workflowNextStepLabel->setFont(nextStepFont);
-  workflowLayout->addWidget(m_workflowNextStepLabel);
+  workflowNextLayout->addWidget(m_workflowNextStepLabel, 1);
+
+  m_workflowNextStepButton =
+      new QPushButton(tr("Open stage"), workflowNextRow);
+  m_workflowNextStepButton->setObjectName(
+      QStringLiteral("WorkflowOpenStageButton"));
+  m_workflowNextStepButton->setSizePolicy(QSizePolicy::Maximum,
+                                          QSizePolicy::Fixed);
+  m_workflowNextStepButton->hide();
+  connect(m_workflowNextStepButton, &QPushButton::clicked, this, [this]() {
+    if (!m_configTabs || !m_workflowNextStepButton)
+      return;
+    const QString key =
+        m_workflowNextStepButton->property("targetPanelKey").toString();
+    const int index = m_configTabs->indexOfKey(key);
+    if (index < 0)
+      return;
+    m_configTabs->setCurrentIndex(index);
+    if (m_configTabs->currentIndex() != index)
+      return;
+
+    // This is explicit user navigation just like clicking the inspector tab.
+    // Keep the semantic preference in sync without relying on numeric indices.
+    QSettings settings;
+    settings.setValue(QStringLiteral("inspector/activePanel"), key);
+    updateWorkflowSummary();
+  });
+  workflowLayout->addWidget(workflowNextRow);
 
   const bool workflowExpanded =
       QSettings().value(QStringLiteral("workflowSummaryExpanded"), true).toBool();
   auto setWorkflowExpanded =
-      [this, workflowToggle, workflowStages](bool expanded) {
+      [this, workflowToggle, workflowStages, workflowNextRow](bool expanded) {
         workflowToggle->setArrowType(expanded ? Qt::DownArrow : Qt::RightArrow);
         workflowStages->setVisible(expanded);
         m_workflowProcessLabel->setVisible(expanded);
@@ -672,7 +704,7 @@ void MainWindow::setupUi() {
         m_workflowProfileLabel->setVisible(
             expanded &&
             m_workflowProfileLabel->property("workflowApplicable").toBool());
-        m_workflowNextStepLabel->setVisible(expanded);
+        workflowNextRow->setVisible(expanded);
         workflowToggle->setToolTip(
             expanded ? tr("Hide the document workflow summary.")
                      : tr("Show the document workflow summary."));
@@ -3241,6 +3273,7 @@ void MainWindow::updateWorkflowSummary() {
       profileApplicable && m_workflowProcessLabel->isVisible());
 
   QString nextStep;
+  QString nextPanelKey;
   const auto screenAutodetectionProgress =
       m_screenAutodetectionProgress.lock();
   if (screenAutodetectionProgress) {
@@ -3257,11 +3290,13 @@ void MainWindow::updateWorkflowSummary() {
     nextStep = tr("Next: load an image.");
   } else if (capture == colorscreen::render_parameters::capture_unknown) {
     nextStep = tr("Next: choose Capture type in Digital capture.");
+    nextPanelKey = QStringLiteral("digital_capture");
   } else if (colorscreen::render_parameters::capture_negative_p(capture) &&
              !m_rparams.contact_copy.simulate) {
     nextStep = tr(
         "Next: Simulated darkroom — enable Contact copy simulation to turn "
         "the negative into a positive.");
+    nextPanelKey = QStringLiteral("contact_copy");
   } else if (!hasScreen) {
     nextStep = tr(
         "Next: set capture correction, black/backlight and sharpening, then "
@@ -3271,11 +3306,13 @@ void MainWindow::updateWorkflowSummary() {
     nextStep = tr(
         "Next: reconstruct from detected screen colours; stochastic screens "
         "do not use Geometry.");
+    nextPanelKey = QStringLiteral("screen");
   } else if (screenDetectionAvailable && screenDetectionModeSelected) {
     nextStep = tr(
         "Next: screen-colour detection is selected. Refine Screen → "
         "Reconstruction if needed, then continue with Sharpness/Color. "
         "Geometry is optional for this RGB path.");
+    nextPanelKey = QStringLiteral("screen");
   } else if (screenDetectionAvailable && regularScreen &&
              !geometryConfigured && pointCount > 0) {
     nextStep = tr(
@@ -3296,8 +3333,10 @@ void MainWindow::updateWorkflowSummary() {
         "Next: restore the coordinate system compatible with the existing "
         "control points, or delete the points before detecting new screen "
         "coordinates.");
+    nextPanelKey = QStringLiteral("geometry");
   } else if (regularScreen && !geometryConfigured) {
     nextStep = tr("Next: Geometry — detect screen coordinates.");
+    nextPanelKey = QStringLiteral("geometry");
   } else if (regularScreen && m_geometryFit.pendingInputs) {
     nextStep = tr("Next: Geometry fit is running…");
   } else if (regularScreen && fitCurrent) {
@@ -3316,6 +3355,7 @@ void MainWindow::updateWorkflowSummary() {
       nextStep = tr("Next: inspect registration. %1 %2 When alignment is clean, "
                     "continue with Sharpness/Color.")
                      .arg(pointGuidance, editGuidance);
+      nextPanelKey = QStringLiteral("geometry");
     } else {
       nextStep = tr(
           "Next: reconstruct — choose Mode → Image layer + screen filter (or "
@@ -3332,6 +3372,7 @@ void MainWindow::updateWorkflowSummary() {
     nextStep = tr(
         "Next: choose the original regular Screen type. Stochastic screen "
         "colors cannot be recovered from a monochrome capture.");
+    nextPanelKey = QStringLiteral("screen");
   } else if (!colorDetection && regularScreen) {
     if (failureCurrent) {
       nextStep = tr(
@@ -3340,12 +3381,35 @@ void MainWindow::updateWorkflowSummary() {
     } else {
       nextStep = tr("Next: Geometry — optimize the fit.");
     }
+    nextPanelKey = QStringLiteral("geometry");
   } else if (hasScreen && type == colorscreen::NoScreen) {
     nextStep = tr("Next: choose the physical Screen type.");
+    nextPanelKey = QStringLiteral("screen");
   } else {
     nextStep = tr("Next: reconstruct the image and refine Color/Profile.");
   }
   m_workflowNextStepLabel->setText(nextStep);
+
+  // Workflow navigation is intentionally conservative. Only expose a button
+  // when the recommendation names one unambiguous inspector stage; choices
+  // between reconstruction paths, toolbar Mode changes, file loading, and
+  // running operations remain text-only.
+  if (m_workflowNextStepButton && m_configTabs) {
+    const int targetIndex = m_configTabs->indexOfKey(nextPanelKey);
+    const bool targetIsDifferent =
+        targetIndex >= 0 && targetIndex != m_configTabs->currentIndex();
+    m_workflowNextStepButton->setProperty("targetPanelKey", nextPanelKey);
+    m_workflowNextStepButton->setText(
+        targetIndex >= 0
+            ? tr("Open %1").arg(m_configTabs->tabText(targetIndex))
+            : tr("Open stage"));
+    m_workflowNextStepButton->setToolTip(
+        targetIndex >= 0
+            ? tr("Open the %1 inspector stage.")
+                  .arg(m_configTabs->tabText(targetIndex))
+            : QString());
+    m_workflowNextStepButton->setVisible(targetIsDifferent);
+  }
 }
 
 /** Refresh all UI panels and toolbar state from a ParameterState.

@@ -550,6 +550,14 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   Geometry/color optimizer queues and workers that intentionally publish
   intermediate results retain their separate lifecycle contracts; do not force
   them through `OneShotOperation` merely to remove another queue.
+- Workflow guidance now has a conservative navigation affordance: when
+  `Next:` points to one specific inspector stage, **Open stage** resolves that
+  destination through the stable semantic tab key and records the click as the
+  user's preferred inspector panel. Recommendations that intentionally present a
+  choice (for example RGB screen-colour detection versus Geometry), toolbar Mode
+  changes, file loading, and active background operations remain text-only.
+  Workspace churn checks both an ambiguous hidden-button case and real
+  Screen-stage navigation/persistence.
 - Separate "enabled" from "applicable/visible" in helper APIs.  Greyed controls
   are useful when they teach a prerequisite; hidden controls are useful when a
   whole concept is meaningless for the current process.  A lambda called

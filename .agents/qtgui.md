@@ -17,7 +17,12 @@ weights and whether nonzero dark offsets are configured. Derive this only from
 the current `image_data` capabilities and `render_parameters`; never cache a
 second authoritative image-layer choice in the GUI. Dynamic Workflow labels
 must keep the horizontal `QSizePolicy::Ignored` contract so changing text
-cannot move the main image/inspector splitter.
+cannot move the main image/inspector splitter. The `Next:` row may expose a
+compact **Open stage** button only when the recommendation has one unambiguous
+inspector target. Store the target as a stable `MultiLineTabWidget` semantic
+key, never as a numeric tab index. Clicking it is explicit user navigation and
+therefore updates `inspector/activePanel`; ambiguous choices and non-panel
+actions stay text-only.
 
 The application is essentially a special-purpose non-destructive image editor.
 It uses Qt's standard multiple-document model. `ColorScreenApplication` owns
