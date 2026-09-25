@@ -421,6 +421,8 @@ bool colorSectionPreferencesSmoke() {
   auto setState = [&documentEdits](const ParameterState &, const QString &,
                                   const QString &) { ++documentEdits; };
   auto noImage = []() { return std::shared_ptr<colorscreen::image_data>(); };
+  std::shared_ptr<colorscreen::image_data> sharpnessImage;
+  auto getSharpnessImage = [&sharpnessImage]() { return sharpnessImage; };
 
   auto settingKey = [](const QString &key) {
     return QStringLiteral("inspector/sections/%1/expanded").arg(key);
@@ -522,7 +524,7 @@ bool colorSectionPreferencesSmoke() {
         QStringLiteral("sharpness.adaptive")},
        [&]() {
          return std::make_unique<SharpnessPanel>(
-             getState, setState, noImage);
+             getState, setState, getSharpnessImage);
        }},
       {{QStringLiteral("color.process"), QStringLiteral("color.backlight"),
         QStringLiteral("color.dyes"), QStringLiteral("color.viewing"),
@@ -624,6 +626,58 @@ bool colorSectionPreferencesSmoke() {
       }
 
       if (auto *sharpness = qobject_cast<SharpnessPanel *>(second.get())) {
+        auto *focusToggle =
+            toggleFor(*sharpness, QStringLiteral("sharpness.focus"));
+        if (!focusToggle)
+          return fail(QStringLiteral(
+              "Sharpness lost Focus analyzer section toggle"));
+        const bool focusWasExpanded = focusToggle->isChecked();
+        focusToggle->setChecked(true);
+        sharpness->updateUI();
+
+        auto *focusAnalyze = sharpness->findChild<QPushButton *>(
+            QStringLiteral("SharpnessAnalyzeFocusAreaButton"));
+        auto *findFocusAreas = sharpness->findChild<QPushButton *>(
+            QStringLiteral("SharpnessFindFocusAreasButton"));
+        auto *focusRequirement = sharpness->findChild<QLabel *>(
+            QStringLiteral("SharpnessFocusRequirement"));
+        if (!focusAnalyze || !findFocusAreas || !focusRequirement ||
+            focusAnalyze->isEnabled() || findFocusAreas->isEnabled() ||
+            focusRequirement->isHidden() ||
+            !focusRequirement->property("parameterApplicable").toBool() ||
+            !focusRequirement->text().contains(QStringLiteral("Load an image")))
+          return fail(QStringLiteral(
+              "Sharpness lost no-image Focus analyzer prerequisite"));
+
+        sharpnessImage = std::make_shared<colorscreen::image_data>();
+        ParameterState focusReadyState = state;
+        focusReadyState.scrToImg.type = colorscreen::Dufay;
+        focusReadyState.scrToImg.coordinate1 = {8, 0};
+        focusReadyState.scrToImg.coordinate2 = {0, 8};
+        state = focusReadyState;
+        sharpness->updateUI();
+        if (!focusAnalyze->isEnabled() || !findFocusAreas->isEnabled() ||
+            !focusRequirement->isHidden() ||
+            focusRequirement->property("parameterApplicable").toBool())
+          return fail(QStringLiteral(
+              "Sharpness kept Focus analyzer prerequisite after image/geometry became ready"));
+
+        state = initialState;
+        sharpness->updateUI();
+        if (focusAnalyze->isEnabled() || findFocusAreas->isEnabled() ||
+            focusRequirement->isHidden() ||
+            !focusRequirement->property("parameterApplicable").toBool() ||
+            !focusRequirement->text().contains(
+                QStringLiteral("Fit screen geometry")))
+          return fail(QStringLiteral(
+              "Sharpness did not explain missing geometry for Focus analyzer"));
+
+        sharpnessImage.reset();
+        sharpness->updateUI();
+        if (!focusRequirement->text().contains(QStringLiteral("Load an image")))
+          return fail(QStringLiteral(
+              "Sharpness did not restore no-image Focus analyzer prerequisite"));
+
         auto *adaptiveToggle =
             toggleFor(*sharpness, QStringLiteral("sharpness.adaptive"));
         auto *adaptiveRow = sharpness->findChild<QWidget *>(
@@ -676,6 +730,11 @@ bool colorSectionPreferencesSmoke() {
             || adaptiveRow->property("parameterApplicable").toBool())
           return fail(QStringLiteral(
               "Finished adaptive analysis retained an empty diagnostic row"));
+
+        // The prerequisite probe temporarily expands Focus analyzer only in
+        // this live panel. Restore its pre-probe fold without persisting it.
+        focusToggle->setChecked(focusWasExpanded);
+        sharpness->updateUI();
       }
 
       // An explicit choice in the new inspector affects future panels only.

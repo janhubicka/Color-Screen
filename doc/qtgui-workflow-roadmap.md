@@ -550,9 +550,12 @@ specialist stages.
   action resolved through that stage's stable semantic key. Choice points,
   toolbar-only actions, file loading, and running operations remain text-only;
 - standardize operation wording: Detect, Measure, Fit, Optimize, Reset;
-- make prerequisites visible. Profile optimization and Adaptive sharpening now
-  use local fold-aware **Requirement** rows for their main gating conditions,
-  instead of leaving a disabled operation unexplained;
+- make prerequisites visible. Profile optimization, Focus analyzer, and
+  Adaptive sharpening use local fold-aware **Requirement** rows for their main
+  gating conditions. Focus analyzer distinguishes a missing image from missing
+  screen geometry, and both **Analyze area** and **Find focus areas** share the
+  same readiness rule instead of leaving disabled or no-op operations
+  unexplained;
 - add explicit stale/result states where analyses depend on changing inputs.
 
 ### Phase C — module grammar
