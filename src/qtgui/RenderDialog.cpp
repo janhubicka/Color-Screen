@@ -68,7 +68,6 @@ RenderDialog::RenderDialog(
     m_rtparams(rtparams),
     m_scrParams(scrParams),
     m_scan(scan),
-    m_outputPath(outputPath),
     m_isDng(isDng)
 {
   setWindowTitle(tr("Render Settings"));
