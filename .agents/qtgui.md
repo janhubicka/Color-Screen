@@ -9,9 +9,11 @@ Each document window (`MainWindow`) integrates the image view and functional
 panels and is a frontend for `libcolorscreen`; `WorkspaceWindow` is the shared
 application shell when documents are attached.
 
-The persistent Workflow summary is derived presentation state. Alongside
-Process, Registration, Sharpening/MTF and Profile it reports the active
-**Image layer**.
+The persistent Workflow summary is derived presentation state. It reports
+**Capture** resolution plus current crop/flat-field presence, alongside Process,
+Registration, Sharpening/MTF, Profile and the active **Image layer**. Capture
+status comes directly from `render_parameters`: do not infer calibration from
+widget visibility or cache a second flag.
  For negative capture types, the Process line also reports whether the
 Contact-copy positive conversion is off or active; derive that directly from
 `render_parameters::contact_copy.simulate`, never from a second GUI flag. A real scalar capture plane is shown as native grayscale/IR
