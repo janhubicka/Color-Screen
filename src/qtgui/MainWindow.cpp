@@ -3108,10 +3108,14 @@ void MainWindow::updateWorkflowSummary() {
   } else if (!hasScreen) {
     registration = tr("Registration: not applicable — no color screen");
   } else if (!regularScreen) {
-    if (stochasticScreen) {
+    if (stochasticScreen && colorDetection) {
       registration = tr(
           "Registration: geometry not used — reconstruct from detected "
           "screen colours");
+    } else if (stochasticScreen) {
+      registration = tr(
+          "Registration: stochastic screen recovery unavailable — "
+          "monochrome capture needs the original regular Screen type");
     } else {
       registration = tr("Registration: choose a screen type");
     }
