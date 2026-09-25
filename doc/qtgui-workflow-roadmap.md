@@ -274,6 +274,13 @@ For beta, the render dialog should make these items explicit:
 - whether any output-specific sharpening exists;
 - destination and overwrite policy.
 
+The current Render Settings dialog now repeats the output contract accepted in
+the native file chooser: destination, TIFF/DNG format, whether an existing file
+was already approved for overwrite, document crop/full scan, resolved output
+coordinates, and the fact that there is no separate export-only sharpening
+stage. Size/scale/antialias, output profile/HDR, and bit depth remain editable
+below that summary.
+
 Do not put export-only state into the document unless users need reproducible
 saved export recipes.  If recipes are later added, model them explicitly rather
 than silently turning the last export dialog state into image-processing state.
