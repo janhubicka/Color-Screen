@@ -3056,17 +3056,21 @@ void MainWindow::updateWorkflowSummary() {
     screenName =
         QString::fromUtf8(colorscreen::scr_names[typeIndex].pretty_name);
 
+  QString processSummary;
   if (capture == colorscreen::render_parameters::capture_unknown) {
-    m_workflowProcessLabel->setText(
-        tr("Process: choose capture type in Digital capture"));
+    processSummary = tr("Process: choose capture type in Digital capture");
   } else if (!hasScreen) {
-    m_workflowProcessLabel->setText(
-        tr("Process: %1 • no screen reconstruction")
-            .arg(captureName));
+    processSummary =
+        tr("Process: %1 • no screen reconstruction").arg(captureName);
   } else {
-    m_workflowProcessLabel->setText(
-        tr("Process: %1 • %2").arg(captureName, screenName));
+    processSummary = tr("Process: %1 • %2").arg(captureName, screenName);
   }
+  if (colorscreen::render_parameters::capture_negative_p(capture)) {
+    processSummary += m_rparams.contact_copy.simulate
+        ? tr(" • positive conversion active")
+        : tr(" • positive conversion off");
+  }
+  m_workflowProcessLabel->setText(processSummary);
 
   QString imageLayerSummary;
   if (!m_scan) {
