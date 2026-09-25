@@ -2996,6 +2996,15 @@ void MainWindow::updateWorkflowSummary() {
       m_renderTypeParams.type == colorscreen::render_type_predictive ||
       m_renderTypeParams.type == colorscreen::render_type_realistic ||
       m_renderTypeParams.type == colorscreen::render_type_combined;
+  const int renderTypeIndex = static_cast<int>(m_renderTypeParams.type);
+  const bool screenDetectionModeSelected =
+      renderTypeIndex >= 0 &&
+      renderTypeIndex < colorscreen::render_type_max &&
+      (colorscreen::render_type_properties[renderTypeIndex].flags &
+       colorscreen::render_type_property::USES_SCR_DETECT);
+  const bool screenDetectionAvailable =
+      colorDetection && m_scan && m_scan->has_rgb() &&
+      colorscreen::screen_present_p(type);
   const ImageWidget *workflowImage = inspectorImageWidget();
   const bool registrationPointsVisible =
       workflowImage && workflowImage->registrationPointsVisible();
@@ -3262,6 +3271,26 @@ void MainWindow::updateWorkflowSummary() {
     nextStep = tr(
         "Next: reconstruct from detected screen colours; stochastic screens "
         "do not use Geometry.");
+  } else if (screenDetectionAvailable && screenDetectionModeSelected) {
+    nextStep = tr(
+        "Next: screen-colour detection is selected. Refine Screen → "
+        "Reconstruction if needed, then continue with Sharpness/Color. "
+        "Geometry is optional for this RGB path.");
+  } else if (screenDetectionAvailable && regularScreen &&
+             !geometryConfigured && pointCount > 0) {
+    nextStep = tr(
+        "Next: choose a reconstruction path. Mode → Image layer + "
+        "auto-detected screen filter uses the RGB screen colours without "
+        "Geometry. To continue the Geometry path, restore the coordinate "
+        "system compatible with the existing control points or delete those "
+        "points before detecting new coordinates.");
+  } else if (screenDetectionAvailable && regularScreen &&
+             !geometryConfigured) {
+    nextStep = tr(
+        "Next: choose a reconstruction path — Mode → Image layer + "
+        "auto-detected screen filter uses the RGB screen colours without "
+        "Geometry, or Geometry → Detect screen coordinates for lattice-based "
+        "reconstruction.");
   } else if (regularScreen && !geometryConfigured && pointCount > 0) {
     nextStep = tr(
         "Next: restore the coordinate system compatible with the existing "
