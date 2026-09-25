@@ -1454,12 +1454,61 @@ bool discreteDefaultPresentationSmoke() {
   return true;
 }
 
+/** Return explicitly requested action-smoke options other than SELECTED.
+
+    Assertion/configuration options such as --smoke-test-expect-windows are
+    deliberately not action options and may accompany every smoke process.
+    Use QCommandLineParser::optionNames() as the source of truth: it contains
+    only names actually present on this process command line. */
+QStringList conflictingSmokeActionOptions(const QStringList &explicitOptions,
+                                          const QString &selected) {
+  static const QStringList actionOptions = {
+      QStringLiteral("smoke-test-detach-reattach"),
+      QStringLiteral("smoke-test-close-to-empty-tab"),
+      QStringLiteral("smoke-test-mdi-arrangements"),
+      QStringLiteral("smoke-test-tile-activation-stable"),
+      QStringLiteral("smoke-test-menu-order"),
+      QStringLiteral("smoke-test-toolbar-before-tabs"),
+      QStringLiteral("smoke-test-tab-drag-detach"),
+      QStringLiteral("smoke-test-tabbed-fills-workspace"),
+      QStringLiteral("smoke-test-global-statusbar"),
+      QStringLiteral("smoke-test-user-visible-progress"),
+      QStringLiteral("smoke-test-new-view"),
+      QStringLiteral("smoke-test-window-lifetime"),
+      QStringLiteral("smoke-test-slanted-reference"),
+      QStringLiteral("smoke-test-document-lifecycle"),
+      QStringLiteral("smoke-test-workspace-churn")};
+
+  QStringList conflicts;
+  for (const QString &name : actionOptions)
+    if (name != selected && explicitOptions.contains(name))
+      conflicts.push_back(name);
+  return conflicts;
+}
+
 /** Exercise beta-critical non-rendering UI/document invariants. */
 bool runBetaInvariantSmoke() {
   auto fail = [](const char *reason) {
     qCritical() << "Beta invariant smoke failed:" << reason;
     return false;
   };
+
+  const QStringList sanitizerWorkspaceOptions = {
+      QStringLiteral("smoke-test"),
+      QStringLiteral("smoke-test-expect-windows"),
+      QStringLiteral("smoke-test-workspace-churn")};
+  if (!conflictingSmokeActionOptions(
+           sanitizerWorkspaceOptions,
+           QStringLiteral("smoke-test-workspace-churn")).isEmpty())
+    return fail("workspace smoke misclassified assertion options as actions");
+
+  QStringList mixedWorkspaceOptions = sanitizerWorkspaceOptions;
+  mixedWorkspaceOptions.push_back(QStringLiteral("smoke-test-menu-order"));
+  const QStringList workspaceConflicts = conflictingSmokeActionOptions(
+      mixedWorkspaceOptions, QStringLiteral("smoke-test-workspace-churn"));
+  if (workspaceConflicts !=
+      QStringList{QStringLiteral("smoke-test-menu-order")})
+    return fail("workspace smoke conflict classification lost a real action");
 
   if (!backgroundThreadRegistryShutdownSmoke()
       || !numericDoubleClickResetSmoke()
@@ -2717,40 +2766,32 @@ int main(int argc, char *argv[]) {
   if (parser.isSet(smokeTestOption) && !runBetaInvariantSmoke())
     return 21;
 
-  if (parser.isSet(workspaceChurnOption) &&
-      (parser.isSet(documentLifecycleOption) ||
-       parser.isSet(detachReattachOption) ||
-       parser.isSet(closeToEmptyTabOption) ||
-       parser.isSet(expectedTabBarOption) ||
-       parser.isSet(mdiArrangementOption) ||
-       parser.isSet(tileActivationStableOption) ||
-       parser.isSet(menuOrderOption) || parser.isSet(toolbarOrderOption) ||
-       parser.isSet(dragDetachOption) || parser.isSet(tabbedFillOption) ||
-       parser.isSet(globalStatusBarOption) ||
-       parser.isSet(userVisibleProgressOption) || parser.isSet(newViewOption) ||
-       parser.isSet(windowLifetimeOption) ||
-       parser.isSet(slantedReferenceOption))) {
-    qCritical() << "--smoke-test-workspace-churn must run without other "
-                   "action smoke options";
-    return 18;
+  const QStringList explicitOptions = parser.optionNames();
+  const QString workspaceChurnName =
+      QStringLiteral("smoke-test-workspace-churn");
+  const QString documentLifecycleName =
+      QStringLiteral("smoke-test-document-lifecycle");
+
+  if (explicitOptions.contains(workspaceChurnName)) {
+    const QStringList conflicts =
+        conflictingSmokeActionOptions(explicitOptions, workspaceChurnName);
+    if (!conflicts.isEmpty()) {
+      qCritical() << "--smoke-test-workspace-churn conflicts with action "
+                     "smoke options:"
+                  << conflicts;
+      return 18;
+    }
   }
 
-  if (parser.isSet(documentLifecycleOption) &&
-      (parser.isSet(workspaceChurnOption) ||
-       parser.isSet(detachReattachOption) ||
-       parser.isSet(closeToEmptyTabOption) ||
-       parser.isSet(expectedTabBarOption) ||
-       parser.isSet(mdiArrangementOption) ||
-       parser.isSet(tileActivationStableOption) ||
-       parser.isSet(menuOrderOption) || parser.isSet(toolbarOrderOption) ||
-       parser.isSet(dragDetachOption) || parser.isSet(tabbedFillOption) ||
-       parser.isSet(globalStatusBarOption) ||
-       parser.isSet(userVisibleProgressOption) || parser.isSet(newViewOption) ||
-       parser.isSet(windowLifetimeOption) ||
-       parser.isSet(slantedReferenceOption))) {
-    qCritical() << "--smoke-test-document-lifecycle must run without other "
-                   "action smoke options";
-    return 19;
+  if (explicitOptions.contains(documentLifecycleName)) {
+    const QStringList conflicts =
+        conflictingSmokeActionOptions(explicitOptions, documentLifecycleName);
+    if (!conflicts.isEmpty()) {
+      qCritical() << "--smoke-test-document-lifecycle conflicts with action "
+                     "smoke options:"
+                  << conflicts;
+      return 19;
+    }
   }
 
   // Smoke tests need an explicit shutdown turn so queued widget destruction and
