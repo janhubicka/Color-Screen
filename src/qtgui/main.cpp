@@ -628,10 +628,35 @@ bool colorSectionPreferencesSmoke() {
             toggleFor(*sharpness, QStringLiteral("sharpness.adaptive"));
         auto *adaptiveRow = sharpness->findChild<QWidget *>(
             QStringLiteral("SharpnessAdaptiveChartRow"));
-        if (!adaptiveToggle || !adaptiveRow || !adaptiveRow->isHidden()
-            || adaptiveRow->property("parameterApplicable").toBool())
+        auto *adaptiveAnalyze = sharpness->findChild<QPushButton *>(
+            QStringLiteral("SharpnessAnalyzeDisplacementsButton"));
+        auto *adaptiveRequirement = sharpness->findChild<QLabel *>(
+            QStringLiteral("SharpnessAdaptiveRequirement"));
+        if (!adaptiveToggle || !adaptiveRow || !adaptiveAnalyze ||
+            !adaptiveRequirement || !adaptiveRow->isHidden() ||
+            adaptiveRow->property("parameterApplicable").toBool() ||
+            adaptiveAnalyze->isEnabled() || adaptiveRequirement->isHidden() ||
+            !adaptiveRequirement->property("parameterApplicable").toBool())
           return fail(QStringLiteral(
-              "Sharpness exposed adaptive diagnostics without data"));
+              "Sharpness lost adaptive-analysis prerequisite presentation"));
+
+        ParameterState adaptiveReadyState = state;
+        adaptiveReadyState.scrToImg.type = colorscreen::Dufay;
+        adaptiveReadyState.scrToImg.coordinate1 = {8, 0};
+        adaptiveReadyState.scrToImg.coordinate2 = {0, 8};
+        state = adaptiveReadyState;
+        sharpness->updateUI();
+        if (!adaptiveAnalyze->isEnabled() || !adaptiveRequirement->isHidden() ||
+            adaptiveRequirement->property("parameterApplicable").toBool())
+          return fail(QStringLiteral(
+              "Sharpness kept adaptive prerequisite after geometry became ready"));
+
+        state = initialState;
+        sharpness->updateUI();
+        if (adaptiveAnalyze->isEnabled() || adaptiveRequirement->isHidden() ||
+            !adaptiveRequirement->property("parameterApplicable").toBool())
+          return fail(QStringLiteral(
+              "Sharpness did not restore adaptive prerequisite with missing geometry"));
 
         // Live analysis makes the row applicable, but never overrides folding.
         adaptiveToggle->click();

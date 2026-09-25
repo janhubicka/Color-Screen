@@ -684,12 +684,29 @@ void SharpnessPanel::setupUi() {
   addSeparator("Adaptive sharpening",
                QStringLiteral("sharpness.adaptive"));
   
-  addButtonParameter("", tr("Analyze displacements"),
+  QPushButton *analyzeDisplacements = addButtonParameter(
+      "", tr("Analyze displacements"),
       [this]() { onAnalyzeDisplacements(); },
       [](const ParameterState &s) {
         return colorscreen::screen_geometry_configured_p(s.scrToImg);
       },
       tr("Run adaptive sharpening analysis after screen geometry has been established."));
+  analyzeDisplacements->setObjectName(
+      QStringLiteral("SharpnessAnalyzeDisplacementsButton"));
+
+  QLabel *adaptiveRequirement = new QLabel(
+      tr("Fit screen geometry before adaptive sharpening analysis."), this);
+  adaptiveRequirement->setObjectName(
+      QStringLiteral("SharpnessAdaptiveRequirement"));
+  adaptiveRequirement->setWordWrap(true);
+  if (m_currentGroupForm)
+    m_currentGroupForm->addRow(tr("Requirement:"), adaptiveRequirement);
+  else
+    m_form->addRow(tr("Requirement:"), adaptiveRequirement);
+  setParameterApplicability(
+      adaptiveRequirement, [](const ParameterState &state) {
+        return !colorscreen::screen_geometry_configured_p(state.scrToImg);
+      });
 
   QPushButton *clearAdaptiveCorrection = addButtonParameter(
       "", tr("Clear adaptive correction"),

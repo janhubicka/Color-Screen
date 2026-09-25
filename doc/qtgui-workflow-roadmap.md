@@ -550,7 +550,9 @@ specialist stages.
   action resolved through that stage's stable semantic key. Choice points,
   toolbar-only actions, file loading, and running operations remain text-only;
 - standardize operation wording: Detect, Measure, Fit, Optimize, Reset;
-- make prerequisites visible;
+- make prerequisites visible. Profile optimization and Adaptive sharpening now
+  use local fold-aware **Requirement** rows for their main gating conditions,
+  instead of leaving a disabled operation unexplained;
 - add explicit stale/result states where analyses depend on changing inputs.
 
 ### Phase C — module grammar
