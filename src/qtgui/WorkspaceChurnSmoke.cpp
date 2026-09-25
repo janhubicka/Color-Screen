@@ -678,6 +678,45 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
             return;
           }
 
+          // Negative captures must advertise the positive-conversion state in
+          // the persistent Process line. Before conversion, Contact copy is the
+          // unambiguous next stage; after enabling it, Workflow continues into
+          // the ordinary RGB reconstruction choice without losing context.
+          auto rgbNegative = std::make_shared<colorscreen::image_data>();
+          if (!rgbNegative->set_dimensions(4, 4, true, false)) {
+            fail(QStringLiteral(
+                "Workspace churn could not allocate negative Workflow fixture"));
+            return;
+          }
+          resetWorkflowProbe();
+          first->m_scan = rgbNegative;
+          first->m_rparams.capture_type =
+              colorscreen::render_parameters::capture_negative_with_screen;
+          first->m_scrToImgParams.type = colorscreen::Paget;
+          first->updateWorkflowSummary();
+          if (!processSummary->text().contains(
+                  QStringLiteral("positive conversion off")) ||
+              !nextStepSummary->text().contains(
+                  QStringLiteral("enable Contact copy simulation")) ||
+              openWorkflowStageButton->property("targetPanelKey").toString() !=
+                  QStringLiteral("contact_copy")) {
+            fail(QStringLiteral(
+                "Workflow did not prioritize positive conversion for RGB negative"));
+            return;
+          }
+
+          first->m_rparams.contact_copy.simulate = true;
+          first->updateWorkflowSummary();
+          if (!processSummary->text().contains(
+                  QStringLiteral("positive conversion active")) ||
+              !nextStepSummary->text().contains(
+                  QStringLiteral("auto-detected screen filter")) ||
+              !openWorkflowStageButton->isHidden()) {
+            fail(QStringLiteral(
+                "Workflow did not hand converted RGB negative into reconstruction"));
+            return;
+          }
+
           first->m_scan = savedScan;
           first->m_rparams = savedRParams;
           first->m_scrToImgParams = savedGeometry;

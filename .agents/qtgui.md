@@ -11,7 +11,10 @@ application shell when documents are attached.
 
 The persistent Workflow summary is derived presentation state. Alongside
 Process, Registration, Sharpening/MTF and Profile it reports the active
-**Image layer**. A real scalar capture plane is shown as native grayscale/IR
+**Image layer**.
+ For negative capture types, the Process line also reports whether the
+Contact-copy positive conversion is off or active; derive that directly from
+`render_parameters::contact_copy.simulate`, never from a second GUI flag. A real scalar capture plane is shown as native grayscale/IR
 (with its captured wavelength when known); otherwise show the simulated RGB
 weights and whether nonzero dark offsets are configured. Derive this only from
 the current `image_data` capabilities and `render_parameters`; never cache a

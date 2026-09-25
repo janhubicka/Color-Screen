@@ -542,7 +542,10 @@ specialist stages.
 - add stage labels and one-line process/image-layer/geometry/MTF/profile
   summaries. The persistent Workflow card reports the actual scalar
   analysis/reconstruction source as native grayscale/IR (with wavelength when
-  known) or the active simulated RGB mix. When a `Next:` recommendation names
+  known) or the active simulated RGB mix.
+  Negative captures also report whether Contact-copy positive conversion is
+  still off or already active, so the persistent state line agrees with the
+  next-step handoff into the simulated darkroom. When a `Next:` recommendation names
   one unambiguous inspector stage, the card also offers a compact **Open stage**
   action resolved through that stage's stable semantic key. Choice points,
   toolbar-only actions, file loading, and running operations remain text-only;
