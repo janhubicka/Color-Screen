@@ -299,6 +299,8 @@ QLabel *workflowStages =
     inspector->findChild<QLabel *>(QStringLiteral("WorkflowStages"));
 QLabel *processSummary = inspector->findChild<QLabel *>(
     QStringLiteral("WorkflowProcessSummary"));
+QLabel *imageLayerSummary = inspector->findChild<QLabel *>(
+    QStringLiteral("WorkflowImageLayerSummary"));
 QLabel *registrationSummary = inspector->findChild<QLabel *>(
     QStringLiteral("WorkflowRegistrationSummary"));
 QLabel *calibrationSummary = inspector->findChild<QLabel *>(
@@ -500,11 +502,26 @@ if (!profileOptimizeButton || !mtfMeasureButton ||
   return;
 }
 
+const bool expectedNativeImageLayer =
+    first->sharedImageData()->has_grayscale_or_ir() &&
+    (!first->sharedImageData()->has_rgb() ||
+     !first->documentStateSnapshot().rparams.ignore_infrared);
+const bool imageLayerSummaryMatches =
+    imageLayerSummary &&
+    imageLayerSummary->text().startsWith(QStringLiteral("Image layer:")) &&
+    (expectedNativeImageLayer
+         ? imageLayerSummary->text().contains(
+               QStringLiteral("native grayscale/IR"))
+         : (!first->sharedImageData()->has_rgb() ||
+            imageLayerSummary->text().contains(QStringLiteral("simulated RGB"))));
+
 if (!workflowSummary || !workflowToggle || !workflowStages ||
-    !processSummary || !registrationSummary || !calibrationSummary ||
-    !profileSummary || !nextStepSummary || !captureTypeCombo ||
+    !processSummary || !imageLayerSummary || !registrationSummary ||
+    !calibrationSummary || !profileSummary || !nextStepSummary ||
+    !captureTypeCombo || !imageLayerSummaryMatches ||
     !workflowStages->text().contains(QStringLiteral("Capture")) ||
     !workflowStages->text().contains(QStringLiteral("Sharpen")) ||
+    !workflowStages->text().contains(QStringLiteral("Image layer")) ||
     !workflowStages->text().contains(QStringLiteral("Register")) ||
     !processSummary->text().startsWith(QStringLiteral("Process:")) ||
     !registrationSummary->text().startsWith(
@@ -525,18 +542,22 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
     captureTypeCombo->findData(
         (int)colorscreen::render_parameters::capture_plain_image) < 0 ||
     processSummary->font().weight() < QFont::DemiBold ||
+    imageLayerSummary->font().weight() < QFont::DemiBold ||
     registrationSummary->font().weight() < QFont::DemiBold ||
     calibrationSummary->font().weight() < QFont::DemiBold ||
     profileSummary->font().weight() < QFont::DemiBold) {
   const QString detail = QStringLiteral(
       "Workspace churn source document lost the persistent workflow "
-      "summary; stages=[%1], process=[%2], registration=[%3], "
-      "calibration=[%4], next=[%5]")
+      "summary; stages=[%1], process=[%2], image-layer=[%3], "
+      "registration=[%4], calibration=[%5], next=[%6]")
                              .arg(workflowStages
                                       ? workflowStages->text()
                                       : QStringLiteral("<missing>"),
                                   processSummary
                                       ? processSummary->text()
+                                      : QStringLiteral("<missing>"),
+                                  imageLayerSummary
+                                      ? imageLayerSummary->text()
                                       : QStringLiteral("<missing>"),
                                   registrationSummary
                                       ? registrationSummary->text()
@@ -558,7 +579,9 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
                  widget->minimumWidth() == 0;
         };
         if (!documentMainSplitter ||
+            !ignoresHorizontalHint(workflowStages) ||
             !ignoresHorizontalHint(processSummary) ||
+            !ignoresHorizontalHint(imageLayerSummary) ||
             !ignoresHorizontalHint(registrationSummary) ||
             !ignoresHorizontalHint(calibrationSummary) ||
             !ignoresHorizontalHint(profileSummary) ||

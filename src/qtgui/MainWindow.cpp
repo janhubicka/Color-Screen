@@ -572,10 +572,14 @@ void MainWindow::setupUi() {
   workflowLayout->addWidget(workflowToggle);
 
   auto *workflowStages = new QLabel(
-      tr("Capture › Sharpen › Process › Register › Reconstruct › Color"),
+      tr("Capture › Sharpen › Image layer › Process › Register › Reconstruct › Color"),
       workflowSummary);
   workflowStages->setObjectName(QStringLiteral("WorkflowStages"));
-  workflowStages->setWordWrap(false);
+  workflowStages->setWordWrap(true);
+  QSizePolicy workflowStagesPolicy = workflowStages->sizePolicy();
+  workflowStagesPolicy.setHorizontalPolicy(QSizePolicy::Ignored);
+  workflowStages->setSizePolicy(workflowStagesPolicy);
+  workflowStages->setMinimumWidth(0);
   QFont workflowStageFont = workflowStages->font();
   if (workflowStageFont.pointSizeF() > 1.0)
     workflowStageFont.setPointSizeF(workflowStageFont.pointSizeF() - 1.0);
@@ -600,6 +604,15 @@ void MainWindow::setupUi() {
       QStringLiteral("WorkflowProcessSummary"));
   configureDynamicWorkflowLabel(m_workflowProcessLabel);
   workflowLayout->addWidget(m_workflowProcessLabel);
+
+  m_workflowImageLayerLabel = new QLabel(workflowSummary);
+  m_workflowImageLayerLabel->setObjectName(
+      QStringLiteral("WorkflowImageLayerSummary"));
+  configureDynamicWorkflowLabel(m_workflowImageLayerLabel);
+  m_workflowImageLayerLabel->setToolTip(tr(
+      "Scalar analysis/reconstruction image source. Native grayscale/infrared "
+      "uses the captured scalar plane; simulated RGB uses the Image Layer mix."));
+  workflowLayout->addWidget(m_workflowImageLayerLabel);
 
   m_workflowRegistrationLabel = new QLabel(workflowSummary);
   m_workflowRegistrationLabel->setObjectName(
@@ -632,6 +645,7 @@ void MainWindow::setupUi() {
   if (workflowSectionFont.pointSizeF() > 1.0)
     workflowSectionFont.setPointSizeF(workflowSectionFont.pointSizeF() - 0.5);
   m_workflowProcessLabel->setFont(workflowSectionFont);
+  m_workflowImageLayerLabel->setFont(workflowSectionFont);
   m_workflowRegistrationLabel->setFont(workflowSectionFont);
   m_workflowCalibrationLabel->setFont(workflowSectionFont);
   m_workflowProfileLabel->setFont(workflowSectionFont);
@@ -652,6 +666,7 @@ void MainWindow::setupUi() {
         workflowToggle->setArrowType(expanded ? Qt::DownArrow : Qt::RightArrow);
         workflowStages->setVisible(expanded);
         m_workflowProcessLabel->setVisible(expanded);
+        m_workflowImageLayerLabel->setVisible(expanded);
         m_workflowRegistrationLabel->setVisible(expanded);
         m_workflowCalibrationLabel->setVisible(expanded);
         m_workflowProfileLabel->setVisible(
@@ -2928,9 +2943,9 @@ void MainWindow::updateWorkflowSummary() {
   cancelStaleAdaptiveSharpening(currentState);
   cancelStaleRegistrationDiscovery(currentState);
 
-  if (!m_workflowProcessLabel || !m_workflowRegistrationLabel ||
-      !m_workflowCalibrationLabel || !m_workflowProfileLabel ||
-      !m_workflowNextStepLabel)
+  if (!m_workflowProcessLabel || !m_workflowImageLayerLabel ||
+      !m_workflowRegistrationLabel || !m_workflowCalibrationLabel ||
+      !m_workflowProfileLabel || !m_workflowNextStepLabel)
     return;
 
   const bool pendingNonlinearModeChanged =
@@ -3011,6 +3026,34 @@ void MainWindow::updateWorkflowSummary() {
     m_workflowProcessLabel->setText(
         tr("Process: %1 • %2").arg(captureName, screenName));
   }
+
+  QString imageLayerSummary;
+  if (!m_scan) {
+    imageLayerSummary = tr("Image layer: load an image to choose source");
+  } else {
+    const bool nativeScalar =
+        m_scan->has_grayscale_or_ir() &&
+        (!m_scan->has_rgb() || !m_rparams.ignore_infrared);
+    if (nativeScalar) {
+      imageLayerSummary = tr("Image layer: native grayscale/IR channel");
+      const double wavelength = m_scan->wavelengths[3];
+      if (colorscreen::my_isfinite(wavelength) && wavelength > 0)
+        imageLayerSummary +=
+            tr(" • %1 nm").arg(wavelength, 0, 'f', 0);
+    } else if (m_scan->has_rgb()) {
+      imageLayerSummary =
+          tr("Image layer: simulated RGB — %1 R + %2 G + %3 B")
+              .arg(m_rparams.mix_red, 0, 'f', 2)
+              .arg(m_rparams.mix_green, 0, 'f', 2)
+              .arg(m_rparams.mix_blue, 0, 'f', 2);
+      if (m_rparams.mix_dark.red != 0 || m_rparams.mix_dark.green != 0 ||
+          m_rparams.mix_dark.blue != 0)
+        imageLayerSummary += tr(" • dark offsets set");
+    } else {
+      imageLayerSummary = tr("Image layer: unavailable");
+    }
+  }
+  m_workflowImageLayerLabel->setText(imageLayerSummary);
 
   QString registration;
   qsizetype pointCount = static_cast<qsizetype>(m_solverParams.n_points());

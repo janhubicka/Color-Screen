@@ -9,6 +9,16 @@ Each document window (`MainWindow`) integrates the image view and functional
 panels and is a frontend for `libcolorscreen`; `WorkspaceWindow` is the shared
 application shell when documents are attached.
 
+The persistent Workflow summary is derived presentation state. Alongside
+Process, Registration, Sharpening/MTF and Profile it reports the active
+**Image layer**. A real scalar capture plane is shown as native grayscale/IR
+(with its captured wavelength when known); otherwise show the simulated RGB
+weights and whether nonzero dark offsets are configured. Derive this only from
+the current `image_data` capabilities and `render_parameters`; never cache a
+second authoritative image-layer choice in the GUI. Dynamic Workflow labels
+must keep the horizontal `QSizePolicy::Ignored` contract so changing text
+cannot move the main image/inspector splitter.
+
 The application is essentially a special-purpose non-destructive image editor.
 It uses Qt's standard multiple-document model. `ColorScreenApplication` owns
 the document objects, `WorkspaceWindow` provides the application shell and a
