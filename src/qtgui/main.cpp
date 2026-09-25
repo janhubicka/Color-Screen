@@ -1538,7 +1538,8 @@ bool renderDialogOutputSummarySmoke() {
 
   colorscreen::render_type_parameters renderType;
   colorscreen::render_parameters render;
-  render.scan_crop = colorscreen::int_image_area(2, 3, 20, 10);
+  render.scan_crop = colorscreen::int_optional_image_area(
+      colorscreen::int_image_area(2, 3, 20, 10));
   colorscreen::scr_to_img_parameters geometry;
 
   RenderDialog tiff(renderType, render, geometry, scan.get(), existingTiff,
