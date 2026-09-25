@@ -761,6 +761,12 @@ precise numeric entry.
 2. **Responsiveness**: Always use background workers for any task taking > 50ms.
 3. **Helpfulness**: Always provide tooltips for parameters using the `tooltip` argument in `ParameterPanel` helpers.
 4. **Validation**: Use `enabledCheck` when a control should stay visible but temporarily unavailable because a prerequisite is missing. This is now uniform across sliders, enums, buttons, and both checkbox helpers. Use `setParameterApplicability()` when the control's concept does not apply to the current image/process; do not reintroduce checkbox-specific hide-on-disable behavior. For rows inside `addSeparator()` sections, never repair logical visibility with a direct `setVisible()` plus a section-toggle callback; section folding must compose with applicability automatically. The section `QGroupBox` itself is also a form row and may be passed to `setParameterApplicability()` when the whole section is conditional; hiding it this way preserves its independent expanded/collapsed state.
+5. **Operation prerequisites**: When a primary operation's disabled state is not
+   self-explanatory, pair its `enabledCheck` with a local fold-aware
+   **Requirement** row rather than relying only on a tooltip. Profile
+   optimization and Sharpness Adaptive sharpening are the reference examples:
+   the Requirement row states the missing condition and becomes inapplicable
+   once the operation is ready.
 
 ---
 
