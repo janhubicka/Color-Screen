@@ -1529,6 +1529,46 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         const bool savedRegistrationVisibility =
             first->m_imageWidget->registrationPointsVisible();
 
+        // An RGB capture with recorded screen colours has two valid
+        // reconstruction paths. Geometry must not be presented as a mandatory
+        // prerequisite before the user has chosen the lattice-based route.
+        if (!first->sharedImageData() || !first->sharedImageData()->has_rgb()) {
+          fail(QStringLiteral(
+              "Workspace churn RGB reconstruction probe lost its RGB fixture"));
+          return;
+        }
+        ParameterState rgbNoGeometry = workflowBaseline;
+        rgbNoGeometry.rparams.capture_type =
+            colorscreen::render_parameters::capture_transparency_with_screen;
+        rgbNoGeometry.scrToImg.type = colorscreen::Paget;
+        rgbNoGeometry.scrToImg.center = {0, 0};
+        rgbNoGeometry.scrToImg.coordinate1 = {0, 0};
+        rgbNoGeometry.scrToImg.coordinate2 = {0, 0};
+        rgbNoGeometry.solver.points.clear();
+        first->applyState(rgbNoGeometry);
+        first->m_geometryFit.clear();
+        first->m_renderTypeParams.type = colorscreen::render_type_original;
+        first->updateWorkflowSummary();
+        if (!nextStepSummary->text().contains(
+                QStringLiteral("auto-detected screen filter")) ||
+            nextStepSummary->text().contains(
+                QStringLiteral("Geometry — detect screen coordinates"))) {
+          fail(QStringLiteral(
+              "Workflow forced Geometry before offering RGB screen-colour reconstruction"));
+          return;
+        }
+
+        first->m_renderTypeParams.type = colorscreen::render_type_realistic_scr;
+        first->updateWorkflowSummary();
+        if (!nextStepSummary->text().contains(
+                QStringLiteral("screen-colour detection is selected")) ||
+            !nextStepSummary->text().contains(
+                QStringLiteral("Geometry is optional"))) {
+          fail(QStringLiteral(
+              "Workflow did not recognize selected geometry-free RGB reconstruction"));
+          return;
+        }
+
         ParameterState workflowReady = workflowBaseline;
         workflowReady.rparams.capture_type =
             colorscreen::render_parameters::capture_transparency;
