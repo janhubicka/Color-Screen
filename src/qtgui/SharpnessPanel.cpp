@@ -384,8 +384,10 @@ void SharpnessPanel::setupUi() {
   m_measureMtfBtn = addToggleButtonParameter(
       "", tr("Measure MTF from edge"), [this](bool checked) {
         emit measureMtfRequested(checked);
-      }, nullptr, nullptr,
-      tr("Select an area containing a slanted edge to compute its MTF."));
+      }, nullptr,
+      [this](const ParameterState &) { return m_imageGetter() != nullptr; },
+      tr("Select an area containing a slanted edge in the loaded image to "
+         "compute its MTF."));
   m_measureMtfBtn->setObjectName(QStringLiteral("MtfMeasureButton"));
 
   // Add the explicit model-fitting dialog when measured data is available.

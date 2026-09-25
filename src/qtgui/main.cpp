@@ -421,6 +421,8 @@ bool colorSectionPreferencesSmoke() {
   auto setState = [&documentEdits](const ParameterState &, const QString &,
                                   const QString &) { ++documentEdits; };
   auto noImage = []() { return std::shared_ptr<colorscreen::image_data>(); };
+  std::shared_ptr<colorscreen::image_data> captureImage;
+  auto getCaptureImage = [&captureImage]() { return captureImage; };
   std::shared_ptr<colorscreen::image_data> sharpnessImage;
   auto getSharpnessImage = [&sharpnessImage]() { return sharpnessImage; };
 
@@ -512,7 +514,7 @@ bool colorSectionPreferencesSmoke() {
         QStringLiteral("capture.corrections")},
        [&]() {
          return std::make_unique<CapturePanel>(
-             getState, setState, noImage, []() {});
+             getState, setState, getCaptureImage, []() {});
        }},
       {{QStringLiteral("sharpness.capture"),
         QStringLiteral("sharpness.measurements"),
@@ -593,6 +595,29 @@ bool colorSectionPreferencesSmoke() {
                           .arg(key));
       }
 
+      if (auto *capture = qobject_cast<CapturePanel *>(second.get())) {
+        auto *measureResolution = capture->findChild<QPushButton *>(
+            QStringLiteral("CaptureMeasureResolutionButton"));
+        auto *cropButton = capture->findChild<QPushButton *>(
+            QStringLiteral("CaptureCropButton"));
+        if (!measureResolution || !cropButton || measureResolution->isEnabled() ||
+            cropButton->isEnabled())
+          return fail(QStringLiteral(
+              "Digital Capture image actions were enabled without an image"));
+
+        captureImage = std::make_shared<colorscreen::image_data>();
+        capture->updateUI();
+        if (!measureResolution->isEnabled() || !cropButton->isEnabled())
+          return fail(QStringLiteral(
+              "Digital Capture image actions stayed disabled after image load"));
+
+        captureImage.reset();
+        capture->updateUI();
+        if (measureResolution->isEnabled() || cropButton->isEnabled())
+          return fail(QStringLiteral(
+              "Digital Capture image actions did not follow image lifetime"));
+      }
+
       if (auto *color = qobject_cast<ColorPanel *>(second.get())) {
         auto *finalGroup = groupFor(*color, QStringLiteral("color.final"));
         auto *curve = color->findChild<ToneCurveWidget *>(
@@ -635,6 +660,12 @@ bool colorSectionPreferencesSmoke() {
         focusToggle->setChecked(true);
         sharpness->updateUI();
 
+        auto *measureMtf = sharpness->findChild<QPushButton *>(
+            QStringLiteral("MtfMeasureButton"));
+        if (!measureMtf || measureMtf->isEnabled())
+          return fail(QStringLiteral(
+              "Sharpness MTF measurement was enabled without an image"));
+
         auto *focusAnalyze = sharpness->findChild<QPushButton *>(
             QStringLiteral("SharpnessAnalyzeFocusAreaButton"));
         auto *findFocusAreas = sharpness->findChild<QPushButton *>(
@@ -656,16 +687,16 @@ bool colorSectionPreferencesSmoke() {
         focusReadyState.scrToImg.coordinate2 = {0, 8};
         state = focusReadyState;
         sharpness->updateUI();
-        if (!focusAnalyze->isEnabled() || !findFocusAreas->isEnabled() ||
-            !focusRequirement->isHidden() ||
+        if (!measureMtf->isEnabled() || !focusAnalyze->isEnabled() ||
+            !findFocusAreas->isEnabled() || !focusRequirement->isHidden() ||
             focusRequirement->property("parameterApplicable").toBool())
           return fail(QStringLiteral(
               "Sharpness kept Focus analyzer prerequisite after image/geometry became ready"));
 
         state = initialState;
         sharpness->updateUI();
-        if (focusAnalyze->isEnabled() || findFocusAreas->isEnabled() ||
-            focusRequirement->isHidden() ||
+        if (!measureMtf->isEnabled() || focusAnalyze->isEnabled() ||
+            findFocusAreas->isEnabled() || focusRequirement->isHidden() ||
             !focusRequirement->property("parameterApplicable").toBool() ||
             !focusRequirement->text().contains(
                 QStringLiteral("Fit screen geometry")))
@@ -674,9 +705,10 @@ bool colorSectionPreferencesSmoke() {
 
         sharpnessImage.reset();
         sharpness->updateUI();
-        if (!focusRequirement->text().contains(QStringLiteral("Load an image")))
+        if (measureMtf->isEnabled() ||
+            !focusRequirement->text().contains(QStringLiteral("Load an image")))
           return fail(QStringLiteral(
-              "Sharpness did not restore no-image Focus analyzer prerequisite"));
+              "Sharpness did not restore no-image interaction prerequisites"));
 
         auto *adaptiveToggle =
             toggleFor(*sharpness, QStringLiteral("sharpness.adaptive"));

@@ -253,7 +253,13 @@ void CapturePanel::setupUi()
         "Scanner or camera resolution in Pixels Per Inch (PPI). Crucial for MTF-based sharpening.",
         QStringLiteral("capture.mtf.scan_dpi"), true);
     
-    addButtonParameter("Resolution", "Measure", [this]() { emit measureRequested(); });
+    QPushButton *measureResolution = addButtonParameter(
+        "Resolution", "Measure", [this]() { emit measureRequested(); },
+        [this](const ParameterState &) { return m_imageGetter() != nullptr; },
+        tr("Measure a known distance in the loaded image to calculate capture "
+           "resolution."));
+    measureResolution->setObjectName(
+        QStringLiteral("CaptureMeasureResolutionButton"));
 
     // 4. Image resolution (Label) + Use
     addValueWithUseButton("Image resolution", &m_imageResolutionValue, &m_useImageResBtn, [this, onUseRes]() {
@@ -800,7 +806,10 @@ void CapturePanel::setupUi()
     
     m_cropBtn = addToggleButtonParameter(
         "Crop image", "Change crop",
-        [this](bool) { emit cropRequested(); });
+        [this](bool) { emit cropRequested(); }, nullptr,
+        [this](const ParameterState &) { return m_imageGetter() != nullptr; },
+        tr("Select or replace the crop on the loaded image."));
+    m_cropBtn->setObjectName(QStringLiteral("CaptureCropButton"));
     
     // Initial update
     updateInfoLabels(m_stateGetter());

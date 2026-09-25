@@ -555,7 +555,9 @@ specialist stages.
   gating conditions. Focus analyzer distinguishes a missing image from missing
   screen geometry, and both **Analyze area** and **Find focus areas** share the
   same readiness rule instead of leaving disabled or no-op operations
-  unexplained;
+  unexplained. Obvious image interactions (Digital Capture Measure/Crop and
+  Sharpness Measure MTF) simply stay disabled until a scan exists, with
+  defensive handler guards as a second line of protection;
 - add explicit stale/result states where analyses depend on changing inputs.
 
 ### Phase C — module grammar
