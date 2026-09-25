@@ -1115,9 +1115,10 @@ bool profileSectionPreferencesSmoke() {
   auto setState = [&](const ParameterState &, const QString &, const QString &) {
     ++documentEdits;
   };
-  auto noImage = []() { return std::shared_ptr<colorscreen::image_data>(); };
+  std::shared_ptr<colorscreen::image_data> image;
+  auto getImage = [&]() { return image; };
   auto createPanel = [&]() {
-    auto panel = std::make_unique<ProfilePanel>(getState, setState, noImage);
+    auto panel = std::make_unique<ProfilePanel>(getState, setState, getImage);
     QObject::connect(panel.get(), &ProfilePanel::optimizeColorRequested,
                      panel.get(), [&](bool) { ++optimizeRequests; });
     QObject::connect(panel.get(), &ProfilePanel::addSpotModeRequested,
@@ -1161,14 +1162,18 @@ bool profileSectionPreferencesSmoke() {
         panel.findChild<QCheckBox *>(QStringLiteral("ProfileShowSpotsCheck"));
     auto *optimize =
         panel.findChild<QPushButton *>(QStringLiteral("ProfileOptimizeButton"));
+    auto *prerequisite = panel.findChild<QLabel *>(
+        QStringLiteral("ProfileOptimizationPrerequisite"));
     auto *status =
         panel.findChild<QLabel *>(QStringLiteral("ProfileCalibrationStatus"));
     auto *quality =
         panel.findChild<QLabel *>(QStringLiteral("ProfileCalibrationQuality"));
     if (!spots || !optimization || !spotCount || !showSpots || !optimize
-        || !status || !quality || !spots->isAncestorOf(spotCount)
+        || !prerequisite || !status || !quality
+        || !spots->isAncestorOf(spotCount)
         || !spots->isAncestorOf(showSpots)
         || !optimization->isAncestorOf(optimize)
+        || !optimization->isAncestorOf(prerequisite)
         || !optimization->isAncestorOf(status)
         || !optimization->isAncestorOf(quality))
       return fail(QStringLiteral("Profile controls escaped their sections"));
@@ -1231,6 +1236,63 @@ bool profileSectionPreferencesSmoke() {
   if (!reopenedSpots || !reopenedOptimization || reopenedSpots->isChecked()
       || reopenedOptimization->isChecked())
     return fail(QStringLiteral("Profile fold preferences were not restored"));
+
+  // Profile provenance and prerequisites are distinct. Exercise the local
+  // guidance through no image, no geometry, insufficient spots, and ready.
+  firstOptimization->setChecked(true);
+  firstSpots->setChecked(true);
+  first->updateUI();
+  auto *prerequisite = first->findChild<QLabel *>(
+      QStringLiteral("ProfileOptimizationPrerequisite"));
+  auto *addSpot = first->findChild<QPushButton *>(
+      QStringLiteral("ProfileAddSpotButton"));
+  auto *clearSpots = first->findChild<QPushButton *>(
+      QStringLiteral("ProfileClearSpotsButton"));
+  auto *autoOptimize =
+      first->findChild<QCheckBox *>(QStringLiteral("autoColorOptBox"));
+  auto *optimize = first->findChild<QPushButton *>(
+      QStringLiteral("ProfileOptimizeButton"));
+  if (!prerequisite || !addSpot || !clearSpots || !autoOptimize || !optimize
+      || !prerequisite->text().contains(QStringLiteral("Load an image"))
+      || addSpot->isEnabled() || clearSpots->isEnabled()
+      || autoOptimize->isEnabled() || optimize->isEnabled())
+    return fail(QStringLiteral(
+        "Profile did not explain the missing-image prerequisite"));
+
+  image = std::make_shared<colorscreen::image_data>();
+  const auto configuredCoordinate1 = state.scrToImg.coordinate1;
+  const auto configuredCoordinate2 = state.scrToImg.coordinate2;
+  state.scrToImg.coordinate1 = {0, 0};
+  state.scrToImg.coordinate2 = {0, 0};
+  first->updateUI();
+  if (!prerequisite->text().contains(QStringLiteral("Fit screen geometry"))
+      || addSpot->isEnabled() || clearSpots->isEnabled()
+      || autoOptimize->isEnabled() || optimize->isEnabled())
+    return fail(QStringLiteral(
+        "Profile did not explain the missing-geometry prerequisite"));
+
+  state.scrToImg.coordinate1 = configuredCoordinate1;
+  state.scrToImg.coordinate2 = configuredCoordinate2;
+  state.profileSpots = {{1, 1}, {2, 2}, {3, 3}};
+  first->updateUI();
+  if (!prerequisite->text().contains(QStringLiteral("Add 1 more profile spot"))
+      || !addSpot->isEnabled() || !clearSpots->isEnabled()
+      || !autoOptimize->isEnabled() || optimize->isEnabled())
+    return fail(QStringLiteral(
+        "Profile did not explain the minimum-spot prerequisite"));
+
+  state.profileSpots.push_back({4, 4});
+  first->updateUI();
+  if (prerequisite->property("parameterApplicable").toBool()
+      || !prerequisite->isHidden() || !addSpot->isEnabled()
+      || !clearSpots->isEnabled() || !autoOptimize->isEnabled()
+      || !optimize->isEnabled())
+    return fail(QStringLiteral(
+        "Profile prerequisite did not disappear when optimization became ready"));
+
+  state = initialState;
+  image.reset();
+  first->updateUI();
 
   if (documentEdits != 0 || optimizeRequests != 0 || addSpotRequests != 0
       || state != initialState)

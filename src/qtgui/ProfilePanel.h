@@ -36,8 +36,10 @@ private:
   QCheckBox *m_showProfileSpotsCheck = nullptr;
   QLabel    *m_spotCountLabel        = nullptr;
   QPushButton *m_addSpotBtn          = nullptr;  // toggleable
+  QPushButton *m_clearSpotsBtn        = nullptr;
   QCheckBox *m_autoCheck             = nullptr;
   QPushButton *m_optimizeBtn         = nullptr;
+  QLabel    *m_prerequisiteLabel      = nullptr;
   QLabel    *m_calibrationStatusLabel = nullptr;
   QLabel    *m_resultLabel           = nullptr;
   std::vector<colorscreen::point_t> m_lastAutoSpots;
