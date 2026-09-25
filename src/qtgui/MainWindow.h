@@ -625,6 +625,7 @@ private:
   QWidget *m_rightColumn;
   NavigationView *m_navigationView;
   MultiLineTabWidget *m_configTabs;
+  QLabel *m_workflowCaptureLabel = nullptr;
   QLabel *m_workflowProcessLabel = nullptr;
   QLabel *m_workflowImageLayerLabel = nullptr;
   QLabel *m_workflowRegistrationLabel = nullptr;
