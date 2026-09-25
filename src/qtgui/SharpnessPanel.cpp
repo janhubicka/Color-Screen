@@ -613,24 +613,55 @@ void SharpnessPanel::setupUi() {
   optimizeDefocusCheck->setObjectName(
       QStringLiteral("SharpnessOptimizeDefocusCheck"));
 
-  m_analyzeAreaBtn = addToggleButtonParameter("", tr("Analyze area"), [this](bool checked) {
-    emit focusAnalysisRequested(checked, m_finetuneFlags);
-  }, nullptr, [](const ParameterState &s) {
-    return colorscreen::screen_geometry_configured_p(s.scrToImg);
-  }, "Experimental tool that attempts to find the best Focus/Sigma by analyzing the local contrast and sharpness of the selected area.");
+  auto focusAnalysisReady = [this](const ParameterState &state) {
+    return m_imageGetter() != nullptr &&
+           colorscreen::screen_geometry_configured_p(state.scrToImg);
+  };
 
-  m_findFocusAreasBtn = new QPushButton(tr("Find focus areas"), this);
-  m_findFocusAreasBtn->setObjectName(
-      QStringLiteral("SharpnessFindFocusAreasButton"));
-  m_findFocusAreasBtn->setToolTip(
+  m_analyzeAreaBtn = addToggleButtonParameter(
+      "", tr("Analyze area"),
+      [this](bool checked) {
+        emit focusAnalysisRequested(checked, m_finetuneFlags);
+      },
+      nullptr, focusAnalysisReady,
+      tr("Experimental tool that attempts to find the best Focus/Sigma by "
+         "analyzing the local contrast and sharpness of the selected area."));
+  m_analyzeAreaBtn->setObjectName(
+      QStringLiteral("SharpnessAnalyzeFocusAreaButton"));
+
+  QLabel *focusRequirement = new QLabel(this);
+  focusRequirement->setObjectName(
+      QStringLiteral("SharpnessFocusRequirement"));
+  focusRequirement->setWordWrap(true);
+  if (m_currentGroupForm)
+    m_currentGroupForm->addRow(tr("Requirement:"), focusRequirement);
+  else
+    m_form->addRow(tr("Requirement:"), focusRequirement);
+  m_paramUpdaters.push_back(
+      [this, focusRequirement](const ParameterState &state) {
+        if (!m_imageGetter()) {
+          focusRequirement->setText(
+              tr("Load an image before using the Focus analyzer."));
+        } else if (!colorscreen::screen_geometry_configured_p(state.scrToImg)) {
+          focusRequirement->setText(
+              tr("Fit screen geometry before using the Focus analyzer."));
+        } else {
+          focusRequirement->clear();
+        }
+      });
+  setParameterApplicability(
+      focusRequirement, [this](const ParameterState &state) {
+        return !m_imageGetter() ||
+               !colorscreen::screen_geometry_configured_p(state.scrToImg);
+      });
+
+  m_findFocusAreasBtn = addButtonParameter(
+      "", tr("Find focus areas"),
+      [this]() { emit findFocusAreasRequested(); }, focusAnalysisReady,
       tr("Search a linear interpolated reconstruction for locally uniform "
          "colour regions suitable for robust multi-area focus analysis."));
-  connect(m_findFocusAreasBtn, &QPushButton::clicked, this,
-          &SharpnessPanel::findFocusAreasRequested);
-  if (m_currentGroupForm)
-    m_currentGroupForm->addRow(m_findFocusAreasBtn);
-  else
-    m_form->addRow(m_findFocusAreasBtn);
+  m_findFocusAreasBtn->setObjectName(
+      QStringLiteral("SharpnessFindFocusAreasButton"));
 
   m_analyzeFocusAreasBtn =
       new QPushButton(tr("Analyze focus areas"), this);

@@ -764,9 +764,10 @@ precise numeric entry.
 5. **Operation prerequisites**: When a primary operation's disabled state is not
    self-explanatory, pair its `enabledCheck` with a local fold-aware
    **Requirement** row rather than relying only on a tooltip. Profile
-   optimization and Sharpness Adaptive sharpening are the reference examples:
-   the Requirement row states the missing condition and becomes inapplicable
-   once the operation is ready.
+   optimization plus Sharpness Focus analyzer and Adaptive sharpening are the
+   reference examples. Focus analyzer uses one shared readiness predicate for
+   both Analyze area and Find focus areas, and its Requirement row distinguishes
+   missing image data from missing geometry before disappearing when ready.
 
 ---
 
