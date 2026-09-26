@@ -689,7 +689,8 @@ void MainWindow::cancelStaleAdaptiveSharpening(
   restoreAdaptiveSharpeningChart();
   if (!m_closing)
     statusBar()->showMessage(
-        tr("Displacement analysis stopped because its inputs changed."), 3000);
+        tr("Adaptive sharpening analysis stopped because its inputs changed."),
+        3000);
 }
 
 /** Launch adaptive sharpening analysis with PARAMETERS selected by the user.
@@ -722,7 +723,7 @@ void MainWindow::onAdaptiveSharpeningRequested(
   m_adaptiveSharpening.baseline = baseline;
   m_adaptiveSharpening.scan = scan;
   m_adaptiveSharpening.progress = progress;
-  addUserVisibleProgress(progress, tr("Analyze displacements"));
+  addUserVisibleProgress(progress, tr("Adaptive sharpening analysis"));
 
   AdaptiveSharpeningWorker *worker = new AdaptiveSharpeningWorker(
       baseline.scrToImg, baseline.rparams, scan, parameters, progress);

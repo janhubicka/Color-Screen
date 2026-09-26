@@ -719,7 +719,10 @@ bool colorSectionPreferencesSmoke() {
         auto *adaptiveRequirement = sharpness->findChild<QLabel *>(
             QStringLiteral("SharpnessAdaptiveRequirement"));
         if (!adaptiveToggle || !adaptiveRow || !adaptiveAnalyze ||
-            !adaptiveRequirement || !adaptiveRow->isHidden() ||
+            !adaptiveRequirement ||
+            adaptiveAnalyze->text() !=
+                QStringLiteral("Analyze adaptive sharpening") ||
+            !adaptiveRow->isHidden() ||
             adaptiveRow->property("parameterApplicable").toBool() ||
             adaptiveAnalyze->isEnabled() || adaptiveRequirement->isHidden() ||
             !adaptiveRequirement->property("parameterApplicable").toBool())

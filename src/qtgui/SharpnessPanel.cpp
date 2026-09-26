@@ -718,7 +718,7 @@ void SharpnessPanel::setupUi() {
                QStringLiteral("sharpness.adaptive"));
   
   QPushButton *analyzeDisplacements = addButtonParameter(
-      "", tr("Analyze displacements"),
+      "", tr("Analyze adaptive sharpening"),
       [this]() { onAnalyzeDisplacements(); },
       [](const ParameterState &s) {
         return colorscreen::screen_geometry_configured_p(s.scrToImg);

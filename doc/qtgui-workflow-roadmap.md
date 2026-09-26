@@ -549,7 +549,10 @@ specialist stages.
   one unambiguous inspector stage, the card also offers a compact **Open stage**
   action resolved through that stage's stable semantic key. Choice points,
   toolbar-only actions, file loading, and running operations remain text-only;
-- standardize operation wording: Detect, Measure, Fit, Optimize, Reset;
+- standardize operation wording: Detect, Measure, Fit, Optimize, Reset.
+  Adaptive sharpening now uses that user-facing goal consistently in its
+  button, long-task progress and stale-input message; the internal displacement
+  terminology remains an implementation detail;
 - make prerequisites visible. Profile optimization, Focus analyzer, and
   Adaptive sharpening use local fold-aware **Requirement** rows for their main
   gating conditions. Focus analyzer distinguishes a missing image from missing
