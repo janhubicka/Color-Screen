@@ -366,6 +366,8 @@ QPushButton *analyzeFocusAreasButton = inspector->findChild<QPushButton *>(
     QStringLiteral("SharpnessAnalyzeFocusAreasButton"));
 QLabel *mtfCalibrationStatus = inspector->findChild<QLabel *>(
     QStringLiteral("MtfCalibrationStatus"));
+QLabel *adaptiveCorrectionStatus = inspector->findChild<QLabel *>(
+    QStringLiteral("SharpnessAdaptiveCorrectionStatus"));
 QComboBox *mtfMeasurementSelector = inspector->findChild<QComboBox *>(
     QStringLiteral("MtfMeasurementSelector"));
 QLabel *mtfMeasurementProvenance = inspector->findChild<QLabel *>(
@@ -3119,7 +3121,28 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         acceptedCorrection->set_correction(0, 1, 0.75);
         acceptedCorrection->set_correction(1, 1, 1.0);
         adaptiveBaseline.rparams.scanner_blur_correction = acceptedCorrection;
+        first->m_adaptiveSharpening.clearAccepted();
         first->applyState(adaptiveBaseline);
+        if (!adaptiveCorrectionStatus ||
+            !adaptiveCorrectionStatus->text().contains(
+                QStringLiteral("freshness not verified"))) {
+          fail(QStringLiteral(
+              "Loaded/manual adaptive correction did not show unverified freshness"));
+          return;
+        }
+
+        // Accepted analysis records the exact post-result state and source scan.
+        // It is session provenance only; the correction itself remains ordinary
+        // saved ParameterState.
+        first->m_adaptiveSharpening.acceptedBaseline = adaptiveBaseline;
+        first->m_adaptiveSharpening.acceptedScan = first->m_scan;
+        first->updateWorkflowSummary();
+        if (!adaptiveCorrectionStatus->text().contains(
+                QStringLiteral("current session analysis"))) {
+          fail(QStringLiteral(
+              "Accepted adaptive correction did not show current provenance"));
+          return;
+        }
 
         auto olderProgress =
             std::make_shared<colorscreen::progress_info>();
@@ -3166,16 +3189,29 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
             first->m_adaptiveSharpening.scan ||
             !first->m_adaptiveSharpening.progress.expired() ||
             first->adaptiveSharpeningRequestCurrent(
-                newerGeneration, newerProgress)) {
+                newerGeneration, newerProgress) ||
+            !adaptiveCorrectionStatus->text().contains(
+                QStringLiteral("stale"))) {
           fail(QStringLiteral(
-              "Document edit did not invalidate adaptive sharpening"));
+              "Document edit did not invalidate adaptive sharpening or its accepted provenance"));
           return;
         }
         first->applyState(adaptiveBaseline);
         if (first->adaptiveSharpeningRequestCurrent(
-                newerGeneration, newerProgress)) {
+                newerGeneration, newerProgress) ||
+            !adaptiveCorrectionStatus->text().contains(
+                QStringLiteral("current session analysis"))) {
           fail(QStringLiteral(
-              "Restoring inputs resurrected stale adaptive sharpening"));
+              "Restoring inputs resurrected live work or failed to restore accepted adaptive provenance"));
+          return;
+        }
+
+        first->m_adaptiveSharpening.clearAccepted();
+        first->updateWorkflowSummary();
+        if (!adaptiveCorrectionStatus->text().contains(
+                QStringLiteral("freshness not verified"))) {
+          fail(QStringLiteral(
+              "Clearing adaptive session provenance did not retain the saved correction as unverified"));
           return;
         }
 
