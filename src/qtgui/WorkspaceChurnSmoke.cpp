@@ -2351,7 +2351,8 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         const auto patchMap =
             std::make_shared<colorscreen::screen_map>(
                 colorscreen::Dufay, 0, 0, 1, 1);
-        first->publishDetectedScreenDiagnostics(patchMap);
+        first->publishDetectedScreenDiagnostics(
+            patchMap, first->m_scan, patchBaseline);
         if (first->m_detectedScreenDiagnostics.map != patchMap ||
             !first->m_detectedScreenDiagnostics.baseline ||
             first->m_detectedScreenDiagnostics.scan.lock() != first->m_scan ||
