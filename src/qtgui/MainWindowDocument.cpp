@@ -601,9 +601,7 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
         m_imageLoadPending = false;
 
         if (result.first) {
-          m_detectedScreenMap.reset();
-          if (m_detectedPatchCentersAction)
-            m_detectedPatchCentersAction->setEnabled(false);
+          clearDetectedScreenDiagnostics();
           m_scan = tempScan;
 
           if ((int)m_scan->gamma != -2 && m_scan->gamma > 0 &&
