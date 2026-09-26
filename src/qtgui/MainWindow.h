@@ -475,7 +475,9 @@ private:
 
   /** Publish one accepted automatic-detection patch map with provenance. */
   void publishDetectedScreenDiagnostics(
-      std::shared_ptr<const colorscreen::screen_map> map);
+      std::shared_ptr<const colorscreen::screen_map> map,
+      std::shared_ptr<colorscreen::image_data> scan,
+      const ParameterState &detectorInputs);
 
   /** Clear an obsolete automatic-detection patch map from every presentation. */
   void clearDetectedScreenDiagnostics();
