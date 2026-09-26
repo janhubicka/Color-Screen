@@ -1250,6 +1250,7 @@ bool MainWindow::loadParameterFile(const QString &fileName) {
   m_mtfFit.clear();
   m_colorOptimizerQueue.cancelAll();
   m_profileCalibration.clear();
+  m_adaptiveSharpening.clearAccepted();
 
   // Update UI/Renderer
   if (m_scan) {
