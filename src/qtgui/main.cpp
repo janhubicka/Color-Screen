@@ -671,13 +671,21 @@ bool colorSectionPreferencesSmoke() {
             QStringLiteral("SharpnessAnalyzeFocusAreaButton"));
         auto *findFocusAreas = sharpness->findChild<QPushButton *>(
             QStringLiteral("SharpnessFindFocusAreasButton"));
+        auto *analyzeFocusAreas = sharpness->findChild<QPushButton *>(
+            QStringLiteral("SharpnessAnalyzeFocusAreasButton"));
+        auto *focusAreaStatus = sharpness->findChild<QLabel *>(
+            QStringLiteral("SharpnessFocusAreaStatus"));
         auto *focusRequirement = sharpness->findChild<QLabel *>(
             QStringLiteral("SharpnessFocusRequirement"));
-        if (!focusAnalyze || !findFocusAreas || !focusRequirement ||
+        sharpness->setFocusAreaAnalysisState(3, false);
+        if (!focusAnalyze || !findFocusAreas || !analyzeFocusAreas ||
+            !focusAreaStatus || !focusRequirement ||
             focusAnalyze->isEnabled() || findFocusAreas->isEnabled() ||
+            analyzeFocusAreas->isEnabled() ||
             focusRequirement->isHidden() ||
             !focusRequirement->property("parameterApplicable").toBool() ||
-            !focusRequirement->text().contains(QStringLiteral("Load an image")))
+            !focusRequirement->text().contains(QStringLiteral("Load an image")) ||
+            !focusAreaStatus->text().contains(QStringLiteral("Load an image")))
           return fail(QStringLiteral(
               "Sharpness lost no-image Focus analyzer prerequisite"));
 
@@ -691,28 +699,40 @@ bool colorSectionPreferencesSmoke() {
         focusReadyState.scrToImg.coordinate2 = {0, 8};
         state = focusReadyState;
         sharpness->updateUI();
+        sharpness->setFocusAreaAnalysisState(3, false);
         if (!measureMtf->isEnabled() || !focusAnalyze->isEnabled() ||
-            !findFocusAreas->isEnabled() || !focusRequirement->isHidden() ||
+            !findFocusAreas->isEnabled() || !analyzeFocusAreas->isEnabled() ||
+            !focusRequirement->isHidden() ||
             focusRequirement->property("parameterApplicable").toBool())
           return fail(QStringLiteral(
               "Sharpness kept Focus analyzer prerequisite after image/geometry became ready"));
 
         state = initialState;
         sharpness->updateUI();
+        sharpness->setFocusAreaAnalysisState(3, false);
         if (!measureMtf->isEnabled() || focusAnalyze->isEnabled() ||
-            findFocusAreas->isEnabled() || focusRequirement->isHidden() ||
+            findFocusAreas->isEnabled() || analyzeFocusAreas->isEnabled() ||
+            focusRequirement->isHidden() ||
             !focusRequirement->property("parameterApplicable").toBool() ||
             !focusRequirement->text().contains(
+                QStringLiteral("Fit screen geometry")) ||
+            !focusAreaStatus->text().contains(
                 QStringLiteral("Fit screen geometry")))
           return fail(QStringLiteral(
               "Sharpness did not explain missing geometry for Focus analyzer"));
 
+        // Saved geometry alone must not let dynamic candidate state re-enable
+        // focus operations after the source image disappears.
+        state = focusReadyState;
         sharpnessImage.reset();
         sharpness->updateUI();
-        if (measureMtf->isEnabled() ||
-            !focusRequirement->text().contains(QStringLiteral("Load an image")))
+        sharpness->setFocusAreaAnalysisState(3, false);
+        if (measureMtf->isEnabled() || findFocusAreas->isEnabled() ||
+            analyzeFocusAreas->isEnabled() ||
+            !focusRequirement->text().contains(QStringLiteral("Load an image")) ||
+            !focusAreaStatus->text().contains(QStringLiteral("Load an image")))
           return fail(QStringLiteral(
-              "Sharpness did not restore no-image interaction prerequisites"));
+              "Sharpness dynamic focus state bypassed no-image prerequisites"));
 
         auto *adaptiveToggle =
             toggleFor(*sharpness, QStringLiteral("sharpness.adaptive"));
