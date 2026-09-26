@@ -39,7 +39,8 @@
 /** Return the display name of TYPE when it is a concrete known screen. */
 static QString detectionScreenName(colorscreen::scr_type type) {
   const int index = static_cast<int>(type);
-  if (index < 0 || index >= colorscreen::max_scr_type ||
+  if (!colorscreen::screen_has_regular_geometry_p(type) || index < 0 ||
+      index >= colorscreen::max_scr_type ||
       !colorscreen::scr_names[index].pretty_name)
     return QString();
   return QString::fromUtf8(colorscreen::scr_names[index].pretty_name);
