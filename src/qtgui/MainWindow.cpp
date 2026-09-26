@@ -4854,18 +4854,27 @@ void MainWindow::clearFocusAreaAnalysis(const QString &summary) {
   m_focusAreaAnalysis.result = colorscreen::finetune_focus_analysis_result();
   m_focusAreaAnalysis.baseline.reset();
   m_focusAreaAnalysis.scan.reset();
+  m_focusAreaAnalysis.statusSummary = summary;
   updateFocusAreaOverlays();
   if (m_sharpnessPanel)
     m_sharpnessPanel->setFocusAreaAnalysisState(
         0, m_focusAreaAnalysis.running, summary);
 }
 
-/** Finish a focus-area request without overwriting its accepted result summary. */
+/** Finish a focus-area request without hiding a newer invalidation reason. */
 void MainWindow::finishFocusAreaOperation(const QString &summary) {
   m_focusAreaAnalysis.running = false;
+  QString effectiveSummary = summary;
+  if (!m_focusAreaAnalysis.baseline &&
+      !m_focusAreaAnalysis.statusSummary.isEmpty()) {
+    effectiveSummary = m_focusAreaAnalysis.statusSummary;
+  } else {
+    m_focusAreaAnalysis.statusSummary = summary;
+  }
   if (m_sharpnessPanel)
     m_sharpnessPanel->setFocusAreaAnalysisState(
-        static_cast<int>(m_focusAreaAnalysis.candidates.size()), false, summary);
+        static_cast<int>(m_focusAreaAnalysis.candidates.size()), false,
+        effectiveSummary);
 }
 
 /** Find uniform areas under the shared final-result snapshot/publication rules. */
