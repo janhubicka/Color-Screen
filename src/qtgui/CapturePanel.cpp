@@ -780,18 +780,13 @@ void CapturePanel::setupUi()
     addButtonParameter("Flat field", "Set reference",
                        [this]() { emit flatFieldRequested(); });
 
-    auto *flatFieldStatus = new QLabel(this);
-    flatFieldStatus->setObjectName(
+    m_flatFieldStatusLabel = new QLabel(this);
+    m_flatFieldStatusLabel->setObjectName(
         QStringLiteral("CaptureFlatFieldStatus"));
-    flatFieldStatus->setWordWrap(true);
-    addFieldRow(tr("Status:"), flatFieldStatus);
+    m_flatFieldStatusLabel->setWordWrap(true);
+    addFieldRow(tr("Status:"), m_flatFieldStatusLabel);
     m_paramUpdaters.push_back(
-        [flatFieldStatus](const ParameterState &state) {
-          flatFieldStatus->setText(
-              state.rparams.backlight_correction
-                  ? tr("Flat-field correction active (saved calibration).")
-                  : tr("No flat-field correction."));
-        });
+        [this](const ParameterState &) { refreshFlatFieldStatus(); });
 
     QPushButton *clearFlatField = addButtonParameter(
         "", tr("Clear flat-field correction"),
@@ -843,6 +838,26 @@ void CapturePanel::setupUi()
     });
 
     updateUI();
+}
+
+/** Present STATUS supplied by the document-owned flat-field provenance. */
+void CapturePanel::setFlatFieldStatus(const QString &status) {
+  m_flatFieldCalibrationStatus = status;
+  refreshFlatFieldStatus();
+}
+
+/** Refresh the flat-field status, falling back to saved-state presence. */
+void CapturePanel::refreshFlatFieldStatus() {
+  if (!m_flatFieldStatusLabel)
+    return;
+  if (!m_flatFieldCalibrationStatus.isEmpty()) {
+    m_flatFieldStatusLabel->setText(m_flatFieldCalibrationStatus);
+    return;
+  }
+  m_flatFieldStatusLabel->setText(
+      m_stateGetter().rparams.backlight_correction
+          ? tr("Flat-field correction active (saved calibration).")
+          : tr("No flat-field correction."));
 }
 
 void CapturePanel::setCropChecked(bool checked) {

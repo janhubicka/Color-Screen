@@ -622,8 +622,9 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   `MainWindow` translation units) and with the static libcolorscreen image-I/O
   dependencies it must link explicitly.
 - Give long-lived analysis state explicit structs rather than parallel member
-  variables. Profile-calibration, geometry-fit, measured-MTF fit, automatic
-  multi-area focus analysis, progressive adaptive sharpening, and progressive
+  variables. Profile-calibration, geometry-fit, measured-MTF fit, flat-field
+  calibration, automatic multi-area focus analysis, progressive adaptive
+  sharpening, and progressive
   registration discovery now each live in one lifecycle struct instead of
   parallel request/result/presentation members. Adaptive sharpening groups its
   generation, immutable request baseline, scan, and progress identity because
@@ -631,6 +632,9 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   also retains an accepted-result baseline plus a weak source-scan identity, so
   its saved correction can be presented as current/stale/unverified without
   pinning a replaced image or creating a second panel freshness flag.
+  Flat-field calibration keeps only its accepted correction identity, reference
+  filenames, and the gamma/demosaic inputs that actually affect reference
+  decoding; do not stale it for unrelated geometry or appearance edits.
   Registration discovery groups generation, scan, progress identity and the evolving
   expected document state because accepted worker batches are themselves
   undoable edits. Reference views likewise group the mutex-published

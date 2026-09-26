@@ -433,7 +433,11 @@ Present quality and provenance next to the value: measured vs. default, source
 image/reference, wavelength, residual/error where available. Flat-field and
 adaptive-sharpening corrections now also expose a concise saved-result status
 beside their Set/Analyze and Clear actions, so an accepted calibration is not
-visible only indirectly through a chart or button state.
+visible only indirectly through a chart or button state. Flat-field freshness
+is intentionally narrower than whole-document freshness: its reference analysis
+depends on capture gamma and demosaic mode, so geometry/color/appearance edits
+leave it current while changing either capture input marks it stale. A correction
+loaded from parameters remains active with unverified session freshness.
 
 ### 3. Operation
 

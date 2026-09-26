@@ -808,6 +808,32 @@ private:
   FocusAreaAnalysisState m_focusAreaAnalysis;
   int m_selectedMtfMeasurement = -1;
 
+  /** Session-only provenance for an accepted flat-field calibration.
+      The correction itself is saved in ParameterState; freshness depends only
+      on the capture gamma/demosaic inputs used to decode the reference files. */
+  struct FlatFieldCalibrationState {
+    std::optional<colorscreen::luminosity_t> gamma;
+    std::optional<colorscreen::image_data::demosaicing_t> demosaic;
+    std::weak_ptr<colorscreen::backlight_correction_parameters> correction;
+    QString whiteReference;
+    QString blackReference;
+    std::weak_ptr<colorscreen::progress_info> progress;
+
+    void clearRequest() { progress.reset(); }
+    void clearAccepted() {
+      gamma.reset();
+      demosaic.reset();
+      correction.reset();
+      whiteReference.clear();
+      blackReference.clear();
+    }
+    void clear() {
+      clearRequest();
+      clearAccepted();
+    }
+  };
+  FlatFieldCalibrationState m_flatFieldCalibration;
+
   /** Session-local ownership for progressive adaptive sharpening.
       Unlike a one-shot result this worker intentionally publishes live chart
       cells, so generation, progress identity and immutable inputs must remain

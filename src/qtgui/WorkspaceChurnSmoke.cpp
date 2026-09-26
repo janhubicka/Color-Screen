@@ -3100,12 +3100,119 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
       }
 
       case 212: {
-        QWidget *adaptiveInspector = first->workspaceInspectorWidget();
+        QWidget *calibrationInspector = first->workspaceInspectorWidget();
+        QLabel *flatFieldStatus =
+            calibrationInspector
+                ? calibrationInspector->findChild<QLabel *>(
+                      QStringLiteral("CaptureFlatFieldStatus"))
+                : nullptr;
         QLabel *adaptiveCorrectionStatus =
-            adaptiveInspector
-                ? adaptiveInspector->findChild<QLabel *>(
+            calibrationInspector
+                ? calibrationInspector->findChild<QLabel *>(
                       QStringLiteral("SharpnessAdaptiveCorrectionStatus"))
                 : nullptr;
+
+        // Flat-field calibration has a deliberately narrow freshness boundary:
+        // decoding the reference depends on capture gamma/demosaic, while
+        // geometry, color and ordinary appearance edits do not invalidate it.
+        if (!flatFieldStatus) {
+          fail(QStringLiteral("Workspace churn lost flat-field status"));
+          return;
+        }
+        {
+          const ParameterState flatOriginal = first->getCurrentState();
+          const auto savedFlatCalibration = first->m_flatFieldCalibration;
+
+          auto correctionOwner = std::make_shared<int>(0);
+          auto flatCorrection =
+              std::shared_ptr<colorscreen::backlight_correction_parameters>(
+                  correctionOwner,
+                  reinterpret_cast<colorscreen::backlight_correction_parameters *>(
+                      correctionOwner.get()));
+          ParameterState flatBaseline = flatOriginal;
+          flatBaseline.rparams.backlight_correction = flatCorrection;
+
+          first->m_flatFieldCalibration.clearAccepted();
+          first->m_flatFieldCalibration.progress.reset();
+          first->applyState(flatBaseline);
+          if (!flatFieldStatus->text().contains(
+                  QStringLiteral("freshness not verified"))) {
+            fail(QStringLiteral(
+                "Loaded/manual flat-field correction did not show unverified freshness"));
+            return;
+          }
+
+          first->m_flatFieldCalibration.gamma = flatBaseline.rparams.gamma;
+          first->m_flatFieldCalibration.demosaic = flatBaseline.rparams.demosaic;
+          first->m_flatFieldCalibration.correction = flatCorrection;
+          first->m_flatFieldCalibration.whiteReference =
+              QStringLiteral("/tmp/colorscreen-flat-white.tif");
+          first->m_flatFieldCalibration.blackReference.clear();
+          first->updateWorkflowSummary();
+          if (!flatFieldStatus->text().contains(
+                  QStringLiteral("current session reference")) ||
+              !flatFieldStatus->text().contains(
+                  QStringLiteral("colorscreen-flat-white.tif"))) {
+            fail(QStringLiteral(
+                "Accepted flat-field correction lost current/reference provenance"));
+            return;
+          }
+
+          ParameterState unrelatedEdit = flatBaseline;
+          unrelatedEdit.rparams.brightness += 0.125;
+          first->applyState(unrelatedEdit);
+          if (!flatFieldStatus->text().contains(
+                  QStringLiteral("current session reference")) ||
+              flatFieldStatus->text().contains(QStringLiteral("stale"))) {
+            fail(QStringLiteral(
+                "Unrelated document edit incorrectly staled flat-field calibration"));
+            return;
+          }
+
+          ParameterState captureEdit = flatBaseline;
+          captureEdit.rparams.gamma =
+              flatBaseline.rparams.gamma == 1.0 ? 1.1 : 1.0;
+          first->applyState(captureEdit);
+          if (!flatFieldStatus->text().contains(QStringLiteral("stale"))) {
+            fail(QStringLiteral(
+                "Capture gamma edit did not stale flat-field calibration"));
+            return;
+          }
+
+          first->applyState(flatBaseline);
+          if (!flatFieldStatus->text().contains(
+                  QStringLiteral("current session reference"))) {
+            fail(QStringLiteral(
+                "Restoring flat-field inputs did not restore current provenance"));
+            return;
+          }
+
+          auto flatProgress =
+              std::make_shared<colorscreen::progress_info>();
+          first->m_flatFieldCalibration.progress = flatProgress;
+          first->updateWorkflowSummary();
+          if (!flatFieldStatus->text().contains(
+                  QStringLiteral("analysis running"), Qt::CaseInsensitive) ||
+              !flatFieldStatus->text().contains(
+                  QStringLiteral("current session reference"))) {
+            fail(QStringLiteral(
+                "Flat-field running state hid the accepted correction provenance"));
+            return;
+          }
+
+          first->m_flatFieldCalibration.progress.reset();
+          first->m_flatFieldCalibration.clearAccepted();
+          first->updateWorkflowSummary();
+          if (!flatFieldStatus->text().contains(
+                  QStringLiteral("freshness not verified"))) {
+            fail(QStringLiteral(
+                "Clearing flat-field session provenance discarded saved calibration presentation"));
+            return;
+          }
+
+          first->m_flatFieldCalibration = savedFlatCalibration;
+          first->applyState(flatOriginal);
+        }
 
         // Progressive adaptive sharpening cannot use OneShotOperation because
         // its live chart cells are intentional publication. Exercise the

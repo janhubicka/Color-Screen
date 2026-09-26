@@ -2975,6 +2975,54 @@ void MainWindow::updateWorkflowSummary() {
   cancelStaleAdaptiveSharpening(currentState);
   cancelStaleRegistrationDiscovery(currentState);
 
+  if (m_capturePanel) {
+    QString flatFieldStatus;
+    const auto correction = currentState.rparams.backlight_correction;
+    if (!correction) {
+      flatFieldStatus = tr("No flat-field correction.");
+    } else if (m_flatFieldCalibration.gamma &&
+               m_flatFieldCalibration.demosaic) {
+      const auto acceptedCorrection = m_flatFieldCalibration.correction.lock();
+      if (acceptedCorrection && acceptedCorrection == correction) {
+        if (currentState.rparams.gamma == *m_flatFieldCalibration.gamma &&
+            currentState.rparams.demosaic == *m_flatFieldCalibration.demosaic) {
+          const QString whiteName =
+              QFileInfo(m_flatFieldCalibration.whiteReference).fileName();
+          const QString blackName =
+              QFileInfo(m_flatFieldCalibration.blackReference).fileName();
+          if (!whiteName.isEmpty() && !blackName.isEmpty()) {
+            flatFieldStatus =
+                tr("Flat-field correction active (current session references: %1 + %2).")
+                    .arg(whiteName, blackName);
+          } else if (!whiteName.isEmpty()) {
+            flatFieldStatus =
+                tr("Flat-field correction active (current session reference: %1).")
+                    .arg(whiteName);
+          } else {
+            flatFieldStatus =
+                tr("Flat-field correction active (current session analysis).");
+          }
+        } else {
+          flatFieldStatus = tr(
+              "Flat-field correction active but stale; capture gamma or demosaic mode changed.");
+        }
+      } else {
+        flatFieldStatus = tr(
+            "Flat-field correction active (saved calibration; freshness not verified this session).");
+      }
+    } else {
+      flatFieldStatus = tr(
+          "Flat-field correction active (saved calibration; freshness not verified this session).");
+    }
+
+    if (!m_flatFieldCalibration.progress.expired()) {
+      flatFieldStatus = correction
+          ? tr("Flat-field analysis running… %1").arg(flatFieldStatus)
+          : tr("Flat-field analysis running…");
+    }
+    m_capturePanel->setFlatFieldStatus(flatFieldStatus);
+  }
+
   if (m_sharpnessPanel) {
     QString adaptiveStatus;
     if (!currentState.rparams.scanner_blur_correction) {
@@ -4631,12 +4679,23 @@ void MainWindow::onFlatFieldRequested() {
     const colorscreen::image_data::demosaicing_t demosaic = m_rparams.demosaic;
     auto result = std::make_shared<FlatFieldAnalysisResult>();
 
+    auto requestProgress =
+        std::make_shared<std::shared_ptr<colorscreen::progress_info>>();
+
     OneShotOperation operation;
     operation.description = tr("Flat field analysis");
+    operation.onStart =
+        [this, requestProgress](
+            std::shared_ptr<colorscreen::progress_info> progress) {
+      *requestProgress = progress;
+      m_flatFieldCalibration.progress = progress;
+      updateWorkflowSummary();
+    };
     operation.resultValid = [this, gamma, demosaic]() {
       return m_rparams.gamma == gamma && m_rparams.demosaic == demosaic;
     };
-    operation.applyResult = [this, result]() {
+    operation.applyResult =
+        [this, result, gamma, demosaic, whiteFile, blackFile]() {
       if (!result->success || !result->correction) {
         if (!result->cancelled) {
           QMessageBox::warning(
@@ -4651,8 +4710,21 @@ void MainWindow::onFlatFieldRequested() {
       ParameterState newState = getCurrentState();
       newState.rparams.backlight_correction = result->correction;
       changeParameters(newState, tr("Flat field"));
+
+      m_flatFieldCalibration.gamma = gamma;
+      m_flatFieldCalibration.demosaic = demosaic;
+      m_flatFieldCalibration.correction = result->correction;
+      m_flatFieldCalibration.whiteReference = whiteFile;
+      m_flatFieldCalibration.blackReference = blackFile;
+      updateWorkflowSummary();
       statusBar()->showMessage(
           tr("Flat-field correction applied."), 4000);
+    };
+    operation.onDone = [this, requestProgress]() {
+      if (*requestProgress &&
+          m_flatFieldCalibration.progress.lock() == *requestProgress)
+        m_flatFieldCalibration.progress.reset();
+      updateWorkflowSummary();
     };
 
     runOneShotOperation(
