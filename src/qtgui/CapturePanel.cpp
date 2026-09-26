@@ -780,6 +780,19 @@ void CapturePanel::setupUi()
     addButtonParameter("Flat field", "Set reference",
                        [this]() { emit flatFieldRequested(); });
 
+    auto *flatFieldStatus = new QLabel(this);
+    flatFieldStatus->setObjectName(
+        QStringLiteral("CaptureFlatFieldStatus"));
+    flatFieldStatus->setWordWrap(true);
+    addFieldRow(tr("Status:"), flatFieldStatus);
+    m_paramUpdaters.push_back(
+        [flatFieldStatus](const ParameterState &state) {
+          flatFieldStatus->setText(
+              state.rparams.backlight_correction
+                  ? tr("Flat-field correction active (saved calibration).")
+                  : tr("No flat-field correction."));
+        });
+
     QPushButton *clearFlatField = addButtonParameter(
         "", tr("Clear flat-field correction"),
         [this]() {

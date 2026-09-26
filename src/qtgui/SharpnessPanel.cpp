@@ -727,6 +727,29 @@ void SharpnessPanel::setupUi() {
   analyzeDisplacements->setObjectName(
       QStringLiteral("SharpnessAnalyzeDisplacementsButton"));
 
+  auto *adaptiveStatus = new QLabel(this);
+  adaptiveStatus->setObjectName(
+      QStringLiteral("SharpnessAdaptiveCorrectionStatus"));
+  adaptiveStatus->setWordWrap(true);
+  if (m_currentGroupForm)
+    m_currentGroupForm->addRow(tr("Status:"), adaptiveStatus);
+  else
+    m_form->addRow(tr("Status:"), adaptiveStatus);
+  m_widgetStateUpdaters.push_back([this, adaptiveStatus]() {
+    const ParameterState state = m_stateGetter();
+    if (m_adaptiveAnalysisRunning) {
+      adaptiveStatus->setText(
+          state.rparams.scanner_blur_correction
+              ? tr("Analysis running… current saved correction remains active.")
+              : tr("Adaptive sharpening analysis running…"));
+    } else {
+      adaptiveStatus->setText(
+          state.rparams.scanner_blur_correction
+              ? tr("Adaptive correction active (saved calibration).")
+              : tr("No adaptive correction."));
+    }
+  });
+
   QLabel *adaptiveRequirement = new QLabel(
       tr("Fit screen geometry before adaptive sharpening analysis."), this);
   adaptiveRequirement->setObjectName(

@@ -423,7 +423,10 @@ hand-tuned continuously.
 Examples: fitted geometry, measured MTF, optimized profile values.
 
 Present quality and provenance next to the value: measured vs. default, source
-image/reference, wavelength, residual/error where available.
+image/reference, wavelength, residual/error where available. Flat-field and
+adaptive-sharpening corrections now also expose a concise saved-result status
+beside their Set/Analyze and Clear actions, so an accepted calibration is not
+visible only indirectly through a chart or button state.
 
 ### 3. Operation
 
