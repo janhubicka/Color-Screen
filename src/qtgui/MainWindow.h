@@ -73,6 +73,13 @@ class QUndoStack; // Forward decl
 class ColorScreenApplication;
 struct DetectScreenAnalysisResult;
 
+/** Explain an automatic screen-detection failure without inventing a cause. */
+QString screenDetectionFailureMessage(colorscreen::scr_type attemptedType);
+/** Explain failure to establish initial coordinates for a known regular screen. */
+QString coordinateDetectionFailureMessage(colorscreen::scr_type attemptedType);
+/** Explain a progressive registration-discovery failure and retained state. */
+QString registrationDiscoveryFailureMessage(bool screenAutodetection);
+
 /** Start the completion-driven workspace ownership/lifecycle smoke test. */
 void startWorkspaceChurnSmoke(ColorScreenApplication &app,
                               std::function<void()> completed);
