@@ -3015,7 +3015,7 @@ void MainWindow::updateWorkflowSummary() {
           "Flat-field correction active (saved calibration; freshness not verified this session).");
     }
 
-    if (m_flatFieldCalibration.running) {
+    if (!m_flatFieldCalibration.progress.expired()) {
       flatFieldStatus = correction
           ? tr("Flat-field analysis running… %1").arg(flatFieldStatus)
           : tr("Flat-field analysis running…");
@@ -4679,10 +4679,16 @@ void MainWindow::onFlatFieldRequested() {
     const colorscreen::image_data::demosaicing_t demosaic = m_rparams.demosaic;
     auto result = std::make_shared<FlatFieldAnalysisResult>();
 
+    auto requestProgress =
+        std::make_shared<std::shared_ptr<colorscreen::progress_info>>();
+
     OneShotOperation operation;
     operation.description = tr("Flat field analysis");
-    operation.onStart = [this](std::shared_ptr<colorscreen::progress_info>) {
-      m_flatFieldCalibration.running = true;
+    operation.onStart =
+        [this, requestProgress](
+            std::shared_ptr<colorscreen::progress_info> progress) {
+      *requestProgress = progress;
+      m_flatFieldCalibration.progress = progress;
       updateWorkflowSummary();
     };
     operation.resultValid = [this, gamma, demosaic]() {
@@ -4714,8 +4720,10 @@ void MainWindow::onFlatFieldRequested() {
       statusBar()->showMessage(
           tr("Flat-field correction applied."), 4000);
     };
-    operation.onDone = [this]() {
-      m_flatFieldCalibration.running = false;
+    operation.onDone = [this, requestProgress]() {
+      if (*requestProgress &&
+          m_flatFieldCalibration.progress.lock() == *requestProgress)
+        m_flatFieldCalibration.progress.reset();
       updateWorkflowSummary();
     };
 
