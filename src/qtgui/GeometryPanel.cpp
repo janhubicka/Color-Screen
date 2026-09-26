@@ -170,6 +170,15 @@ void GeometryPanel::setupUi() {
   }, "Fit the geometry parameters (rotation, tilt, lens correction, and optional nonlinear correction) to the registration points.");
   m_optimizeButton->setObjectName(QStringLiteral("GeometryFitButton"));
 
+  m_fitStatusLabel = new QLabel(
+      tr("No geometry fit result in this session."), this);
+  m_fitStatusLabel->setObjectName(QStringLiteral("GeometryFitStatus"));
+  m_fitStatusLabel->setWordWrap(true);
+  if (m_currentGroupForm)
+    m_currentGroupForm->addRow(tr("Status:"), m_fitStatusLabel);
+  else
+    m_form->addRow(tr("Status:"), m_fitStatusLabel);
+
   connect(m_autoOptimizeBox, &QCheckBox::toggled, this, [this](bool checked){
       if (checked) emit optimizeRequested(true);
   });
@@ -399,6 +408,12 @@ void GeometryPanel::setupUi() {
 
 bool GeometryPanel::isAutoEnabled() const {
   return m_autoOptimizeBox && m_autoOptimizeBox->isChecked();
+}
+
+/** Present STATUS supplied by the owning document's geometry-fit provenance. */
+void GeometryPanel::setFitStatus(const QString &status) {
+  if (m_fitStatusLabel)
+    m_fitStatusLabel->setText(status);
 }
 
 /** Refresh prerequisites from STATE without changing section preferences. */
