@@ -3107,6 +3107,10 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         // equivalent generation/progress/snapshot ownership contract without
         // running the expensive numerical analysis.
         ParameterState adaptiveBaseline = first->getCurrentState();
+        const auto savedAcceptedBaseline =
+            first->m_adaptiveSharpening.acceptedBaseline;
+        const auto savedAcceptedScan =
+            first->m_adaptiveSharpening.acceptedScan;
         auto acceptedCorrection =
             std::make_shared<colorscreen::scanner_blur_correction_parameters>();
         if (!acceptedCorrection->alloc(
@@ -3215,6 +3219,9 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
           return;
         }
 
+        first->m_adaptiveSharpening.acceptedBaseline =
+            savedAcceptedBaseline;
+        first->m_adaptiveSharpening.acceptedScan = savedAcceptedScan;
         first->applyState(state->beforeReference);
         schedule(213, 0, 40);
         return;
