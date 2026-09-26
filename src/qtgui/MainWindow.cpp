@@ -2975,6 +2975,27 @@ void MainWindow::updateWorkflowSummary() {
   cancelStaleAdaptiveSharpening(currentState);
   cancelStaleRegistrationDiscovery(currentState);
 
+  if (m_sharpnessPanel) {
+    QString adaptiveStatus;
+    if (!currentState.rparams.scanner_blur_correction) {
+      adaptiveStatus = tr("No adaptive correction.");
+    } else if (m_adaptiveSharpening.acceptedBaseline) {
+      const auto acceptedScan = m_adaptiveSharpening.acceptedScan.lock();
+      if (acceptedScan && acceptedScan == m_scan &&
+          *m_adaptiveSharpening.acceptedBaseline == currentState) {
+        adaptiveStatus =
+            tr("Adaptive correction active (current session analysis).");
+      } else {
+        adaptiveStatus =
+            tr("Adaptive correction active but stale; rerun analysis after input changes.");
+      }
+    } else {
+      adaptiveStatus = tr(
+          "Adaptive correction active (saved calibration; freshness not verified this session).");
+    }
+    m_sharpnessPanel->setAdaptiveCorrectionStatus(adaptiveStatus);
+  }
+
   if (!m_workflowProcessLabel || !m_workflowImageLayerLabel ||
       !m_workflowRegistrationLabel || !m_workflowCalibrationLabel ||
       !m_workflowProfileLabel || !m_workflowNextStepLabel)
