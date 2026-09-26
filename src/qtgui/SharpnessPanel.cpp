@@ -684,6 +684,8 @@ void SharpnessPanel::setupUi() {
     m_form->addRow(m_analyzeFocusAreasBtn);
 
   m_focusAreaStatusLabel = new QLabel(tr("No focus analysis areas found."), this);
+  m_focusAreaStatusLabel->setObjectName(
+      QStringLiteral("SharpnessFocusAreaStatus"));
   m_focusAreaStatusLabel->setWordWrap(true);
   if (m_currentGroupForm)
     m_currentGroupForm->addRow(m_focusAreaStatusLabel);
