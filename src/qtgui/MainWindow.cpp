@@ -187,7 +187,7 @@ bool detectedScreenDiagnosticsInputsDiffer(const ParameterState &before,
          before.scrToImg.scanner_type != after.scrToImg.scanner_type ||
          before.detect != after.detect ||
          before.rparams.gamma != after.rparams.gamma ||
-         !before.rparams.sharpen.equal_p(after.rparams.sharpen);
+         !(before.rparams.sharpen == after.rparams.sharpen);
 }
 
 /** Return whether automatic focus-area discovery/analysis inputs differ.
@@ -2725,15 +2725,27 @@ void MainWindow::restoreFromWorkspaceEmbedding() {
     been accepted, so the immediate geometry-refinement handoff can update the
     mapping without making the scan-space diagnostic stale. */
 void MainWindow::publishDetectedScreenDiagnostics(
-    std::shared_ptr<const colorscreen::screen_map> map) {
-  if (!map) {
+    std::shared_ptr<const colorscreen::screen_map> map,
+    std::shared_ptr<colorscreen::image_data> scan,
+    const ParameterState &detectorInputs) {
+  if (!map || !scan || scan != m_scan) {
+    clearDetectedScreenDiagnostics();
+    return;
+  }
+
+  ParameterState provenance = detectorInputs;
+  // Unknown-screen discovery learns TYPE as part of the result. Treat the
+  // detected type as the accepted identity of this map while preserving every
+  // other input exactly as it was when the detector ran.
+  provenance.scrToImg.type = map->type;
+  if (detectedScreenDiagnosticsInputsDiffer(provenance, getCurrentState())) {
     clearDetectedScreenDiagnostics();
     return;
   }
 
   m_detectedScreenDiagnostics.map = std::move(map);
-  m_detectedScreenDiagnostics.baseline = getCurrentState();
-  m_detectedScreenDiagnostics.scan = m_scan;
+  m_detectedScreenDiagnostics.baseline = std::move(provenance);
+  m_detectedScreenDiagnostics.scan = scan;
 
   if (m_imageWidget)
     m_imageWidget->setDetectedScreenMap(m_detectedScreenDiagnostics.map);
