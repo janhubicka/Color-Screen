@@ -694,14 +694,7 @@ void MainWindow::presentDetectedScreenResult(
         m_renderTypeParams.type = colorscreen::render_type_interpolated;
         changeParameters(newState, tr("Autodetect screen"));
 
-        m_detectedScreenMap = std::move(detectedScreenMap);
-        m_imageWidget->setDetectedScreenMap(m_detectedScreenMap);
-        if (ImageWidget *image = inspectorImageWidget();
-            image && image != m_imageWidget)
-          image->setDetectedScreenMap(m_detectedScreenMap);
-        if (m_detectedPatchCentersAction)
-          m_detectedPatchCentersAction->setEnabled(
-              static_cast<bool>(m_detectedScreenMap));
+        publishDetectedScreenDiagnostics(std::move(detectedScreenMap));
 
         updateRegistrationActions();
         updateModeMenu();
