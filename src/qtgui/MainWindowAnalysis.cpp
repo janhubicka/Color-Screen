@@ -841,12 +841,19 @@ void MainWindow::onAdaptiveSharpeningFinished(
   m_undoStack->push(new ChangeParametersCommand(
       this, oldState, newState, "Adaptive Sharpening Analysis"));
 
+  // The accepted correction belongs to the exact scan/document snapshot after
+  // the undo command has installed RESULT. Loaded corrections intentionally
+  // have no such session baseline and remain usable with unverified freshness.
+  m_adaptiveSharpening.acceptedBaseline = getCurrentState();
+  m_adaptiveSharpening.acceptedScan = m_scan;
+
   // applyState() already refreshes panel/chart state through the undo command.
   if (m_sharpnessPanel && m_sharpnessPanel->getAdaptiveChart()) {
     m_sharpnessPanel->getAdaptiveChart()->setCorrection(result);
     m_sharpnessPanel->setAdaptiveAnalysisRunning(false);
   }
 
+  updateWorkflowSummary();
   statusBar()->showMessage(
       tr("Adaptive sharpening analysis completed."), 4000);
 }
