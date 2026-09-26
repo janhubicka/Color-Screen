@@ -2230,9 +2230,10 @@ void MainWindow::createMenus() {
   m_detectedPatchCentersAction->setChecked(false);
   m_detectedPatchCentersAction->setEnabled(false);
   m_detectedPatchCentersAction->setToolTip(
-      tr("Show color-coded centers of screen elements found by the most recent "
-         "automatic basic-screen detection. The dense overlay is drawn at "
-         "100% zoom and above."));
+      tr("Show color-coded centers of screen elements from the most recent "
+         "current automatic screen detection. The diagnostic expires when "
+         "detection inputs change; geometry-only refinement keeps it current. "
+         "The dense overlay is drawn at 100% zoom and above."));
   connect(m_detectedPatchCentersAction, &QAction::toggled, this,
           [this](bool show) {
             m_showDetectedPatchCenters = show;
@@ -2519,7 +2520,7 @@ void MainWindow::setInspectorImageWidget(ImageWidget *imageWidget) {
     disconnect(connection);
   m_inspectorImageConnections.clear();
   m_inspectorImageWidget = target;
-  target->setDetectedScreenMap(m_detectedScreenMap);
+  target->setDetectedScreenMap(m_detectedScreenDiagnostics.map);
   target->setShowDetectedPatchCenters(m_showDetectedPatchCenters);
 
   // A selected document tool belongs to the document operation, not to the
@@ -2647,7 +2648,7 @@ void MainWindow::setInspectorImageWidget(ImageWidget *imageWidget) {
     const QSignalBlocker blocker(m_detectedPatchCentersAction);
     m_detectedPatchCentersAction->setChecked(m_showDetectedPatchCenters);
     m_detectedPatchCentersAction->setEnabled(
-        static_cast<bool>(m_detectedScreenMap));
+        static_cast<bool>(m_detectedScreenDiagnostics.map));
   }
   if (m_geometryPanel)
     m_geometryPanel->setRegistrationPointsVisible(
@@ -2702,6 +2703,51 @@ void MainWindow::restoreFromWorkspaceEmbedding() {
 
 // Undo/Redo Implementation
 
+/** Publish one current automatic-detection patch map to every ordinary view.
+
+    Capture provenance only after the detected numerical document result has
+    been accepted, so the immediate geometry-refinement handoff can update the
+    mapping without making the scan-space diagnostic stale. */
+void MainWindow::publishDetectedScreenDiagnostics(
+    std::shared_ptr<const colorscreen::screen_map> map,
+    std::shared_ptr<colorscreen::image_data> scan,
+    const ParameterState &detectorInputs) {
+  if (!map || !scan || scan != m_scan) {
+    clearDetectedScreenDiagnostics();
+    return;
+  }
+
+  DetectedScreenDiagnosticsState::Inputs inputs(map->type, detectorInputs);
+  if (!inputs.matches(getCurrentState())) {
+    clearDetectedScreenDiagnostics();
+    return;
+  }
+
+  m_detectedScreenDiagnostics.map = std::move(map);
+  m_detectedScreenDiagnostics.inputs = std::move(inputs);
+  m_detectedScreenDiagnostics.scan = scan;
+
+  if (m_imageWidget)
+    m_imageWidget->setDetectedScreenMap(m_detectedScreenDiagnostics.map);
+  if (ImageWidget *image = inspectorImageWidget();
+      image && image != m_imageWidget)
+    image->setDetectedScreenMap(m_detectedScreenDiagnostics.map);
+  if (m_detectedPatchCentersAction)
+    m_detectedPatchCentersAction->setEnabled(true);
+}
+
+/** Remove an obsolete patch map from state and every ordinary presentation. */
+void MainWindow::clearDetectedScreenDiagnostics() {
+  m_detectedScreenDiagnostics.clear();
+  if (m_imageWidget)
+    m_imageWidget->setDetectedScreenMap(nullptr);
+  if (ImageWidget *image = inspectorImageWidget();
+      image && image != m_imageWidget)
+    image->setDetectedScreenMap(nullptr);
+  if (m_detectedPatchCentersAction)
+    m_detectedPatchCentersAction->setEnabled(false);
+}
+
 /** Apply a full ParameterState to the application.
    Copies all parameter structs (render, scr-to-img, detect, solver,
    profile spots) to member variables, updates ImageWidget and
@@ -2721,6 +2767,13 @@ void MainWindow::applyState(const ParameterState &state) {
     m_geometryPanel->clearFinetuneImages();
   if (m_sharpnessPanel)
     m_sharpnessPanel->clearFinetuneImages();
+
+  const bool invalidateDetectedScreenDiagnostics =
+      m_detectedScreenDiagnostics.inputs &&
+      (m_detectedScreenDiagnostics.scan.lock() != m_scan ||
+       !m_detectedScreenDiagnostics.inputs->matches(state));
+  if (invalidateDetectedScreenDiagnostics)
+    clearDetectedScreenDiagnostics();
 
   const bool invalidateFocusAreas =
       m_focusAreaAnalysis.baseline &&

@@ -7,6 +7,7 @@
 #include "MultiLineTabWidget.h"
 #include "ScreenPanel.h"
 #include "WorkspaceWindow.h"
+#include "../libcolorscreen/include/screen-map.h"
 
 #include <QAction>
 #include <QComboBox>
@@ -2341,6 +2342,56 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
           fail(QStringLiteral("One-shot did not register its dedicated progress row"));
           return;
         }
+
+        // Auto-detected patch centers are scan-space diagnostics with a
+        // deliberately narrower freshness contract than the whole document.
+        // Geometry refinement must keep the map; detector/color-classification
+        // edits must expire it and disable the Registration-menu toggle.
+        const ParameterState patchBaseline = first->documentStateSnapshot();
+        const auto patchMap =
+            std::make_shared<colorscreen::screen_map>(
+                patchBaseline.scrToImg.type, 0, 0, 1, 1);
+        first->publishDetectedScreenDiagnostics(
+            patchMap, first->m_scan, patchBaseline);
+        if (first->m_detectedScreenDiagnostics.map != patchMap ||
+            !first->m_detectedScreenDiagnostics.inputs ||
+            first->m_detectedScreenDiagnostics.scan.lock() != first->m_scan ||
+            !first->m_detectedPatchCentersAction ||
+            !first->m_detectedPatchCentersAction->isEnabled()) {
+          fail(QStringLiteral(
+              "Detected patch-center diagnostic did not publish with provenance"));
+          return;
+        }
+
+        ParameterState geometryOnly = patchBaseline;
+        geometryOnly.scrToImg.center.x += 0.25;
+        first->applyState(geometryOnly);
+        if (first->m_detectedScreenDiagnostics.map != patchMap ||
+            !first->m_detectedScreenDiagnostics.inputs ||
+            !first->m_detectedPatchCentersAction->isEnabled()) {
+          fail(QStringLiteral(
+              "Geometry-only edit incorrectly expired detected patch centers"));
+          return;
+        }
+        first->applyState(patchBaseline);
+        if (first->m_detectedScreenDiagnostics.map != patchMap) {
+          fail(QStringLiteral(
+              "Restoring geometry unexpectedly lost detected patch centers"));
+          return;
+        }
+
+        ParameterState detectorEdit = patchBaseline;
+        detectorEdit.detect.min_ratio += 0.25;
+        first->applyState(detectorEdit);
+        if (first->m_detectedScreenDiagnostics.map ||
+            first->m_detectedScreenDiagnostics.inputs ||
+            !first->m_detectedScreenDiagnostics.scan.expired() ||
+            first->m_detectedPatchCentersAction->isEnabled()) {
+          fail(QStringLiteral(
+              "Detector-input edit retained stale detected patch centers"));
+          return;
+        }
+        first->applyState(patchBaseline);
 
         // Give the source a distinctive processing-state sentinel without
         // dirtying the document (applyState is the same path used by

@@ -599,6 +599,11 @@ specialist stages.
   their point/geometry prerequisites, so saved state cannot expose an enabled
   no-op while an image is absent or being replaced;
 - add explicit stale/result states where analyses depend on changing inputs.
+  The Registration menu's auto-detected patch-center overlay now has explicit
+  provenance too: it survives coordinate/mesh refinement because the retained
+  map is screen-coordinate evidence projected through current geometry, but a
+  source-scan, screen/scanner-type, detection-parameter, gamma, or capture-
+  sharpening change clears it from every ordinary view and disables the toggle.
 
 ### Phase C — module grammar
 
