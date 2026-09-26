@@ -817,7 +817,7 @@ private:
     std::weak_ptr<colorscreen::backlight_correction_parameters> correction;
     QString whiteReference;
     QString blackReference;
-    bool running = false;
+    std::weak_ptr<colorscreen::progress_info> progress;
 
     void clearAccepted() {
       gamma.reset();
