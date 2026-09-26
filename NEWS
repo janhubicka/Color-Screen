@@ -15,7 +15,7 @@ Changes in version 1.1
    - Long-running GUI operations can register dedicated rows in the global
      status bar so they remain visible and directly cancellable across document
      switches. Rendering to file, coordinate autodetection, automatic point
-     addition, and displacement analysis use these rows; incremental automatic
+     addition, and adaptive sharpening analysis use these rows; incremental automatic
      point addition offers "Stop" so points already added remain in the image.
    - The Window menu provides New View for opening a second view of the same
      image as another workspace tab. Ordinary views expose the same complete
