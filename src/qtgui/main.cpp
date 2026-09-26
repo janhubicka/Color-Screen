@@ -734,6 +734,22 @@ bool colorSectionPreferencesSmoke() {
           return fail(QStringLiteral(
               "Sharpness dynamic focus state bypassed no-image prerequisites"));
 
+        auto *sharpnessFinetuneRow = sharpness->findChild<QWidget *>(
+            QStringLiteral("SharpnessFinetuneImagesRow"));
+        if (!sharpnessFinetuneRow ||
+            sharpnessFinetuneRow->property("parameterApplicable").toBool())
+          return fail(QStringLiteral(
+              "Sharpness exposed finetune diagnostics before an accepted result"));
+        colorscreen::finetune_result sharpnessDiagnosticResult;
+        sharpness->updateFinetuneImages(sharpnessDiagnosticResult);
+        if (!sharpnessFinetuneRow->property("parameterApplicable").toBool())
+          return fail(QStringLiteral(
+              "Sharpness did not mark accepted finetune diagnostics applicable"));
+        sharpness->clearFinetuneImages();
+        if (sharpnessFinetuneRow->property("parameterApplicable").toBool())
+          return fail(QStringLiteral(
+              "Sharpness clear retained stale finetune diagnostics"));
+
         auto *adaptiveToggle =
             toggleFor(*sharpness, QStringLiteral("sharpness.adaptive"));
         auto *adaptiveRow = sharpness->findChild<QWidget *>(
@@ -1001,6 +1017,25 @@ bool geometrySectionPreferencesSmoke() {
   };
 
   auto first = createPanel();
+  auto *geometryFinetuneRow = first->findChild<QWidget *>(
+      QStringLiteral("GeometryFinetuneImagesRow"));
+  if (!geometryFinetuneRow ||
+      geometryFinetuneRow->property("parameterApplicable").toBool() ||
+      !geometryFinetuneRow->isHidden())
+    return fail(QStringLiteral(
+        "Geometry exposed finetune diagnostics before an accepted result"));
+  colorscreen::finetune_result geometryDiagnosticResult;
+  first->updateFinetuneImages(geometryDiagnosticResult);
+  if (!geometryFinetuneRow->property("parameterApplicable").toBool() ||
+      geometryFinetuneRow->isHidden())
+    return fail(QStringLiteral(
+        "Geometry did not expose accepted finetune diagnostics"));
+  first->clearFinetuneImages();
+  if (geometryFinetuneRow->property("parameterApplicable").toBool() ||
+      !geometryFinetuneRow->isHidden())
+    return fail(QStringLiteral(
+        "Geometry clear retained stale finetune diagnostics"));
+
   auto *detectCoordinates = first->findChild<QPushButton *>(
       QStringLiteral("DetectScreenCoordinatesButton"));
   auto *optimizeCoordinates = first->findChild<QPushButton *>(
@@ -2401,7 +2436,40 @@ bool runBetaInvariantSmoke() {
     return fail(
         "Undo did not restore the adaptive sharpening calibration/presentation");
 
+  // Finetune diagnostic images are transient evidence from one accepted
+  // operation. Any later accepted document state must hide both Geometry and
+  // Sharpness diagnostics; a producing operation may then publish a fresh set.
+  auto *geometryPanel = window.findChild<GeometryPanel *>();
+  auto *sharpnessPanel = window.findChild<SharpnessPanel *>();
+  auto *geometryFinetuneRow = window.findChild<QWidget *>(
+      QStringLiteral("GeometryFinetuneImagesRow"));
+  auto *sharpnessFinetuneRow = window.findChild<QWidget *>(
+      QStringLiteral("SharpnessFinetuneImagesRow"));
+  if (!geometryPanel || !sharpnessPanel || !geometryFinetuneRow ||
+      !sharpnessFinetuneRow)
+    return fail("document inspector lost finetune diagnostic rows");
+  colorscreen::finetune_result transientDiagnostics;
+  geometryPanel->updateFinetuneImages(transientDiagnostics);
+  sharpnessPanel->updateFinetuneImages(transientDiagnostics);
+  if (!geometryFinetuneRow->property("parameterApplicable").toBool() ||
+      !sharpnessFinetuneRow->property("parameterApplicable").toBool())
+    return fail("accepted finetune diagnostics were not exposed");
+
+  window.applyState(window.documentStateSnapshot());
+  if (geometryFinetuneRow->property("parameterApplicable").toBool() ||
+      sharpnessFinetuneRow->property("parameterApplicable").toBool())
+    return fail("document refresh retained stale finetune diagnostics");
+
+  geometryPanel->updateFinetuneImages(transientDiagnostics);
+  sharpnessPanel->updateFinetuneImages(transientDiagnostics);
+  if (!geometryFinetuneRow->property("parameterApplicable").toBool() ||
+      !sharpnessFinetuneRow->property("parameterApplicable").toBool())
+    return fail("fresh finetune diagnostics could not be republished");
+
   window.applyState(calibrationBaseline);
+  if (geometryFinetuneRow->property("parameterApplicable").toBool() ||
+      sharpnessFinetuneRow->property("parameterApplicable").toBool())
+    return fail("state restoration resurrected finetune diagnostics");
   undoStack->clear();
 
   // Tiles deliberately reuse one pair of editors for the currently selected

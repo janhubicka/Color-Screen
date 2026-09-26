@@ -2713,6 +2713,15 @@ void MainWindow::applyState(const ParameterState &state) {
   dismissOneShotPrompts();
   m_oneShotOperations.cancelAll();
 
+  // Finetune image grids are transient evidence from one accepted operation,
+  // not document/calibration state. A producing operation applies its numerical
+  // result first, then republishes fresh diagnostics; every intervening
+  // document edit must therefore hide the previous images.
+  if (m_geometryPanel)
+    m_geometryPanel->clearFinetuneImages();
+  if (m_sharpnessPanel)
+    m_sharpnessPanel->clearFinetuneImages();
+
   const bool invalidateFocusAreas =
       m_focusAreaAnalysis.baseline &&
       (m_focusAreaAnalysis.scan.lock() != m_scan ||

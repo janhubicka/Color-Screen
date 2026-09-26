@@ -874,6 +874,11 @@ compose with section folding. Sharpness uses eight stable `sharpness.*`
 section keys. Its numeric saved MTF/deconvolution controls opt into
 default/modified/Reset presentation; diagnostic rows such as finetune images
 and the adaptive chart must register applicability separately from folding.
+Finetune image grids are transient evidence from the most recently accepted
+operation, not saved calibration state: every accepted document-state
+application clears them, and the producing operation republishes fresh images
+after applying its numerical result. Geometry and Sharpness expose typed clear
+hooks; do not retain stale grids in panel-local visibility state.
 Live adaptive analysis may make its chart row applicable, but must never expand
 the section programmatically.
 

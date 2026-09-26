@@ -622,7 +622,12 @@ specialist stages.
   same default/modified/Reset presentation piloted in Digital Capture.
   Geometry includes all five existing groups; fit-prerequisite
   messages and visualization charts respect both applicability and the saved
-  fold during incremental updates. Finetune Diagnostic Images remains separate.
+  fold during incremental updates. Finetune Diagnostic Images remains separate
+  and is explicitly transient: Geometry and Sharpness expose it only after an
+  accepted finetune-producing operation, and the next accepted document-state
+  application clears the grid before any producing operation can republish fresh
+  diagnostics. This prevents an old optical/registration comparison from
+  masquerading as current after later edits or Undo/Redo.
   Other panels keep the previous initially-expanded behavior until their
   sections receive explicit keys;
 - add consistent per-module reset/bypass only where semantically valid.

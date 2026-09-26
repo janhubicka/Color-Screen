@@ -49,6 +49,8 @@ public:
 
   QWidget *getMTFChartWidget() const;
   void updateFinetuneImages(const colorscreen::finetune_result& result);
+  /** Clear transient finetune diagnostics after their document inputs change. */
+  void clearFinetuneImages();
   void setFocusAnalysisChecked(bool checked);
   /** Update availability and summary text for automatic multi-area focus
       analysis owned by the current document. */
