@@ -41,6 +41,8 @@ public:
   void updateRegistrationPointInfo(const ParameterState &state);
   void updateDeformationChart();
   void updateFinetuneImages(const colorscreen::finetune_result& result);
+  /** Clear transient finetune diagnostics after their document inputs change. */
+  void clearFinetuneImages();
   /** Show document-owned geometry-fit freshness/result status. */
   void setFitStatus(const QString &status);
   void setRegistrationPointsVisible(bool visible);
@@ -63,6 +65,8 @@ private:
   DeformationChartWidget *m_perspectiveChart = nullptr;
   DeformationChartWidget *m_nonlinearChart = nullptr;
   FinetuneImagesPanel *m_finetuneImagesPanel = nullptr;
+  QWidget *m_finetuneImagesWrapper = nullptr;
+  bool m_finetuneImagesAvailable = false;
 
   QVBoxLayout *m_chartContainer = nullptr;
   QVBoxLayout *m_lensChartContainer = nullptr;
