@@ -673,7 +673,7 @@ void MainWindow::presentDetectedScreenResult(
 
   presentScreenDetectionSuggestions(
       scan, baseline, detectedParam, true,
-      [this, baseline, detectedParam, detectedMesh, solverPoints,
+      [this, scan, baseline, detectedParam, detectedMesh, solverPoints,
        detectedScreenMap](bool updateColorModel, bool updateDpi,
                           double screenDpi) mutable {
         ParameterState newState = baseline;
@@ -694,7 +694,8 @@ void MainWindow::presentDetectedScreenResult(
         m_renderTypeParams.type = colorscreen::render_type_interpolated;
         changeParameters(newState, tr("Autodetect screen"));
 
-        publishDetectedScreenDiagnostics(std::move(detectedScreenMap));
+        publishDetectedScreenDiagnostics(
+            std::move(detectedScreenMap), scan, baseline);
 
         updateRegistrationActions();
         updateModeMenu();
