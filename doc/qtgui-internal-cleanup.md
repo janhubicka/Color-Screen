@@ -562,7 +562,10 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   are useful when they teach a prerequisite; hidden controls are useful when a
   whole concept is meaningless for the current process.  A lambda called
   `enabledCheck` should not silently mean different things in different helper
-  functions.  `ParameterPanel::setParameterApplicability()` now establishes
+  functions. Geometry's image-backed compute actions are a concrete guardrail:
+  saved coordinate/point state must not keep Detect/Optimize/Add/Fit enabled
+  while the source scan is absent; the real-panel smoke exercises image removal
+  with otherwise valid saved geometry.  `ParameterPanel::setParameterApplicability()` now establishes
   this distinction for form rows and composes it with section folding; Screen
   pattern rows and measured-MTF controls were the first users. Both checkbox
   helpers now follow the same enable-only `enabledCheck` contract as sliders,

@@ -571,7 +571,11 @@ specialist stages.
   same readiness rule instead of leaving disabled or no-op operations
   unexplained. Obvious image interactions (Digital Capture Measure/Crop and
   Sharpness Measure MTF) simply stay disabled until a scan exists, with
-  defensive handler guards as a second line of protection;
+  defensive handler guards as a second line of protection. Geometry follows
+  the same rule for every compute verb: Detect/Optimize coordinates, automatic
+  point discovery and Fit geometry require a live source scan in addition to
+  their point/geometry prerequisites, so saved state cannot expose an enabled
+  no-op while an image is absent or being replaced;
 - add explicit stale/result states where analyses depend on changing inputs.
 
 ### Phase C — module grammar
