@@ -2323,7 +2323,9 @@ bool runBetaInvariantSmoke() {
       !flatFieldStatus->text().contains(QStringLiteral("active"),
                                         Qt::CaseInsensitive) ||
       !adaptiveStatus->text().contains(QStringLiteral("active"),
-                                       Qt::CaseInsensitive))
+                                       Qt::CaseInsensitive) ||
+      !adaptiveStatus->text().contains(
+          QStringLiteral("freshness not verified"), Qt::CaseInsensitive))
     return fail("accepted calibrations did not expose active status/actions");
 
   clearFlatField->click();
