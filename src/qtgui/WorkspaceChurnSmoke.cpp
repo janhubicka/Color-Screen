@@ -356,8 +356,6 @@ if (captureTypeCombo && first->sharedImageData()) {
 }
 QLabel *profileCalibrationStatus = inspector->findChild<QLabel *>(
     QStringLiteral("ProfileCalibrationStatus"));
-QLabel *flatFieldStatus = inspector->findChild<QLabel *>(
-    QStringLiteral("CaptureFlatFieldStatus"));
 QPushButton *profileOptimizeButton = inspector->findChild<QPushButton *>(
     QStringLiteral("ProfileOptimizeButton"));
 QPushButton *mtfMeasureButton = inspector->findChild<QPushButton *>(
@@ -368,8 +366,6 @@ QPushButton *analyzeFocusAreasButton = inspector->findChild<QPushButton *>(
     QStringLiteral("SharpnessAnalyzeFocusAreasButton"));
 QLabel *mtfCalibrationStatus = inspector->findChild<QLabel *>(
     QStringLiteral("MtfCalibrationStatus"));
-QLabel *adaptiveCorrectionStatus = inspector->findChild<QLabel *>(
-    QStringLiteral("SharpnessAdaptiveCorrectionStatus"));
 QComboBox *mtfMeasurementSelector = inspector->findChild<QComboBox *>(
     QStringLiteral("MtfMeasurementSelector"));
 QLabel *mtfMeasurementProvenance = inspector->findChild<QLabel *>(
@@ -3104,6 +3100,18 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
       }
 
       case 212: {
+        QWidget *calibrationInspector = first->workspaceInspectorWidget();
+        QLabel *flatFieldStatus =
+            calibrationInspector
+                ? calibrationInspector->findChild<QLabel *>(
+                      QStringLiteral("CaptureFlatFieldStatus"))
+                : nullptr;
+        QLabel *adaptiveCorrectionStatus =
+            calibrationInspector
+                ? calibrationInspector->findChild<QLabel *>(
+                      QStringLiteral("SharpnessAdaptiveCorrectionStatus"))
+                : nullptr;
+
         // Flat-field calibration has a deliberately narrow freshness boundary:
         // decoding the reference depends on capture gamma/demosaic, while
         // geometry, color and ordinary appearance edits do not invalidate it.
