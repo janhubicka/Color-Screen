@@ -2460,10 +2460,73 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
           return;
         }
 
+        // Candidate freshness follows the actual worker inputs: render
+        // parameters + screen geometry + source scan. Profile-spot bookkeeping
+        // is irrelevant and must not discard useful candidates.
+        const ParameterState focusBaseline = first->getCurrentState();
+        const auto focusScan = first->sharedImageData();
+        QWidget *focusInspector = first->workspaceInspectorWidget();
+        QLabel *focusAreaStatus =
+            focusInspector
+                ? focusInspector->findChild<QLabel *>(
+                      QStringLiteral("SharpnessFocusAreaStatus"))
+                : nullptr;
+        first->m_focusAreaAnalysis.candidates.resize(3);
+        first->m_focusAreaAnalysis.baseline = focusBaseline;
+        first->m_focusAreaAnalysis.scan = focusScan;
+
+        ParameterState irrelevant = focusBaseline;
+        irrelevant.profileSpots.push_back({1.0, 1.0});
+        first->applyState(irrelevant);
+        if (first->m_focusAreaAnalysis.candidates.size() != 3 ||
+            !first->m_focusAreaAnalysis.baseline) {
+          fail(QStringLiteral(
+              "Irrelevant profile-spot edit invalidated focus-area candidates"));
+          return;
+        }
+        first->applyState(focusBaseline);
+        if (first->m_focusAreaAnalysis.candidates.size() != 3) {
+          fail(QStringLiteral(
+              "Restoring irrelevant state lost focus-area candidates"));
+          return;
+        }
+
+        ParameterState staleInputs = focusBaseline;
+        staleInputs.rparams.brightness += 0.125;
+        first->applyState(staleInputs);
+        if (!first->m_focusAreaAnalysis.candidates.empty() ||
+            first->m_focusAreaAnalysis.baseline ||
+            !first->m_focusAreaAnalysis.scan.expired() ||
+            !focusAreaStatus ||
+            !focusAreaStatus->text().contains(QStringLiteral("inputs changed"))) {
+          fail(QStringLiteral(
+              "Render edit did not invalidate/explain stale focus-area candidates"));
+          return;
+        }
+        first->applyState(focusBaseline);
+
+        // Defensive programmatic calls must reject stale candidates even if
+        // their vector was populated without going through applyState().
+        ParameterState staleCandidateBaseline = focusBaseline;
+        staleCandidateBaseline.rparams.brightness += 0.25;
+        first->m_focusAreaAnalysis.candidates.resize(3);
+        first->m_focusAreaAnalysis.baseline = staleCandidateBaseline;
+        first->m_focusAreaAnalysis.scan = focusScan;
+        first->onAnalyzeFocusAreasRequested(
+            colorscreen::finetune_scanner_mtf_sigma);
+        if (first->m_oneShotOperations.hasActiveTasks() ||
+            !first->m_focusAreaAnalysis.candidates.empty() ||
+            !focusAreaStatus->text().contains(QStringLiteral("inputs changed"))) {
+          fail(QStringLiteral(
+              "Programmatic focus analysis accepted stale candidate inputs"));
+          return;
+        }
+
         // Run the real multi-area path too. A geometry edit clears the source
         // candidates; a late completion must not put its old vector back.
-        const ParameterState focusBaseline = first->getCurrentState();
         first->m_focusAreaAnalysis.candidates.resize(3);
+        first->m_focusAreaAnalysis.baseline = focusBaseline;
+        first->m_focusAreaAnalysis.scan = focusScan;
         first->onAnalyzeFocusAreasRequested(
             colorscreen::finetune_scanner_mtf_sigma);
         if (!first->m_focusAreaAnalysis.running ||
@@ -2484,11 +2547,20 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
           retryOrFail(QStringLiteral("Cancelled multi-area fit did not finish cleanup"));
           return;
         }
+        QWidget *focusInspector = first->workspaceInspectorWidget();
+        QLabel *focusAreaStatus =
+            focusInspector
+                ? focusInspector->findChild<QLabel *>(
+                      QStringLiteral("SharpnessFocusAreaStatus"))
+                : nullptr;
         if (!first->m_focusAreaAnalysis.candidates.empty() ||
             first->m_focusAreaAnalysis.prompt ||
             !first->m_focusAreaAnalysis.result.selected.empty() ||
-            first->m_oneShotOperations.hasActiveTasks()) {
-          fail(QStringLiteral("Cancelled multi-area fit restored stale diagnostics"));
+            first->m_oneShotOperations.hasActiveTasks() ||
+            !focusAreaStatus ||
+            !focusAreaStatus->text().contains(QStringLiteral("inputs changed"))) {
+          fail(QStringLiteral(
+              "Cancelled multi-area fit restored stale diagnostics or hid its invalidation reason"));
           return;
         }
         for (const ProgressEntry &entry : first->m_progressController.entries()) {

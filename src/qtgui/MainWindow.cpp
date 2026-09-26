@@ -174,6 +174,15 @@ bool geometryFitInputsDiffer(const ParameterState &before,
          a.mesh_trans_is_scr_to_img != b.mesh_trans_is_scr_to_img;
 }
 
+/** Return whether automatic focus-area discovery/analysis inputs differ.
+    These workers consume render parameters and the screen-to-image mapping,
+    but not solver bookkeeping, detection settings, or profile-spot state. */
+bool focusAreaInputsDiffer(const ParameterState &before,
+                           const ParameterState &after) {
+  return !(before.rparams == after.rparams) ||
+         before.scrToImg != after.scrToImg;
+}
+
 /** Return whether CURRENT still uses the geometry produced by BASELINE.
 
     Solver-point edits intentionally do not count here: they make a fit stale,
@@ -2704,9 +2713,10 @@ void MainWindow::applyState(const ParameterState &state) {
   dismissOneShotPrompts();
   m_oneShotOperations.cancelAll();
 
-  const bool invalidateFocusAreas
-      = m_scrToImgParams != state.scrToImg
-        || !(m_rparams.scan_crop == state.rparams.scan_crop);
+  const bool invalidateFocusAreas =
+      m_focusAreaAnalysis.baseline &&
+      (m_focusAreaAnalysis.scan.lock() != m_scan ||
+       focusAreaInputsDiffer(*m_focusAreaAnalysis.baseline, state));
   bool profileSpotsChanged = m_profileSpots.size() != state.profileSpots.size();
   if (!profileSpotsChanged) {
     for (std::size_t i = 0; i < m_profileSpots.size(); ++i) {
@@ -2748,7 +2758,8 @@ void MainWindow::applyState(const ParameterState &state) {
   updateRegistrationActions();
   updateModeMenu();
   if (invalidateFocusAreas)
-    clearFocusAreaAnalysis();
+    clearFocusAreaAnalysis(
+        tr("Focus-area inputs changed; find focus areas again."));
 }
 
 QString MainWindow::mtfCalibrationSummary() const {
@@ -4838,20 +4849,32 @@ void MainWindow::updateFocusAreaOverlays() {
 }
 
 /** Clear transient automatic focus-area state without changing parameters. */
-void MainWindow::clearFocusAreaAnalysis() {
+void MainWindow::clearFocusAreaAnalysis(const QString &summary) {
   m_focusAreaAnalysis.candidates.clear();
   m_focusAreaAnalysis.result = colorscreen::finetune_focus_analysis_result();
+  m_focusAreaAnalysis.baseline.reset();
+  m_focusAreaAnalysis.scan.reset();
+  m_focusAreaAnalysis.statusSummary = summary;
   updateFocusAreaOverlays();
   if (m_sharpnessPanel)
-    m_sharpnessPanel->setFocusAreaAnalysisState(0, m_focusAreaAnalysis.running);
+    m_sharpnessPanel->setFocusAreaAnalysisState(
+        0, m_focusAreaAnalysis.running, summary);
 }
 
-/** Finish a focus-area request without overwriting its accepted result summary. */
+/** Finish a focus-area request without hiding a newer invalidation reason. */
 void MainWindow::finishFocusAreaOperation(const QString &summary) {
   m_focusAreaAnalysis.running = false;
+  QString effectiveSummary = summary;
+  if (!m_focusAreaAnalysis.baseline &&
+      !m_focusAreaAnalysis.statusSummary.isEmpty()) {
+    effectiveSummary = m_focusAreaAnalysis.statusSummary;
+  } else {
+    m_focusAreaAnalysis.statusSummary = summary;
+  }
   if (m_sharpnessPanel)
     m_sharpnessPanel->setFocusAreaAnalysisState(
-        static_cast<int>(m_focusAreaAnalysis.candidates.size()), false, summary);
+        static_cast<int>(m_focusAreaAnalysis.candidates.size()), false,
+        effectiveSummary);
 }
 
 /** Find uniform areas under the shared final-result snapshot/publication rules. */
@@ -4879,7 +4902,7 @@ void MainWindow::onFindFocusAreasRequested() {
   operation.resultValid = [this, scan, baseline, result]() {
     return m_scan == scan && getCurrentState() == baseline && !result->cancelled;
   };
-  operation.applyResult = [this, result, summary]() {
+  operation.applyResult = [this, scan, baseline, result, summary]() {
     if (!result->success) {
       *summary = tr("Focus-area search failed: %1")
                      .arg(QString::fromStdString(result->error));
@@ -4887,6 +4910,8 @@ void MainWindow::onFindFocusAreasRequested() {
     }
     m_focusAreaAnalysis.candidates = std::move(result->candidates);
     m_focusAreaAnalysis.result = colorscreen::finetune_focus_analysis_result();
+    m_focusAreaAnalysis.baseline = baseline;
+    m_focusAreaAnalysis.scan = scan;
     updateFocusAreaOverlays();
     const int count = static_cast<int>(m_focusAreaAnalysis.candidates.size());
     *summary = tr("Found %1 candidate uniform area(s).").arg(count);
@@ -4910,6 +4935,17 @@ void MainWindow::onAnalyzeFocusAreasRequested(uint64_t flags) {
   if (m_focusAreaAnalysis.candidates.size() < 3) {
     statusBar()->showMessage(
         tr("Find at least three focus areas before analyzing them."), 4000);
+    return;
+  }
+  const ParameterState currentFocusInputs = getCurrentState();
+  if (!m_focusAreaAnalysis.baseline ||
+      m_focusAreaAnalysis.scan.lock() != m_scan ||
+      focusAreaInputsDiffer(*m_focusAreaAnalysis.baseline,
+                            currentFocusInputs)) {
+    clearFocusAreaAnalysis(
+        tr("Focus-area inputs changed; find focus areas again."));
+    statusBar()->showMessage(
+        tr("Focus-area inputs changed; find focus areas again."), 4000);
     return;
   }
   const uint64_t focusMask = colorscreen::finetune_screen_blur
@@ -4948,6 +4984,8 @@ void MainWindow::onAnalyzeFocusAreasRequested(uint64_t flags) {
     // Partial diagnostics from cancelled/stale runs never reach this callback.
     m_focusAreaAnalysis.candidates = std::move(result->candidates);
     m_focusAreaAnalysis.result = std::move(result->analysis);
+    m_focusAreaAnalysis.baseline = baseline;
+    m_focusAreaAnalysis.scan = scan;
     updateFocusAreaOverlays();
     if (!result->success) {
       const QString error = QString::fromStdString(result->error);

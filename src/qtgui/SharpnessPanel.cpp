@@ -684,6 +684,8 @@ void SharpnessPanel::setupUi() {
     m_form->addRow(m_analyzeFocusAreasBtn);
 
   m_focusAreaStatusLabel = new QLabel(tr("No focus analysis areas found."), this);
+  m_focusAreaStatusLabel->setObjectName(
+      QStringLiteral("SharpnessFocusAreaStatus"));
   m_focusAreaStatusLabel->setWordWrap(true);
   if (m_currentGroupForm)
     m_currentGroupForm->addRow(m_focusAreaStatusLabel);
@@ -1431,14 +1433,20 @@ void SharpnessPanel::setFocusAnalysisChecked(bool checked) {
 /** Update controls for the document-local automatic focus-area workflow. */
 void SharpnessPanel::setFocusAreaAnalysisState(int candidateCount, bool running,
                                                const QString &summary) {
+    const bool hasImage = m_imageGetter() != nullptr;
     const bool geometryReady = colorscreen::screen_geometry_configured_p(
         m_stateGetter().scrToImg);
+    const bool analysisReady = hasImage && geometryReady;
     if (m_findFocusAreasBtn)
-        m_findFocusAreasBtn->setEnabled(!running && geometryReady);
+        m_findFocusAreasBtn->setEnabled(!running && analysisReady);
     if (m_analyzeFocusAreasBtn)
-        m_analyzeFocusAreasBtn->setEnabled(!running && geometryReady && candidateCount >= 3);
+        m_analyzeFocusAreasBtn->setEnabled(
+            !running && analysisReady && candidateCount >= 3);
     if (m_focusAreaStatusLabel) {
-        if (!geometryReady)
+        if (!hasImage)
+            m_focusAreaStatusLabel->setText(
+                tr("Load an image before focus analysis."));
+        else if (!geometryReady)
             m_focusAreaStatusLabel->setText(
                 tr("Fit screen geometry before focus analysis."));
         else if (!summary.isEmpty())
