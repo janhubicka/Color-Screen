@@ -807,6 +807,7 @@ private:
     // screen-to-image inputs under which they were produced.
     std::optional<ParameterState> baseline;
     std::weak_ptr<colorscreen::image_data> scan;
+    QString statusSummary;
     bool running = false;
   };
   FocusAreaAnalysisState m_focusAreaAnalysis;
