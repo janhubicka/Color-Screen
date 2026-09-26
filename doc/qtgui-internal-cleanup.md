@@ -635,6 +635,10 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   Flat-field calibration keeps only its accepted correction identity, reference
   filenames, and the gamma/demosaic inputs that actually affect reference
   decoding; do not stale it for unrelated geometry or appearance edits.
+  Focus-area analysis keeps candidate/result provenance with the source scan and
+  the render + screen-to-image inputs actually passed to its workers. Clear stale
+  transient overlays/results instead of leaving them analyzable; do not include
+  solver/detection/profile-spot bookkeeping in that freshness comparison.
   Registration discovery groups generation, scan, progress identity and the evolving
   expected document state because accepted worker batches are themselves
   undoable edits. Reference views likewise group the mutex-published
