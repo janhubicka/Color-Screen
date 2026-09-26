@@ -387,6 +387,16 @@ dialog declines optional recommendations but never discards mandatory detected
 geometry. The prompt remains snapshot-bound, so intervening document/image
 changes invalidate it.
 
+The **Show Auto-detected Patch Centers** overlay is session-only detection
+evidence, not saved calibration. Keep its map together with a weak source-scan
+identity and the accepted detector-input snapshot. Geometry-only refinement does
+not stale the map: `screen_map` stores detected elements in screen coordinates
+and drawing projects them through the current mapping. Changing the source scan,
+screen/scanner type, screen-colour detection parameters, capture gamma, or
+capture-sharpening inputs clears the map from every ordinary view and disables
+the menu action. Do not keep an enabled stale diagnostic merely because the
+underlying `screen_map` object is still allocated.
+
 ### 3. Independent Exports (Render to File)
 - **When to Use**: Tasks that are independent of ongoing UI parameter tweaks once started and should run to completion.
 - **Examples**: `onRender()` (rendering to a final file).
