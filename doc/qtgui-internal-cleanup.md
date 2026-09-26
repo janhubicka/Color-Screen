@@ -626,9 +626,12 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   multi-area focus analysis, progressive adaptive sharpening, and progressive
   registration discovery now each live in one lifecycle struct instead of
   parallel request/result/presentation members. Adaptive sharpening groups its
-  generation, immutable baseline, scan, and progress identity because both live
-  chart cells and the final correction share that ownership. Registration
-  discovery groups generation, scan, progress identity and the evolving
+  generation, immutable request baseline, scan, and progress identity because
+  live chart cells and final publication share that ownership. The same struct
+  also retains an accepted-result baseline plus a weak source-scan identity, so
+  its saved correction can be presented as current/stale/unverified without
+  pinning a replaced image or creating a second panel freshness flag.
+  Registration discovery groups generation, scan, progress identity and the evolving
   expected document state because accepted worker batches are themselves
   undoable edits. Reference views likewise group the mutex-published
   reference-load handoff and each reference-MTF request. Keep applying this
