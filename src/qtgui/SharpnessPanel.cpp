@@ -730,28 +730,16 @@ void SharpnessPanel::setupUi() {
   analyzeDisplacements->setObjectName(
       QStringLiteral("SharpnessAnalyzeDisplacementsButton"));
 
-  auto *adaptiveStatus = new QLabel(this);
-  adaptiveStatus->setObjectName(
+  m_adaptiveStatusLabel = new QLabel(this);
+  m_adaptiveStatusLabel->setObjectName(
       QStringLiteral("SharpnessAdaptiveCorrectionStatus"));
-  adaptiveStatus->setWordWrap(true);
+  m_adaptiveStatusLabel->setWordWrap(true);
   if (m_currentGroupForm)
-    m_currentGroupForm->addRow(tr("Status:"), adaptiveStatus);
+    m_currentGroupForm->addRow(tr("Status:"), m_adaptiveStatusLabel);
   else
-    m_form->addRow(tr("Status:"), adaptiveStatus);
-  m_widgetStateUpdaters.push_back([this, adaptiveStatus]() {
-    const ParameterState state = m_stateGetter();
-    if (m_adaptiveAnalysisRunning) {
-      adaptiveStatus->setText(
-          state.rparams.scanner_blur_correction
-              ? tr("Analysis running… current saved correction remains active.")
-              : tr("Adaptive sharpening analysis running…"));
-    } else {
-      adaptiveStatus->setText(
-          state.rparams.scanner_blur_correction
-              ? tr("Adaptive correction active (saved calibration).")
-              : tr("No adaptive correction."));
-    }
-  });
+    m_form->addRow(tr("Status:"), m_adaptiveStatusLabel);
+  m_widgetStateUpdaters.push_back(
+      [this]() { refreshAdaptiveCorrectionStatus(); });
 
   QLabel *adaptiveRequirement = new QLabel(this);
   adaptiveRequirement->setObjectName(
@@ -1395,7 +1383,41 @@ void SharpnessPanel::showAdaptiveChart() {
 /** Keep live adaptive diagnostics visible without bypassing section folding. */
 void SharpnessPanel::setAdaptiveAnalysisRunning(bool running) {
   m_adaptiveAnalysisRunning = running;
+  refreshAdaptiveCorrectionStatus();
   updateWidgetStates();
+}
+
+/** Present STATUS supplied by the document-owned adaptive-analysis provenance. */
+void SharpnessPanel::setAdaptiveCorrectionStatus(const QString &status) {
+  m_adaptiveCorrectionStatus = status;
+  refreshAdaptiveCorrectionStatus();
+}
+
+/** Refresh the adaptive status, composing persistent provenance with live work. */
+void SharpnessPanel::refreshAdaptiveCorrectionStatus() {
+  if (!m_adaptiveStatusLabel)
+    return;
+
+  const ParameterState state = m_stateGetter();
+  QString acceptedStatus = m_adaptiveCorrectionStatus;
+  if (acceptedStatus.isEmpty()) {
+    acceptedStatus = state.rparams.scanner_blur_correction
+        ? tr("Adaptive correction active (saved calibration).")
+        : tr("No adaptive correction.");
+  }
+
+  if (!m_adaptiveAnalysisRunning) {
+    m_adaptiveStatusLabel->setText(acceptedStatus);
+    return;
+  }
+
+  if (state.rparams.scanner_blur_correction) {
+    m_adaptiveStatusLabel->setText(
+        tr("Analysis running… %1").arg(acceptedStatus));
+  } else {
+    m_adaptiveStatusLabel->setText(
+        tr("Adaptive sharpening analysis running…"));
+  }
 }
 
 void SharpnessPanel::setFocusAnalysisChecked(bool checked) {
