@@ -1378,6 +1378,14 @@ void SharpnessPanel::updateFinetuneImages(
   updateWidgetStates();
 }
 
+/** Remove finetune diagnostic images without changing document parameters. */
+void SharpnessPanel::clearFinetuneImages() {
+  if (m_finetuneImagesPanel)
+    m_finetuneImagesPanel->clear();
+  m_finetuneImagesAvailable = false;
+  updateWidgetStates();
+}
+
 void SharpnessPanel::showAdaptiveChart() {
   setAdaptiveAnalysisRunning(true);
 }
