@@ -401,11 +401,15 @@ requiring the operator to infer freshness from the global Workflow card.
 Measured MTF model fitting now follows the same
 document-level presentation model across the main and reference inspectors; its
 measurement ROI/edge metadata is persistent provenance but deliberately does
-not stale the numerical model. Profile calibration now follows the same rule:
-the exact screen/render/spot snapshot gates publication, accepted fits retain
-their average DeltaE as quality provenance, and later edits make the profile
-stale without discarding its coefficients. Profiles loaded from `.par` remain
-available but are labelled as having unverified session freshness.
+not stale the numerical model. Adaptive sharpening now retains the same exact
+scan/document snapshot after a correction is accepted: the saved correction
+stays active after later edits but is labelled stale, while a correction loaded
+from `.par` remains usable with unverified session freshness. Profile
+calibration follows the same rule: the exact screen/render/spot snapshot gates
+publication, accepted fits retain their average DeltaE as quality provenance,
+and later edits make the profile stale without discarding its coefficients.
+Profiles loaded from `.par` remain available but are labelled as having
+unverified session freshness.
 
 ## Control semantics: five categories
 
