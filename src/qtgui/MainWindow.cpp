@@ -3008,6 +3008,45 @@ void MainWindow::updateWorkflowSummary() {
     }
   }
 
+  if (m_geometryPanel) {
+    QString fitStatus;
+    const bool regularGeometry =
+        colorscreen::screen_has_regular_geometry_p(currentState.scrToImg.type);
+    const bool configuredGeometry =
+        colorscreen::screen_geometry_configured_p(currentState.scrToImg);
+    if (!m_scan) {
+      fitStatus = tr("No source image loaded.");
+    } else if (!regularGeometry) {
+      fitStatus = tr("Geometry fitting is not used for this screen type.");
+    } else if (!configuredGeometry) {
+      fitStatus = tr("Geometry not configured.");
+    } else {
+      const bool fitCurrent =
+          m_geometryFit.baseline &&
+          !geometryFitInputsDiffer(*m_geometryFit.baseline, currentState);
+      const bool failureCurrent =
+          m_geometryFit.failureInputs &&
+          !geometryFitInputsDiffer(*m_geometryFit.failureInputs, currentState);
+      if (m_geometryFit.pendingInputs) {
+        fitStatus = tr("Fitting geometry…");
+      } else if (fitCurrent) {
+        fitStatus = tr("Current fitted geometry.");
+        if (failureCurrent)
+          fitStatus +=
+              tr(" Last refit failed; the current fitted geometry is unchanged.");
+      } else if (failureCurrent) {
+        fitStatus =
+            tr("Fit failed for the current inputs; adjust points/settings and retry.");
+      } else if (m_geometryFit.baseline) {
+        fitStatus = tr("Fitted geometry is stale; refit to update it.");
+      } else {
+        fitStatus =
+            tr("Geometry present; fit provenance is not verified in this session.");
+      }
+    }
+    m_geometryPanel->setFitStatus(fitStatus);
+  }
+
   using capture_type =
       decltype(colorscreen::render_parameters::capture_unknown);
   const capture_type capture =
