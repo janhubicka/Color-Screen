@@ -956,11 +956,27 @@ bool geometrySectionPreferencesSmoke() {
   };
 
   auto first = createPanel();
+  auto *detectCoordinates = first->findChild<QPushButton *>(
+      QStringLiteral("DetectScreenCoordinatesButton"));
+  auto *optimizeCoordinates = first->findChild<QPushButton *>(
+      QStringLiteral("OptimizeScreenCoordinatesButton"));
+  auto *addRegistrationPoints = first->findChild<QPushButton *>(
+      QStringLiteral("GeometryAddRegistrationPointsButton"));
+  auto *addPointsInArea = first->findChild<QPushButton *>(
+      QStringLiteral("GeometryAddPointsInAreaButton"));
+  auto *fitGeometry = first->findChild<QPushButton *>(
+      QStringLiteral("GeometryFitButton"));
   std::vector<bool> expected(keys.size(), true);
   if (!verify(*first, expected)
       || !verifyMessages(*first, {true, true, true, true})
       || !verifyCharts(*first, {false, false, false, false}))
     return false;
+  if (!detectCoordinates || !optimizeCoordinates || !addRegistrationPoints ||
+      !addPointsInArea || !fitGeometry || detectCoordinates->isEnabled() ||
+      optimizeCoordinates->isEnabled() || addRegistrationPoints->isEnabled() ||
+      addPointsInArea->isEnabled() || fitGeometry->isEnabled())
+    return fail(QStringLiteral(
+        "Geometry exposed compute actions without a source image"));
   for (int i = 0; i < keys.size(); ++i) {
     if (QSettings().contains(settingKey(keys[i])))
       return fail(QStringLiteral("construction persisted a default choice"));
@@ -1017,6 +1033,25 @@ bool geometrySectionPreferencesSmoke() {
   state.scrToImg.coordinate1 = {4, 0};
   state.scrToImg.coordinate2 = {0, 4};
   addLocalPoints();
+  second->updateUI();
+  auto *secondDetectCoordinates = second->findChild<QPushButton *>(
+      QStringLiteral("DetectScreenCoordinatesButton"));
+  auto *secondOptimizeCoordinates = second->findChild<QPushButton *>(
+      QStringLiteral("OptimizeScreenCoordinatesButton"));
+  auto *secondAddRegistrationPoints = second->findChild<QPushButton *>(
+      QStringLiteral("GeometryAddRegistrationPointsButton"));
+  auto *secondAddPointsInArea = second->findChild<QPushButton *>(
+      QStringLiteral("GeometryAddPointsInAreaButton"));
+  auto *secondFitGeometry = second->findChild<QPushButton *>(
+      QStringLiteral("GeometryFitButton"));
+  if (!secondDetectCoordinates || !secondOptimizeCoordinates ||
+      !secondAddRegistrationPoints || !secondAddPointsInArea ||
+      !secondFitGeometry || secondDetectCoordinates->isEnabled() ||
+      secondOptimizeCoordinates->isEnabled() ||
+      !secondAddRegistrationPoints->isEnabled() ||
+      !secondAddPointsInArea->isEnabled() || !secondFitGeometry->isEnabled())
+    return fail(QStringLiteral(
+        "Geometry compute availability ignored scan/point prerequisites"));
   second->updateRegistrationPointInfo(state);
   if (!verifyMessages(*second, {false, true, false, false}))
     return fail(QStringLiteral("lens coverage warning ignored folding"));
@@ -1068,6 +1103,13 @@ bool geometrySectionPreferencesSmoke() {
     return fail(QStringLiteral("expansion resurrected charts without geometry"));
   state = withGeometry;
   scan.reset();
+  second->updateUI();
+  if (secondDetectCoordinates->isEnabled() ||
+      secondOptimizeCoordinates->isEnabled() ||
+      secondAddRegistrationPoints->isEnabled() ||
+      secondAddPointsInArea->isEnabled() || secondFitGeometry->isEnabled())
+    return fail(QStringLiteral(
+        "image removal left Geometry compute actions enabled"));
   second->updateDeformationChart();
   if (!verifyCharts(*second, {false, false, false, false}))
     return fail(QStringLiteral("image removal left diagnostic charts visible"));

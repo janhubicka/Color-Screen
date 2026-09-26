@@ -76,15 +76,18 @@ void GeometryPanel::setupUi() {
   addSeparator("Automatic registration",
                QStringLiteral("geometry.automatic_registration"));
 
-  auto hasConfiguredGeometry = [](const ParameterState &s) {
-      return colorscreen::screen_geometry_configured_p(s.scrToImg);
+  auto hasConfiguredGeometry = [this](const ParameterState &s) {
+      return m_imageGetter() != nullptr &&
+             colorscreen::screen_geometry_configured_p(s.scrToImg);
   };
 
   m_autodetectCoordinatesButton = addButtonParameter(
       "Step 1", "Detect screen coordinates", [this]() {
         emit autodetectCoordinatesRequested();
       },
-      [](const ParameterState &state) { return state.solver.points.empty(); },
+      [this](const ParameterState &state) {
+        return m_imageGetter() != nullptr && state.solver.points.empty();
+      },
       "Detect the regular screen pattern and establish its coordinate system "
       "(center and axes). This is intentionally disabled once control points "
       "exist because they are expressed in the current screen coordinate system; "
@@ -106,13 +109,23 @@ void GeometryPanel::setupUi() {
   optimizeCoordinatesButton->setObjectName(
       QStringLiteral("OptimizeScreenCoordinatesButton"));
 
-  addButtonParameter("Step 3", "Add registration points", [this]() {
-      emit automaticallyAddPointsRequested(m_finetuneAreaParams);
-  }, hasConfiguredGeometry, "Automatically identify and add registration points within the current crop area.");
+  QPushButton *addRegistrationPointsButton =
+      addButtonParameter("Step 3", "Add registration points", [this]() {
+        emit automaticallyAddPointsRequested(m_finetuneAreaParams);
+      }, hasConfiguredGeometry,
+      "Automatically identify and add registration points within the current "
+      "crop area.");
+  addRegistrationPointsButton->setObjectName(
+      QStringLiteral("GeometryAddRegistrationPointsButton"));
   
-  addButtonParameter("", "Add points in selected area", [this]() {
-      emit automaticallyAddPointsInAreaRequested(m_finetuneAreaParams);
-  }, hasConfiguredGeometry, "Select an area and automatically identify and add registration points within it.");
+  QPushButton *addPointsInAreaButton =
+      addButtonParameter("", "Add points in selected area", [this]() {
+        emit automaticallyAddPointsInAreaRequested(m_finetuneAreaParams);
+      }, hasConfiguredGeometry,
+      "Select an area and automatically identify and add registration points "
+      "within it.");
+  addPointsInAreaButton->setObjectName(
+      QStringLiteral("GeometryAddPointsInAreaButton"));
 
   auto setupFinetuneSlider = [this](const QString &label, double min, double max, double scale, int decimals, double initial, auto member, double gamma = 1.0, bool logarithmic = false, const QString &tooltip = QString()) {
       SliderWidgets widgets = addSliderControls(label, min, max, scale, decimals, "", "", initial, [this, member](double v) {
@@ -148,7 +161,14 @@ void GeometryPanel::setupUi() {
 
   m_optimizeButton = addButtonParameter("Fit", "Fit geometry", [this]() {
       emit optimizeRequested(m_autoOptimizeBox->isChecked());
-  }, nullptr, "Fit the geometry parameters (rotation, tilt, lens correction, and optional nonlinear correction) to the registration points.");
+  }, [this](const ParameterState &state) {
+      const auto scan = m_imageGetter();
+      return scan != nullptr &&
+             static_cast<int>(state.solver.points.size()) >=
+                 colorscreen::solver_parameters::min_points(
+                     state.scrToImg.type);
+  }, "Fit the geometry parameters (rotation, tilt, lens correction, and optional nonlinear correction) to the registration points.");
+  m_optimizeButton->setObjectName(QStringLiteral("GeometryFitButton"));
 
   connect(m_autoOptimizeBox, &QCheckBox::toggled, this, [this](bool checked){
       if (checked) emit optimizeRequested(true);
@@ -385,12 +405,15 @@ bool GeometryPanel::isAutoEnabled() const {
 void GeometryPanel::updateRegistrationPointInfo(const ParameterState &state) {
   int numPoints = state.solver.points.size();
   colorscreen::scr_type type = state.scrToImg.type;
+  const auto scan = m_imageGetter();
+  const bool hasScan = scan != nullptr;
 
   // Stored solver points use the current screen coordinate system as their
   // reference frame. Redetecting the basis after points exist would silently
-  // reinterpret them. Keep this guard in the incremental update path too.
+  // reinterpret them. Keep this guard in the incremental update path too, and
+  // never leave a compute action enabled while its source image is absent.
   if (m_autodetectCoordinatesButton)
-    m_autodetectCoordinatesButton->setEnabled(numPoints == 0);
+    m_autodetectCoordinatesButton->setEnabled(hasScan && numPoints == 0);
 
   if (m_showRegistrationPointsBox) {
       m_showRegistrationPointsBox->setText(tr("Show registration points"));
@@ -418,7 +441,6 @@ void GeometryPanel::updateRegistrationPointInfo(const ParameterState &state) {
      explanation instead of silently enabling lens optimization.  */
   if (m_lensMessageLabel
       && numPoints >= colorscreen::solver_parameters::min_lens_points(type)) {
-      auto scan = m_imageGetter();
       if (scan && !state.solver.lens_coverage_sufficient(
                       scan->width, scan->height, state.scrToImg.scanner_type)) {
           m_lensMessageLabel->setText(
@@ -426,11 +448,13 @@ void GeometryPanel::updateRegistrationPointInfo(const ParameterState &state) {
       }
   }
 
-  bool canOptimize = numPoints >= colorscreen::solver_parameters::min_points(type);
-  if (m_optimizeButton) m_optimizeButton->setEnabled(canOptimize);
+  bool canOptimize =
+      hasScan &&
+      numPoints >= colorscreen::solver_parameters::min_points(type);
+  if (m_optimizeButton)
+    m_optimizeButton->setEnabled(canOptimize);
 
   if (m_gridWidthSpin && m_gridHeightSpin) {
-      auto scan = m_imageGetter();
       if (scan && scan->width > 0 && scan->height > 0) {
           colorscreen::int_image_area crop = state.rparams.get_scan_crop(scan->width, scan->height);
           int defW, defH;
