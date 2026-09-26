@@ -174,22 +174,6 @@ bool geometryFitInputsDiffer(const ParameterState &before,
          a.mesh_trans_is_scr_to_img != b.mesh_trans_is_scr_to_img;
 }
 
-/** Return whether inputs that produce an automatic-detection patch map differ.
-
-    The retained screen_map is scan-space detection evidence. Coordinate
-    geometry may be refined afterwards and is intentionally excluded because
-    drawing projects the retained screen coordinates through the current
-    mapping. The detector itself consumes screen/scanner type, screen-color
-    classification, gamma, and capture sharpening. */
-bool detectedScreenDiagnosticsInputsDiffer(const ParameterState &before,
-                                           const ParameterState &after) {
-  return before.scrToImg.type != after.scrToImg.type ||
-         before.scrToImg.scanner_type != after.scrToImg.scanner_type ||
-         before.detect != after.detect ||
-         before.rparams.gamma != after.rparams.gamma ||
-         !(before.rparams.sharpen == after.rparams.sharpen);
-}
-
 /** Return whether automatic focus-area discovery/analysis inputs differ.
     These workers consume render parameters and the screen-to-image mapping,
     but not solver bookkeeping, detection settings, or profile-spot state. */
@@ -2733,18 +2717,14 @@ void MainWindow::publishDetectedScreenDiagnostics(
     return;
   }
 
-  ParameterState provenance = detectorInputs;
-  // Unknown-screen discovery learns TYPE as part of the result. Treat the
-  // detected type as the accepted identity of this map while preserving every
-  // other input exactly as it was when the detector ran.
-  provenance.scrToImg.type = map->type;
-  if (detectedScreenDiagnosticsInputsDiffer(provenance, getCurrentState())) {
+  DetectedScreenDiagnosticsState::Inputs inputs(map->type, detectorInputs);
+  if (!inputs.matches(getCurrentState())) {
     clearDetectedScreenDiagnostics();
     return;
   }
 
   m_detectedScreenDiagnostics.map = std::move(map);
-  m_detectedScreenDiagnostics.baseline = std::move(provenance);
+  m_detectedScreenDiagnostics.inputs = std::move(inputs);
   m_detectedScreenDiagnostics.scan = scan;
 
   if (m_imageWidget)
@@ -2789,10 +2769,9 @@ void MainWindow::applyState(const ParameterState &state) {
     m_sharpnessPanel->clearFinetuneImages();
 
   const bool invalidateDetectedScreenDiagnostics =
-      m_detectedScreenDiagnostics.baseline &&
+      m_detectedScreenDiagnostics.inputs &&
       (m_detectedScreenDiagnostics.scan.lock() != m_scan ||
-       detectedScreenDiagnosticsInputsDiffer(
-           *m_detectedScreenDiagnostics.baseline, state));
+       !m_detectedScreenDiagnostics.inputs->matches(state));
   if (invalidateDetectedScreenDiagnostics)
     clearDetectedScreenDiagnostics();
 
