@@ -678,13 +678,38 @@ private:
       but not across changes to the scan or detector/color-classification
       inputs that produced it. */
   struct DetectedScreenDiagnosticsState {
+    /** Exact subset consumed while building the retained screen_map. */
+    struct Inputs {
+      colorscreen::scr_type type;
+      colorscreen::scanner_type scannerType;
+      colorscreen::scr_detect_parameters detect;
+      colorscreen::luminosity_t gamma;
+      colorscreen::sharpen_parameters sharpen;
+
+      Inputs(colorscreen::scr_type detectedType,
+             const ParameterState &state)
+          : type(detectedType),
+            scannerType(state.scrToImg.scanner_type),
+            detect(state.detect),
+            gamma(state.rparams.gamma),
+            sharpen(state.rparams.sharpen) {}
+
+      bool matches(const ParameterState &state) const {
+        return type == state.scrToImg.type &&
+               scannerType == state.scrToImg.scanner_type &&
+               detect == state.detect &&
+               gamma == state.rparams.gamma &&
+               sharpen == state.rparams.sharpen;
+      }
+    };
+
     std::shared_ptr<const colorscreen::screen_map> map;
-    std::optional<ParameterState> baseline;
+    std::optional<Inputs> inputs;
     std::weak_ptr<colorscreen::image_data> scan;
 
     void clear() {
       map.reset();
-      baseline.reset();
+      inputs.reset();
       scan.reset();
     }
   };
