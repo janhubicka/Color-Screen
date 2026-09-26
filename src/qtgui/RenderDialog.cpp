@@ -60,20 +60,36 @@ RenderDialog::RenderDialog(
     const render_parameters &rparams,
     const scr_to_img_parameters &scrParams,
     const image_data *scan,
+    const QString &outputPath,
     bool isDng,
     QWidget *parent)
   : QDialog(parent), m_rtparams(rtparams), m_scrParams(scrParams), m_scan(scan)
 {
-  setWindowTitle(tr("Render Settings"));
-  setMinimumWidth(460);
+  setWindowTitle(tr("Render to File"));
+  setMinimumWidth(520);
 
   auto *mainLayout = new QVBoxLayout(this);
 
-  // ── Mode ──────────────────────────────────────────────────────────────────
-  auto *topForm = new QFormLayout;
-  mainLayout->addLayout(topForm);
+  // ── Output identity / coordinate plane ────────────────────────────────────
+  auto *outputGroup = new QGroupBox(tr("Output"), this);
+  outputGroup->setObjectName(QStringLiteral("RenderOutputGroup"));
+  auto *outputForm = new QFormLayout(outputGroup);
+  mainLayout->addWidget(outputGroup);
 
-  m_modeCombo = new QComboBox(this);
+  auto *outputPathLabel = new QLabel(outputPath, outputGroup);
+  outputPathLabel->setObjectName(QStringLiteral("RenderOutputPathLabel"));
+  outputPathLabel->setWordWrap(true);
+  outputPathLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
+  outputPathLabel->setToolTip(outputPath);
+  outputForm->addRow(tr("File:"), outputPathLabel);
+
+  auto *formatLabel =
+      new QLabel(isDng ? tr("DNG") : tr("TIFF"), outputGroup);
+  formatLabel->setObjectName(QStringLiteral("RenderOutputFormatLabel"));
+  outputForm->addRow(tr("Format:"), formatLabel);
+
+  m_modeCombo = new QComboBox(outputGroup);
+  m_modeCombo->setObjectName(QStringLiteral("RenderModeCombo"));
   for (int i = 0; i < render_type_max; ++i) {
     const render_type_property &prop = render_type_properties[i];
     bool show = true;
@@ -106,14 +122,37 @@ RenderDialog::RenderDialog(
   }
   int idx = m_modeCombo->findData((int)rtparams.type);
   if (idx >= 0) m_modeCombo->setCurrentIndex(idx);
-  topForm->addRow(tr("Mode:"), m_modeCombo);
+  outputForm->addRow(tr("Render mode:"), m_modeCombo);
 
-  // ── Non-DNG options ───────────────────────────────────────────────────────
-  m_nonDngWidget = new QWidget(this);
-  auto *nonDngForm = new QFormLayout(m_nonDngWidget);
-  nonDngForm->setContentsMargins(0, 0, 0, 0);
+  if (colorscreen::screen_geometry_configured_p(scrParams)) {
+    m_geometryCombo = new QComboBox(outputGroup);
+    m_geometryCombo->setObjectName(QStringLiteral("RenderOutputPlaneCombo"));
+    for (int i = 0; i < (int)render_to_file_params::max_geometry; ++i)
+      m_geometryCombo->addItem(render_to_file_params::geometry_names[i].name, i);
+    m_geometryCombo->setCurrentIndex(
+        (int)render_to_file_params::default_geometry);
+    outputForm->addRow(tr("Output plane:"), m_geometryCombo);
+    connect(m_geometryCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, &RenderDialog::onGeometryChanged);
+  }
+
+  auto *processingLabel = new QLabel(
+      tr("Uses the current document crop and Sharpness settings. "
+         "No additional export-only sharpening is applied."),
+      outputGroup);
+  processingLabel->setObjectName(
+      QStringLiteral("RenderDocumentProcessingLabel"));
+  processingLabel->setWordWrap(true);
+  outputForm->addRow(tr("Document processing:"), processingLabel);
+
+  // ── Non-DNG color/encoding options ────────────────────────────────────────
+  auto *colorGroup = new QGroupBox(tr("Color and encoding"), this);
+  colorGroup->setObjectName(QStringLiteral("RenderColorEncodingGroup"));
+  m_nonDngWidget = colorGroup;
+  auto *nonDngForm = new QFormLayout(colorGroup);
 
   m_profileCombo = new QComboBox(m_nonDngWidget);
+  m_profileCombo->setObjectName(QStringLiteral("RenderOutputProfileCombo"));
   for (int i = 0; i < (int)render_parameters::output_profile_max; ++i)
     m_profileCombo->addItem(render_parameters::output_profile_names[i], i);
   m_profileCombo->setCurrentIndex((int)rparams.output_profile);
@@ -123,6 +162,7 @@ RenderDialog::RenderDialog(
   nonDngForm->addRow(QString(), m_hdrCheck);
 
   m_depthCombo = new QComboBox(m_nonDngWidget);
+  m_depthCombo->setObjectName(QStringLiteral("RenderBitDepthCombo"));
   m_depthCombo->addItem("8-bit",  QVariant(8));
   m_depthCombo->addItem("16-bit", QVariant(16));
   m_depthCombo->addItem("32-bit", QVariant(32));
@@ -131,33 +171,20 @@ RenderDialog::RenderDialog(
   connect(m_depthCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
           this, &RenderDialog::updateSizePreview);
 
-  if (colorscreen::screen_geometry_configured_p(scrParams)) {
-    m_geometryCombo = new QComboBox(m_nonDngWidget);
-    for (int i = 0; i < (int)render_to_file_params::max_geometry; ++i)
-      m_geometryCombo->addItem(render_to_file_params::geometry_names[i].name, i);
-    m_geometryCombo->setCurrentIndex((int)render_to_file_params::default_geometry);
-    nonDngForm->addRow(tr("Geometry:"), m_geometryCombo);
-    connect(m_geometryCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
-            this, &RenderDialog::onGeometryChanged);
-  }
-
   m_nonDngWidget->setVisible(!isDng);
   mainLayout->addWidget(m_nonDngWidget);
 
-  // ── Antialias ─────────────────────────────────────────────────────────────
-  auto *commonForm = new QFormLayout;
-  mainLayout->addLayout(commonForm);
+  // ── Size / resampling ─────────────────────────────────────────────────────
+  auto *sizeGroup = new QGroupBox(tr("Size and resampling"), this);
+  sizeGroup->setObjectName(QStringLiteral("RenderSizeResamplingGroup"));
+  auto *sizeForm  = new QFormLayout(sizeGroup);
+  mainLayout->addWidget(sizeGroup);
 
-  m_antialiasSpin = new QSpinBox(this);
+  m_antialiasSpin = new QSpinBox(sizeGroup);
   m_antialiasSpin->setRange(0, 32);
   m_antialiasSpin->setValue(0);
   m_antialiasSpin->setSpecialValueText(tr("default"));
-  commonForm->addRow(tr("Antialias (NxN):"), m_antialiasSpin);
-
-  // ── Output Size group ─────────────────────────────────────────────────────
-  auto *sizeGroup = new QGroupBox(tr("Output Size"), this);
-  auto *sizeForm  = new QFormLayout(sizeGroup);
-  mainLayout->addWidget(sizeGroup);
+  sizeForm->addRow(tr("Antialias (N×N):"), m_antialiasSpin);
 
   // Scale (default 1.0)
   makeScaleRow(sizeForm, tr("Scale:"), &m_scaleSpin, &m_scaleSlider, sizeGroup);
@@ -225,6 +252,7 @@ RenderDialog::RenderDialog(
 
   // Output size label (exact, not estimated)
   m_sizePreviewLabel = new QLabel(tr("—"), sizeGroup);
+  m_sizePreviewLabel->setObjectName(QStringLiteral("RenderOutputSizeLabel"));
   m_sizePreviewLabel->setAlignment(Qt::AlignRight);
   sizeForm->addRow(tr("Output size:"), m_sizePreviewLabel);
 
@@ -284,6 +312,10 @@ RenderDialog::RenderDialog(
   // ── Buttons ───────────────────────────────────────────────────────────────
   auto *buttons = new QDialogButtonBox(
       QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
+  if (QPushButton *renderButton = buttons->button(QDialogButtonBox::Ok)) {
+    renderButton->setText(tr("Render"));
+    renderButton->setObjectName(QStringLiteral("RenderDialogRenderButton"));
+  }
   connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
   connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
   mainLayout->addWidget(buttons);
