@@ -2719,6 +2719,43 @@ void MainWindow::restoreFromWorkspaceEmbedding() {
 
 // Undo/Redo Implementation
 
+/** Publish one current automatic-detection patch map to every ordinary view.
+
+    Capture provenance only after the detected numerical document result has
+    been accepted, so the immediate geometry-refinement handoff can update the
+    mapping without making the scan-space diagnostic stale. */
+void MainWindow::publishDetectedScreenDiagnostics(
+    std::shared_ptr<const colorscreen::screen_map> map) {
+  if (!map) {
+    clearDetectedScreenDiagnostics();
+    return;
+  }
+
+  m_detectedScreenDiagnostics.map = std::move(map);
+  m_detectedScreenDiagnostics.baseline = getCurrentState();
+  m_detectedScreenDiagnostics.scan = m_scan;
+
+  if (m_imageWidget)
+    m_imageWidget->setDetectedScreenMap(m_detectedScreenDiagnostics.map);
+  if (ImageWidget *image = inspectorImageWidget();
+      image && image != m_imageWidget)
+    image->setDetectedScreenMap(m_detectedScreenDiagnostics.map);
+  if (m_detectedPatchCentersAction)
+    m_detectedPatchCentersAction->setEnabled(true);
+}
+
+/** Remove an obsolete patch map from state and every ordinary presentation. */
+void MainWindow::clearDetectedScreenDiagnostics() {
+  m_detectedScreenDiagnostics.clear();
+  if (m_imageWidget)
+    m_imageWidget->setDetectedScreenMap(nullptr);
+  if (ImageWidget *image = inspectorImageWidget();
+      image && image != m_imageWidget)
+    image->setDetectedScreenMap(nullptr);
+  if (m_detectedPatchCentersAction)
+    m_detectedPatchCentersAction->setEnabled(false);
+}
+
 /** Apply a full ParameterState to the application.
    Copies all parameter structs (render, scr-to-img, detect, solver,
    profile spots) to member variables, updates ImageWidget and
