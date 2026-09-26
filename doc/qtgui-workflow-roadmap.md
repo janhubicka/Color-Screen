@@ -409,7 +409,12 @@ calibration follows the same rule: the exact screen/render/spot snapshot gates
 publication, accepted fits retain their average DeltaE as quality provenance,
 and later edits make the profile stale without discarding its coefficients.
 Profiles loaded from `.par` remain available but are labelled as having
-unverified session freshness.
+unverified session freshness. Automatic focus-area candidates/diagnostics are
+transient rather than saved calibration: they retain the source scan plus the
+render/screen-mapping snapshot used by discovery. Changes to those actual worker
+inputs clear the rectangles/results and ask the operator to find areas again;
+solver bookkeeping, detection settings and profile-spot edits do not
+unnecessarily discard them.
 
 ## Control semantics: five categories
 
