@@ -819,12 +819,17 @@ private:
     QString blackReference;
     std::weak_ptr<colorscreen::progress_info> progress;
 
+    void clearRequest() { progress.reset(); }
     void clearAccepted() {
       gamma.reset();
       demosaic.reset();
       correction.reset();
       whiteReference.clear();
       blackReference.clear();
+    }
+    void clear() {
+      clearRequest();
+      clearAccepted();
     }
   };
   FlatFieldCalibrationState m_flatFieldCalibration;
