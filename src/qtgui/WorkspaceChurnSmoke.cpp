@@ -366,8 +366,6 @@ QPushButton *analyzeFocusAreasButton = inspector->findChild<QPushButton *>(
     QStringLiteral("SharpnessAnalyzeFocusAreasButton"));
 QLabel *mtfCalibrationStatus = inspector->findChild<QLabel *>(
     QStringLiteral("MtfCalibrationStatus"));
-QLabel *adaptiveCorrectionStatus = inspector->findChild<QLabel *>(
-    QStringLiteral("SharpnessAdaptiveCorrectionStatus"));
 QComboBox *mtfMeasurementSelector = inspector->findChild<QComboBox *>(
     QStringLiteral("MtfMeasurementSelector"));
 QLabel *mtfMeasurementProvenance = inspector->findChild<QLabel *>(
@@ -3102,6 +3100,13 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
       }
 
       case 212: {
+        QWidget *adaptiveInspector = first->workspaceInspectorWidget();
+        QLabel *adaptiveCorrectionStatus =
+            adaptiveInspector
+                ? adaptiveInspector->findChild<QLabel *>(
+                      QStringLiteral("SharpnessAdaptiveCorrectionStatus"))
+                : nullptr;
+
         // Progressive adaptive sharpening cannot use OneShotOperation because
         // its live chart cells are intentional publication. Exercise the
         // equivalent generation/progress/snapshot ownership contract without
