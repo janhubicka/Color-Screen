@@ -265,14 +265,22 @@ hardening patch corrects that behaviour.
 Rendering/export is currently a command/dialog rather than a parameter-panel
 stage.  That is reasonable and conventional.
 
-For beta, the render dialog should make these items explicit:
+For beta, the render flow now makes these items explicit without creating
+another layer of saved export state:
 
-- output coordinate/image plane;
-- crop and dimensions/resampling;
-- output colour profile/encoding;
-- bit depth and file format;
-- whether any output-specific sharpening exists;
-- destination and overwrite policy.
+- the native save dialog chooses destination/file format and retains native
+  overwrite confirmation;
+- Render to File repeats that exact destination and TIFF/DNG format before
+  rendering;
+- **Render mode** and **Output plane** identify the output coordinate/image
+  plane;
+- **Color and encoding** groups output profile, HDR choice and bit depth for
+  TIFF output;
+- **Size and resampling** groups antialiasing, scale/screen scale, explicit
+  dimensions and the exact computed output size;
+- a document-processing row states that the current crop and Sharpness settings
+  are used and that there is no additional export-only sharpening;
+- the primary action is **Render**, not a generic OK button.
 
 Do not put export-only state into the document unless users need reproducible
 saved export recipes.  If recipes are later added, model them explicitly rather

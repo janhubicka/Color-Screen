@@ -10,6 +10,7 @@
 #include "MultiLineTabWidget.h"
 #include "ParameterPanel.h"
 #include "ProfilePanel.h"
+#include "RenderDialog.h"
 #include "ImageViewWindow.h"
 #include "ImageWidget.h"
 #include "InitialSetupGuideDialog.h"
@@ -1605,6 +1606,60 @@ QStringList conflictingSmokeActionOptions(const QStringList &explicitOptions,
   return conflicts;
 }
 
+/** Exercise explicit beta export presentation without starting a render. */
+bool renderDialogPresentationSmoke() {
+  auto fail = [](const char *reason) {
+    qCritical() << "Render-dialog presentation smoke failed:" << reason;
+    return false;
+  };
+
+  colorscreen::render_type_parameters rt;
+  colorscreen::render_parameters rp;
+  colorscreen::scr_to_img_parameters geometry;
+
+  RenderDialog tiffDialog(rt, rp, geometry, nullptr,
+                          QStringLiteral("/tmp/colorscreen-output.tif"),
+                          false);
+  auto *pathLabel = tiffDialog.findChild<QLabel *>(
+      QStringLiteral("RenderOutputPathLabel"));
+  auto *formatLabel = tiffDialog.findChild<QLabel *>(
+      QStringLiteral("RenderOutputFormatLabel"));
+  auto *processingLabel = tiffDialog.findChild<QLabel *>(
+      QStringLiteral("RenderDocumentProcessingLabel"));
+  auto *colorGroup = tiffDialog.findChild<QGroupBox *>(
+      QStringLiteral("RenderColorEncodingGroup"));
+  auto *sizeGroup = tiffDialog.findChild<QGroupBox *>(
+      QStringLiteral("RenderSizeResamplingGroup"));
+  auto *renderButton = tiffDialog.findChild<QPushButton *>(
+      QStringLiteral("RenderDialogRenderButton"));
+  if (!pathLabel || !formatLabel || !processingLabel || !colorGroup ||
+      !sizeGroup || !renderButton ||
+      !pathLabel->text().contains(QStringLiteral("colorscreen-output.tif")) ||
+      formatLabel->text() != QStringLiteral("TIFF") ||
+      !processingLabel->text().contains(QStringLiteral("crop"),
+                                        Qt::CaseInsensitive) ||
+      !processingLabel->text().contains(QStringLiteral("sharpen"),
+                                        Qt::CaseInsensitive) ||
+      colorGroup->isHidden() ||
+      sizeGroup->title() != QStringLiteral("Size and resampling") ||
+      renderButton->text() != QStringLiteral("Render"))
+    return fail("TIFF dialog did not expose explicit output semantics");
+
+  RenderDialog dngDialog(rt, rp, geometry, nullptr,
+                         QStringLiteral("/tmp/colorscreen-output.dng"),
+                         true);
+  auto *dngFormat = dngDialog.findChild<QLabel *>(
+      QStringLiteral("RenderOutputFormatLabel"));
+  auto *dngColorGroup = dngDialog.findChild<QGroupBox *>(
+      QStringLiteral("RenderColorEncodingGroup"));
+  if (!dngFormat || !dngColorGroup ||
+      dngFormat->text() != QStringLiteral("DNG") ||
+      !dngColorGroup->isHidden())
+    return fail("DNG dialog did not expose format-specific presentation");
+
+  return true;
+}
+
 /** Exercise beta-critical non-rendering UI/document invariants. */
 bool runBetaInvariantSmoke() {
   auto fail = [](const char *reason) {
@@ -1636,6 +1691,7 @@ bool runBetaInvariantSmoke() {
       || !colorSectionPreferencesSmoke()
       || !geometrySectionPreferencesSmoke()
       || !profileSectionPreferencesSmoke()
+      || !renderDialogPresentationSmoke()
       || !initialSetupGuideScreenDetectionSmoke())
     return false;
 
