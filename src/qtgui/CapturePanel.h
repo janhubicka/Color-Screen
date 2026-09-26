@@ -30,9 +30,12 @@ signals:
 
 public:
   void setCropChecked(bool checked);
+  /** Show document-owned freshness/provenance for the flat-field correction. */
+  void setFlatFieldStatus(const QString &status);
 
 private:
     void setupUi();
+    void refreshFlatFieldStatus();
     ReloadCallback m_reloadCallback;
     // Top-level material/capture choice controlling the applicable workflow.
     class QComboBox *m_captureTypeCombo = nullptr;
@@ -72,6 +75,8 @@ private:
     class QLabel *m_detectedWavelengthsValue = nullptr;
     class QPushButton *m_useDetectedWavelengthsBtn = nullptr;
     class BacklightChartWidget *m_backlightWidget = nullptr;
+    class QLabel *m_flatFieldStatusLabel = nullptr;
+    QString m_flatFieldCalibrationStatus;
     class QPushButton *m_cropBtn = nullptr;
 };
 
