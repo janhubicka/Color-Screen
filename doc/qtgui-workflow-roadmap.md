@@ -531,7 +531,12 @@ Error messages should answer:
 
 For example, "Screen detection failed" is less useful than "No regular Dufay
 lattice was found in the selected scan; existing screen geometry was left
-unchanged. Try a central raster area or verify the process type."
+unchanged. Try a central raster area or verify the process type." The Screen /
+Geometry registration workflow now follows this rule: unsupported/failed regular
+screen discovery and coordinate detection state what prior state remains intact
+and suggest a clearer raster or corrected Screen/capture setup, while progressive
+point discovery explicitly says that already accepted point/geometry batches
+remain in the document and tells the operator how to retry locally.
 
 ## Visual style
 

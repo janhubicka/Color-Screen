@@ -14,6 +14,7 @@
 
 #include <QAction>
 #include <QCheckBox>
+#include <QCoreApplication>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QHBoxLayout>
@@ -34,6 +35,74 @@
 #include <optional>
 #include <utility>
 #include <vector>
+
+/** Return the display name of TYPE when it is a concrete known screen. */
+static QString detectionScreenName(colorscreen::scr_type type) {
+  const int index = static_cast<int>(type);
+  if (!colorscreen::screen_has_regular_geometry_p(type) || index < 0 ||
+      index >= colorscreen::max_scr_type ||
+      !colorscreen::scr_names[index].pretty_name)
+    return QString();
+  return QString::fromUtf8(colorscreen::scr_names[index].pretty_name);
+}
+
+/** Explain regular-screen discovery failure while stating preserved state. */
+QString screenDetectionFailureMessage(colorscreen::scr_type attemptedType) {
+  const QString name = detectionScreenName(attemptedType);
+  if (!name.isEmpty()) {
+    return QCoreApplication::translate(
+               "MainWindow",
+               "No regular %1 lattice was found in this scan. Existing screen "
+               "geometry and registration points were left unchanged. Try a "
+               "scan with a clearer central raster, or verify the Screen type "
+               "and capture settings.")
+        .arg(name);
+  }
+  return QCoreApplication::translate(
+      "MainWindow",
+      "No supported regular screen lattice was found in this scan. Existing "
+      "screen type, geometry, and registration points were left unchanged. "
+      "Try a scan with a clearer central raster, or choose the Screen type "
+      "manually and verify the capture settings.");
+}
+
+/** Explain initial coordinate discovery failure for a known regular screen. */
+QString coordinateDetectionFailureMessage(colorscreen::scr_type attemptedType) {
+  const QString name = detectionScreenName(attemptedType);
+  if (!name.isEmpty()) {
+    return QCoreApplication::translate(
+               "MainWindow",
+               "Could not establish %1 screen coordinates from this scan. "
+               "Existing geometry was left unchanged. Try a scan with a "
+               "clearer central raster, verify the Screen type, or adjust "
+               "capture gamma/linearization before retrying.")
+        .arg(name);
+  }
+  return QCoreApplication::translate(
+      "MainWindow",
+      "Could not establish screen coordinates from this scan. Existing "
+      "geometry was left unchanged. Try a scan with a clearer central raster, "
+      "verify the Screen type, or adjust capture gamma/linearization before "
+      "retrying.");
+}
+
+/** Explain progressive registration failure without claiming rollback. */
+QString registrationDiscoveryFailureMessage(bool screenAutodetection) {
+  if (screenAutodetection) {
+    return QCoreApplication::translate(
+        "MainWindow",
+        "Screen detection stopped while adding or refining registration "
+        "points. Any points or geometry already accepted remain in the "
+        "document. Inspect the registration overlay, then retry Detect screen "
+        "or use Add points in selected area on a clearer region.");
+  }
+  return QCoreApplication::translate(
+      "MainWindow",
+      "Automatic registration stopped before completing. Any points or "
+      "geometry already accepted remain in the document. Inspect the "
+      "registration overlay, then retry Add registration points or use Add "
+      "points in selected area on a clearer region.");
+}
 
 namespace {
 /** Return the physical scan resolution inferred from a configured screen. */
@@ -409,8 +478,8 @@ void MainWindow::startRegistrationDiscovery(
         if (!m_closing && ownsRequest && publishable && !success &&
             !cancelled) {
           QMessageBox::warning(
-              this, tr("Optimization Failed"),
-              tr("Automatically add registration points failed."));
+              this, tr("Automatic Registration"),
+              registrationDiscoveryFailureMessage(screenAutodetection));
         }
       });
 
@@ -588,8 +657,9 @@ void MainWindow::presentDetectedScreenResult(
     std::shared_ptr<colorscreen::image_data> scan,
     const ParameterState &baseline) {
   if (!result.success || !result.detected.success) {
-    QMessageBox::warning(this, tr("Screen Detection"),
-                         tr("Screen detection failed."));
+    QMessageBox::warning(
+        this, tr("Screen Detection"),
+        screenDetectionFailureMessage(baseline.scrToImg.type));
     return;
   }
 
@@ -921,8 +991,10 @@ void MainWindow::startCoordinateAutodetection(bool addPointsAfterDetection) {
   };
   operation.applyResult = [this, result, addPointsAfterDetection]() {
     if (!result->success) {
-      QMessageBox::warning(this, tr("Detect Screen Coordinates"),
-                           tr("Screen coordinate detection failed."));
+      QMessageBox::warning(
+          this, tr("Detect Screen Coordinates"),
+          coordinateDetectionFailureMessage(
+              getCurrentState().scrToImg.type));
       return;
     }
 
