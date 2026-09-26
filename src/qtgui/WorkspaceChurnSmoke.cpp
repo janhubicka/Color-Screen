@@ -304,6 +304,8 @@ QLabel *imageLayerSummary = inspector->findChild<QLabel *>(
     QStringLiteral("WorkflowImageLayerSummary"));
 QLabel *registrationSummary = inspector->findChild<QLabel *>(
     QStringLiteral("WorkflowRegistrationSummary"));
+QLabel *geometryFitStatus = inspector->findChild<QLabel *>(
+    QStringLiteral("GeometryFitStatus"));
 QLabel *calibrationSummary = inspector->findChild<QLabel *>(
     QStringLiteral("WorkflowCalibrationSummary"));
 QLabel *profileSummary = inspector->findChild<QLabel *>(
@@ -520,7 +522,8 @@ const bool imageLayerSummaryMatches =
 
 if (!workflowSummary || !workflowToggle || !workflowStages ||
     !processSummary || !imageLayerSummary || !registrationSummary ||
-    !calibrationSummary || !profileSummary || !nextStepSummary ||
+    !geometryFitStatus || !calibrationSummary || !profileSummary ||
+    !nextStepSummary ||
     !captureTypeCombo || !imageLayerSummaryMatches ||
     !workflowStages->text().contains(QStringLiteral("Capture")) ||
     !workflowStages->text().contains(QStringLiteral("Sharpen")) ||
@@ -1795,6 +1798,46 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         first->m_renderTypeParams.type = colorscreen::render_type_interpolated;
         first->m_imageWidget->setShowRegistrationPoints(false);
         first->updateWorkflowSummary();
+        if (!geometryFitStatus->text().contains(
+                QStringLiteral("Current fitted geometry"))) {
+          fail(QStringLiteral(
+              "Geometry panel did not show current fit provenance"));
+          return;
+        }
+
+        // The fitted mapping remains visible after point/input edits, but its
+        // local status must make the stale calibration explicit.
+        ParameterState staleGeometry = first->documentStateSnapshot();
+        staleGeometry.solver.points[0].img.x += 0.5;
+        first->applyState(staleGeometry);
+        first->updateWorkflowSummary();
+        if (!geometryFitStatus->text().contains(QStringLiteral("stale"))) {
+          fail(QStringLiteral(
+              "Geometry panel did not mark edited fitted geometry stale"));
+          return;
+        }
+        first->applyState(workflowReady);
+        first->updateWorkflowSummary();
+        if (!geometryFitStatus->text().contains(
+                QStringLiteral("Current fitted geometry"))) {
+          fail(QStringLiteral(
+              "Geometry panel did not restore current fit status"));
+          return;
+        }
+
+        // Loaded/manual geometry has no session fit baseline. Keep it usable,
+        // but never imply that this session verified it by running the solver.
+        const auto workflowFitBaseline = first->m_geometryFit.baseline;
+        first->m_geometryFit.baseline.reset();
+        first->updateWorkflowSummary();
+        if (!geometryFitStatus->text().contains(
+                QStringLiteral("provenance is not verified"))) {
+          fail(QStringLiteral(
+              "Geometry panel treated unverified geometry as a current fit"));
+          return;
+        }
+        first->m_geometryFit.baseline = workflowFitBaseline;
+        first->updateWorkflowSummary();
 
         const QString hiddenPointGuidance = nextStepSummary->text();
         if (hiddenPointGuidance.contains(QStringLiteral("choose Mode")) ||
@@ -1915,6 +1958,12 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
             first->m_geometryPanel->isNonlinearEnabled();
         first->m_geometryFit.pendingRequestId = newerGeometryRequest;
         first->updateWorkflowSummary();
+        if (!geometryFitStatus->text().contains(
+                QStringLiteral("Fitting geometry"))) {
+          fail(QStringLiteral(
+              "Geometry panel did not expose running fit status"));
+          return;
+        }
 
         first->onSolverFinished(olderGeometryRequest, workflowReady.scrToImg,
                                 false, false);
@@ -1933,7 +1982,9 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
             first->m_geometryFit.pendingNonlinearEnabled ||
             first->m_geometryFit.pendingRequestId ||
             nextStepSummary->text().contains(
-                QStringLiteral("Geometry fit is running"))) {
+                QStringLiteral("Geometry fit is running")) ||
+            geometryFitStatus->text().contains(
+                QStringLiteral("Fitting geometry"))) {
           fail(QStringLiteral(
               "Cancelled newest geometry fit left stale running provenance"));
           return;
