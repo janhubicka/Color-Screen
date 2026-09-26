@@ -2460,10 +2460,56 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
           return;
         }
 
+        // Candidate freshness follows the actual worker inputs: render
+        // parameters + screen geometry + source scan. Profile-spot bookkeeping
+        // is irrelevant and must not discard useful candidates.
+        const ParameterState focusBaseline = first->getCurrentState();
+        const auto focusScan = first->sharedImageData();
+        QWidget *focusInspector = first->workspaceInspectorWidget();
+        QLabel *focusAreaStatus =
+            focusInspector
+                ? focusInspector->findChild<QLabel *>(
+                      QStringLiteral("SharpnessFocusAreaStatus"))
+                : nullptr;
+        first->m_focusAreaAnalysis.candidates.resize(3);
+        first->m_focusAreaAnalysis.baseline = focusBaseline;
+        first->m_focusAreaAnalysis.scan = focusScan;
+
+        ParameterState irrelevant = focusBaseline;
+        irrelevant.profileSpots.push_back({1.0, 1.0});
+        first->applyState(irrelevant);
+        if (first->m_focusAreaAnalysis.candidates.size() != 3 ||
+            !first->m_focusAreaAnalysis.baseline) {
+          fail(QStringLiteral(
+              "Irrelevant profile-spot edit invalidated focus-area candidates"));
+          return;
+        }
+        first->applyState(focusBaseline);
+        if (first->m_focusAreaAnalysis.candidates.size() != 3) {
+          fail(QStringLiteral(
+              "Restoring irrelevant state lost focus-area candidates"));
+          return;
+        }
+
+        ParameterState staleInputs = focusBaseline;
+        staleInputs.rparams.brightness += 0.125;
+        first->applyState(staleInputs);
+        if (!first->m_focusAreaAnalysis.candidates.empty() ||
+            first->m_focusAreaAnalysis.baseline ||
+            !first->m_focusAreaAnalysis.scan.expired() ||
+            !focusAreaStatus ||
+            !focusAreaStatus->text().contains(QStringLiteral("inputs changed"))) {
+          fail(QStringLiteral(
+              "Render edit did not invalidate/explain stale focus-area candidates"));
+          return;
+        }
+        first->applyState(focusBaseline);
+
         // Run the real multi-area path too. A geometry edit clears the source
         // candidates; a late completion must not put its old vector back.
-        const ParameterState focusBaseline = first->getCurrentState();
         first->m_focusAreaAnalysis.candidates.resize(3);
+        first->m_focusAreaAnalysis.baseline = focusBaseline;
+        first->m_focusAreaAnalysis.scan = focusScan;
         first->onAnalyzeFocusAreasRequested(
             colorscreen::finetune_scanner_mtf_sigma);
         if (!first->m_focusAreaAnalysis.running ||
