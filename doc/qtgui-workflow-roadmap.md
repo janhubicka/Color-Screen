@@ -395,7 +395,10 @@ For automatic operations, show four states consistently:
 remain numerically present after a prerequisite changed. Geometry tracks an
 accepted fit baseline for the current session: edits keep the numerical result
 visible but label it stale, and a fit whose inputs change while it is running is
-prevented from publishing. Measured MTF model fitting now follows the same
+prevented from publishing. The Geometry fit section now mirrors this provenance
+locally as current, running, failed, stale, or present-but-unverified, instead of
+requiring the operator to infer freshness from the global Workflow card.
+Measured MTF model fitting now follows the same
 document-level presentation model across the main and reference inspectors; its
 measurement ROI/edge metadata is persistent provenance but deliberately does
 not stale the numerical model. Profile calibration now follows the same rule:

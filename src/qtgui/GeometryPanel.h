@@ -41,6 +41,8 @@ public:
   void updateRegistrationPointInfo(const ParameterState &state);
   void updateDeformationChart();
   void updateFinetuneImages(const colorscreen::finetune_result& result);
+  /** Show document-owned geometry-fit freshness/result status. */
+  void setFitStatus(const QString &status);
   void setRegistrationPointsVisible(bool visible);
   void setNonlinearChecked(bool checked);
   QCheckBox *autoOptimizeCheckBox() const { return m_autoOptimizeBox; }
@@ -83,6 +85,7 @@ private:
   QLabel *m_tiltMessageLabel = nullptr;
   QLabel *m_nonlinearMessageLabel = nullptr;
   QLabel *m_optimizationMessageLabel = nullptr;
+  QLabel *m_fitStatusLabel = nullptr;
   colorscreen::finetune_area_parameters m_finetuneAreaParams;
   QDoubleSpinBox *m_gridWidthSpin = nullptr;
   QDoubleSpinBox *m_gridHeightSpin = nullptr;

@@ -547,6 +547,10 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   the same queue. Workspace churn covers a real successful objective evaluation,
   exact Apply/Undo/Redo state, edit-and-restore cancellation, validator failure,
   stale dialog acceptance, supersession and progress-row cleanup.
+  Geometry's accepted-fit baseline is also the source for the panel-local
+  **Status** row: MainWindow translates the existing session provenance into
+  current/running/failed/stale/unverified presentation, while GeometryPanel owns
+  only the label. Do not introduce a second freshness flag in the panel.
   Geometry/color optimizer queues and workers that intentionally publish
   intermediate results retain their separate lifecycle contracts; do not force
   them through `OneShotOperation` merely to remove another queue.
