@@ -1806,6 +1806,35 @@ bool runBetaInvariantSmoke() {
       QStringList{QStringLiteral("smoke-test-menu-order")})
     return fail("workspace smoke conflict classification lost a real action");
 
+  const QString unknownScreenFailure =
+      screenDetectionFailureMessage(colorscreen::NoScreen);
+  const QString knownScreenFailure =
+      screenDetectionFailureMessage(colorscreen::Dufay);
+  const QString coordinateFailure =
+      coordinateDetectionFailureMessage(colorscreen::Dufay);
+  const QString registrationFailure =
+      registrationDiscoveryFailureMessage(false);
+  const QString detectRegistrationFailure =
+      registrationDiscoveryFailureMessage(true);
+  if (!unknownScreenFailure.contains(
+          QStringLiteral("No supported regular screen lattice")) ||
+      !unknownScreenFailure.contains(QStringLiteral("left unchanged")) ||
+      !unknownScreenFailure.contains(QStringLiteral("Screen type")) ||
+      !knownScreenFailure.contains(QStringLiteral("Dufay")) ||
+      !knownScreenFailure.contains(QStringLiteral("clearer central raster")) ||
+      !coordinateFailure.contains(QStringLiteral("Dufay")) ||
+      !coordinateFailure.contains(
+          QStringLiteral("Existing geometry was left unchanged")) ||
+      !coordinateFailure.contains(QStringLiteral("gamma/linearization")) ||
+      !registrationFailure.contains(
+          QStringLiteral("already accepted remain")) ||
+      !registrationFailure.contains(
+          QStringLiteral("Add points in selected area")) ||
+      !detectRegistrationFailure.contains(
+          QStringLiteral("Screen detection stopped")) ||
+      !detectRegistrationFailure.contains(QStringLiteral("retry Detect screen")))
+    return fail("registration/detection failure guidance lost actionable state semantics");
+
   if (!backgroundThreadRegistryShutdownSmoke()
       || !numericDoubleClickResetSmoke()
       || !discreteDefaultPresentationSmoke()
