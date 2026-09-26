@@ -3133,7 +3133,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
           flatBaseline.rparams.backlight_correction = flatCorrection;
 
           first->m_flatFieldCalibration.clearAccepted();
-          first->m_flatFieldCalibration.running = false;
+          first->m_flatFieldCalibration.progress.reset();
           first->applyState(flatBaseline);
           if (!flatFieldStatus->text().contains(
                   QStringLiteral("freshness not verified"))) {
@@ -3187,7 +3187,9 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
             return;
           }
 
-          first->m_flatFieldCalibration.running = true;
+          auto flatProgress =
+              std::make_shared<colorscreen::progress_info>();
+          first->m_flatFieldCalibration.progress = flatProgress;
           first->updateWorkflowSummary();
           if (!flatFieldStatus->text().contains(
                   QStringLiteral("analysis running"), Qt::CaseInsensitive) ||
@@ -3198,7 +3200,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
             return;
           }
 
-          first->m_flatFieldCalibration.running = false;
+          first->m_flatFieldCalibration.progress.reset();
           first->m_flatFieldCalibration.clearAccepted();
           first->updateWorkflowSummary();
           if (!flatFieldStatus->text().contains(
