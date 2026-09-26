@@ -817,11 +817,23 @@ private:
     std::optional<ParameterState> baseline;
     std::shared_ptr<colorscreen::image_data> scan;
     std::weak_ptr<colorscreen::progress_info> progress;
+    // Accepted correction provenance is session-only.  Keep a weak scan
+    // identity so freshness never pins a replaced source image in memory.
+    std::optional<ParameterState> acceptedBaseline;
+    std::weak_ptr<colorscreen::image_data> acceptedScan;
 
     void clearRequest() {
       baseline.reset();
       scan.reset();
       progress.reset();
+    }
+    void clearAccepted() {
+      acceptedBaseline.reset();
+      acceptedScan.reset();
+    }
+    void clear() {
+      clearRequest();
+      clearAccepted();
     }
   };
   AdaptiveSharpeningState m_adaptiveSharpening;
