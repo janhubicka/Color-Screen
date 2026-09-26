@@ -2322,6 +2322,8 @@ bool runBetaInvariantSmoke() {
       !clearFlatField->isEnabled() || !clearAdaptive->isEnabled() ||
       !flatFieldStatus->text().contains(QStringLiteral("active"),
                                         Qt::CaseInsensitive) ||
+      !flatFieldStatus->text().contains(
+          QStringLiteral("freshness not verified"), Qt::CaseInsensitive) ||
       !adaptiveStatus->text().contains(QStringLiteral("active"),
                                        Qt::CaseInsensitive) ||
       !adaptiveStatus->text().contains(
