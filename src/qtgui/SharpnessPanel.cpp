@@ -717,13 +717,16 @@ void SharpnessPanel::setupUi() {
   addSeparator("Adaptive sharpening",
                QStringLiteral("sharpness.adaptive"));
   
+  auto adaptiveAnalysisReady = [this](const ParameterState &state) {
+    return m_imageGetter() != nullptr &&
+           colorscreen::screen_geometry_configured_p(state.scrToImg);
+  };
+
   QPushButton *analyzeDisplacements = addButtonParameter(
       "", tr("Analyze adaptive sharpening"),
-      [this]() { onAnalyzeDisplacements(); },
-      [](const ParameterState &s) {
-        return colorscreen::screen_geometry_configured_p(s.scrToImg);
-      },
-      tr("Run adaptive sharpening analysis after screen geometry has been established."));
+      [this]() { onAnalyzeDisplacements(); }, adaptiveAnalysisReady,
+      tr("Run adaptive sharpening analysis on the loaded image after screen "
+         "geometry has been established."));
   analyzeDisplacements->setObjectName(
       QStringLiteral("SharpnessAnalyzeDisplacementsButton"));
 
@@ -750,8 +753,7 @@ void SharpnessPanel::setupUi() {
     }
   });
 
-  QLabel *adaptiveRequirement = new QLabel(
-      tr("Fit screen geometry before adaptive sharpening analysis."), this);
+  QLabel *adaptiveRequirement = new QLabel(this);
   adaptiveRequirement->setObjectName(
       QStringLiteral("SharpnessAdaptiveRequirement"));
   adaptiveRequirement->setWordWrap(true);
@@ -759,9 +761,22 @@ void SharpnessPanel::setupUi() {
     m_currentGroupForm->addRow(tr("Requirement:"), adaptiveRequirement);
   else
     m_form->addRow(tr("Requirement:"), adaptiveRequirement);
+  m_paramUpdaters.push_back(
+      [this, adaptiveRequirement](const ParameterState &state) {
+        if (!m_imageGetter()) {
+          adaptiveRequirement->setText(
+              tr("Load an image before adaptive sharpening analysis."));
+        } else if (!colorscreen::screen_geometry_configured_p(state.scrToImg)) {
+          adaptiveRequirement->setText(
+              tr("Fit screen geometry before adaptive sharpening analysis."));
+        } else {
+          adaptiveRequirement->clear();
+        }
+      });
   setParameterApplicability(
-      adaptiveRequirement, [](const ParameterState &state) {
-        return !colorscreen::screen_geometry_configured_p(state.scrToImg);
+      adaptiveRequirement, [this](const ParameterState &state) {
+        return !m_imageGetter() ||
+               !colorscreen::screen_geometry_configured_p(state.scrToImg);
       });
 
   QPushButton *clearAdaptiveCorrection = addButtonParameter(

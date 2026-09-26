@@ -729,7 +729,8 @@ bool colorSectionPreferencesSmoke() {
             !adaptiveRow->isHidden() ||
             adaptiveRow->property("parameterApplicable").toBool() ||
             adaptiveAnalyze->isEnabled() || adaptiveRequirement->isHidden() ||
-            !adaptiveRequirement->property("parameterApplicable").toBool())
+            !adaptiveRequirement->property("parameterApplicable").toBool() ||
+            !adaptiveRequirement->text().contains(QStringLiteral("Load an image")))
           return fail(QStringLiteral(
               "Sharpness lost adaptive-analysis prerequisite presentation"));
 
@@ -739,17 +740,38 @@ bool colorSectionPreferencesSmoke() {
         adaptiveReadyState.scrToImg.coordinate2 = {0, 8};
         state = adaptiveReadyState;
         sharpness->updateUI();
+        if (adaptiveAnalyze->isEnabled() || adaptiveRequirement->isHidden() ||
+            !adaptiveRequirement->property("parameterApplicable").toBool() ||
+            !adaptiveRequirement->text().contains(QStringLiteral("Load an image")))
+          return fail(QStringLiteral(
+              "Sharpness enabled adaptive analysis without its source image"));
+
+        sharpnessImage = std::make_shared<colorscreen::image_data>();
+        if (!sharpnessImage->set_dimensions(4, 4, false, true))
+          return fail(QStringLiteral(
+              "Sharpness adaptive-analysis smoke could not create test image"));
+        sharpness->updateUI();
         if (!adaptiveAnalyze->isEnabled() || !adaptiveRequirement->isHidden() ||
             adaptiveRequirement->property("parameterApplicable").toBool())
           return fail(QStringLiteral(
-              "Sharpness kept adaptive prerequisite after geometry became ready"));
+              "Sharpness kept adaptive prerequisite after image/geometry became ready"));
 
         state = initialState;
         sharpness->updateUI();
         if (adaptiveAnalyze->isEnabled() || adaptiveRequirement->isHidden() ||
-            !adaptiveRequirement->property("parameterApplicable").toBool())
+            !adaptiveRequirement->property("parameterApplicable").toBool() ||
+            !adaptiveRequirement->text().contains(
+                QStringLiteral("Fit screen geometry")))
           return fail(QStringLiteral(
-              "Sharpness did not restore adaptive prerequisite with missing geometry"));
+              "Sharpness did not explain missing geometry for adaptive analysis"));
+
+        sharpnessImage.reset();
+        sharpness->updateUI();
+        if (adaptiveAnalyze->isEnabled() || adaptiveRequirement->isHidden() ||
+            !adaptiveRequirement->property("parameterApplicable").toBool() ||
+            !adaptiveRequirement->text().contains(QStringLiteral("Load an image")))
+          return fail(QStringLiteral(
+              "Sharpness did not restore no-image adaptive prerequisite"));
 
         // Live analysis makes the row applicable, but never overrides folding.
         adaptiveToggle->click();

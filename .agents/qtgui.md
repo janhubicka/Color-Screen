@@ -766,8 +766,9 @@ precise numeric entry.
    **Requirement** row rather than relying only on a tooltip. Profile
    optimization plus Sharpness Focus analyzer and Adaptive sharpening are the
    reference examples. Focus analyzer uses one shared readiness predicate for
-   both Analyze area and Find focus areas, and its Requirement row distinguishes
-   missing image data from missing geometry before disappearing when ready.
+   both Analyze area and Find focus areas. Focus and Adaptive sharpening both
+   distinguish missing image data from missing geometry in their Requirement
+   rows before disappearing when the operation is ready.
    When the reason is obvious from the document state (for example Measure,
    Crop, or Measure MTF with no image loaded), prefer a normal `enabledCheck`
    rather than another explanatory row. Keep the receiving MainWindow handler

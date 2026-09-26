@@ -566,10 +566,11 @@ specialist stages.
   terminology remains an implementation detail;
 - make prerequisites visible. Profile optimization, Focus analyzer, and
   Adaptive sharpening use local fold-aware **Requirement** rows for their main
-  gating conditions. Focus analyzer distinguishes a missing image from missing
-  screen geometry, and both **Analyze area** and **Find focus areas** share the
-  same readiness rule instead of leaving disabled or no-op operations
-  unexplained. Obvious image interactions (Digital Capture Measure/Crop and
+  gating conditions. Focus analyzer and Adaptive sharpening distinguish a
+  missing image from missing screen geometry; both Focus **Analyze area** and
+  **Find focus areas** also share the same readiness rule instead of leaving
+  disabled or no-op operations unexplained. Obvious image interactions (Digital
+  Capture Measure/Crop and
   Sharpness Measure MTF) simply stay disabled until a scan exists, with
   defensive handler guards as a second line of protection. Geometry follows
   the same rule for every compute verb: Detect/Optimize coordinates, automatic
