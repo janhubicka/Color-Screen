@@ -2505,6 +2505,23 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         }
         first->applyState(focusBaseline);
 
+        // Defensive programmatic calls must reject stale candidates even if
+        // their vector was populated without going through applyState().
+        ParameterState staleCandidateBaseline = focusBaseline;
+        staleCandidateBaseline.rparams.brightness += 0.25;
+        first->m_focusAreaAnalysis.candidates.resize(3);
+        first->m_focusAreaAnalysis.baseline = staleCandidateBaseline;
+        first->m_focusAreaAnalysis.scan = focusScan;
+        first->onAnalyzeFocusAreasRequested(
+            colorscreen::finetune_scanner_mtf_sigma);
+        if (first->m_oneShotOperations.hasActiveTasks() ||
+            !first->m_focusAreaAnalysis.candidates.empty() ||
+            !focusAreaStatus->text().contains(QStringLiteral("inputs changed"))) {
+          fail(QStringLiteral(
+              "Programmatic focus analysis accepted stale candidate inputs"));
+          return;
+        }
+
         // Run the real multi-area path too. A geometry edit clears the source
         // candidates; a late completion must not put its old vector back.
         first->m_focusAreaAnalysis.candidates.resize(3);
@@ -2530,11 +2547,20 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
           retryOrFail(QStringLiteral("Cancelled multi-area fit did not finish cleanup"));
           return;
         }
+        QWidget *focusInspector = first->workspaceInspectorWidget();
+        QLabel *focusAreaStatus =
+            focusInspector
+                ? focusInspector->findChild<QLabel *>(
+                      QStringLiteral("SharpnessFocusAreaStatus"))
+                : nullptr;
         if (!first->m_focusAreaAnalysis.candidates.empty() ||
             first->m_focusAreaAnalysis.prompt ||
             !first->m_focusAreaAnalysis.result.selected.empty() ||
-            first->m_oneShotOperations.hasActiveTasks()) {
-          fail(QStringLiteral("Cancelled multi-area fit restored stale diagnostics"));
+            first->m_oneShotOperations.hasActiveTasks() ||
+            !focusAreaStatus ||
+            !focusAreaStatus->text().contains(QStringLiteral("inputs changed"))) {
+          fail(QStringLiteral(
+              "Cancelled multi-area fit restored stale diagnostics or hid its invalidation reason"));
           return;
         }
         for (const ProgressEntry &entry : first->m_progressController.entries()) {
