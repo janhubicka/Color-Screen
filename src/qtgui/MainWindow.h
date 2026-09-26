@@ -527,7 +527,7 @@ private:
   /** Return document-owned color-profile fit provenance. */
   QString profileCalibrationSummary() const;
   /** Clear transient automatic focus-area state for this document. */
-  void clearFocusAreaAnalysis();
+  void clearFocusAreaAnalysis(const QString &summary = QString());
 
   /** Return true only while GENERATION/PROGRESS still own the adaptive
       sharpening request and its immutable scan/parameter snapshot is current. */
@@ -803,6 +803,10 @@ private:
     std::vector<colorscreen::finetune_focus_area_candidate> candidates;
     colorscreen::finetune_focus_analysis_result result;
     QPointer<QMessageBox> prompt;
+    // Candidate rectangles and diagnostics are valid only for the render +
+    // screen-to-image inputs under which they were produced.
+    std::optional<ParameterState> baseline;
+    std::weak_ptr<colorscreen::image_data> scan;
     bool running = false;
   };
   FocusAreaAnalysisState m_focusAreaAnalysis;
