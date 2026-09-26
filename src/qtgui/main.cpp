@@ -2208,11 +2208,19 @@ bool runBetaInvariantSmoke() {
       QStringLiteral("CaptureClearFlatFieldButton"));
   auto *clearAdaptive = window.findChild<QPushButton *>(
       QStringLiteral("SharpnessClearAdaptiveCorrectionButton"));
-  if (!clearFlatField || !clearAdaptive)
-    return fail("calibration Clear actions were not constructed");
+  auto *flatFieldStatus = window.findChild<QLabel *>(
+      QStringLiteral("CaptureFlatFieldStatus"));
+  auto *adaptiveStatus = window.findChild<QLabel *>(
+      QStringLiteral("SharpnessAdaptiveCorrectionStatus"));
+  if (!clearFlatField || !clearAdaptive || !flatFieldStatus || !adaptiveStatus)
+    return fail("calibration Clear/status presentation was not constructed");
   if (clearFlatField->property("parameterApplicable").toBool() ||
-      clearAdaptive->property("parameterApplicable").toBool())
-    return fail("empty document exposed calibration Clear actions");
+      clearAdaptive->property("parameterApplicable").toBool() ||
+      !flatFieldStatus->text().contains(
+          QStringLiteral("No flat-field correction")) ||
+      !adaptiveStatus->text().contains(
+          QStringLiteral("No adaptive correction")))
+    return fail("empty document exposed stale calibration presentation");
 
   ParameterState calibrationBaseline = window.documentStateSnapshot();
   ParameterState calibrated = calibrationBaseline;
@@ -2244,15 +2252,23 @@ bool runBetaInvariantSmoke() {
   undoStack->clear();
   if (!clearFlatField->property("parameterApplicable").toBool() ||
       !clearAdaptive->property("parameterApplicable").toBool() ||
-      !clearFlatField->isEnabled() || !clearAdaptive->isEnabled())
-    return fail("accepted calibrations did not expose their Clear actions");
+      !clearFlatField->isEnabled() || !clearAdaptive->isEnabled() ||
+      !flatFieldStatus->text().contains(QStringLiteral("active"),
+                                        Qt::CaseInsensitive) ||
+      !adaptiveStatus->text().contains(QStringLiteral("active"),
+                                       Qt::CaseInsensitive))
+    return fail("accepted calibrations did not expose active status/actions");
 
   clearFlatField->click();
   const ParameterState afterFlatClear = window.documentStateSnapshot();
   if (afterFlatClear.rparams.backlight_correction ||
       afterFlatClear.rparams.scanner_blur_correction != adaptiveCorrection ||
       clearFlatField->property("parameterApplicable").toBool() ||
-      !clearAdaptive->property("parameterApplicable").toBool())
+      !clearAdaptive->property("parameterApplicable").toBool() ||
+      !flatFieldStatus->text().contains(
+          QStringLiteral("No flat-field correction")) ||
+      !adaptiveStatus->text().contains(QStringLiteral("active"),
+                                       Qt::CaseInsensitive))
     return fail("Clear flat field changed the wrong calibration/presentation");
   undoStack->undo();
   if (window.documentStateSnapshot().rparams.backlight_correction !=
@@ -2260,7 +2276,11 @@ bool runBetaInvariantSmoke() {
       window.documentStateSnapshot().rparams.scanner_blur_correction !=
           adaptiveCorrection ||
       !clearFlatField->property("parameterApplicable").toBool() ||
-      !clearAdaptive->property("parameterApplicable").toBool())
+      !clearAdaptive->property("parameterApplicable").toBool() ||
+      !flatFieldStatus->text().contains(QStringLiteral("active"),
+                                        Qt::CaseInsensitive) ||
+      !adaptiveStatus->text().contains(QStringLiteral("active"),
+                                       Qt::CaseInsensitive))
     return fail("Undo did not restore the flat-field calibration/presentation");
 
   undoStack->clear();
@@ -2269,7 +2289,11 @@ bool runBetaInvariantSmoke() {
   if (afterAdaptiveClear.rparams.scanner_blur_correction ||
       afterAdaptiveClear.rparams.backlight_correction != flatCorrection ||
       clearAdaptive->property("parameterApplicable").toBool() ||
-      !clearFlatField->property("parameterApplicable").toBool())
+      !clearFlatField->property("parameterApplicable").toBool() ||
+      !adaptiveStatus->text().contains(
+          QStringLiteral("No adaptive correction")) ||
+      !flatFieldStatus->text().contains(QStringLiteral("active"),
+                                        Qt::CaseInsensitive))
     return fail(
         "Clear adaptive correction changed the wrong calibration/presentation");
   undoStack->undo();
@@ -2278,7 +2302,11 @@ bool runBetaInvariantSmoke() {
       window.documentStateSnapshot().rparams.backlight_correction !=
           flatCorrection ||
       !clearAdaptive->property("parameterApplicable").toBool() ||
-      !clearFlatField->property("parameterApplicable").toBool())
+      !clearFlatField->property("parameterApplicable").toBool() ||
+      !adaptiveStatus->text().contains(QStringLiteral("active"),
+                                       Qt::CaseInsensitive) ||
+      !flatFieldStatus->text().contains(QStringLiteral("active"),
+                                        Qt::CaseInsensitive))
     return fail(
         "Undo did not restore the adaptive sharpening calibration/presentation");
 
