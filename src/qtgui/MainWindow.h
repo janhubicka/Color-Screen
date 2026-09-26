@@ -473,6 +473,13 @@ private:
       std::function<void(bool usePreferredColorModel, bool useScreenDpi,
                          double screenDpi)> apply);
 
+  /** Publish one accepted automatic-detection patch map with provenance. */
+  void publishDetectedScreenDiagnostics(
+      std::shared_ptr<const colorscreen::screen_map> map);
+
+  /** Clear an obsolete automatic-detection patch map from every presentation. */
+  void clearDetectedScreenDiagnostics();
+
   /** Dismiss obsolete one-shot confirmations without publishing their results. */
   void dismissOneShotPrompts();
 
@@ -664,7 +671,22 @@ private:
   colorscreen::scr_detect_parameters m_detectParams;
   colorscreen::scr_to_img_parameters m_scrToImgParams;
   colorscreen::solver_parameters m_solverParams;
-  std::shared_ptr<const colorscreen::screen_map> m_detectedScreenMap;
+  /** Session-only provenance for the patch-center map returned by automatic
+      screen detection. The map stays meaningful across geometry refinement,
+      but not across changes to the scan or detector/color-classification
+      inputs that produced it. */
+  struct DetectedScreenDiagnosticsState {
+    std::shared_ptr<const colorscreen::screen_map> map;
+    std::optional<ParameterState> baseline;
+    std::weak_ptr<colorscreen::image_data> scan;
+
+    void clear() {
+      map.reset();
+      baseline.reset();
+      scan.reset();
+    }
+  };
+  DetectedScreenDiagnosticsState m_detectedScreenDiagnostics;
   QPointer<QDialog> m_detectScreenPrompt;
   // Session-only guidance for the combined Detect screen workflow. The weak
   // progress identity never owns the task and cannot outlive its worker.
