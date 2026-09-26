@@ -734,6 +734,22 @@ bool colorSectionPreferencesSmoke() {
           return fail(QStringLiteral(
               "Sharpness dynamic focus state bypassed no-image prerequisites"));
 
+        auto *sharpnessFinetuneRow = sharpness->findChild<QWidget *>(
+            QStringLiteral("SharpnessFinetuneImagesRow"));
+        if (!sharpnessFinetuneRow ||
+            sharpnessFinetuneRow->property("parameterApplicable").toBool())
+          return fail(QStringLiteral(
+              "Sharpness exposed finetune diagnostics before an accepted result"));
+        colorscreen::finetune_result sharpnessDiagnosticResult;
+        sharpness->updateFinetuneImages(sharpnessDiagnosticResult);
+        if (!sharpnessFinetuneRow->property("parameterApplicable").toBool())
+          return fail(QStringLiteral(
+              "Sharpness did not mark accepted finetune diagnostics applicable"));
+        sharpness->clearFinetuneImages();
+        if (sharpnessFinetuneRow->property("parameterApplicable").toBool())
+          return fail(QStringLiteral(
+              "Sharpness clear retained stale finetune diagnostics"));
+
         auto *adaptiveToggle =
             toggleFor(*sharpness, QStringLiteral("sharpness.adaptive"));
         auto *adaptiveRow = sharpness->findChild<QWidget *>(
@@ -1001,6 +1017,25 @@ bool geometrySectionPreferencesSmoke() {
   };
 
   auto first = createPanel();
+  auto *geometryFinetuneRow = first->findChild<QWidget *>(
+      QStringLiteral("GeometryFinetuneImagesRow"));
+  if (!geometryFinetuneRow ||
+      geometryFinetuneRow->property("parameterApplicable").toBool() ||
+      !geometryFinetuneRow->isHidden())
+    return fail(QStringLiteral(
+        "Geometry exposed finetune diagnostics before an accepted result"));
+  colorscreen::finetune_result geometryDiagnosticResult;
+  first->updateFinetuneImages(geometryDiagnosticResult);
+  if (!geometryFinetuneRow->property("parameterApplicable").toBool() ||
+      geometryFinetuneRow->isHidden())
+    return fail(QStringLiteral(
+        "Geometry did not expose accepted finetune diagnostics"));
+  first->clearFinetuneImages();
+  if (geometryFinetuneRow->property("parameterApplicable").toBool() ||
+      !geometryFinetuneRow->isHidden())
+    return fail(QStringLiteral(
+        "Geometry clear retained stale finetune diagnostics"));
+
   auto *detectCoordinates = first->findChild<QPushButton *>(
       QStringLiteral("DetectScreenCoordinatesButton"));
   auto *optimizeCoordinates = first->findChild<QPushButton *>(
