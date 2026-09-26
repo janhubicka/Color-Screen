@@ -2350,7 +2350,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         const ParameterState patchBaseline = first->documentStateSnapshot();
         const auto patchMap =
             std::make_shared<colorscreen::screen_map>(
-                colorscreen::Dufay, 0, 0, 1, 1);
+                patchBaseline.scrToImg.type, 0, 0, 1, 1);
         first->publishDetectedScreenDiagnostics(
             patchMap, first->m_scan, patchBaseline);
         if (first->m_detectedScreenDiagnostics.map != patchMap ||
