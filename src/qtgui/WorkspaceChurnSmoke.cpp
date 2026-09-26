@@ -2354,7 +2354,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         first->publishDetectedScreenDiagnostics(
             patchMap, first->m_scan, patchBaseline);
         if (first->m_detectedScreenDiagnostics.map != patchMap ||
-            !first->m_detectedScreenDiagnostics.baseline ||
+            !first->m_detectedScreenDiagnostics.inputs ||
             first->m_detectedScreenDiagnostics.scan.lock() != first->m_scan ||
             !first->m_detectedPatchCentersAction ||
             !first->m_detectedPatchCentersAction->isEnabled()) {
@@ -2367,7 +2367,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         geometryOnly.scrToImg.center.x += 0.25;
         first->applyState(geometryOnly);
         if (first->m_detectedScreenDiagnostics.map != patchMap ||
-            !first->m_detectedScreenDiagnostics.baseline ||
+            !first->m_detectedScreenDiagnostics.inputs ||
             !first->m_detectedPatchCentersAction->isEnabled()) {
           fail(QStringLiteral(
               "Geometry-only edit incorrectly expired detected patch centers"));
@@ -2384,7 +2384,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         detectorEdit.detect.min_ratio += 0.25;
         first->applyState(detectorEdit);
         if (first->m_detectedScreenDiagnostics.map ||
-            first->m_detectedScreenDiagnostics.baseline ||
+            first->m_detectedScreenDiagnostics.inputs ||
             !first->m_detectedScreenDiagnostics.scan.expired() ||
             first->m_detectedPatchCentersAction->isEnabled()) {
           fail(QStringLiteral(
