@@ -65,6 +65,8 @@ public:
   /** Mark live adaptive analysis so its chart row remains logically available
       while respecting the saved Adaptive sharpening section fold. */
   void setAdaptiveAnalysisRunning(bool running);
+  /** Show document-owned freshness/provenance for the accepted correction. */
+  void setAdaptiveCorrectionStatus(const QString &status);
 
 public slots:
   void onAnalyzeDisplacements();
@@ -104,6 +106,7 @@ private:
   void fitMeasuredMtf();
   void updateMeasurementList();
   void updateMtfCalibrationStatus();
+  void refreshAdaptiveCorrectionStatus();
   void selectMtfMeasurement(int index);
   void updateSelectedMeasurementDetails();
   void onParametersRefreshed(const ParameterState &state) override;
@@ -143,6 +146,8 @@ private:
   bool m_adaptiveSharpeningParametersInitialized = false;
   QPointer<AdaptiveSharpeningChart> m_adaptiveChart;
   QWidget *m_adaptiveChartWrapper = nullptr;
+  QLabel *m_adaptiveStatusLabel = nullptr;
+  QString m_adaptiveCorrectionStatus;
   bool m_adaptiveAnalysisRunning = false;
 };
 
