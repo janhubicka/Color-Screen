@@ -2436,7 +2436,40 @@ bool runBetaInvariantSmoke() {
     return fail(
         "Undo did not restore the adaptive sharpening calibration/presentation");
 
+  // Finetune diagnostic images are transient evidence from one accepted
+  // operation. Any later accepted document state must hide both Geometry and
+  // Sharpness diagnostics; a producing operation may then publish a fresh set.
+  auto *geometryPanel = window.findChild<GeometryPanel *>();
+  auto *sharpnessPanel = window.findChild<SharpnessPanel *>();
+  auto *geometryFinetuneRow = window.findChild<QWidget *>(
+      QStringLiteral("GeometryFinetuneImagesRow"));
+  auto *sharpnessFinetuneRow = window.findChild<QWidget *>(
+      QStringLiteral("SharpnessFinetuneImagesRow"));
+  if (!geometryPanel || !sharpnessPanel || !geometryFinetuneRow ||
+      !sharpnessFinetuneRow)
+    return fail("document inspector lost finetune diagnostic rows");
+  colorscreen::finetune_result transientDiagnostics;
+  geometryPanel->updateFinetuneImages(transientDiagnostics);
+  sharpnessPanel->updateFinetuneImages(transientDiagnostics);
+  if (!geometryFinetuneRow->property("parameterApplicable").toBool() ||
+      !sharpnessFinetuneRow->property("parameterApplicable").toBool())
+    return fail("accepted finetune diagnostics were not exposed");
+
+  window.applyState(window.documentStateSnapshot());
+  if (geometryFinetuneRow->property("parameterApplicable").toBool() ||
+      sharpnessFinetuneRow->property("parameterApplicable").toBool())
+    return fail("document refresh retained stale finetune diagnostics");
+
+  geometryPanel->updateFinetuneImages(transientDiagnostics);
+  sharpnessPanel->updateFinetuneImages(transientDiagnostics);
+  if (!geometryFinetuneRow->property("parameterApplicable").toBool() ||
+      !sharpnessFinetuneRow->property("parameterApplicable").toBool())
+    return fail("fresh finetune diagnostics could not be republished");
+
   window.applyState(calibrationBaseline);
+  if (geometryFinetuneRow->property("parameterApplicable").toBool() ||
+      sharpnessFinetuneRow->property("parameterApplicable").toBool())
+    return fail("state restoration resurrected finetune diagnostics");
   undoStack->clear();
 
   // Tiles deliberately reuse one pair of editors for the currently selected
