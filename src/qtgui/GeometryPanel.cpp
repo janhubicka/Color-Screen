@@ -313,15 +313,18 @@ void GeometryPanel::setupUi() {
   QWidget *finetuneDetachable =
       createDetachableSection("Finetune Diagnostic Images", finetuneWrapper);
   
-  QWidget *finetuneContainer = new QWidget();
-  m_finetuneImagesContainer = new QVBoxLayout(finetuneContainer);
+  m_finetuneImagesWrapper = new QWidget();
+  m_finetuneImagesWrapper->setObjectName(
+      QStringLiteral("GeometryFinetuneImagesRow"));
+  m_finetuneImagesContainer = new QVBoxLayout(m_finetuneImagesWrapper);
   m_finetuneImagesContainer->setContentsMargins(0, 0, 0, 0);
   m_finetuneImagesContainer->addWidget(finetuneDetachable);
-  
-  // Initially hide until first finetune
-  finetuneContainer->hide();
-  
-  addToPanel(finetuneContainer);
+
+  addToPanel(m_finetuneImagesWrapper);
+  setParameterApplicability(
+      m_finetuneImagesWrapper, [this](const ParameterState &) {
+        return m_finetuneImagesAvailable;
+      });
 
   QToolButton* visBtn = addSeparator("Visualization",
                QStringLiteral("geometry.visualization"));
@@ -569,15 +572,22 @@ void GeometryPanel::updateDeformationChart() {
     m_deformationChart->setDeformationData(state.scrToImg, p0, w, h, mirror, rotation, ox, oy, fw, fh);
 }
 
-void GeometryPanel::updateFinetuneImages(const colorscreen::finetune_result& result) {
-    if (!m_finetuneImagesPanel) return;
-    
-    m_finetuneImagesPanel->setFinetuneResult(result);
-    
-    // Show the container if it was hidden
-    if (m_finetuneImagesContainer && m_finetuneImagesContainer->parentWidget()) {
-        m_finetuneImagesContainer->parentWidget()->show();
-    }
+void GeometryPanel::updateFinetuneImages(
+    const colorscreen::finetune_result &result) {
+  if (!m_finetuneImagesPanel)
+    return;
+
+  m_finetuneImagesPanel->setFinetuneResult(result);
+  m_finetuneImagesAvailable = true;
+  updateWidgetStates();
+}
+
+/** Remove finetune diagnostic images without changing document parameters. */
+void GeometryPanel::clearFinetuneImages() {
+  if (m_finetuneImagesPanel)
+    m_finetuneImagesPanel->clear();
+  m_finetuneImagesAvailable = false;
+  updateWidgetStates();
 }
 
 void GeometryPanel::setRegistrationPointsVisible(bool visible) {
