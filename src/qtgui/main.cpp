@@ -682,6 +682,9 @@ bool colorSectionPreferencesSmoke() {
               "Sharpness lost no-image Focus analyzer prerequisite"));
 
         sharpnessImage = std::make_shared<colorscreen::image_data>();
+        if (!sharpnessImage->set_dimensions(4, 4, false, true))
+          return fail(QStringLiteral(
+              "Sharpness Focus analyzer smoke could not create test image"));
         ParameterState focusReadyState = state;
         focusReadyState.scrToImg.type = colorscreen::Dufay;
         focusReadyState.scrToImg.coordinate1 = {8, 0};
