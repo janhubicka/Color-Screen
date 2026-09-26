@@ -174,6 +174,22 @@ bool geometryFitInputsDiffer(const ParameterState &before,
          a.mesh_trans_is_scr_to_img != b.mesh_trans_is_scr_to_img;
 }
 
+/** Return whether inputs that produce an automatic-detection patch map differ.
+
+    The retained screen_map is scan-space detection evidence. Coordinate
+    geometry may be refined afterwards and is intentionally excluded because
+    drawing projects the retained screen coordinates through the current
+    mapping. The detector itself consumes screen/scanner type, screen-color
+    classification, gamma, and capture sharpening. */
+bool detectedScreenDiagnosticsInputsDiffer(const ParameterState &before,
+                                           const ParameterState &after) {
+  return before.scrToImg.type != after.scrToImg.type ||
+         before.scrToImg.scanner_type != after.scrToImg.scanner_type ||
+         before.detect != after.detect ||
+         before.rparams.gamma != after.rparams.gamma ||
+         !before.rparams.sharpen.equal_p(after.rparams.sharpen);
+}
+
 /** Return whether automatic focus-area discovery/analysis inputs differ.
     These workers consume render parameters and the screen-to-image mapping,
     but not solver bookkeeping, detection settings, or profile-spot state. */
@@ -2230,9 +2246,10 @@ void MainWindow::createMenus() {
   m_detectedPatchCentersAction->setChecked(false);
   m_detectedPatchCentersAction->setEnabled(false);
   m_detectedPatchCentersAction->setToolTip(
-      tr("Show color-coded centers of screen elements found by the most recent "
-         "automatic basic-screen detection. The dense overlay is drawn at "
-         "100% zoom and above."));
+      tr("Show color-coded centers of screen elements from the most recent "
+         "current automatic screen detection. The diagnostic expires when "
+         "detection inputs change; geometry-only refinement keeps it current. "
+         "The dense overlay is drawn at 100% zoom and above."));
   connect(m_detectedPatchCentersAction, &QAction::toggled, this,
           [this](bool show) {
             m_showDetectedPatchCenters = show;
@@ -2519,7 +2536,7 @@ void MainWindow::setInspectorImageWidget(ImageWidget *imageWidget) {
     disconnect(connection);
   m_inspectorImageConnections.clear();
   m_inspectorImageWidget = target;
-  target->setDetectedScreenMap(m_detectedScreenMap);
+  target->setDetectedScreenMap(m_detectedScreenDiagnostics.map);
   target->setShowDetectedPatchCenters(m_showDetectedPatchCenters);
 
   // A selected document tool belongs to the document operation, not to the
@@ -2647,7 +2664,7 @@ void MainWindow::setInspectorImageWidget(ImageWidget *imageWidget) {
     const QSignalBlocker blocker(m_detectedPatchCentersAction);
     m_detectedPatchCentersAction->setChecked(m_showDetectedPatchCenters);
     m_detectedPatchCentersAction->setEnabled(
-        static_cast<bool>(m_detectedScreenMap));
+        static_cast<bool>(m_detectedScreenDiagnostics.map));
   }
   if (m_geometryPanel)
     m_geometryPanel->setRegistrationPointsVisible(
@@ -2721,6 +2738,14 @@ void MainWindow::applyState(const ParameterState &state) {
     m_geometryPanel->clearFinetuneImages();
   if (m_sharpnessPanel)
     m_sharpnessPanel->clearFinetuneImages();
+
+  const bool invalidateDetectedScreenDiagnostics =
+      m_detectedScreenDiagnostics.baseline &&
+      (m_detectedScreenDiagnostics.scan.lock() != m_scan ||
+       detectedScreenDiagnosticsInputsDiffer(
+           *m_detectedScreenDiagnostics.baseline, state));
+  if (invalidateDetectedScreenDiagnostics)
+    clearDetectedScreenDiagnostics();
 
   const bool invalidateFocusAreas =
       m_focusAreaAnalysis.baseline &&
