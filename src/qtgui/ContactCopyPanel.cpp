@@ -1,3 +1,5 @@
+#include <utility>
+
 #include <QSignalBlocker>
 #include <QShowEvent>
 #include "ContactCopyPanel.h"
