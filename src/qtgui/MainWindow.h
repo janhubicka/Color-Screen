@@ -164,6 +164,9 @@ public:
       ordinary presentation executes them. */
   void appendOrdinaryViewToolActions(QToolBar *toolbar);
 
+  /** Synchronize document-owned detected-patch diagnostics to one ordinary view. */
+  void syncDetectedScreenDiagnostics(ImageWidget *image) const;
+
   /** Return the shared Edit menu action for ordinary secondary views. */
   QAction *ordinaryViewEditMenuAction() const;
 
@@ -327,6 +330,8 @@ signals:
   void documentStateChanged();
   /** Emitted when session-local MTF fit provenance changes without parameters. */
   void mtfCalibrationStateChanged();
+  /** Emitted when detected-patch map availability or visibility changes. */
+  void detectedScreenDiagnosticsChanged();
   /** Emitted when this document gains or loses dedicated progress rows. */
   void userVisibleProgressVisibilityChanged(bool visible);
   /** Emitted when delayed transient progress appears or disappears. */

@@ -2239,8 +2239,8 @@ void MainWindow::createMenus() {
   connect(m_detectedPatchCentersAction, &QAction::toggled, this,
           [this](bool show) {
             m_showDetectedPatchCenters = show;
-            if (ImageWidget *image = inspectorImageWidget())
-              image->setShowDetectedPatchCenters(show);
+            syncDetectedScreenDiagnostics(m_imageWidget);
+            emit detectedScreenDiagnosticsChanged();
           });
   m_registrationMenu->addAction(m_detectedPatchCentersAction);
   m_registrationMenu->addSeparator();
@@ -2522,8 +2522,7 @@ void MainWindow::setInspectorImageWidget(ImageWidget *imageWidget) {
     disconnect(connection);
   m_inspectorImageConnections.clear();
   m_inspectorImageWidget = target;
-  target->setDetectedScreenMap(m_detectedScreenDiagnostics.map);
-  target->setShowDetectedPatchCenters(m_showDetectedPatchCenters);
+  syncDetectedScreenDiagnostics(target);
 
   // A selected document tool belongs to the document operation, not to the
   // canvas that happened to be active when it was armed. Move it to the newly
@@ -2705,6 +2704,18 @@ void MainWindow::restoreFromWorkspaceEmbedding() {
 
 // Undo/Redo Implementation
 
+/** Synchronize the document-owned detected-patch diagnostic to IMAGE.
+
+    Ordinary views may remain simultaneously visible in tiled/cascaded MDI.
+    Keep map availability and the shared visibility preference independent of
+    which view currently borrows the document inspector. */
+void MainWindow::syncDetectedScreenDiagnostics(ImageWidget *image) const {
+  if (!image || !acceptsInspectorImageWidget(image))
+    return;
+  image->setDetectedScreenMap(m_detectedScreenDiagnostics.map);
+  image->setShowDetectedPatchCenters(m_showDetectedPatchCenters);
+}
+
 /** Publish one current automatic-detection patch map to every ordinary view.
 
     Capture provenance only after the detected numerical document result has
@@ -2729,25 +2740,19 @@ void MainWindow::publishDetectedScreenDiagnostics(
   m_detectedScreenDiagnostics.inputs = std::move(inputs);
   m_detectedScreenDiagnostics.scan = scan;
 
-  if (m_imageWidget)
-    m_imageWidget->setDetectedScreenMap(m_detectedScreenDiagnostics.map);
-  if (ImageWidget *image = inspectorImageWidget();
-      image && image != m_imageWidget)
-    image->setDetectedScreenMap(m_detectedScreenDiagnostics.map);
+  syncDetectedScreenDiagnostics(m_imageWidget);
   if (m_detectedPatchCentersAction)
     m_detectedPatchCentersAction->setEnabled(true);
+  emit detectedScreenDiagnosticsChanged();
 }
 
 /** Remove an obsolete patch map from state and every ordinary presentation. */
 void MainWindow::clearDetectedScreenDiagnostics() {
   m_detectedScreenDiagnostics.clear();
-  if (m_imageWidget)
-    m_imageWidget->setDetectedScreenMap(nullptr);
-  if (ImageWidget *image = inspectorImageWidget();
-      image && image != m_imageWidget)
-    image->setDetectedScreenMap(nullptr);
+  syncDetectedScreenDiagnostics(m_imageWidget);
   if (m_detectedPatchCentersAction)
     m_detectedPatchCentersAction->setEnabled(false);
+  emit detectedScreenDiagnosticsChanged();
 }
 
 /** Apply a full ParameterState to the application.

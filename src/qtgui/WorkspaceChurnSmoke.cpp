@@ -2443,7 +2443,17 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         // Auto-detected patch centers are scan-space diagnostics with a
         // deliberately narrower freshness contract than the whole document.
         // Geometry refinement must keep the map; detector/color-classification
-        // edits must expire it and disable the Registration-menu toggle.
+        // edits must expire it and disable the Registration-menu toggle. Keep
+        // the peer view inactive while exercising this so propagation cannot
+        // accidentally rely on inspector ownership.
+        workspace->activateDocument(first);
+        if (first->inspectorImageWidget() != first->m_imageWidget) {
+          fail(QStringLiteral(
+              "Workspace churn could not make the primary view diagnostic owner"));
+          return;
+        }
+        const bool savedDetectedPatchVisibility =
+            first->m_showDetectedPatchCenters;
         const ParameterState patchBaseline = first->documentStateSnapshot();
         const auto patchMap =
             std::make_shared<colorscreen::screen_map>(
@@ -2454,9 +2464,39 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
             !first->m_detectedScreenDiagnostics.inputs ||
             first->m_detectedScreenDiagnostics.scan.lock() != first->m_scan ||
             !first->m_detectedPatchCentersAction ||
-            !first->m_detectedPatchCentersAction->isEnabled()) {
+            !first->m_detectedPatchCentersAction->isEnabled() ||
+            !first->m_imageWidget->hasDetectedScreenMap() ||
+            !view->imageWidget()->hasDetectedScreenMap()) {
           fail(QStringLiteral(
-              "Detected patch-center diagnostic did not publish with provenance"));
+              "Detected patch-center diagnostic did not publish to every ordinary view"));
+          return;
+        }
+
+        first->m_detectedPatchCentersAction->setChecked(
+            !savedDetectedPatchVisibility);
+        if (first->m_imageWidget->detectedPatchCentersVisible() ==
+                savedDetectedPatchVisibility ||
+            view->imageWidget()->detectedPatchCentersVisible() ==
+                savedDetectedPatchVisibility) {
+          fail(QStringLiteral(
+              "Detected patch-center visibility did not synchronize across ordinary views"));
+          return;
+        }
+
+        // A view initialized/refreshed after publication must recover the
+        // current document-owned diagnostic even before it becomes active.
+        view->imageWidget()->setDetectedScreenMap(nullptr);
+        if (view->imageWidget()->hasDetectedScreenMap()) {
+          fail(QStringLiteral(
+              "Workspace churn could not clear peer diagnostic for refresh probe"));
+          return;
+        }
+        view->refreshFromDocument();
+        if (!view->imageWidget()->hasDetectedScreenMap() ||
+            view->imageWidget()->detectedPatchCentersVisible() !=
+                first->m_showDetectedPatchCenters) {
+          fail(QStringLiteral(
+              "Ordinary-view refresh did not recover detected patch diagnostics"));
           return;
         }
 
@@ -2465,7 +2505,9 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         first->applyState(geometryOnly);
         if (first->m_detectedScreenDiagnostics.map != patchMap ||
             !first->m_detectedScreenDiagnostics.inputs ||
-            !first->m_detectedPatchCentersAction->isEnabled()) {
+            !first->m_detectedPatchCentersAction->isEnabled() ||
+            !first->m_imageWidget->hasDetectedScreenMap() ||
+            !view->imageWidget()->hasDetectedScreenMap()) {
           fail(QStringLiteral(
               "Geometry-only edit incorrectly expired detected patch centers"));
           return;
@@ -2483,12 +2525,22 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         if (first->m_detectedScreenDiagnostics.map ||
             first->m_detectedScreenDiagnostics.inputs ||
             !first->m_detectedScreenDiagnostics.scan.expired() ||
-            first->m_detectedPatchCentersAction->isEnabled()) {
+            first->m_detectedPatchCentersAction->isEnabled() ||
+            first->m_imageWidget->hasDetectedScreenMap() ||
+            view->imageWidget()->hasDetectedScreenMap()) {
           fail(QStringLiteral(
-              "Detector-input edit retained stale detected patch centers"));
+              "Detector-input edit retained stale detected patch centers in an ordinary view"));
           return;
         }
         first->applyState(patchBaseline);
+        first->m_detectedPatchCentersAction->setChecked(
+            savedDetectedPatchVisibility);
+        workspace->activateView(view);
+        if (first->inspectorImageWidget() != view->imageWidget()) {
+          fail(QStringLiteral(
+              "Workspace churn could not restore peer-view inspector after diagnostic probe"));
+          return;
+        }
 
         // Give the source a distinctive processing-state sentinel without
         // dirtying the document (applyState is the same path used by

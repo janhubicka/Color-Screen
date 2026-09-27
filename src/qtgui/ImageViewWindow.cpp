@@ -87,6 +87,11 @@ ImageViewWindow::ImageViewWindow(MainWindow *document, int viewNumber,
   if (m_document) {
     connect(m_document, &MainWindow::documentStateChanged, this,
             &ImageViewWindow::refreshFromDocument);
+    connect(m_document, &MainWindow::detectedScreenDiagnosticsChanged, this,
+            [this]() {
+              if (m_document && !m_slantedEdgeReference)
+                m_document->syncDetectedScreenDiagnostics(m_imageWidget);
+            });
     connect(m_document, &QWidget::windowTitleChanged, this,
             [this](const QString &) { refreshFromDocument(); });
     connect(m_document, &QObject::destroyed, this, [this]() {
@@ -630,6 +635,8 @@ void ImageViewWindow::refreshFromDocument() {
   rebuildModeList();
   updateViewControls();
   updateImageParameters(imageChanged);
+  if (!m_slantedEdgeReference)
+    m_document->syncDetectedScreenDiagnostics(m_imageWidget);
   if (m_sharpnessPanel)
     m_sharpnessPanel->updateUI();
 

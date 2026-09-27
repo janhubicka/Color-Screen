@@ -119,6 +119,10 @@ public:
   bool detectedPatchCentersVisible() const {
     return m_showDetectedPatchCenters;
   }
+  /** Return whether this view currently holds a detected-patch diagnostic map. */
+  bool hasDetectedScreenMap() const {
+    return static_cast<bool>(m_detectedScreenMap);
+  }
 
   /**
    * @brief Toggles the visibility of registration points.

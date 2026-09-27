@@ -604,6 +604,10 @@ specialist stages.
   map is screen-coordinate evidence projected through current geometry, but a
   source-scan, screen/scanner-type, detection-parameter, gamma, or capture-
   sharpening change clears it from every ordinary view and disables the toggle.
+  A dedicated document diagnostic signal keeps map availability and Show/Hide
+  synchronized even in inactive tiled/cascaded or detached ordinary views, and
+  new/refreshed peer views immediately adopt the current diagnostic; reference
+  scans are intentionally excluded.
   Profile calibration follows the same evidence rule: the fitted matrix remains
   saved and may be labelled stale, but per-spot colour matches and average
   DeltaE are session diagnostics tied to the exact source scan + optimizer
