@@ -29,8 +29,8 @@ public:
     ir,
     all_channels
   };
-  backlight_correction_parameters ();
-  bool alloc (int width, int height, bool enabled[4]);
+  DLL_PUBLIC backlight_correction_parameters ();
+  DLL_PUBLIC bool alloc (int width, int height, bool enabled[4]);
   virtual ~backlight_correction_parameters () = default;
   DLL_PUBLIC static std::shared_ptr <backlight_correction_parameters>
   load_captureone_lcc (FILE *f, bool verbose = false);
