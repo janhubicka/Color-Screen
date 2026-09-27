@@ -2469,8 +2469,6 @@ void ImageWidget::selectAll() {
 void ImageWidget::deleteSelectedPoints() {
   if (!m_solver || m_selectedPoints.empty()) return;
   
-  emit pointManipulationStarted();
-  
   std::vector<size_t> toDelete;
   for (const auto& sp : m_selectedPoints) {
     if (sp.type == SelectedPoint::RegistrationPoint) {
@@ -2479,6 +2477,9 @@ void ImageWidget::deleteSelectedPoints() {
   }
   
   if (toDelete.empty()) return;
+
+  // Only a real document edit opens an Undo gesture.
+  emit pointManipulationStarted();
   
   // Sort descending to avoid index shifting during deletion
   std::sort(toDelete.rbegin(), toDelete.rend());

@@ -2566,6 +2566,33 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         }
         coordinateUndo->undo();
 
+        // In-place canvas gestures own one start snapshot. A duplicate/stray
+        // completion must not reuse an old baseline or create another command.
+        const int gestureUndoIndex = coordinateUndo->index();
+        first->onCoordinateSystemManipulationStarted();
+        first->m_scrToImgParams.center.x += 0.5;
+        const ParameterState expectedGestureState = first->getCurrentState();
+        first->onCoordinateSystemManipulationFinished();
+        if (coordinateUndo->index() != gestureUndoIndex + 1 ||
+            first->getCurrentState() != expectedGestureState) {
+          fail(QStringLiteral(
+              "Coordinate gesture did not create exactly one undo command"));
+          return;
+        }
+        first->onCoordinateSystemManipulationFinished();
+        if (coordinateUndo->index() != gestureUndoIndex + 1) {
+          fail(QStringLiteral(
+              "Duplicate coordinate gesture completion reused a stale snapshot"));
+          return;
+        }
+        coordinateUndo->undo();
+        if (coordinateUndo->index() != gestureUndoIndex ||
+            first->getCurrentState() != beforeCoordinates) {
+          fail(QStringLiteral(
+              "Coordinate gesture undo did not restore its exact baseline"));
+          return;
+        }
+
         // A state-mutating one-shot must be cancelled as soon as the document
         // accepts another parameter snapshot. Its racing completion must still
         // execute cleanup but must never publish the stale result.

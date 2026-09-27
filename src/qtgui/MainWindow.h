@@ -782,8 +782,15 @@ private:
       determine the generated curve.  */
   colorscreen::slanted_edge_parameters m_slantedEdgeParameters;
   std::vector<colorscreen::point_t> m_profileSpots;
-  ParameterState m_undoSnapshot; // Added
-  ParameterState m_gridManipulationOldState;
+
+  /** Undo baselines for in-place canvas gestures.
+      Each completion consumes exactly one matching start snapshot. */
+  struct CanvasGestureUndoState {
+    std::optional<ParameterState> pointEdit;
+    std::optional<ParameterState> coordinateEdit;
+  };
+  CanvasGestureUndoState m_canvasGestureUndo;
+
   colorscreen::render_type_parameters m_renderTypeParams; // New member
 
   void resetParameters();
