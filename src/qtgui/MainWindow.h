@@ -167,6 +167,9 @@ public:
   /** Synchronize document-owned detected-patch diagnostics to one ordinary view. */
   void syncDetectedScreenDiagnostics(ImageWidget *image) const;
 
+  /** Synchronize document-owned focus-analysis rectangles to one ordinary view. */
+  void syncFocusAreaOverlays(ImageWidget *image) const;
+
   /** Return the shared Edit menu action for ordinary secondary views. */
   QAction *ordinaryViewEditMenuAction() const;
 
@@ -332,6 +335,8 @@ signals:
   void mtfCalibrationStateChanged();
   /** Emitted when detected-patch map availability or visibility changes. */
   void detectedScreenDiagnosticsChanged();
+  /** Emitted when document-owned focus-analysis rectangles change. */
+  void focusAreaOverlaysChanged();
   /** Emitted when this document gains or loses dedicated progress rows. */
   void userVisibleProgressVisibilityChanged(bool visible);
   /** Emitted when delayed transient progress appears or disappears. */
@@ -540,8 +545,7 @@ private:
   /** Refresh the compact persistent processing-stage summary in the inspector. */
   void updateWorkflowSummary();
 
-  /** Refresh focus-analysis rectangles in the ordinary view currently
-      presenting this document's inspector. */
+  /** Publish current focus-analysis rectangles to every ordinary view. */
   void updateFocusAreaOverlays();
   /** Refresh/optionally locate the selected measured-MTF ROI in ordinary views. */
   void updateMtfMeasurementOverlay(bool locate = false);

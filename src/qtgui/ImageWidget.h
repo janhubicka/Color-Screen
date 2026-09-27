@@ -105,6 +105,10 @@ public:
 
   /** Replace the focus-analysis overlay shown by this view. */
   void setFocusAreaOverlays(const std::vector<FocusAreaOverlay> &areas);
+  /** Return the number of document-owned focus rectangles held by this view. */
+  std::size_t focusAreaOverlayCount() const {
+    return m_focusAreaOverlays.size();
+  }
   /** Show the ROI and accepted edge belonging to one stored MTF measurement.
       Passing null or a measurement without spatial provenance clears it. */
   void setMtfMeasurementOverlay(const colorscreen::mtf_measurement *measurement);

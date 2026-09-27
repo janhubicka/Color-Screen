@@ -160,9 +160,11 @@ while the existing focused smoke tests isolate their own lifetime assumptions.
 Automatic solid-area focus analysis is also document-local.  The discovered
 candidate rectangles, individual fit results, selected subset, and validation
 diagnostics belong to the source `MainWindow`; they must never be static or
-application-global.  Ordinary views only present that state as overlays, and an
-active secondary view receives the same document overlay when it takes over the
-inspector.  Discovery and multi-area fitting are one-shot cancellable background
+application-global.  Every ordinary view presents that state as overlays,
+including inactive tiled/cascaded and detached peers. A document overlay-change
+signal updates existing peers, while a newly created/refreshed ordinary view
+pulls the current rectangles immediately; slanted-edge reference views are
+excluded because they display another scan.  Discovery and multi-area fitting are one-shot cancellable background
 operations using `MainWindow::OneShotOperation` and synchronous
 `FocusAnalysisWorker` helpers. Discovery and fitting each capture the scan and
 complete `ParameterState`; stale/cancelled completions must not repopulate

@@ -2655,7 +2655,7 @@ void MainWindow::setInspectorImageWidget(ImageWidget *imageWidget) {
     m_geometryPanel->setRegistrationPointsVisible(
         target->registrationPointsVisible());
   updateRegistrationActions();
-  updateFocusAreaOverlays();
+  syncFocusAreaOverlays(target);
   updateMtfMeasurementOverlay(false);
 }
 
@@ -4902,9 +4902,15 @@ void MainWindow::updateMtfMeasurementOverlay(bool locate) {
   }
 }
 
-/** Refresh automatic focus-area rectangles in all ordinary views currently
-    owned/presented by this document. */
-void MainWindow::updateFocusAreaOverlays() {
+/** Synchronize document-owned focus-analysis rectangles to IMAGE.
+
+    Ordinary views may remain simultaneously visible in tiled/cascaded MDI.
+    Reference views are rejected by acceptsInspectorImageWidget() because they
+    display another source scan. */
+void MainWindow::syncFocusAreaOverlays(ImageWidget *image) const {
+  if (!image || !acceptsInspectorImageWidget(image))
+    return;
+
   std::vector<ImageWidget::FocusAreaOverlay> overlays;
   overlays.reserve(m_focusAreaAnalysis.candidates.size());
   std::map<size_t, colorscreen::coord_t> heldOut;
@@ -4925,10 +4931,13 @@ void MainWindow::updateFocusAreaOverlays() {
       overlay.heldOutRelativeBadness = score->second;
     overlays.push_back(overlay);
   }
-  if (m_imageWidget)
-    m_imageWidget->setFocusAreaOverlays(overlays);
-  if (ImageWidget *target = inspectorImageWidget(); target && target != m_imageWidget)
-    target->setFocusAreaOverlays(overlays);
+  image->setFocusAreaOverlays(overlays);
+}
+
+/** Publish current automatic focus-area rectangles to every ordinary view. */
+void MainWindow::updateFocusAreaOverlays() {
+  syncFocusAreaOverlays(m_imageWidget);
+  emit focusAreaOverlaysChanged();
 }
 
 /** Clear transient automatic focus-area state without changing parameters. */

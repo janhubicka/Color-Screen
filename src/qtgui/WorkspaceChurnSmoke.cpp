@@ -2696,9 +2696,27 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
                 ? focusInspector->findChild<QLabel *>(
                       QStringLiteral("SharpnessFocusAreaStatus"))
                 : nullptr;
+        workspace->activateDocument(first);
         first->m_focusAreaAnalysis.candidates.resize(3);
         first->m_focusAreaAnalysis.baseline = focusBaseline;
         first->m_focusAreaAnalysis.scan = focusScan;
+        first->updateFocusAreaOverlays();
+        if (first->m_imageWidget->focusAreaOverlayCount() != 3 ||
+            view->imageWidget()->focusAreaOverlayCount() != 3) {
+          fail(QStringLiteral(
+              "Focus-area candidates did not publish to every ordinary view"));
+          return;
+        }
+
+        // A peer refreshed after publication must recover the document-owned
+        // rectangles without first becoming the inspector target.
+        view->imageWidget()->setFocusAreaOverlays({});
+        view->refreshFromDocument();
+        if (view->imageWidget()->focusAreaOverlayCount() != 3) {
+          fail(QStringLiteral(
+              "Ordinary-view refresh did not recover focus-area overlays"));
+          return;
+        }
 
         ParameterState irrelevant = focusBaseline;
         irrelevant.profileSpots.push_back({1.0, 1.0});
@@ -2722,6 +2740,8 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         if (!first->m_focusAreaAnalysis.candidates.empty() ||
             first->m_focusAreaAnalysis.baseline ||
             !first->m_focusAreaAnalysis.scan.expired() ||
+            first->m_imageWidget->focusAreaOverlayCount() != 0 ||
+            view->imageWidget()->focusAreaOverlayCount() != 0 ||
             !focusAreaStatus ||
             !focusAreaStatus->text().contains(QStringLiteral("inputs changed"))) {
           fail(QStringLiteral(
