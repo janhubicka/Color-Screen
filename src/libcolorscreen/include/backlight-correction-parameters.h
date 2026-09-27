@@ -1,6 +1,7 @@
 #ifndef BACKLIGHT_CORRECTION_PARAMETERS_H
 #define BACKLIGHT_CORRECTION_PARAMETERS_H
 #include <memory>
+#include <vector>
 #include "base.h"
 #include "color.h"
 namespace colorscreen
