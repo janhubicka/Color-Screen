@@ -292,6 +292,16 @@ though the spots were unchanged.  Other unrelated edits could do the same.
 The panel now snapshots the profile-spot coordinates and auto-runs only when the
 spot set actually changes.  Manual **Optimize color** remains unchanged.
 
+Profile fitting also owns an immutable source-image snapshot now. The queued
+request carries the source scan itself instead of letting
+`ColorOptimizerWorker` read its mutable `WorkerBase::m_scan`; completion checks
+that source identity as well as the geometry/render/spot inputs. Accepted and
+failed provenance keep only weak scan identities, so old images are not pinned.
+Per-spot colour matches and average DeltaE live inside
+`ProfileCalibrationState` with the rest of the fit diagnostics and are cleared
+when the accepted inputs become stale. The persisted profiled colour matrix is
+not discarded by that presentation cleanup.
+
 ### Workflow now names the active image layer
 
 The persistent Workflow card includes an explicit Image layer line. It
