@@ -97,6 +97,11 @@ ImageViewWindow::ImageViewWindow(MainWindow *document, int viewNumber,
               if (m_document && !m_slantedEdgeReference)
                 m_document->syncFocusAreaOverlays(m_imageWidget);
             });
+    connect(m_document, &MainWindow::mtfMeasurementOverlayChanged, this,
+            [this]() {
+              if (m_document && !m_slantedEdgeReference)
+                m_document->syncMtfMeasurementOverlay(m_imageWidget);
+            });
     connect(m_document, &QWidget::windowTitleChanged, this,
             [this](const QString &) { refreshFromDocument(); });
     connect(m_document, &QObject::destroyed, this, [this]() {
@@ -643,6 +648,7 @@ void ImageViewWindow::refreshFromDocument() {
   if (!m_slantedEdgeReference) {
     m_document->syncDetectedScreenDiagnostics(m_imageWidget);
     m_document->syncFocusAreaOverlays(m_imageWidget);
+    m_document->syncMtfMeasurementOverlay(m_imageWidget);
   }
   if (m_sharpnessPanel)
     m_sharpnessPanel->updateUI();
