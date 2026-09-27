@@ -8,12 +8,13 @@ GeometrySolverWorker::GeometrySolverWorker(
     : WorkerBase(scan, parent) {}
 
 void GeometrySolverWorker::solve(
-    int reqId, colorscreen::scr_to_img_parameters params,
+    int reqId, std::shared_ptr<colorscreen::image_data> scan,
+    colorscreen::scr_to_img_parameters params,
     colorscreen::solver_parameters solverParams,
     std::shared_ptr<colorscreen::progress_info> progress,
     bool computeMesh) {
     
-  if (!m_scan) {
+  if (!scan) {
     emit finished(reqId, params, false, false);
     return;
   }
@@ -33,7 +34,7 @@ void GeometrySolverWorker::solve(
 
     // colorscreen::solver modifies params in place and returns sum of squares of error
     colorscreen::coord_t error_sq =
-        colorscreen::solver(&params, *m_scan, solverParams, progress.get());
+        colorscreen::solver(&params, *scan, solverParams, progress.get());
 
     if (!computeMesh) {
       params.mesh_trans = originalMesh;
@@ -51,7 +52,7 @@ void GeometrySolverWorker::solve(
           static_cast<int>(solverParams.n_points()) >
               colorscreen::solver_parameters::min_mesh_points(params.type)) {
         params.mesh_trans =
-            colorscreen::solver_mesh(&params, *m_scan, solverParams,
+            colorscreen::solver_mesh(&params, *scan, solverParams,
                                      progress.get());
         params.mesh_trans_is_scr_to_img = false;
         if (!params.mesh_trans) {
