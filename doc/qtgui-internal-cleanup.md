@@ -470,7 +470,11 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   levels, image-layer calibration and slanted-edge measurement) were the first
   migrated users. Flat-field analysis now follows the same lifecycle and its
   former QObject/QThread/generation wrapper has been reduced to a synchronous
-  background helper. Point-based focus analysis now uses the same lifecycle as
+  background helper. Failed reference analysis is presentation-only: the current
+  saved correction and all document parameters stay untouched, the selected
+  reference/capture inputs are named, worker detail is secondary, and the
+  parent-owned asynchronous warning points back to **Set reference**. Point-based
+  focus analysis now uses the same lifecycle as
   well: the old QObject/QThread/generation wrapper is gone, and an exact
   image/`ParameterState` snapshot gate prevents stale MTF values from being
   applied after an unrelated edit. These operations publish only while their
