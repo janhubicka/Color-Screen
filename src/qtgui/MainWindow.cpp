@@ -2656,7 +2656,7 @@ void MainWindow::setInspectorImageWidget(ImageWidget *imageWidget) {
         target->registrationPointsVisible());
   updateRegistrationActions();
   syncFocusAreaOverlays(target);
-  updateMtfMeasurementOverlay(false);
+  syncMtfMeasurementOverlay(target);
 }
 
 /** Reclaim the inspector when a detached primary document becomes active. */
@@ -4851,8 +4851,45 @@ void MainWindow::onFocusAnalysisRequested(bool checked, uint64_t flags) {
   }
 }
 
+/** Return the selected stored MTF measurement when its spatial provenance
+    belongs to this document's current source scan. */
+const colorscreen::mtf_measurement *MainWindow::currentMtfMeasurementOverlay() const {
+  const auto &measurements = m_rparams.sharpen.scanner_mtf.measurements;
+  if (m_selectedMtfMeasurement < 0 ||
+      m_selectedMtfMeasurement >= static_cast<int>(measurements.size()))
+    return nullptr;
+
+  const colorscreen::mtf_measurement *measurement =
+      &measurements[m_selectedMtfMeasurement];
+  if (!measurement->has_spatial_metadata() || !m_scan ||
+      measurement->source_filename.empty())
+    return nullptr;
+  if (measurement->source_width > 0 && measurement->source_height > 0 &&
+      (measurement->source_width != m_scan->width ||
+       measurement->source_height != m_scan->height))
+    return nullptr;
+
+  const QFileInfo recorded(
+      QString::fromUtf8(measurement->source_filename.c_str()));
+  const QFileInfo current(m_currentImageFile);
+  if (recorded.absoluteFilePath() == current.absoluteFilePath() ||
+      (recorded.fileName() == current.fileName() &&
+       measurement->source_width == m_scan->width &&
+       measurement->source_height == m_scan->height))
+    return measurement;
+  return nullptr;
+}
+
+/** Synchronize the selected document-owned stored-MTF overlay to IMAGE. */
+void MainWindow::syncMtfMeasurementOverlay(ImageWidget *image) const {
+  if (!image || !acceptsInspectorImageWidget(image))
+    return;
+  image->setMtfMeasurementOverlay(currentMtfMeasurementOverlay());
+}
+
 /** Show/locate one selected stored MTF measurement on ordinary views when its
-    source image matches this document. */
+    source image matches this document. Overlay publication is document-wide;
+    Locate still affects only the active inspector view. */
 void MainWindow::updateMtfMeasurementOverlay(bool locate) {
   const auto &measurements = m_rparams.sharpen.scanner_mtf.measurements;
   const colorscreen::mtf_measurement *measurement = nullptr;
@@ -4860,27 +4897,10 @@ void MainWindow::updateMtfMeasurementOverlay(bool locate) {
       m_selectedMtfMeasurement < static_cast<int>(measurements.size()))
     measurement = &measurements[m_selectedMtfMeasurement];
 
-  auto matchesSource = [this](const colorscreen::mtf_measurement *m) {
-    if (!m || !m->has_spatial_metadata() || !m_scan ||
-        m->source_filename.empty())
-      return false;
-    if (m->source_width > 0 && m->source_height > 0 &&
-        (m->source_width != m_scan->width || m->source_height != m_scan->height))
-      return false;
-    const QFileInfo recorded(QString::fromUtf8(m->source_filename.c_str()));
-    const QFileInfo current(m_currentImageFile);
-    return recorded.absoluteFilePath() == current.absoluteFilePath() ||
-           (recorded.fileName() == current.fileName() &&
-            m->source_width == m_scan->width && m->source_height == m_scan->height);
-  };
-
   const colorscreen::mtf_measurement *overlay =
-      matchesSource(measurement) ? measurement : nullptr;
-  if (m_imageWidget)
-    m_imageWidget->setMtfMeasurementOverlay(overlay);
-  if (ImageWidget *target = inspectorImageWidget();
-      target && target != m_imageWidget)
-    target->setMtfMeasurementOverlay(overlay);
+      currentMtfMeasurementOverlay();
+  syncMtfMeasurementOverlay(m_imageWidget);
+  emit mtfMeasurementOverlayChanged();
 
   if (!locate)
     return;
