@@ -760,11 +760,22 @@ private:
     }
   };
   DetectedScreenDiagnosticsState m_detectedScreenDiagnostics;
-  QPointer<QDialog> m_detectScreenPrompt;
-  // Session-only guidance for the combined Detect screen workflow. The weak
-  // progress identity never owns the task and cannot outlive its worker.
-  std::weak_ptr<colorscreen::progress_info> m_screenAutodetectionProgress;
-  bool m_screenAutodetectionUsesStop = false;
+
+  /** Session-only ownership for the combined Detect screen workflow.
+      The confirmation prompt and Wait/Cancel -> Wait/Stop progress handoff
+      belong to one logical operation. The weak progress identity never owns
+      the task and cannot outlive its worker. */
+  struct ScreenAutodetectionState {
+    QPointer<QDialog> prompt;
+    std::weak_ptr<colorscreen::progress_info> progress;
+    bool usesStop = false;
+
+    void clearProgress() {
+      progress.reset();
+      usesStop = false;
+    }
+  };
+  ScreenAutodetectionState m_screenAutodetection;
   bool m_showDetectedPatchCenters = false;
   /** Last slanted-edge setup used in this session.  Each accepted measurement
       stores an independent copy of its metadata, while the numerical controls
