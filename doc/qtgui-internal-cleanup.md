@@ -743,6 +743,14 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   reference-load handoff and each reference-MTF request. Keep applying this
   pattern when another analysis has coupled session-local members that are
   always saved, cleared, or restored together.
+- Group file-target semantics that must change atomically. `ParameterFileState`
+  now owns the current `.par` path together with whether that path is merely an
+  auto-suggested Save-As default. Save/load paths use `setLoaded()` and
+  `setSuggested()` transitions instead of assigning a filename and weak flag
+  independently. Recovery serialization is deliberately unchanged: it still
+  stores path, suggested flag, and dirty flag on separate lines, then restores
+  the first two through the grouped transition. Workspace churn contains a small
+  friend-level transition probe.
 - Keep linear/gamma/logarithmic slider conversions centralized in
   `SliderValueMapping`; do not reintroduce separate mapping formulas in stateful
   and stateless helpers.
