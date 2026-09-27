@@ -611,7 +611,10 @@ specialist stages.
   Profile calibration follows the same evidence rule: the fitted matrix remains
   saved and may be labelled stale, but per-spot colour matches and average
   DeltaE are session diagnostics tied to the exact source scan + optimizer
-  inputs and disappear as soon as those inputs change.
+  inputs and disappear as soon as those inputs change. Profile spot positions
+  and those accepted match results are synchronized to every ordinary peer view;
+  the Show profile spots switch remains view-local and the shared Profile
+  checkbox follows only the currently inspected view.
   Focus-area rectangles are likewise document-owned diagnostics: candidate,
   selected and held-out-result overlays synchronize to every ordinary peer view
   and clear from all of them when focus inputs become stale; reference scans are
