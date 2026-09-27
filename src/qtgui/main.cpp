@@ -1,4 +1,5 @@
 #include <algorithm>
+#include "../libcolorscreen/include/backlight-correction-parameters.h"
 #include "../libcolorscreen/include/imagedata.h"
 #include "GeometryPanel.h"
 #include "BackgroundThreadRegistry.h"
@@ -2375,16 +2376,18 @@ bool runBetaInvariantSmoke() {
 
   ParameterState calibrationBaseline = window.documentStateSnapshot();
   ParameterState calibrated = calibrationBaseline;
-  // The Qt executable deliberately cannot construct the library-private
-  // backlight-correction payload directly. The Clear path treats the accepted
-  // calibration as an opaque shared handle, so use an aliasing non-null handle
-  // here without constructing or dereferencing the payload type.
-  auto flatCorrectionOwner = std::make_shared<int>(0);
+  // Use a real neutral correction: applyState() may legitimately schedule a
+  // renderer before this Clear-path smoke clicks the calibration action.
   auto flatCorrection =
-      std::shared_ptr<colorscreen::backlight_correction_parameters>(
-          flatCorrectionOwner,
-          reinterpret_cast<colorscreen::backlight_correction_parameters *>(
-              flatCorrectionOwner.get()));
+      std::make_shared<colorscreen::backlight_correction_parameters>();
+  bool flatChannels[4] = {true, true, true, true};
+  if (!flatCorrection->alloc(2, 2, flatChannels))
+    return fail("could not allocate flat-field correction fixture");
+  for (int y = 0; y < 2; ++y)
+    for (int x = 0; x < 2; ++x) {
+      flatCorrection->set_luminosity(x, y, 1.0);
+      flatCorrection->set_sub(x, y, 0.0);
+    }
   calibrated.rparams.backlight_correction = flatCorrection;
 
   auto adaptiveCorrection =
