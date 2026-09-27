@@ -798,6 +798,13 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         measuredCurve.add_value(0.0, 100.0);
         measuredCurve.add_value(0.25, 80.0);
         measuredCurve.add_value(0.5, 50.0);
+        measuredCurve.source_filename =
+            first->m_currentImageFile.toUtf8().toStdString();
+        measuredCurve.source_width = first->m_scan ? first->m_scan->width : -1;
+        measuredCurve.source_height = first->m_scan ? first->m_scan->height : -1;
+        measuredCurve.roi = {16, 16, 24, 24};
+        measuredCurve.edge_p1 = {18, 18};
+        measuredCurve.edge_p2 = {36, 36};
         measuredCurves.push_back(measuredCurve);
         measuredWiener.rparams.sharpen.scanner_mtf.measured_mtf_idx = 0;
         first->applyState(measuredWiener);
@@ -812,7 +819,39 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
           return;
         }
 
+        const int savedSelectedMtfMeasurement =
+            first->m_selectedMtfMeasurement;
+        workspace->activateDocument(first);
+        first->m_selectedMtfMeasurement = 0;
+        first->updateMtfMeasurementOverlay(false);
+        if (!first->m_imageWidget->hasMtfMeasurementOverlay() ||
+            !view->imageWidget()->hasMtfMeasurementOverlay()) {
+          fail(QStringLiteral(
+              "Stored MTF overlay did not publish to every ordinary view"));
+          return;
+        }
+
+        view->imageWidget()->setMtfMeasurementOverlay(nullptr);
+        view->refreshFromDocument();
+        if (!view->imageWidget()->hasMtfMeasurementOverlay()) {
+          fail(QStringLiteral(
+              "Ordinary-view refresh did not recover stored MTF overlay"));
+          return;
+        }
+
+        first->m_selectedMtfMeasurement = -1;
+        first->updateMtfMeasurementOverlay(false);
+        if (first->m_imageWidget->hasMtfMeasurementOverlay() ||
+            view->imageWidget()->hasMtfMeasurementOverlay()) {
+          fail(QStringLiteral(
+              "Deselecting stored MTF measurement left an ordinary-view overlay"));
+          return;
+        }
+
         first->applyState(sharpeningSummaryBaseline);
+        first->m_selectedMtfMeasurement = savedSelectedMtfMeasurement;
+        first->updateMtfMeasurementOverlay(false);
+        workspace->activateView(view);
 
         auto ignoresHorizontalHint = [](QWidget *widget) {
           return widget &&
