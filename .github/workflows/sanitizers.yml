@@ -512,15 +512,16 @@ jobs:
             --smoke-test-new-view --smoke-test-slanted-reference \
             "$image" "$image"
 
-        # Workspace churn now exercises several genuine asynchronous analyses
-        # (reference MTF, focus/profile freshness, calibration provenance and
-        # multi-view diagnostics). clang64 ASan routinely needs more than the
-        # historical 100-second process budget even while making progress.
-        # Keep it bounded, but give the smoke enough room to finish; the
-        # phase-transition log distinguishes slow progress from a real wedge.
-        run_asan_smoke workspace-churn 240 \
+        # Windows ASan uses the workspace probe for presentation/lifetime
+        # churn only. The full phases 100-213 contain image-backed analyses
+        # already exercised by the macOS ASan/UBSan and Linux TSan runs; under
+        # clang64 ASan they can dominate this process for many minutes and
+        # obscure actual MDI lifetime regressions. Keep phase 1 plus phases 2+
+        # (tile/cascade/tab/detach/reattach/consolidate/close) under ASan.
+        run_asan_smoke workspace-churn 120 \
+          env COLORSCREEN_WORKSPACE_CHURN_SKIP_ANALYSIS=1 \
           ./src/qtgui/colorscreen-qt \
-            --smoke-test 180000 --smoke-test-expect-windows 2 \
+            --smoke-test 90000 --smoke-test-expect-windows 2 \
             --smoke-test-workspace-churn \
             "$image" "$image"
 
