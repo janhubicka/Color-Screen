@@ -357,6 +357,8 @@ if (captureTypeCombo && first->sharedImageData()) {
 }
 QLabel *profileCalibrationStatus = inspector->findChild<QLabel *>(
     QStringLiteral("ProfileCalibrationStatus"));
+QLabel *profileCalibrationQuality = inspector->findChild<QLabel *>(
+    QStringLiteral("ProfileCalibrationQuality"));
 QPushButton *profileOptimizeButton = inspector->findChild<QPushButton *>(
     QStringLiteral("ProfileOptimizeButton"));
 QPushButton *mtfMeasureButton = inspector->findChild<QPushButton *>(
@@ -831,7 +833,8 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
           return;
         }
 
-        if (!profileCalibrationStatus || !profileOptimizeButton ||
+        if (!profileCalibrationStatus || !profileCalibrationQuality ||
+            !profileOptimizeButton ||
             (profileApplicable
                  ? !profileCalibrationStatus->text().startsWith(
                        QStringLiteral("Profile:"))
@@ -844,6 +847,76 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
           fail(QStringLiteral(
               "Workspace churn source document lost calibration/provenance controls"));
           return;
+        }
+
+        // Profile colour-match rings and average DeltaE are diagnostics of the
+        // accepted optimizer inputs. Output-profile changes are intentionally
+        // irrelevant to that fit, while ordinary render/geometry input changes
+        // must clear the stale diagnostics without deleting the saved matrix or
+        // its accepted-baseline provenance.
+        {
+          const ParameterState profileDiagnosticBaseline =
+              first->getCurrentState();
+          const auto savedProfileCalibration = first->m_profileCalibration;
+
+          first->m_profileCalibration.baseline =
+              MainWindow::ColorOptimizerRequestData{
+                  profileDiagnosticBaseline.scrToImg,
+                  profileDiagnosticBaseline.rparams,
+                  profileDiagnosticBaseline.profileSpots};
+          colorscreen::color_match match{};
+          match.deltaE = 1.5;
+          first->m_profileCalibration.spotResults = {match};
+          first->m_profileCalibration.averageDeltaE = match.deltaE;
+          first->m_profilePanel->setSpotResults(
+              first->m_profileCalibration.spotResults);
+          first->m_imageWidget->setProfileSpots(
+              &first->m_profileSpots,
+              &first->m_profileCalibration.spotResults);
+          if (!profileCalibrationQuality->text().contains(
+                  QStringLiteral("avg ΔE₂₀₀₀ = 1.50"))) {
+            fail(QStringLiteral(
+                "Workspace churn could not seed profile quality diagnostics"));
+            return;
+          }
+
+          ParameterState outputOnly = profileDiagnosticBaseline;
+          outputOnly.rparams.output_profile =
+              profileDiagnosticBaseline.rparams.output_profile ==
+                      colorscreen::render_parameters::output_profile_sRGB
+                  ? colorscreen::render_parameters::output_profile_xyz
+                  : colorscreen::render_parameters::output_profile_sRGB;
+          first->applyState(outputOnly);
+          if (first->m_profileCalibration.spotResults.size() != 1 ||
+              first->m_profileCalibration.averageDeltaE != match.deltaE ||
+              !profileCalibrationQuality->text().contains(
+                  QStringLiteral("avg ΔE₂₀₀₀ = 1.50"))) {
+            fail(QStringLiteral(
+                "Output-only edit incorrectly expired profile diagnostics"));
+            return;
+          }
+          first->applyState(profileDiagnosticBaseline);
+
+          ParameterState staleProfileInputs = profileDiagnosticBaseline;
+          staleProfileInputs.rparams.brightness += 0.125;
+          first->applyState(staleProfileInputs);
+          if (!first->m_profileCalibration.spotResults.empty() ||
+              first->m_profileCalibration.averageDeltaE >= 0 ||
+              !first->m_profileCalibration.baseline ||
+              profileCalibrationQuality->text() != QStringLiteral("—")) {
+            fail(QStringLiteral(
+                "Profile input edit retained stale color-match diagnostics"));
+            return;
+          }
+
+          first->applyState(profileDiagnosticBaseline);
+          first->m_profileCalibration = savedProfileCalibration;
+          first->m_profilePanel->setSpotResults(
+              first->m_profileCalibration.spotResults);
+          first->m_imageWidget->setProfileSpots(
+              &first->m_profileSpots,
+              &first->m_profileCalibration.spotResults);
+          first->updateWorkflowSummary();
         }
 
         // Applicability is logical UI state, independent of section folding.
