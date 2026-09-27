@@ -108,15 +108,11 @@ For every new asynchronous feature answer these questions in code review:
 ### Undo describes user gestures, not timing accidents
 
 Slider drags should coalesce into one undo step, but two different controls
-changed quickly are two user actions.  Merge identity must therefore include a
-logical operation identity, not only a short wall-clock interval.  This review
-changes the current command merger so only commands with the same description
-can merge.
-
-Longer term, the description string should become an explicit merge key supplied
-by the parameter helper.  That avoids depending on translated display text and
-allows two controls with the same visible label in different groups to remain
-independent.
+changed quickly are two user actions. Merge identity therefore uses an explicit
+stable parameter key plus the short gesture window; human-readable Undo text is
+presentation only. Unkeyed actions are atomic and never merge merely because
+their descriptions match. This is now the completed beta contract rather than a
+future migration target.
 
 ### Dirty state is separate from worker/view activity
 
@@ -198,8 +194,13 @@ button disappears, and settle all transient state at tool/window/grab
 boundaries. Qt's automatic press-to-release mouse grab is used consistently
 instead of selectively calling `grabMouse()`. Live edits close their undo
 transaction on interruption; uncommitted area/measurement gestures are simply
-discarded. The ordinary Qt smoke path contains synthetic lost-release and
-tool-switch probes for the primary canvas and interactive curves.
+discarded. MainWindow keeps point and coordinate-edit baselines as optional
+single-use snapshots: a matching completion consumes the snapshot exactly once,
+while a duplicate/stray completion cannot synthesize an Undo command from an old
+or default state. No-op deletion also waits until a real registration-point set
+has been identified before emitting `pointManipulationStarted()`. Ordinary Qt
+smoke covers lost-release/tool-switch behavior, and workspace churn verifies that
+a duplicate coordinate completion does not add a second Undo command.
 
 ### Dynamic inspector status text resized the canvas
 
