@@ -115,6 +115,17 @@ QString geometryFitFailureMessage() {
       "settings, then retry Fit geometry.");
 }
 
+/** Explain profile-optimization failure without inventing a numerical cause. */
+QString profileOptimizationFailureMessage() {
+  return QCoreApplication::translate(
+      "MainWindow",
+      "Profile optimization could not fit the current calibration spots for "
+      "this image and its current geometry/color-processing inputs. Existing "
+      "profile correction values and calibration spots were left unchanged. "
+      "Inspect the spot distribution and current geometry/color inputs, adjust "
+      "the spots or inputs if needed, then retry Optimize profile.");
+}
+
 namespace {
 /** Return the physical scan resolution inferred from a configured screen. */
 std::optional<double> estimateScreenDpi(

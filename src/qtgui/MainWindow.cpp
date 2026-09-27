@@ -3044,9 +3044,11 @@ QString MainWindow::profileCalibrationSummary() const {
       summary += tr(" • avg ΔE₂₀₀₀ %1")
           .arg(m_profileCalibration.averageDeltaE, 0, 'f', 2);
     if (failureCurrent)
-      summary += tr(" • last retry failed");
+      summary += tr(
+          " • last retry failed — current calibration retained; adjust spots/inputs and retry");
   } else if (failureCurrent) {
-    summary += tr(" • optimization failed — adjust inputs and retry");
+    summary += tr(
+        " • optimization failed — existing profile correction unchanged; inspect spots/inputs and retry");
   } else if (m_profileCalibration.baseline) {
     summary += tr(" • calibration stale — reoptimize");
   } else if (savedCalibration) {
@@ -5480,7 +5482,7 @@ void MainWindow::onColorOptimizerFinished(
                         : std::shared_ptr<colorscreen::image_data>();
     if (m_profileCalibration.failureInputs)
       m_profileCalibration.failureInputs->scan.reset();
-    statusBar()->showMessage(tr("Color optimization failed"), 4000);
+    statusBar()->showMessage(profileOptimizationFailureMessage(), 9000);
   }
   updateWorkflowSummary();
 }

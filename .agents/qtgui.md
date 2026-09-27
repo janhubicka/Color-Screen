@@ -379,7 +379,13 @@ diagnostics of that accepted input snapshot: clear them when the scan or any
 optimizer input becomes stale, while leaving the persisted profile matrix in
 `ParameterState` so the UI can label that calibration stale/unverified. Output
 profile and final-plane orientation remain irrelevant because the optimizer
-forces its own XYZ comparison space. Profile spot coordinates and accepted
+forces its own XYZ comparison space. A current optimization failure must not
+overwrite the accepted/persisted profile correction or the calibration spots.
+Report it persistently as a failed retry/current-input failure with the retained
+state explicit, and use the status bar for the fuller actionable explanation
+(spot distribution plus geometry/color inputs, then retry **Optimize profile**).
+Do not invent a numerical cause or add a routine modal warning for this failure.
+Profile spot coordinates and accepted
 per-spot colour-match results are document-owned overlay data: bind them into
 every ordinary New View and refresh them when either ParameterState or the
 session-only optimizer diagnostics change. The **Show profile spots** choice is
