@@ -471,6 +471,12 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
   // current image snapshot. Invalidate both before starting replacement I/O.
   dismissOneShotPrompts();
   m_oneShotOperations.cancelAll();
+  // Profile optimization is image-backed but uses TaskQueue rather than the
+  // one-shot controller. Disown pending publication immediately; its worker
+  // keeps the captured source scan alive until it unwinds.
+  m_colorOptimizerQueue.cancelAll();
+  m_profileCalibration.pendingInputs.reset();
+  m_profileCalibration.pendingRequestId.reset();
   const uint64_t loadGeneration = ++m_imageLoadGeneration;
   if (m_screenAutodetectAfterLoadGeneration &&
       *m_screenAutodetectAfterLoadGeneration != loadGeneration)
@@ -602,6 +608,13 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
 
         if (result.first) {
           clearDetectedScreenDiagnostics();
+          // A new/reloaded image establishes a new colour-sampling context.
+          // Persisted profile matrix values remain in render parameters, but
+          // session provenance and per-spot quality diagnostics do not carry
+          // across the source-image boundary.
+          m_profileCalibration.clear();
+          if (m_profilePanel)
+            m_profilePanel->setSpotResults(m_profileCalibration.spotResults);
           m_scan = tempScan;
 
           if ((int)m_scan->gamma != -2 && m_scan->gamma > 0 &&
