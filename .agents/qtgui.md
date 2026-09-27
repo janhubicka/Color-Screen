@@ -941,7 +941,12 @@ the section programmatically.
 
 Geometry's five section preferences follow the same contract. Its four fit
 prerequisite messages are rows inside Geometry fit, applicable only while their
-message is nonempty. All four Visualization chart rows register applicability
+message is nonempty. A failed Geometry fit does not mutate the existing mapping
+or registration points: record failure provenance, keep the panel/Workflow stale
+or failed status accurate, and show one parent-owned asynchronous warning that
+states the preserved state and directs the operator to registration
+coverage/outlier guidance, point edits, fit settings, and retrying **Fit
+geometry**. All four Visualization chart rows register applicability
 independently of the section fold. Incremental point/chart updates call
 `ParameterPanel::updateWidgetStates()` to replay presentation callbacks only;
 this must not invoke parameter updaters or `onParametersRefreshed()` recursively.
