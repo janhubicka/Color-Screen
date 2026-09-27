@@ -2787,7 +2787,7 @@ void MainWindow::applyState(const ParameterState &state) {
   // inputs change, keep the matrix/provenance so the UI can report it as stale,
   // but remove diagnostics that no longer describe the current document.
   const ColorOptimizerRequestData proposedProfileInputs{
-      state.scrToImg, state.rparams, state.profileSpots};
+      m_scan, state.scrToImg, state.rparams, state.profileSpots};
   const bool invalidateProfileDiagnostics =
       m_profileCalibration.baseline &&
       (m_profileCalibration.acceptedScan.lock() != m_scan ||
@@ -5302,7 +5302,7 @@ void MainWindow::onColorOptimizeRequested(bool /*autoMode*/) {
 void MainWindow::onTriggerColorOptimize(
     int reqId, std::shared_ptr<colorscreen::progress_info> progress,
     const QVariant &userData) {
-  if (!m_scan || !m_colorOptimizerWorker ||
+  if (!m_colorOptimizerWorker ||
       !userData.canConvert<ColorOptimizerRequestData>()) {
     m_colorOptimizerQueue.reportFinished(reqId, false);
     if (m_profileCalibration.pendingRequestId &&
@@ -5315,15 +5315,28 @@ void MainWindow::onTriggerColorOptimize(
   }
 
   auto d = userData.value<ColorOptimizerRequestData>();
+  if (!d.scan || d.scan != m_scan) {
+    m_colorOptimizerQueue.reportFinished(reqId, false);
+    if (m_profileCalibration.pendingRequestId &&
+        *m_profileCalibration.pendingRequestId == reqId) {
+      m_profileCalibration.pendingInputs.reset();
+      m_profileCalibration.pendingRequestId.reset();
+      updateWorkflowSummary();
+    }
+    return;
+  }
+
   if (progress)
     progress->set_task("Optimizing color profile", 1);
 
+  ColorOptimizerWorker *worker = m_colorOptimizerWorker;
   QMetaObject::invokeMethod(
-      m_colorOptimizerWorker, "optimize", Qt::QueuedConnection,
-      Q_ARG(int, reqId), Q_ARG(colorscreen::scr_to_img_parameters, d.scrParams),
-      Q_ARG(colorscreen::render_parameters, d.rparams),
-      Q_ARG(std::vector<colorscreen::point_t>, d.spots),
-      Q_ARG(std::shared_ptr<colorscreen::progress_info>, progress));
+      worker,
+      [worker, reqId, d = std::move(d), progress]() mutable {
+        worker->optimize(reqId, std::move(d.scan), std::move(d.scrParams),
+                         std::move(d.rparams), std::move(d.spots), progress);
+      },
+      Qt::QueuedConnection);
 }
 
 /** Handle completion of color profile optimisation.
