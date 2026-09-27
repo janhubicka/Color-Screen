@@ -921,15 +921,78 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
           first->m_profileCalibration.averageDeltaE = match.deltaE;
           first->m_profilePanel->setSpotResults(
               first->m_profileCalibration.spotResults);
-          first->m_imageWidget->setProfileSpots(
-              &first->m_profileSpots,
-              &first->m_profileCalibration.spotResults);
+          first->syncProfileSpotOverlay(first->m_imageWidget);
+          emit first->profileSpotOverlayChanged();
           if (!profileCalibrationQuality->text().contains(
-                  QStringLiteral("avg ΔE₂₀₀₀ = 1.50"))) {
+                  QStringLiteral("avg ΔE₂₀₀₀ = 1.50")) ||
+              first->m_imageWidget->profileSpotResultCount() != 1 ||
+              view->imageWidget()->profileSpotResultCount() != 1 ||
+              first->m_imageWidget->profileSpotCount() !=
+                  first->m_profileSpots.size() ||
+              view->imageWidget()->profileSpotCount() !=
+                  first->m_profileSpots.size()) {
             fail(QStringLiteral(
-                "Workspace churn could not seed profile quality diagnostics"));
+                "Workspace churn could not seed profile diagnostics in every ordinary view"));
             return;
           }
+
+          // Rebinding after a normal document refresh must recover document
+          // overlay data without touching this view's local visibility choice.
+          const bool primaryProfileVisible =
+              first->m_imageWidget->profileSpotsVisible();
+          const bool peerProfileVisible =
+              view->imageWidget()->profileSpotsVisible();
+          view->imageWidget()->setProfileSpots(nullptr, nullptr);
+          view->refreshFromDocument();
+          if (view->imageWidget()->profileSpotResultCount() != 1 ||
+              view->imageWidget()->profileSpotCount() !=
+                  first->m_profileSpots.size() ||
+              view->imageWidget()->profileSpotsVisible() !=
+                  peerProfileVisible) {
+            fail(QStringLiteral(
+                "Ordinary-view refresh did not recover profile overlay data"));
+            return;
+          }
+
+          // Visibility is deliberately view-local. The one shared Profile
+          // checkbox mirrors the ordinary view that currently owns the
+          // inspector instead of forcing all peer views to one value.
+          first->m_imageWidget->setShowProfileSpots(false);
+          view->imageWidget()->setShowProfileSpots(true);
+          first->syncProfileSpotOverlay(first->m_imageWidget);
+          first->syncProfileSpotOverlay(view->imageWidget());
+          if (first->m_imageWidget->profileSpotsVisible() ||
+              !view->imageWidget()->profileSpotsVisible()) {
+            fail(QStringLiteral(
+                "Profile overlay data synchronization changed view-local visibility"));
+            return;
+          }
+          QCheckBox *profileShowSpots =
+              first->m_profilePanel->findChild<QCheckBox *>(
+                  QStringLiteral("ProfileShowSpotsCheck"));
+          if (!profileShowSpots) {
+            fail(QStringLiteral(
+                "Workspace churn lost Profile show-spots presentation control"));
+            return;
+          }
+          workspace->activateDocument(first);
+          if (first->inspectorImageWidget() != first->m_imageWidget ||
+              profileShowSpots->isChecked()) {
+            fail(QStringLiteral(
+                "Profile visibility checkbox did not follow primary ordinary view"));
+            return;
+          }
+          workspace->activateView(view);
+          if (first->inspectorImageWidget() != view->imageWidget() ||
+              !profileShowSpots->isChecked()) {
+            fail(QStringLiteral(
+                "Profile visibility checkbox did not follow peer ordinary view"));
+            return;
+          }
+          first->m_imageWidget->setShowProfileSpots(primaryProfileVisible);
+          view->imageWidget()->setShowProfileSpots(peerProfileVisible);
+          first->m_profilePanel->setShowProfileSpots(
+              view->imageWidget()->profileSpotsVisible());
 
           ParameterState outputOnly = profileDiagnosticBaseline;
           outputOnly.rparams.output_profile =
@@ -940,6 +1003,8 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
           first->applyState(outputOnly);
           if (first->m_profileCalibration.spotResults.size() != 1 ||
               first->m_profileCalibration.averageDeltaE != match.deltaE ||
+              first->m_imageWidget->profileSpotResultCount() != 1 ||
+              view->imageWidget()->profileSpotResultCount() != 1 ||
               !profileCalibrationQuality->text().contains(
                   QStringLiteral("avg ΔE₂₀₀₀ = 1.50"))) {
             fail(QStringLiteral(
@@ -954,6 +1019,8 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
           if (!first->m_profileCalibration.spotResults.empty() ||
               first->m_profileCalibration.averageDeltaE >= 0 ||
               !first->m_profileCalibration.baseline ||
+              first->m_imageWidget->profileSpotResultCount() != 0 ||
+              view->imageWidget()->profileSpotResultCount() != 0 ||
               profileCalibrationQuality->text() != QStringLiteral("—")) {
             fail(QStringLiteral(
                 "Profile input edit retained stale color-match diagnostics"));
@@ -985,9 +1052,8 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
           first->m_profileCalibration = savedProfileCalibration;
           first->m_profilePanel->setSpotResults(
               first->m_profileCalibration.spotResults);
-          first->m_imageWidget->setProfileSpots(
-              &first->m_profileSpots,
-              &first->m_profileCalibration.spotResults);
+          first->syncProfileSpotOverlay(first->m_imageWidget);
+          emit first->profileSpotOverlayChanged();
           first->updateWorkflowSummary();
         }
 
