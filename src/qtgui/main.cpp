@@ -1830,6 +1830,8 @@ bool runBetaInvariantSmoke() {
       flatFieldFailureMessage(QStringLiteral("could not load white reference"));
   const QString adaptiveFailure =
       adaptiveSharpeningFailureMessage(QStringLiteral("insufficient texture"));
+  const QString coordinateOptimizationFailure =
+      coordinateOptimizationFailureMessage(QStringLiteral("local fit failed"));
   if (!unknownScreenFailure.contains(
           QStringLiteral("No supported regular screen lattice")) ||
       !unknownScreenFailure.contains(QStringLiteral("left unchanged")) ||
@@ -1891,7 +1893,17 @@ bool runBetaInvariantSmoke() {
       !adaptiveFailure.contains(
           QStringLiteral("retry Analyze adaptive sharpening")) ||
       !adaptiveFailure.contains(
-          QStringLiteral("Analysis detail: insufficient texture")))
+          QStringLiteral("Analysis detail: insufficient texture")) ||
+      !coordinateOptimizationFailure.contains(
+          QStringLiteral("screen coordinates, nonlinear correction, and registration points were left unchanged")) ||
+      !coordinateOptimizationFailure.contains(
+          QStringLiteral("capture gamma/linearization")) ||
+      !coordinateOptimizationFailure.contains(
+          QStringLiteral("Detect screen coordinates")) ||
+      !coordinateOptimizationFailure.contains(
+          QStringLiteral("retry Optimize coordinates")) ||
+      !coordinateOptimizationFailure.contains(
+          QStringLiteral("Optimizer detail: local fit failed")))
     return fail("analysis failure guidance lost actionable preserved-state semantics");
 
   if (!backgroundThreadRegistryShutdownSmoke()
