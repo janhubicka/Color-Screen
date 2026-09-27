@@ -550,7 +550,12 @@ curves and model/fit settings are named as the failed inputs, existing
 measurements and model parameters are explicitly retained, numerical fitter
 detail remains secondary diagnostic context, and the operator is sent back to
 measurement selection, capture metadata and fit options before retrying
-**Fit measured MTF model**.
+**Fit measured MTF model**. Focus-area discovery and joint analysis follow the
+same rule: failed discovery changes no saved processing state and accepts no new
+candidates, while a failed joint fit preserves the candidate/failed-region
+overlays for diagnosis. Both retain the worker's numerical detail only as
+secondary context and point the operator back to **Find focus areas** or
+**Analyze focus areas** with the Screen/Geometry and validation setup to inspect.
 
 ## Visual style
 
