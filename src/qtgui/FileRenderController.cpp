@@ -95,23 +95,23 @@ void FileRenderController::start(Request request) {
 
   const QString outputPath = request.outputPath;
   const std::string outputPathStd = outputPath.toStdString();
-  auto *watcher = new QFutureWatcher<bool>(this);
+  auto *watcher = new QFutureWatcher<RenderResult>(this);
   connect(watcher, &QFutureWatcher<bool>::finished, this,
           [this, watcher, progress, outputPath]() {
-            bool success = false;
+            RenderResult result;
             try {
-              success = watcher->result();
-            } catch (const std::exception &) {
-              success = false;
+              result = watcher->result();
+            } catch (const std::exception &exception) {
+              result.error = QString::fromUtf8(exception.what());
             } catch (...) {
-              success = false;
+              result.error = QStringLiteral("unexpected exception while rendering");
             }
 
             const bool cancelled = progress->pool_cancel();
             removeActiveJob(progress);
             watcher->deleteLater();
 
-            if (cancelled || !success) {
+            if (cancelled || !result.success) {
               if (QFile::exists(outputPath))
                 QFile::remove(outputPath);
             }
@@ -121,10 +121,11 @@ void FileRenderController::start(Request request) {
             if (m_callbacks.removeProgress)
               m_callbacks.removeProgress(progress);
             if (m_callbacks.finished)
-              m_callbacks.finished(outputPath, success, cancelled);
+              m_callbacks.finished(outputPath, result.success, cancelled,
+                                   result.error);
           });
 
-  QFuture<bool> future = QtConcurrent::run(
+  QFuture<RenderResult> future = QtConcurrent::run(
       [request = std::move(request), outputPathStd, progress]() mutable {
         colorscreen::render_to_file_params params;
         params.filename = outputPathStd.c_str();
@@ -140,10 +141,14 @@ void FileRenderController::start(Request request) {
         params.height = request.height;
 
         const char *error = nullptr;
-        return colorscreen::render_to_file(
+        RenderResult result;
+        result.success = colorscreen::render_to_file(
             *request.scan, request.scrParams, request.detectParams,
             request.renderParams, params, request.renderType, progress.get(),
             &error);
+        if (!result.success && error)
+          result.error = QString::fromUtf8(error);
+        return result;
       });
 
   m_activeJobs.push_back(
