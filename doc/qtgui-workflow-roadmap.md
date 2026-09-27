@@ -612,6 +612,10 @@ specialist stages.
   saved and may be labelled stale, but per-spot colour matches and average
   DeltaE are session diagnostics tied to the exact source scan + optimizer
   inputs and disappear as soon as those inputs change.
+  Focus-area rectangles are likewise document-owned diagnostics: candidate,
+  selected and held-out-result overlays synchronize to every ordinary peer view
+  and clear from all of them when focus inputs become stale; reference scans are
+  intentionally excluded.
 
 ### Phase C — module grammar
 
