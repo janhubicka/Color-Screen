@@ -3,6 +3,7 @@
 
 #include "ParameterPanel.h"
 #include "TaskQueue.h"
+#include <memory>
 #include <QThread>
 #include <QVariant>
 
