@@ -79,6 +79,8 @@ QString screenDetectionFailureMessage(colorscreen::scr_type attemptedType);
 QString coordinateDetectionFailureMessage(colorscreen::scr_type attemptedType);
 /** Explain a progressive registration-discovery failure and retained state. */
 QString registrationDiscoveryFailureMessage(bool screenAutodetection);
+/** Explain geometry-fit failure, preserved document state, and next actions. */
+QString geometryFitFailureMessage();
 
 /** Start the completion-driven workspace ownership/lifecycle smoke test. */
 void startWorkspaceChurnSmoke(ColorScreenApplication &app,
