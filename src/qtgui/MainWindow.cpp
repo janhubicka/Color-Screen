@@ -3956,8 +3956,12 @@ void MainWindow::onSolverFinished(int reqId,
   } else {
     m_geometryFit.failureInputs = now;
     m_geometryFit.failureScan = completedScan;
-    QMessageBox::warning(this, "Optimization Failed",
-                         "The geometry solver failed to find a solution.");
+    auto *box = new QMessageBox(
+        QMessageBox::Warning, tr("Geometry fit failed"),
+        geometryFitFailureMessage(), QMessageBox::Ok, this);
+    box->setObjectName(QStringLiteral("GeometryFitFailureDialog"));
+    box->setAttribute(Qt::WA_DeleteOnClose);
+    box->open();
   }
   updateWorkflowSummary();
 }

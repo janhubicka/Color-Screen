@@ -1817,6 +1817,7 @@ bool runBetaInvariantSmoke() {
       registrationDiscoveryFailureMessage(false);
   const QString detectRegistrationFailure =
       registrationDiscoveryFailureMessage(true);
+  const QString geometryFitFailure = geometryFitFailureMessage();
   if (!unknownScreenFailure.contains(
           QStringLiteral("No supported regular screen lattice")) ||
       !unknownScreenFailure.contains(QStringLiteral("left unchanged")) ||
@@ -1833,8 +1834,13 @@ bool runBetaInvariantSmoke() {
           QStringLiteral("Add points in selected area")) ||
       !detectRegistrationFailure.contains(
           QStringLiteral("Screen detection stopped")) ||
-      !detectRegistrationFailure.contains(QStringLiteral("retry Detect screen")))
-    return fail("registration/detection failure guidance lost actionable state semantics");
+      !detectRegistrationFailure.contains(QStringLiteral("retry Detect screen")) ||
+      !geometryFitFailure.contains(QStringLiteral("could not find a solution")) ||
+      !geometryFitFailure.contains(
+          QStringLiteral("Existing geometry and registration points were left unchanged")) ||
+      !geometryFitFailure.contains(QStringLiteral("coverage/outlier guidance")) ||
+      !geometryFitFailure.contains(QStringLiteral("retry Fit geometry")))
+    return fail("registration/geometry failure guidance lost actionable state semantics");
 
   if (!backgroundThreadRegistryShutdownSmoke()
       || !numericDoubleClickResetSmoke()
