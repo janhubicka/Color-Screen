@@ -1304,15 +1304,18 @@ void MainWindow::onCoordinateSystemChanged() {
 }
 /** Snapshot state before a grid drag operation for undo bookkeeping.  */
 void MainWindow::onCoordinateSystemManipulationStarted() {
-  m_gridManipulationOldState = getCurrentState();
+  m_canvasGestureUndo.coordinateEdit = getCurrentState();
 }
 
 /** Create an undo command after a grid drag operation completes.  */
 void MainWindow::onCoordinateSystemManipulationFinished() {
   ParameterState newState = getCurrentState();
-  if (newState != m_gridManipulationOldState)
+  const std::optional<ParameterState> oldState =
+      std::move(m_canvasGestureUndo.coordinateEdit);
+  m_canvasGestureUndo.coordinateEdit.reset();
+  if (oldState && newState != *oldState)
     m_undoStack->push(new ChangeParametersCommand(
-        this, m_gridManipulationOldState, newState, "Modify coordinate system"));
+        this, *oldState, newState, "Modify coordinate system"));
   updateRegistrationActions();
 }
 
