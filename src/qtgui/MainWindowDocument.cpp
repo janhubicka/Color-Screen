@@ -1269,7 +1269,7 @@ bool MainWindow::loadParameterFile(const QString &fileName) {
     m_imageWidget->setImage(m_scan, &m_rparams, &m_scrToImgParams,
                             &m_detectParams, &m_renderTypeParams,
                             &m_solverParams);
-    m_imageWidget->setProfileSpots(&m_profileSpots, &m_profileCalibration.spotResults);
+    syncProfileSpotOverlay(m_imageWidget);
     if (m_profilePanel)
       m_profilePanel->setSpotResults(m_profileCalibration.spotResults);
     m_navigationView->setImage(m_scan, &m_rparams, &m_scrToImgParams,
