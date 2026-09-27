@@ -3771,6 +3771,19 @@ void MainWindow::restoreInteractionMode() {
   inspectorImageWidget()->setInteractionMode(m_previousInteractionMode);
 }
 
+/** Clear whichever temporary point-click tool currently owns AddPointMode.
+    This never changes the canvas mode; callers decide whether they are handing
+    ownership to another temporary tool or honoring an explicit user tool. */
+void MainWindow::clearPointClickToolPresentation() {
+  if (m_pointClickTool.profileSpot() && m_profilePanel)
+    m_profilePanel->setAddSpotChecked(false);
+  if (m_pointClickTool.focusAnalysis() && m_sharpnessPanel) {
+    m_sharpnessPanel->setFocusAnalysisChecked(false);
+    statusBar()->clearMessage();
+  }
+  m_pointClickTool.clear();
+}
+
 
 // Recent Parameters Implementation
 
