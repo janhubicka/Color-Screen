@@ -479,18 +479,17 @@ diagnostic merely because the underlying `screen_map` object is still allocated.
 
 ### Implementation Details
 
-Inherit from `WorkerBase` or `QObject` to implement a specific task. Use `QThread` to move the worker off the main thread.
+Use a focused `QObject` worker for tasks that require a dedicated `QThread`; pass immutable request inputs explicitly rather than hiding document state in a common worker base.
 
 A QObject moved to a dedicated `QThread` must also be destroyed on that
 thread. Connect `QThread::finished` to the worker's `QObject::deleteLater`
 **before** starting the thread, then request `quit()` and `wait()` from the
 owner during teardown. After the join, clear any non-owning GUI-thread pointer
-but never `delete` the worker from the GUI thread. This is especially
-important for workers that actually retain mutable thread-owned inputs.
-`WorkerBase` is now limited to the histogram path, whose `setScan()` queues
-assignment of `m_scan` to its worker thread. Geometry and profile optimization
-workers deliberately avoid that pattern and receive immutable scan snapshots per
-request. The renderer has its own explicit shutdown/ownership contract.
+but never `delete` the worker from the GUI thread. Image-backed analysis workers should not retain a parallel mutable document
+scan. Geometry solving, profile optimization, and Contact Copy histogram
+computation now all receive immutable scan snapshots in their dispatched request,
+so the former `WorkerBase` mutable-scan abstraction has been removed. The
+renderer has its own explicit shutdown/ownership contract.
 
 ```cpp
 class MyWorker : public QObject {
