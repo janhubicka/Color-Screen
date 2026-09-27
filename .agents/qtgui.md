@@ -407,8 +407,13 @@ not stale the map: `screen_map` stores detected elements in screen coordinates
 and drawing projects them through the current mapping. Changing the source scan,
 screen/scanner type, screen-colour detection parameters, capture gamma, or
 capture-sharpening inputs clears the map from every ordinary view and disables
-the menu action. Do not keep an enabled stale diagnostic merely because the
-underlying `screen_map` object is still allocated.
+the menu action. Map availability and the document-level Show/Hide preference
+must also stay synchronized in inactive tiled/cascaded and detached ordinary
+views; use the document's diagnostic-change signal rather than updating only the
+view currently borrowing the inspector. A newly created/refreshed ordinary view
+must pull the current diagnostic immediately. Slanted-edge reference views are
+excluded because they display another scan. Do not keep an enabled stale
+diagnostic merely because the underlying `screen_map` object is still allocated.
 
 ### 3. Independent Exports (Render to File)
 - **When to Use**: Tasks that are independent of ongoing UI parameter tweaks once started and should run to completion.
