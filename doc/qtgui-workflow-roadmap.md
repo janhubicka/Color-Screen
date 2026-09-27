@@ -560,7 +560,13 @@ Flat-field reference analysis follows the same contract: a failed white/black
 reference request explicitly retains the active correction and all document
 parameters, identifies the reference files plus capture gamma/demosaic inputs,
 keeps loader/analyzer detail secondary, and uses an asynchronous warning that
-points back to **Flat field — Set reference**.
+points back to **Flat field — Set reference**. Adaptive sharpening also
+distinguishes an ordinary cancellation from a genuine numerical failure:
+cancellation produces only a status message, while failure explicitly retains
+the accepted spatial correction and all document parameters, restores the chart
+to that accepted state, identifies the current image/geometry/analysis inputs,
+and points back to **Analyze adaptive sharpening** with worker detail kept
+secondary.
 
 ## Visual style
 
