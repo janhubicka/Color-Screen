@@ -2377,7 +2377,7 @@ bool runBetaInvariantSmoke() {
   histogramRequest.steps = 256;
   histogramRequest.minX = 0;
   histogramRequest.maxX = 1;
-  histogramRequest.axisType = colorscreen::hd_axis_density;
+  histogramRequest.axisType = colorscreen::hd_axis_hd;
   const QVariant histogramVariant = QVariant::fromValue(histogramRequest);
   if (!histogramVariant.canConvert<HistogramRequestData>() ||
       histogramVariant.value<HistogramRequestData>().scan != histogramScan)
