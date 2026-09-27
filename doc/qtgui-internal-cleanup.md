@@ -89,7 +89,11 @@ A long-running computation should be understood as operating on a snapshot of
 input state.  The completion path must establish that the result still belongs
 to the current request/document before applying it.  `TaskQueue` request IDs,
 explicit snapshots and cancellation are preferable to reading mutable GUI state
-from a worker after it has started.
+from a worker after it has started. Geometry fitting and profile optimization
+are reference examples: both carry the exact source-image shared pointer in
+their request and pass it directly into the worker, while accepted/failure
+provenance retains only a weak scan identity so replacing an image cannot be
+blocked or mistaken for the same analysis context.
 
 For every new asynchronous feature answer these questions in code review:
 
