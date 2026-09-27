@@ -68,6 +68,7 @@ struct WorkspaceChurnState {
   bool oneShotApplied = false;
   bool oneShotDone = false;
   std::atomic_bool oneShotSawCancellation{false};
+  std::optional<ParameterState> focusProbeOriginalState;
   QPointer<ImageViewWindow> reference;
   std::unique_ptr<QTemporaryDir> referenceDirectory;
   ParameterState beforeReference;
@@ -2662,8 +2663,30 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
 
         // Candidate freshness follows the actual worker inputs: render
         // parameters + screen geometry + source scan. Profile-spot bookkeeping
-        // is irrelevant and must not discard useful candidates.
-        const ParameterState focusBaseline = first->getCurrentState();
+        // is irrelevant and must not discard useful candidates. This synthetic
+        // probe may run after a fixture with no configured lattice, while the
+        // real UI correctly prioritizes the missing-geometry prerequisite over
+        // a stale-result message. Install a temporary valid regular mapping so
+        // this phase tests stale-result presentation itself, then restore the
+        // exact original state before leaving the focus phases.
+        ParameterState focusBaseline = first->getCurrentState();
+        if (!colorscreen::screen_geometry_configured_p(focusBaseline.scrToImg)) {
+          state->focusProbeOriginalState = focusBaseline;
+          focusBaseline.scrToImg.type = colorscreen::Dufay;
+          focusBaseline.scrToImg.center = {64, 64};
+          focusBaseline.scrToImg.coordinate1 = {8, 0};
+          focusBaseline.scrToImg.coordinate2 = {0, 8};
+          focusBaseline.scrToImg.mesh_trans.reset();
+          focusBaseline.scrToImg.mesh_trans_is_scr_to_img = false;
+          first->applyState(focusBaseline);
+        }
+        if (!colorscreen::screen_geometry_configured_p(
+                first->getCurrentState().scrToImg)) {
+          fail(QStringLiteral(
+              "Focus freshness smoke could not establish temporary regular geometry"));
+          return;
+        }
+        focusBaseline = first->getCurrentState();
         const auto focusScan = first->sharedImageData();
         QWidget *focusInspector = first->workspaceInspectorWidget();
         QLabel *focusAreaStatus =
@@ -2700,7 +2723,9 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
             !focusAreaStatus ||
             !focusAreaStatus->text().contains(QStringLiteral("inputs changed"))) {
           fail(QStringLiteral(
-              "Render edit did not invalidate/explain stale focus-area candidates"));
+                   "Render edit did not invalidate/explain stale focus-area candidates; status=[%1]")
+                   .arg(focusAreaStatus ? focusAreaStatus->text()
+                                        : QStringLiteral("<missing>")));
           return;
         }
         first->applyState(focusBaseline);
@@ -2865,6 +2890,16 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
           return;
         }
         undo->undo();
+
+        if (state->focusProbeOriginalState) {
+          first->applyState(*state->focusProbeOriginalState);
+          if (first->getCurrentState() != *state->focusProbeOriginalState) {
+            fail(QStringLiteral(
+                "Focus freshness smoke did not restore its original document state"));
+            return;
+          }
+          state->focusProbeOriginalState.reset();
+        }
 
         // A small Gaussian edge uses the same construction as the library's
         // blur-range regression, not an external image or a mocked result.
