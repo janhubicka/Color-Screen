@@ -361,7 +361,14 @@ diagnostics of that accepted input snapshot: clear them when the scan or any
 optimizer input becomes stale, while leaving the persisted profile matrix in
 `ParameterState` so the UI can label that calibration stale/unverified. Output
 profile and final-plane orientation remain irrelevant because the optimizer
-forces its own XYZ comparison space.
+forces its own XYZ comparison space. Profile spot coordinates and accepted
+per-spot colour-match results are document-owned overlay data: bind them into
+every ordinary New View and refresh them when either ParameterState or the
+session-only optimizer diagnostics change. The **Show profile spots** choice is
+different: it remains view-local, and the one shared Profile-panel checkbox
+mirrors whichever ordinary view currently owns the inspector. Do not propagate
+that visibility toggle to inactive tiled/detached peers. Slanted-edge reference
+views display another scan and never receive profile overlays.
 
 ### 2. One-Shot Cancellable Tasks
 Tasks that run in the background and report a final result (or series of intermediate results).

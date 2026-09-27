@@ -173,6 +173,9 @@ public:
   /** Synchronize the selected stored-MTF spatial overlay to one ordinary view. */
   void syncMtfMeasurementOverlay(ImageWidget *image) const;
 
+  /** Synchronize document-owned profile spots/results to one ordinary view. */
+  void syncProfileSpotOverlay(ImageWidget *image) const;
+
   /** Return the shared Edit menu action for ordinary secondary views. */
   QAction *ordinaryViewEditMenuAction() const;
 
@@ -342,6 +345,8 @@ signals:
   void focusAreaOverlaysChanged();
   /** Emitted when the selected stored-MTF spatial overlay changes. */
   void mtfMeasurementOverlayChanged();
+  /** Emitted when session-local profile spot/result overlay data changes. */
+  void profileSpotOverlayChanged();
   /** Emitted when this document gains or loses dedicated progress rows. */
   void userVisibleProgressVisibilityChanged(bool visible);
   /** Emitted when delayed transient progress appears or disappears. */

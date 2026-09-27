@@ -67,10 +67,13 @@ clear reason for them to be view-local.
 
 ### View state stays view-local
 
-Zoom, pan, render mode, Color/IR presentation, and coordinate-space choice are
-examples of view state.  Opening **Window -> New View** must not make those
-controls fight through a single shared variable.  Conversely, an edit made from
-one ordinary view must update all views because the edited document is shared.
+Zoom, pan, render mode, Color/IR presentation, coordinate-space choice, and
+overlay visibility choices such as **Show profile spots** are examples of view
+state. Opening **Window -> New View** must not make those controls fight through
+a single shared variable. Conversely, an edit made from one ordinary view must
+update all views because the edited document is shared. Profile spot coordinates
+and optimizer match results therefore propagate to every ordinary view even
+though each view may independently hide them.
 
 ### Workspace chrome is presentation, not document state
 

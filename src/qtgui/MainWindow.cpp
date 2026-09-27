@@ -2523,6 +2523,9 @@ void MainWindow::setInspectorImageWidget(ImageWidget *imageWidget) {
   m_inspectorImageConnections.clear();
   m_inspectorImageWidget = target;
   syncDetectedScreenDiagnostics(target);
+  syncProfileSpotOverlay(target);
+  if (m_profilePanel)
+    m_profilePanel->setShowProfileSpots(target->profileSpotsVisible());
 
   // A selected document tool belongs to the document operation, not to the
   // canvas that happened to be active when it was armed. Move it to the newly
@@ -2822,7 +2825,7 @@ void MainWindow::applyState(const ParameterState &state) {
     m_imageWidget->updateParameters(&m_rparams, &m_scrToImgParams,
                                     &m_detectParams, &m_renderTypeParams,
                                     &m_solverParams);
-    m_imageWidget->setProfileSpots(&m_profileSpots, &m_profileCalibration.spotResults);
+    syncProfileSpotOverlay(m_imageWidget);
     m_navigationView->updateParameters(&m_rparams, &m_scrToImgParams,
                                        &m_detectParams);
   }
@@ -4887,6 +4890,16 @@ void MainWindow::syncMtfMeasurementOverlay(ImageWidget *image) const {
   image->setMtfMeasurementOverlay(currentMtfMeasurementOverlay());
 }
 
+/** Synchronize document-owned profile spot/result data to IMAGE.
+
+    Spot visibility itself remains view-local; the shared Profile checkbox
+    mirrors whichever ordinary view currently owns the inspector. */
+void MainWindow::syncProfileSpotOverlay(ImageWidget *image) const {
+  if (!image || !acceptsInspectorImageWidget(image))
+    return;
+  image->setProfileSpots(&m_profileSpots, &m_profileCalibration.spotResults);
+}
+
 /** Show/locate one selected stored MTF measurement on ordinary views when its
     source image matches this document. Overlay publication is document-wide;
     Locate still affects only the active inspector view. */
@@ -5435,10 +5448,8 @@ void MainWindow::onColorOptimizerFinished(
     m_profileCalibration.spotResults = std::move(results);
     if (m_profilePanel)
       m_profilePanel->setSpotResults(m_profileCalibration.spotResults);
-    if (m_imageWidget) {
-      m_imageWidget->setProfileSpots(&m_profileSpots, &m_profileCalibration.spotResults);
-      m_imageWidget->update();
-    }
+    syncProfileSpotOverlay(m_imageWidget);
+    emit profileSpotOverlayChanged();
   } else {
     m_profileCalibration.failureInputs = completedInputs;
     m_profileCalibration.failureScan =
