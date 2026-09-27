@@ -104,6 +104,17 @@ QString registrationDiscoveryFailureMessage(bool screenAutodetection) {
       "points in selected area on a clearer region.");
 }
 
+/** Explain geometry-fit failure without inventing an algorithmic cause. */
+QString geometryFitFailureMessage() {
+  return QCoreApplication::translate(
+      "MainWindow",
+      "Geometry fitting could not find a solution for the current registration "
+      "points and fit settings. Existing geometry and registration points were "
+      "left unchanged. Inspect the registration overlay and Geometry fit "
+      "coverage/outlier guidance, adjust bad or under-covered points or fit "
+      "settings, then retry Fit geometry.");
+}
+
 namespace {
 /** Return the physical scan resolution inferred from a configured screen. */
 std::optional<double> estimateScreenDpi(
