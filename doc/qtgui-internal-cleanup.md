@@ -660,12 +660,16 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   optimization now subclass `QObject` directly and receive the source
   `image_data` only in each immutable request; image reload no longer mutates a
   second worker-side scan that those algorithms should never consult.
-  `WorkerBase::m_scan` remains only where it is genuinely the worker's input
-  model (currently Contact Copy histogram computation). The same pass removes
-  the old write-only `m_prevScrToImgParams` / `m_prevDetectParams` snapshots,
+  Contact Copy histogram requests now capture the source scan too, eliminating
+  the last mutable worker-side image and allowing `WorkerBase` to be removed
+  entirely. The same pass removes the old write-only
+  `m_prevScrToImgParams` / `m_prevDetectParams` snapshots,
   whose names suggested a change-detection invariant that no code actually used.
   Existing workspace churn already replaces scans while geometry/profile work is
   pending and therefore remains the behavioral gate for stale publication.
+  Contact Copy's TaskQueue still owns newest-request publication, while each
+  histogram request now keeps its own scan/parameter pair so dispatch cannot
+  combine stale parameters with a newly loaded image.
 - Split very large source files by responsibility rather than by arbitrary line
   count. `MainWindow` retains document-specific snapshots, UI decisions and
   publication. The first physical split is now complete:
