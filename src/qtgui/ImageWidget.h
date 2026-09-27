@@ -112,6 +112,10 @@ public:
   /** Show the ROI and accepted edge belonging to one stored MTF measurement.
       Passing null or a measurement without spatial provenance clears it. */
   void setMtfMeasurementOverlay(const colorscreen::mtf_measurement *measurement);
+  /** Return whether this view currently holds a stored-MTF spatial overlay. */
+  bool hasMtfMeasurementOverlay() const {
+    return m_hasMtfMeasurementOverlay;
+  }
 
   /** Replace the map of connected screen elements returned by the most recent
       successful automatic basic-screen detection. */
