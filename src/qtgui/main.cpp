@@ -1818,6 +1818,8 @@ bool runBetaInvariantSmoke() {
   const QString detectRegistrationFailure =
       registrationDiscoveryFailureMessage(true);
   const QString geometryFitFailure = geometryFitFailureMessage();
+  const QString profileOptimizationFailure =
+      profileOptimizationFailureMessage();
   if (!unknownScreenFailure.contains(
           QStringLiteral("No supported regular screen lattice")) ||
       !unknownScreenFailure.contains(QStringLiteral("left unchanged")) ||
@@ -1839,8 +1841,16 @@ bool runBetaInvariantSmoke() {
       !geometryFitFailure.contains(
           QStringLiteral("Existing geometry and registration points were left unchanged")) ||
       !geometryFitFailure.contains(QStringLiteral("coverage/outlier guidance")) ||
-      !geometryFitFailure.contains(QStringLiteral("retry Fit geometry")))
-    return fail("registration/geometry failure guidance lost actionable state semantics");
+      !geometryFitFailure.contains(QStringLiteral("retry Fit geometry")) ||
+      !profileOptimizationFailure.contains(
+          QStringLiteral("current calibration spots")) ||
+      !profileOptimizationFailure.contains(
+          QStringLiteral("profile correction values and calibration spots were left unchanged")) ||
+      !profileOptimizationFailure.contains(
+          QStringLiteral("geometry/color inputs")) ||
+      !profileOptimizationFailure.contains(
+          QStringLiteral("retry Optimize profile")))
+    return fail("analysis failure guidance lost actionable preserved-state semantics");
 
   if (!backgroundThreadRegistryShutdownSmoke()
       || !numericDoubleClickResetSmoke()
