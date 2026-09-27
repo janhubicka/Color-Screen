@@ -1834,6 +1834,9 @@ bool runBetaInvariantSmoke() {
       adaptiveSharpeningFailureMessage(QStringLiteral("insufficient texture"));
   const QString coordinateOptimizationFailure =
       coordinateOptimizationFailureMessage(QStringLiteral("local fit failed"));
+  const QString renderFailure =
+      renderToFileFailureMessage(QStringLiteral("/tmp/output.tif"),
+                                 QStringLiteral("write error"));
   const QString pointFocusFailure =
       pointFocusAnalysisFailureMessage(QStringLiteral("low local contrast"));
   if (!unknownScreenFailure.contains(
@@ -1917,6 +1920,13 @@ bool runBetaInvariantSmoke() {
           QStringLiteral("retry Optimize coordinates")) ||
       !coordinateOptimizationFailure.contains(
           QStringLiteral("Optimizer detail: local fit failed")) ||
+      !renderFailure.contains(QStringLiteral("/tmp/output.tif")) ||
+      !renderFailure.contains(
+          QStringLiteral("current document parameters and image state were not changed")) ||
+      !renderFailure.contains(
+          QStringLiteral("no failed partial output is retained")) ||
+      !renderFailure.contains(QStringLiteral("retry Render to file")) ||
+      !renderFailure.contains(QStringLiteral("Render detail: write error")) ||
       !pointFocusFailure.contains(
           QStringLiteral("Existing MTF/sharpening parameters were left unchanged")) ||
       !pointFocusFailure.contains(
