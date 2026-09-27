@@ -523,7 +523,10 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   RAII, exact scan/`ParameterState` validation gates worker completion, and the
   asynchronous dye-model confirmation remains tied to that same baseline. A
   document edit or newer final-result operation dismisses the obsolete prompt,
-  preventing a valid old detection from being accepted into newer state. The
+  preventing a valid old detection from being accepted into newer state.
+  Screen-detection, coordinate-bootstrap, and progressive-registration failure
+  warnings are also parent-owned asynchronous dialogs with stable object names;
+  background completion must not enter a nested static warning event loop. The
   former DetectScreen QObject/QThread generation wrapper and unused cached mesh
   member are therefore gone.
   Coordinate autodetection and local coordinate refinement now also use these

@@ -652,9 +652,14 @@ void MainWindow::startRegistrationDiscovery(
 
         if (!m_closing && ownsRequest && publishable && !success &&
             !cancelled) {
-          QMessageBox::warning(
-              this, tr("Automatic Registration"),
-              registrationDiscoveryFailureMessage(screenAutodetection));
+          auto *box = new QMessageBox(
+              QMessageBox::Warning, tr("Automatic Registration"),
+              registrationDiscoveryFailureMessage(screenAutodetection),
+              QMessageBox::Ok, this);
+          box->setObjectName(
+              QStringLiteral("RegistrationDiscoveryFailureDialog"));
+          box->setAttribute(Qt::WA_DeleteOnClose);
+          box->open();
         }
       });
 
@@ -832,9 +837,13 @@ void MainWindow::presentDetectedScreenResult(
     std::shared_ptr<colorscreen::image_data> scan,
     const ParameterState &baseline) {
   if (!result.success || !result.detected.success) {
-    QMessageBox::warning(
-        this, tr("Screen Detection"),
-        screenDetectionFailureMessage(baseline.scrToImg.type));
+    auto *box = new QMessageBox(
+        QMessageBox::Warning, tr("Screen Detection"),
+        screenDetectionFailureMessage(baseline.scrToImg.type),
+        QMessageBox::Ok, this);
+    box->setObjectName(QStringLiteral("ScreenDetectionFailureDialog"));
+    box->setAttribute(Qt::WA_DeleteOnClose);
+    box->open();
     return;
   }
 
@@ -1160,10 +1169,15 @@ void MainWindow::startCoordinateAutodetection(bool addPointsAfterDetection) {
   };
   operation.applyResult = [this, result, addPointsAfterDetection]() {
     if (!result->success) {
-      QMessageBox::warning(
-          this, tr("Detect Screen Coordinates"),
+      auto *box = new QMessageBox(
+          QMessageBox::Warning, tr("Detect Screen Coordinates"),
           coordinateDetectionFailureMessage(
-              getCurrentState().scrToImg.type));
+              getCurrentState().scrToImg.type),
+          QMessageBox::Ok, this);
+      box->setObjectName(
+          QStringLiteral("CoordinateDetectionFailureDialog"));
+      box->setAttribute(Qt::WA_DeleteOnClose);
+      box->open();
       return;
     }
 
