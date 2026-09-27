@@ -2785,7 +2785,11 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         if (first->m_detectedScreenDiagnostics.map ||
             first->m_detectedScreenDiagnostics.inputs ||
             !first->m_detectedScreenDiagnostics.scan.expired() ||
+            first->m_detectedScreenDiagnostics.showCenters ==
+                savedDetectedPatchVisibility ||
             first->m_detectedPatchCentersAction->isEnabled() ||
+            first->m_detectedPatchCentersAction->isChecked() !=
+                first->m_detectedScreenDiagnostics.showCenters ||
             first->m_imageWidget->hasDetectedScreenMap() ||
             view->imageWidget()->hasDetectedScreenMap()) {
           fail(QStringLiteral(
