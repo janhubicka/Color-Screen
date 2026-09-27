@@ -1826,6 +1826,8 @@ bool runBetaInvariantSmoke() {
       focusAreaSearchFailureMessage(QStringLiteral("insufficient contrast"));
   const QString focusAnalysisFailure =
       focusAreaAnalysisFailureMessage(QStringLiteral("joint fit failed"));
+  const QString flatFieldFailure =
+      flatFieldFailureMessage(QStringLiteral("could not load white reference"));
   if (!unknownScreenFailure.contains(
           QStringLiteral("No supported regular screen lattice")) ||
       !unknownScreenFailure.contains(QStringLiteral("left unchanged")) ||
@@ -1873,7 +1875,13 @@ bool runBetaInvariantSmoke() {
           QStringLiteral("overlays remain available for inspection")) ||
       !focusAnalysisFailure.contains(QStringLiteral("retry Analyze focus areas")) ||
       !focusAnalysisFailure.contains(
-          QStringLiteral("Analysis detail: joint fit failed")))
+          QStringLiteral("Analysis detail: joint fit failed")) ||
+      !flatFieldFailure.contains(
+          QStringLiteral("Existing flat-field correction and document parameters were left unchanged")) ||
+      !flatFieldFailure.contains(QStringLiteral("capture gamma and demosaic")) ||
+      !flatFieldFailure.contains(QStringLiteral("Flat field — Set reference")) ||
+      !flatFieldFailure.contains(
+          QStringLiteral("Analysis detail: could not load white reference")))
     return fail("analysis failure guidance lost actionable preserved-state semantics");
 
   if (!backgroundThreadRegistryShutdownSmoke()

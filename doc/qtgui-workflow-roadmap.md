@@ -556,6 +556,11 @@ candidates, while a failed joint fit preserves the candidate/failed-region
 overlays for diagnosis. Both retain the worker's numerical detail only as
 secondary context and point the operator back to **Find focus areas** or
 **Analyze focus areas** with the Screen/Geometry and validation setup to inspect.
+Flat-field reference analysis follows the same contract: a failed white/black
+reference request explicitly retains the active correction and all document
+parameters, identifies the reference files plus capture gamma/demosaic inputs,
+keeps loader/analyzer detail secondary, and uses an asynchronous warning that
+points back to **Flat field — Set reference**.
 
 ## Visual style
 
