@@ -634,9 +634,14 @@ Mouse interaction logic is delegated based on `InteractionMode`. This ensures th
   normal drag is allowed to leave the widget under Qt's automatic mouse grab.
 - Interrupted live edits (registration-point and coordinate-system drags) keep
   movement already applied and emit their normal completion signal exactly once
-  so undo bookkeeping closes. A point press that never moved is not an edit and
-  must not trigger solver/undo work merely because the gesture was interrupted.
-  Interrupted rubber bands and measurements have no
+  so undo bookkeeping closes. MainWindow stores those in-place edit baselines as
+  optional single-use snapshots: completion consumes the matching start state,
+  and a completion without a live snapshot must not create Undo history. Do not
+  emit a manipulation-start signal until an operation is known to edit document
+  state (for example, validate the registration-point deletion set first). A
+  point press that never moved is not an edit and must not trigger solver/undo
+  work merely because the gesture was interrupted. Interrupted rubber bands and
+  measurements have no
   committed result until release and must be discarded without synthesizing a
   click, area selection, or measurement.
 - Keep mouse tracking enabled in normal canvas modes when hover feedback is
