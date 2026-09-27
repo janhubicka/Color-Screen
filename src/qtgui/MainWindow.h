@@ -903,10 +903,26 @@ private:
   // Docks
   BacklightChartWidget *m_backlightChart;
 
-  // Current parameters file path
+  // Current image file path.
   QString m_currentImageFile;
-  QString m_currentParamsFile;
-  bool m_currentParamsFileIsWeak = false; // true if filename is suggested, not loaded
+
+  /** Parameter-file target for this document.
+      A suggested path is only a Save-As default and must never be overwritten
+      without confirmation as though it had already been loaded/saved. */
+  struct ParameterFileState {
+    QString path;
+    bool suggested = false;
+
+    void setLoaded(const QString &fileName) {
+      path = fileName;
+      suggested = false;
+    }
+    void setSuggested(const QString &fileName) {
+      path = fileName;
+      suggested = true;
+    }
+  };
+  ParameterFileState m_parameterFile;
 
   /** Session-only ownership for asynchronous image replacement.
       Generation gates stale completions; the optional autodetect handoff names
