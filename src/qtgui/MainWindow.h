@@ -288,6 +288,7 @@ public:
   };
 
   struct ColorOptimizerRequestData {
+    std::shared_ptr<colorscreen::image_data> scan;
     colorscreen::scr_to_img_parameters scrParams;
     colorscreen::render_parameters     rparams;
     std::vector<colorscreen::point_t>  spots;
@@ -963,9 +964,11 @@ private:
   // spots.
   struct ProfileCalibrationState {
     std::optional<ColorOptimizerRequestData> baseline;
+    std::weak_ptr<colorscreen::image_data> acceptedScan;
     std::optional<ColorOptimizerRequestData> pendingInputs;
     std::optional<int> pendingRequestId;
     std::optional<ColorOptimizerRequestData> failureInputs;
+    std::weak_ptr<colorscreen::image_data> failureScan;
     std::vector<colorscreen::color_match> spotResults;
     double averageDeltaE = -1;
 
@@ -976,9 +979,11 @@ private:
 
     void clear() {
       baseline.reset();
+      acceptedScan.reset();
       pendingInputs.reset();
       pendingRequestId.reset();
       failureInputs.reset();
+      failureScan.reset();
       clearDiagnostics();
     }
   };
