@@ -5625,13 +5625,14 @@ void MainWindow::onMeasureMtfRequested(bool checked) {
           [this]() { m_sharpnessPanel->setMeasureMtfEnabled(false); },
           [this, batchError]() {
             if (!batchError->empty()) {
-              QString reason = QString::fromStdString(*batchError);
-              QMessageBox::warning(
-                  this, tr("MTF Measurement Failed"),
-                  tr("%1\n\nSelect one straight, isolated edge with clear "
-                     "plateaus on both sides. Avoid dust, texture, multiple "
-                     "edges, and edges parallel to the pixel grid.")
-                      .arg(reason));
+              auto *box = new QMessageBox(
+                  QMessageBox::Warning, tr("MTF Measurement Failed"),
+                  mtfMeasurementFailureMessage(
+                      QString::fromStdString(*batchError)),
+                  QMessageBox::Ok, this);
+              box->setObjectName(QStringLiteral("MtfMeasurementFailureDialog"));
+              box->setAttribute(Qt::WA_DeleteOnClose);
+              box->open();
             }
             m_sharpnessPanel->setMeasureMtfChecked(false);
             m_sharpnessPanel->setMeasureMtfEnabled(true);
