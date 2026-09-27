@@ -74,7 +74,10 @@ each document has independent:
 - `QUndoStack`, selection/tool state, panels, navigation, and detached docks;
 - worker objects, `TaskQueue` instances, progress entries, and render
   cancellation state;
-- current image/parameter filenames and a UUID-named recovery directory.
+- current image filename, one `ParameterFileState` (path + whether it is only
+  a suggested Save-As target), and a UUID-named recovery directory. Never let a
+  suggested `.par` name become an overwrite target without an explicit save/load
+  transition.
 
 Workspace geometry and recent-file lists remain application preferences in
 `QSettings`; they are not document state. Detached-document geometry is also
