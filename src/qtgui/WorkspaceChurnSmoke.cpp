@@ -252,6 +252,22 @@ void startWorkspaceChurnSmoke(ColorScreenApplication &app,
 
       switch (phase) {
       case 0: {
+        MainWindow::ParameterFileState parameterFileProbe;
+        parameterFileProbe.setSuggested(QStringLiteral("/tmp/suggested.par"));
+        if (parameterFileProbe.path != QStringLiteral("/tmp/suggested.par") ||
+            !parameterFileProbe.suggested) {
+          fail(QStringLiteral(
+              "Suggested parameter-file target lost Save-As-only semantics"));
+          return;
+        }
+        parameterFileProbe.setLoaded(QStringLiteral("/tmp/loaded.par"));
+        if (parameterFileProbe.path != QStringLiteral("/tmp/loaded.par") ||
+            parameterFileProbe.suggested) {
+          fail(QStringLiteral(
+              "Loaded parameter-file target retained suggested semantics"));
+          return;
+        }
+
         if (!second || !view || view->sourceDocument() != first ||
             view->sharedImageData() != first->sharedImageData() ||
             app.documentWindows().size() != 2 ||
