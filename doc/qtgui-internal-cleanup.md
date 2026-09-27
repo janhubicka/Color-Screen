@@ -701,10 +701,11 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   dependencies it must link explicitly.
 - Give long-lived analysis state explicit structs rather than parallel member
   variables. Profile-calibration, geometry-fit, measured-MTF fit, flat-field
-  calibration, automatic multi-area focus analysis, progressive adaptive
-  sharpening, progressive registration discovery, and the combined
-  **Detect screen** prompt/progress presentation now each live in one lifecycle
-  struct instead of parallel request/result/presentation members. Adaptive sharpening groups its
+  calibration, automatic multi-area focus analysis, the armed one-area Focus
+  tool, progressive adaptive sharpening, progressive registration discovery,
+  and the combined **Detect screen** prompt/progress presentation now each live
+  in one lifecycle struct instead of parallel request/result/presentation
+  members. Adaptive sharpening groups its
   generation, immutable request baseline, scan, and progress identity because
   live chart cells and final publication share that ownership. The same struct
   also retains an accepted-result baseline plus a weak source-scan identity, so
