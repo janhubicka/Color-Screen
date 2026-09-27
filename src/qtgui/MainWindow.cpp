@@ -4429,9 +4429,9 @@ void MainWindow::onPointAdded(colorscreen::point_t imgPos,
     return;
   }
 
-  if (m_pointFocusAnalysis.pending) {
-    const uint64_t focusFlags = m_pointFocusAnalysis.flags;
-    m_pointFocusAnalysis.clear();
+  if (m_pointClickTool.focusAnalysis()) {
+    const uint64_t focusFlags = m_pointClickTool.focusFlags;
+    m_pointClickTool.clear();
     restoreInteractionMode();
 
     colorscreen::finetune_parameters fparam;
@@ -4884,26 +4884,30 @@ void MainWindow::onFlatFieldRequested() {
   });
 }
 
-/** Toggle focus analysis mode.
-   When CHECKED is true, saves the current tool, switches to AddPoint
-   mode, and sets a flag so the next point-add triggers a focus analysis
-   worker instead of adding a registration point.  FLAGS controls which
-   finetune features to run (e.g. strip widths).  */
+/** Toggle the one-area Focus point-click tool.
+    Profile-spot and Focus tools are mutually exclusive owners of AddPointMode;
+    handing ownership between them preserves the original canvas tool. */
 void MainWindow::onFocusAnalysisRequested(bool checked, uint64_t flags) {
-  if (!m_imageWidget)
+  ImageWidget *image = inspectorImageWidget();
+  if (!image)
     return;
-  if (checked)
-    m_pointFocusAnalysis.arm(flags);
-  else
-    m_pointFocusAnalysis.clear();
+
   if (checked) {
-    saveInteractionMode();
-    m_imageWidget->setInteractionMode(ImageWidget::AddPointMode);
+    const bool alreadyTemporary = m_pointClickTool.active();
+    if (!alreadyTemporary)
+      saveInteractionMode();
+    if (!m_pointClickTool.focusAnalysis())
+      clearPointClickToolPresentation();
+    m_pointClickTool.armFocusAnalysis(flags);
+    image->setInteractionMode(ImageWidget::AddPointMode);
     statusBar()->showMessage(tr("Select point for focus analysis"), 5000);
-  } else {
-    restoreInteractionMode();
-    statusBar()->clearMessage();
+    return;
   }
+
+  if (!m_pointClickTool.focusAnalysis())
+    return;
+  clearPointClickToolPresentation();
+  restoreInteractionMode();
 }
 
 /** Return the selected stored MTF measurement when its spatial provenance
@@ -5354,18 +5358,29 @@ void MainWindow::onRender() {
   });
 }
 
-/** Enter or exit profile spot adding mode.
-   When ACTIVE is true, saves the current tool and switches to AddPoint
-   mode.  The m_addingProfileSpot flag causes onPointAdded to add
-   profile calibration spots instead of registration points.  */
+/** Enter or exit the Profile spot point-click tool.
+    Profile and one-area Focus share AddPointMode but never own it concurrently;
+    switching directly between them must not overwrite the saved prior tool. */
 void MainWindow::onAddSpotModeRequested(bool active) {
-  m_addingProfileSpot = active;
+  ImageWidget *image = inspectorImageWidget();
+  if (!image)
+    return;
+
   if (active) {
-    saveInteractionMode();
-    inspectorImageWidget()->setInteractionMode(ImageWidget::AddPointMode);
-  } else {
-    inspectorImageWidget()->setInteractionMode(m_previousInteractionMode);
+    const bool alreadyTemporary = m_pointClickTool.active();
+    if (!alreadyTemporary)
+      saveInteractionMode();
+    if (!m_pointClickTool.profileSpot())
+      clearPointClickToolPresentation();
+    m_pointClickTool.armProfileSpot();
+    image->setInteractionMode(ImageWidget::AddPointMode);
+    return;
   }
+
+  if (!m_pointClickTool.profileSpot())
+    return;
+  clearPointClickToolPresentation();
+  restoreInteractionMode();
 }
 
 /** Handle profile color optimisation request from ProfilePanel.
