@@ -544,7 +544,13 @@ call. Profile optimization now follows the same four-part rule without adding a
 routine modal: the persistent Profile/Workflow status states that existing
 profile correction values remain unchanged, while the status bar identifies the
 failed image/spot/input fit and points the operator to spot distribution and
-geometry/color inputs before retrying **Optimize profile**.
+geometry/color inputs before retrying **Optimize profile**. Measured-MTF model
+fitting uses the same contract in its asynchronous warning: the selected saved
+curves and model/fit settings are named as the failed inputs, existing
+measurements and model parameters are explicitly retained, numerical fitter
+detail remains secondary diagnostic context, and the operator is sent back to
+measurement selection, capture metadata and fit options before retrying
+**Fit measured MTF model**.
 
 ## Visual style
 
