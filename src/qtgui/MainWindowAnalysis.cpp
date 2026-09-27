@@ -175,6 +175,23 @@ QString focusAreaAnalysisFailureMessage(const QString &detail) {
   return message;
 }
 
+/** Explain flat-field reference-analysis failure without guessing its cause. */
+QString flatFieldFailureMessage(const QString &detail) {
+  QString message = QCoreApplication::translate(
+      "MainWindow",
+      "Flat-field reference analysis could not produce a correction from the "
+      "selected white/black reference inputs and current capture settings. "
+      "Existing flat-field correction and document parameters were left "
+      "unchanged. Verify that the reference files are readable and match the "
+      "capture setup, review capture gamma and demosaic settings, then retry "
+      "Flat field — Set reference.");
+  const QString trimmedDetail = detail.trimmed();
+  if (!trimmedDetail.isEmpty())
+    message += QCoreApplication::translate("MainWindow", "\n\nAnalysis detail: %1")
+                   .arg(trimmedDetail);
+  return message;
+}
+
 namespace {
 /** Return the physical scan resolution inferred from a configured screen. */
 std::optional<double> estimateScreenDpi(
