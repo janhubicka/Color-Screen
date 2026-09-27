@@ -294,6 +294,7 @@ public:
   bool isWorkspaceEmbedded() const { return m_workspaceEmbedded; }
 
   struct SolverRequestData {
+    std::shared_ptr<colorscreen::image_data> scan;
     colorscreen::scr_to_img_parameters scrToImg;
     colorscreen::solver_parameters solver;
     bool computeMesh;
@@ -1023,20 +1024,34 @@ private:
   // also used as a publication gate when parameters change during a solve.
   struct GeometryFitState {
     std::optional<ParameterState> baseline;
+    std::weak_ptr<colorscreen::image_data> acceptedScan;
     std::optional<ParameterState> pendingInputs;
+    std::shared_ptr<colorscreen::image_data> pendingScan;
     std::optional<bool> pendingNonlinearEnabled;
     // TaskQueue publishability and provenance cleanup are separate. Track the
     // dispatched request that owns pendingInputs so a cancelled completion can
     // clear its own state without an older completion clearing a newer fit.
     std::optional<int> pendingRequestId;
     std::optional<ParameterState> failureInputs;
+    std::weak_ptr<colorscreen::image_data> failureScan;
 
-    void clear() {
-      baseline.reset();
+    void clearRequest() {
       pendingInputs.reset();
+      pendingScan.reset();
       pendingNonlinearEnabled.reset();
       pendingRequestId.reset();
+    }
+
+    void clearAccepted() {
+      baseline.reset();
+      acceptedScan.reset();
       failureInputs.reset();
+      failureScan.reset();
+    }
+
+    void clear() {
+      clearRequest();
+      clearAccepted();
     }
   };
   GeometryFitState m_geometryFit;
