@@ -861,9 +861,12 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
 
           first->m_profileCalibration.baseline =
               MainWindow::ColorOptimizerRequestData{
+                  first->m_scan,
                   profileDiagnosticBaseline.scrToImg,
                   profileDiagnosticBaseline.rparams,
                   profileDiagnosticBaseline.profileSpots};
+          first->m_profileCalibration.acceptedScan = first->m_scan;
+          first->m_profileCalibration.baseline->scan.reset();
           colorscreen::color_match match{};
           match.deltaE = 1.5;
           first->m_profileCalibration.spotResults = {match};
