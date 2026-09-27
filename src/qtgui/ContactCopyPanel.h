@@ -63,6 +63,7 @@ private:
 };
 
 struct HistogramRequestData {
+    std::shared_ptr<colorscreen::image_data> scan;
     colorscreen::render_parameters params;
     int steps;
     double minX;
