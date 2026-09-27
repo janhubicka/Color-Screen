@@ -2779,15 +2779,25 @@ void MainWindow::applyState(const ParameterState &state) {
       m_focusAreaAnalysis.baseline &&
       (m_focusAreaAnalysis.scan.lock() != m_scan ||
        focusAreaInputsDiffer(*m_focusAreaAnalysis.baseline, state));
-  bool profileSpotsChanged = m_profileSpots.size() != state.profileSpots.size();
-  if (!profileSpotsChanged) {
-    for (std::size_t i = 0; i < m_profileSpots.size(); ++i) {
-      if (!(m_profileSpots[i] == state.profileSpots[i])) {
-        profileSpotsChanged = true;
-        break;
-      }
-    }
+
+  // Per-spot colour matches and average DeltaE are diagnostics of the accepted
+  // optimizer inputs, not part of the persisted correction matrix. Once those
+  // inputs change, keep the matrix/provenance so the UI can report it as stale,
+  // but remove diagnostics that no longer describe the current document.
+  const ColorOptimizerRequestData proposedProfileInputs{
+      state.scrToImg, state.rparams, state.profileSpots};
+  const bool invalidateProfileDiagnostics =
+      m_profileCalibration.baseline &&
+      profileCalibrationInputsDiffer(*m_profileCalibration.baseline,
+                                     proposedProfileInputs);
+  if (invalidateProfileDiagnostics &&
+      (!m_profileCalibration.spotResults.empty() ||
+       m_profileCalibration.averageDeltaE >= 0)) {
+    m_profileCalibration.clearDiagnostics();
+    if (m_profilePanel)
+      m_profilePanel->setSpotResults(m_profileCalibration.spotResults);
   }
+
   // User requested rotation is not part of parameters.
   // Preserve current rotation when applying state.
   m_rparams = state.rparams;
@@ -2795,13 +2805,6 @@ void MainWindow::applyState(const ParameterState &state) {
   m_detectParams = state.detect;
   m_solverParams = state.solver; // Manually copy logic if needed? Struct copy
   m_profileSpots = state.profileSpots;
-  if (profileSpotsChanged) {
-    // Per-spot optimizer output is indexed by the spot list. Never show old
-    // DeltaE/colour matches beside a different set of spots.
-    m_profileSpotResults.clear();
-    if (m_profilePanel)
-      m_profilePanel->setSpotResults(m_profileSpotResults);
-  }
   // should work if fields are copyable.
   // solver_parameters has vector, copy constructor should be fine
   // (std::vector).
@@ -2811,7 +2814,7 @@ void MainWindow::applyState(const ParameterState &state) {
     m_imageWidget->updateParameters(&m_rparams, &m_scrToImgParams,
                                     &m_detectParams, &m_renderTypeParams,
                                     &m_solverParams);
-    m_imageWidget->setProfileSpots(&m_profileSpots, &m_profileSpotResults);
+    m_imageWidget->setProfileSpots(&m_profileSpots, &m_profileCalibration.spotResults);
     m_navigationView->updateParameters(&m_rparams, &m_scrToImgParams,
                                        &m_detectParams);
   }
@@ -5345,7 +5348,7 @@ void MainWindow::onColorOptimizerFinished(
   if (success) {
     m_profileCalibration.baseline = completedInputs;
     m_profileCalibration.failureInputs.reset();
-    m_profileCalibration.averageDeltaE = -1;
+    m_profileCalibration.clearDiagnostics();
     if (!results.empty()) {
       double total = 0;
       for (const auto &match : results)
@@ -5360,11 +5363,11 @@ void MainWindow::onColorOptimizerFinished(
     newState.rparams.profiled_blue = updatedRparams.profiled_blue;
     changeParameters(newState, tr("Optimize profile"));
 
-    m_profileSpotResults = results;
+    m_profileCalibration.spotResults = std::move(results);
     if (m_profilePanel)
-      m_profilePanel->setSpotResults(results);
+      m_profilePanel->setSpotResults(m_profileCalibration.spotResults);
     if (m_imageWidget) {
-      m_imageWidget->setProfileSpots(&m_profileSpots, &m_profileSpotResults);
+      m_imageWidget->setProfileSpots(&m_profileSpots, &m_profileCalibration.spotResults);
       m_imageWidget->update();
     }
   } else {
