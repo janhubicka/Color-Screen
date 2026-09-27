@@ -156,6 +156,13 @@ lifecycle. Each phase verifies live wrapper counts, document/view ownership,
 inspector routing, status-bar routing, and workspace visibility. Keep this probe
 in its own process: it intentionally stresses queued Qt presentation teardown,
 while the existing focused smoke tests isolate their own lifetime assumptions.
+The full probe also contains image-backed analysis lifecycle phases 100-213.
+Windows clang64 ASan runs with
+`COLORSCREEN_WORKSPACE_CHURN_SKIP_ANALYSIS=1` and skips only those phases after
+the initial tiled-MDI assertions; it still executes the actual cascade/detach/
+reattach/consolidate/close churn. macOS ASan/UBSan, Linux TSan, and ordinary
+smoke keep the complete analysis block, avoiding an excessively slow duplicate
+Windows run without dropping sanitizer coverage of the workspace lifetime path.
 
 Automatic solid-area focus analysis is also document-local.  The discovered
 candidate rectangles, individual fit results, selected subset, and validation
