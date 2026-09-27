@@ -170,6 +170,9 @@ public:
   /** Synchronize document-owned focus-analysis rectangles to one ordinary view. */
   void syncFocusAreaOverlays(ImageWidget *image) const;
 
+  /** Synchronize the selected stored-MTF spatial overlay to one ordinary view. */
+  void syncMtfMeasurementOverlay(ImageWidget *image) const;
+
   /** Return the shared Edit menu action for ordinary secondary views. */
   QAction *ordinaryViewEditMenuAction() const;
 
@@ -337,6 +340,8 @@ signals:
   void detectedScreenDiagnosticsChanged();
   /** Emitted when document-owned focus-analysis rectangles change. */
   void focusAreaOverlaysChanged();
+  /** Emitted when the selected stored-MTF spatial overlay changes. */
+  void mtfMeasurementOverlayChanged();
   /** Emitted when this document gains or loses dedicated progress rows. */
   void userVisibleProgressVisibilityChanged(bool visible);
   /** Emitted when delayed transient progress appears or disappears. */
@@ -547,6 +552,8 @@ private:
 
   /** Publish current focus-analysis rectangles to every ordinary view. */
   void updateFocusAreaOverlays();
+  /** Return the selected stored-MTF spatial record when it belongs to this scan. */
+  const colorscreen::mtf_measurement *currentMtfMeasurementOverlay() const;
   /** Refresh/optionally locate the selected measured-MTF ROI in ordinary views. */
   void updateMtfMeasurementOverlay(bool locate = false);
   void refreshMtfCalibrationPresentation();
