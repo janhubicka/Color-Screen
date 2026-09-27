@@ -202,10 +202,12 @@ bool screenGeometryMatchesFitBaseline(const ParameterState &baseline,
          a.mesh_trans_is_scr_to_img == b.mesh_trans_is_scr_to_img;
 }
 
-/** Compare the inputs actually handed to optimize_color_model_colors().
-    The fitted profiled_* values are outputs, not prerequisites. Final-plane
-    orientation and output profile selection likewise do not change the sampled
-    screen/scan colors used by the optimizer. */
+/** Compare non-image inputs handed to optimize_color_model_colors().
+    Source-scan identity is checked separately so accepted provenance can keep a
+    weak image reference rather than pinning a replaced scan. The fitted
+    profiled_* values are outputs, not prerequisites. Final-plane orientation
+    and output profile selection likewise do not change the sampled screen/scan
+    colors used by the optimizer. */
 bool profileCalibrationInputsDiffer(
     const MainWindow::ColorOptimizerRequestData &before,
     const MainWindow::ColorOptimizerRequestData &after) {
@@ -2779,15 +2781,26 @@ void MainWindow::applyState(const ParameterState &state) {
       m_focusAreaAnalysis.baseline &&
       (m_focusAreaAnalysis.scan.lock() != m_scan ||
        focusAreaInputsDiffer(*m_focusAreaAnalysis.baseline, state));
-  bool profileSpotsChanged = m_profileSpots.size() != state.profileSpots.size();
-  if (!profileSpotsChanged) {
-    for (std::size_t i = 0; i < m_profileSpots.size(); ++i) {
-      if (!(m_profileSpots[i] == state.profileSpots[i])) {
-        profileSpotsChanged = true;
-        break;
-      }
-    }
+
+  // Per-spot colour matches and average DeltaE are diagnostics of the accepted
+  // optimizer inputs, not part of the persisted correction matrix. Once those
+  // inputs change, keep the matrix/provenance so the UI can report it as stale,
+  // but remove diagnostics that no longer describe the current document.
+  const ColorOptimizerRequestData proposedProfileInputs{
+      m_scan, state.scrToImg, state.rparams, state.profileSpots};
+  const bool invalidateProfileDiagnostics =
+      m_profileCalibration.baseline &&
+      (m_profileCalibration.acceptedScan.lock() != m_scan ||
+       profileCalibrationInputsDiffer(*m_profileCalibration.baseline,
+                                      proposedProfileInputs));
+  if (invalidateProfileDiagnostics &&
+      (!m_profileCalibration.spotResults.empty() ||
+       m_profileCalibration.averageDeltaE >= 0)) {
+    m_profileCalibration.clearDiagnostics();
+    if (m_profilePanel)
+      m_profilePanel->setSpotResults(m_profileCalibration.spotResults);
   }
+
   // User requested rotation is not part of parameters.
   // Preserve current rotation when applying state.
   m_rparams = state.rparams;
@@ -2795,13 +2808,6 @@ void MainWindow::applyState(const ParameterState &state) {
   m_detectParams = state.detect;
   m_solverParams = state.solver; // Manually copy logic if needed? Struct copy
   m_profileSpots = state.profileSpots;
-  if (profileSpotsChanged) {
-    // Per-spot optimizer output is indexed by the spot list. Never show old
-    // DeltaE/colour matches beside a different set of spots.
-    m_profileSpotResults.clear();
-    if (m_profilePanel)
-      m_profilePanel->setSpotResults(m_profileSpotResults);
-  }
   // should work if fields are copyable.
   // solver_parameters has vector, copy constructor should be fine
   // (std::vector).
@@ -2811,7 +2817,7 @@ void MainWindow::applyState(const ParameterState &state) {
     m_imageWidget->updateParameters(&m_rparams, &m_scrToImgParams,
                                     &m_detectParams, &m_renderTypeParams,
                                     &m_solverParams);
-    m_imageWidget->setProfileSpots(&m_profileSpots, &m_profileSpotResults);
+    m_imageWidget->setProfileSpots(&m_profileSpots, &m_profileCalibration.spotResults);
     m_navigationView->updateParameters(&m_rparams, &m_scrToImgParams,
                                        &m_detectParams);
   }
@@ -3004,17 +3010,26 @@ QString MainWindow::profileCalibrationSummary() const {
   }
 
   const ColorOptimizerRequestData current{
-      m_scrToImgParams, m_rparams, m_profileSpots};
-  const bool fitCurrent = m_profileCalibration.baseline &&
+      m_scan, m_scrToImgParams, m_rparams, m_profileSpots};
+  const bool fitCurrent =
+      m_profileCalibration.baseline &&
+      m_profileCalibration.acceptedScan.lock() == m_scan &&
       !profileCalibrationInputsDiffer(*m_profileCalibration.baseline, current);
-  const bool failureCurrent = m_profileCalibration.failureInputs &&
+  const bool failureCurrent =
+      m_profileCalibration.failureInputs &&
+      m_profileCalibration.failureScan.lock() == m_scan &&
       !profileCalibrationInputsDiffer(*m_profileCalibration.failureInputs, current);
 
   QString summary =
       tr("Profile: optional matrix correction • %1 calibration spots")
           .arg(count);
   if (m_profileCalibration.pendingInputs) {
-    summary += tr(" • optimizing…");
+    if (m_profileCalibration.pendingInputs->scan != m_scan ||
+        profileCalibrationInputsDiffer(*m_profileCalibration.pendingInputs,
+                                       current))
+      summary += tr(" • optimizing… inputs changed — result will be discarded");
+    else
+      summary += tr(" • optimizing…");
   } else if (fitCurrent) {
     summary += tr(" • calibration current");
     if (m_profileCalibration.averageDeltaE >= 0)
@@ -3139,8 +3154,9 @@ void MainWindow::updateWorkflowSummary() {
 
   if (m_profileCalibration.pendingInputs) {
     const ColorOptimizerRequestData currentProfileInputs{
-        m_scrToImgParams, m_rparams, m_profileSpots};
-    if (profileCalibrationInputsDiffer(*m_profileCalibration.pendingInputs,
+        m_scan, m_scrToImgParams, m_rparams, m_profileSpots};
+    if (m_profileCalibration.pendingInputs->scan != m_scan ||
+        profileCalibrationInputsDiffer(*m_profileCalibration.pendingInputs,
                                        currentProfileInputs)) {
       // Reset identity first because cancellation can synchronously drive
       // progress/UI callbacks.
@@ -5267,7 +5283,8 @@ void MainWindow::onColorOptimizeRequested(bool /*autoMode*/) {
   // The snapshot is both user-visible provenance and a publication gate. A
   // newer request still supersedes an older TaskQueue job, while unrelated
   // edits invalidate even the newest request before it can publish.
-  ColorOptimizerRequestData d{m_scrToImgParams, m_rparams, state.profileSpots};
+  ColorOptimizerRequestData d{
+      m_scan, m_scrToImgParams, m_rparams, state.profileSpots};
   const int requestId =
       m_colorOptimizerQueue.requestRender(QVariant::fromValue(d));
   if (requestId <= 0)
@@ -5276,6 +5293,7 @@ void MainWindow::onColorOptimizeRequested(bool /*autoMode*/) {
   m_profileCalibration.pendingInputs = d;
   m_profileCalibration.pendingRequestId = requestId;
   m_profileCalibration.failureInputs.reset();
+  m_profileCalibration.failureScan.reset();
   updateWorkflowSummary();
 }
 
@@ -5285,7 +5303,7 @@ void MainWindow::onColorOptimizeRequested(bool /*autoMode*/) {
 void MainWindow::onTriggerColorOptimize(
     int reqId, std::shared_ptr<colorscreen::progress_info> progress,
     const QVariant &userData) {
-  if (!m_scan || !m_colorOptimizerWorker ||
+  if (!m_colorOptimizerWorker ||
       !userData.canConvert<ColorOptimizerRequestData>()) {
     m_colorOptimizerQueue.reportFinished(reqId, false);
     if (m_profileCalibration.pendingRequestId &&
@@ -5298,15 +5316,28 @@ void MainWindow::onTriggerColorOptimize(
   }
 
   auto d = userData.value<ColorOptimizerRequestData>();
+  if (!d.scan || d.scan != m_scan) {
+    m_colorOptimizerQueue.reportFinished(reqId, false);
+    if (m_profileCalibration.pendingRequestId &&
+        *m_profileCalibration.pendingRequestId == reqId) {
+      m_profileCalibration.pendingInputs.reset();
+      m_profileCalibration.pendingRequestId.reset();
+      updateWorkflowSummary();
+    }
+    return;
+  }
+
   if (progress)
     progress->set_task("Optimizing color profile", 1);
 
+  ColorOptimizerWorker *worker = m_colorOptimizerWorker;
   QMetaObject::invokeMethod(
-      m_colorOptimizerWorker, "optimize", Qt::QueuedConnection,
-      Q_ARG(int, reqId), Q_ARG(colorscreen::scr_to_img_parameters, d.scrParams),
-      Q_ARG(colorscreen::render_parameters, d.rparams),
-      Q_ARG(std::vector<colorscreen::point_t>, d.spots),
-      Q_ARG(std::shared_ptr<colorscreen::progress_info>, progress));
+      worker,
+      [worker, reqId, d = std::move(d), progress]() mutable {
+        worker->optimize(reqId, std::move(d.scan), std::move(d.scrParams),
+                         std::move(d.rparams), std::move(d.spots), progress);
+      },
+      Qt::QueuedConnection);
 }
 
 /** Handle completion of color profile optimisation.
@@ -5329,8 +5360,9 @@ void MainWindow::onColorOptimizerFinished(
     return;
 
   const ColorOptimizerRequestData now{
-      m_scrToImgParams, m_rparams, m_profileSpots};
+      m_scan, m_scrToImgParams, m_rparams, m_profileSpots};
   const bool inputsStillCurrent = m_profileCalibration.pendingInputs &&
+      m_profileCalibration.pendingInputs->scan == m_scan &&
       !profileCalibrationInputsDiffer(*m_profileCalibration.pendingInputs, now);
   const std::optional<ColorOptimizerRequestData> completedInputs =
       m_profileCalibration.pendingInputs;
@@ -5344,8 +5376,14 @@ void MainWindow::onColorOptimizerFinished(
 
   if (success) {
     m_profileCalibration.baseline = completedInputs;
+    m_profileCalibration.acceptedScan =
+        completedInputs ? completedInputs->scan
+                        : std::shared_ptr<colorscreen::image_data>();
+    if (m_profileCalibration.baseline)
+      m_profileCalibration.baseline->scan.reset();
     m_profileCalibration.failureInputs.reset();
-    m_profileCalibration.averageDeltaE = -1;
+    m_profileCalibration.failureScan.reset();
+    m_profileCalibration.clearDiagnostics();
     if (!results.empty()) {
       double total = 0;
       for (const auto &match : results)
@@ -5360,15 +5398,20 @@ void MainWindow::onColorOptimizerFinished(
     newState.rparams.profiled_blue = updatedRparams.profiled_blue;
     changeParameters(newState, tr("Optimize profile"));
 
-    m_profileSpotResults = results;
+    m_profileCalibration.spotResults = std::move(results);
     if (m_profilePanel)
-      m_profilePanel->setSpotResults(results);
+      m_profilePanel->setSpotResults(m_profileCalibration.spotResults);
     if (m_imageWidget) {
-      m_imageWidget->setProfileSpots(&m_profileSpots, &m_profileSpotResults);
+      m_imageWidget->setProfileSpots(&m_profileSpots, &m_profileCalibration.spotResults);
       m_imageWidget->update();
     }
   } else {
     m_profileCalibration.failureInputs = completedInputs;
+    m_profileCalibration.failureScan =
+        completedInputs ? completedInputs->scan
+                        : std::shared_ptr<colorscreen::image_data>();
+    if (m_profileCalibration.failureInputs)
+      m_profileCalibration.failureInputs->scan.reset();
     statusBar()->showMessage(tr("Color optimization failed"), 4000);
   }
   updateWorkflowSummary();

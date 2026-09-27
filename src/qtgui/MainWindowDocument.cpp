@@ -471,6 +471,12 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
   // current image snapshot. Invalidate both before starting replacement I/O.
   dismissOneShotPrompts();
   m_oneShotOperations.cancelAll();
+  // Profile optimization is image-backed but uses TaskQueue rather than the
+  // one-shot controller. Disown pending publication immediately; its worker
+  // keeps the captured source scan alive until it unwinds.
+  m_colorOptimizerQueue.cancelAll();
+  m_profileCalibration.pendingInputs.reset();
+  m_profileCalibration.pendingRequestId.reset();
   const uint64_t loadGeneration = ++m_imageLoadGeneration;
   if (m_screenAutodetectAfterLoadGeneration &&
       *m_screenAutodetectAfterLoadGeneration != loadGeneration)
@@ -509,11 +515,11 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
           colorscreen::solver_parameters emptySolver;
           m_solverParams = emptySolver;
           m_profileSpots.clear();
-          m_profileSpotResults.clear();
+          m_profileCalibration.spotResults.clear();
           if (!colorscreen::load_csp_with_profile_spots(
                   f, &m_scrToImgParams, &m_detectParams, &m_rparams,
                   &m_solverParams, &error, &m_profileSpots,
-                  &m_profileSpotResults)) {
+                  &m_profileCalibration.spotResults)) {
             QMessageBox::warning(this, "Error Loading Parameters",
                                  error ? QString::fromUtf8(error)
                                        : "Unknown error loading parameters.");
@@ -602,6 +608,13 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
 
         if (result.first) {
           clearDetectedScreenDiagnostics();
+          // A new/reloaded image establishes a new colour-sampling context.
+          // Persisted profile matrix values remain in render parameters, but
+          // session provenance and per-spot quality diagnostics do not carry
+          // across the source-image boundary.
+          m_profileCalibration.clear();
+          if (m_profilePanel)
+            m_profilePanel->setSpotResults(m_profileCalibration.spotResults);
           m_scan = tempScan;
 
           if ((int)m_scan->gamma != -2 && m_scan->gamma > 0 &&
@@ -1149,7 +1162,7 @@ bool MainWindow::restoreRecoveryState() {
       const char *error = nullptr;
       const bool loaded = colorscreen::load_csp_with_profile_spots(
           f, &m_scrToImgParams, &m_detectParams, &m_rparams, &m_solverParams,
-          &error, &m_profileSpots, &m_profileSpotResults);
+          &error, &m_profileSpots, &m_profileCalibration.spotResults);
       fclose(f);
       if (!loaded || error) {
         QMessageBox::warning(
@@ -1216,7 +1229,7 @@ bool MainWindow::loadParameterFile(const QString &fileName) {
   // preserve those too.
   const ParameterState oldState = getCurrentState();
   const std::vector<colorscreen::color_match> oldProfileSpotResults =
-      m_profileSpotResults;
+      m_profileCalibration.spotResults;
 
   // load_csp merges parameters in; reset first to ensure clean load.
   m_scrToImgParams = colorscreen::scr_to_img_parameters();
@@ -1226,7 +1239,7 @@ bool MainWindow::loadParameterFile(const QString &fileName) {
 
   if (!colorscreen::load_csp_with_profile_spots(
           f, &m_scrToImgParams, &m_detectParams, &m_rparams, &m_solverParams,
-          &error, &m_profileSpots, &m_profileSpotResults)) {
+          &error, &m_profileSpots, &m_profileCalibration.spotResults)) {
     fclose(f);
     QString errStr =
         error ? QString::fromUtf8(error) : "Unknown error loading parameters.";
@@ -1238,7 +1251,7 @@ bool MainWindow::loadParameterFile(const QString &fileName) {
     m_rparams = oldState.rparams;
     m_solverParams = oldState.solver;
     m_profileSpots = oldState.profileSpots;
-    m_profileSpotResults = oldProfileSpotResults;
+    m_profileCalibration.spotResults = oldProfileSpotResults;
     return false;
   }
   fclose(f);
@@ -1256,9 +1269,9 @@ bool MainWindow::loadParameterFile(const QString &fileName) {
     m_imageWidget->setImage(m_scan, &m_rparams, &m_scrToImgParams,
                             &m_detectParams, &m_renderTypeParams,
                             &m_solverParams);
-    m_imageWidget->setProfileSpots(&m_profileSpots, &m_profileSpotResults);
+    m_imageWidget->setProfileSpots(&m_profileSpots, &m_profileCalibration.spotResults);
     if (m_profilePanel)
-      m_profilePanel->setSpotResults(m_profileSpotResults);
+      m_profilePanel->setSpotResults(m_profileCalibration.spotResults);
     m_navigationView->setImage(m_scan, &m_rparams, &m_scrToImgParams,
                                &m_detectParams);
     updateColorCheckBoxState();

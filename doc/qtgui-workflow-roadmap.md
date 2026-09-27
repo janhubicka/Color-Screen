@@ -604,6 +604,10 @@ specialist stages.
   map is screen-coordinate evidence projected through current geometry, but a
   source-scan, screen/scanner-type, detection-parameter, gamma, or capture-
   sharpening change clears it from every ordinary view and disables the toggle.
+  Profile calibration follows the same evidence rule: the fitted matrix remains
+  saved and may be labelled stale, but per-spot colour matches and average
+  DeltaE are session diagnostics tied to the exact source scan + optimizer
+  inputs and disappear as soon as those inputs change.
 
 ### Phase C — module grammar
 
