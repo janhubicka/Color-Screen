@@ -296,9 +296,9 @@ void MainWindow::reloadCurrentImageWithDemosaic(bool autodetectScreen) {
     m_recoveryDirty = true;
 
   if (autodetectScreen)
-    m_screenAutodetectAfterLoadGeneration = m_imageLoadGeneration + 1;
+    m_imageLoad.screenAutodetectAfterGeneration = m_imageLoad.generation + 1;
   else
-    m_screenAutodetectAfterLoadGeneration.reset();
+    m_imageLoad.screenAutodetectAfterGeneration.reset();
 
   loadFile(m_currentImageFile, true);
   if (ColorScreenApplication *application = documentApplication())
@@ -475,11 +475,11 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
   m_colorOptimizerQueue.cancelAll();
   m_profileCalibration.pendingInputs.reset();
   m_profileCalibration.pendingRequestId.reset();
-  const uint64_t loadGeneration = ++m_imageLoadGeneration;
-  if (m_screenAutodetectAfterLoadGeneration &&
-      *m_screenAutodetectAfterLoadGeneration != loadGeneration)
-    m_screenAutodetectAfterLoadGeneration.reset();
-  m_imageLoadPending = true;
+  const uint64_t loadGeneration = ++m_imageLoad.generation;
+  if (m_imageLoad.screenAutodetectAfterGeneration &&
+      *m_imageLoad.screenAutodetectAfterGeneration != loadGeneration)
+    m_imageLoad.screenAutodetectAfterGeneration.reset();
+  m_imageLoad.pending = true;
   bool parameterDataLoaded = false;
   if (!suppressParamPrompt)
     m_recoveryDirty = false;
@@ -591,16 +591,16 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
         // Reloading (notably after changing demosaic mode) can start another
         // asynchronous image load before this one finishes. Only the newest
         // generation may clear the pending state or replace the document scan.
-        if (loadGeneration != m_imageLoadGeneration)
+        if (loadGeneration != m_imageLoad.generation)
           return;
 
         const bool autodetectScreenAfterLoad =
-            m_screenAutodetectAfterLoadGeneration &&
-            *m_screenAutodetectAfterLoadGeneration == loadGeneration;
+            m_imageLoad.screenAutodetectAfterGeneration &&
+            *m_imageLoad.screenAutodetectAfterGeneration == loadGeneration;
         if (autodetectScreenAfterLoad)
-          m_screenAutodetectAfterLoadGeneration.reset();
+          m_imageLoad.screenAutodetectAfterGeneration.reset();
 
-        m_imageLoadPending = false;
+        m_imageLoad.pending = false;
 
         if (result.first) {
           clearDetectedScreenDiagnostics();
@@ -661,7 +661,7 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
                 0, this,
                 [this, analysis, suggestDetectedMetadata, loadGeneration,
                  tempScan]() {
-                  if (m_closing || loadGeneration != m_imageLoadGeneration ||
+                  if (m_closing || loadGeneration != m_imageLoad.generation ||
                       m_scan != tempScan)
                     return;
                   maybeOfferInitialSetupGuide(analysis,
@@ -797,7 +797,7 @@ bool MainWindow::isDocumentModified() const {
 
 /** Return whether a new image may safely reuse this document window. */
 bool MainWindow::canReuseForOpen() const {
-  return !m_closing && !m_scan && !m_imageLoadPending &&
+  return !m_closing && !m_scan && !m_imageLoad.pending &&
          m_currentImageFile.isEmpty() && !isDocumentModified();
 }
 
