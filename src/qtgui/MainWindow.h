@@ -83,6 +83,8 @@ QString registrationDiscoveryFailureMessage(bool screenAutodetection);
 QString geometryFitFailureMessage();
 /** Explain profile-optimization failure without inventing a numerical cause. */
 QString profileOptimizationFailureMessage();
+/** Explain measured-MTF fit failure, retained calibration, and next actions. */
+QString mtfModelFitFailureMessage(const QString &detail = QString());
 
 /** Start the completion-driven workspace ownership/lifecycle smoke test. */
 void startWorkspaceChurnSmoke(ColorScreenApplication &app,
