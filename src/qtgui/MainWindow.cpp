@@ -4820,11 +4820,12 @@ void MainWindow::onFlatFieldRequested() {
         [this, result, gamma, demosaic, whiteFile, blackFile]() {
       if (!result->success || !result->correction) {
         if (!result->cancelled) {
-          QMessageBox::warning(
-              this, tr("Flat Field"),
-              result->error.isEmpty()
-                  ? tr("Flat field analysis failed.")
-                  : tr("Flat field analysis failed: %1").arg(result->error));
+          auto *box = new QMessageBox(
+              QMessageBox::Warning, tr("Flat Field"),
+              flatFieldFailureMessage(result->error), QMessageBox::Ok, this);
+          box->setObjectName(QStringLiteral("FlatFieldFailureDialog"));
+          box->setAttribute(Qt::WA_DeleteOnClose);
+          box->open();
         }
         return;
       }
