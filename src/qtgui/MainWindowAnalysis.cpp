@@ -192,6 +192,23 @@ QString flatFieldFailureMessage(const QString &detail) {
   return message;
 }
 
+/** Explain adaptive-sharpening failure without confusing it with cancellation. */
+QString adaptiveSharpeningFailureMessage(const QString &detail) {
+  QString message = QCoreApplication::translate(
+      "MainWindow",
+      "Adaptive sharpening analysis could not produce a spatial correction for "
+      "the current image, fitted screen geometry, and analysis settings. "
+      "Existing adaptive sharpening correction and document parameters were "
+      "left unchanged, and the chart was restored to the accepted correction. "
+      "Review the Screen/Geometry fit and adaptive analysis settings, then retry "
+      "Analyze adaptive sharpening.");
+  const QString trimmedDetail = detail.trimmed();
+  if (!trimmedDetail.isEmpty())
+    message += QCoreApplication::translate("MainWindow", "\n\nAnalysis detail: %1")
+                   .arg(trimmedDetail);
+  return message;
+}
+
 namespace {
 /** Return the physical scan resolution inferred from a configured screen. */
 std::optional<double> estimateScreenDpi(
@@ -953,7 +970,7 @@ void MainWindow::onAdaptiveSharpeningRequested(
                 restoreAdaptiveSharpeningChart();
                 if (cancelled)
                   statusBar()->showMessage(
-                      tr("Displacement analysis cancelled"), 3000);
+                      tr("Adaptive sharpening analysis cancelled"), 3000);
                 else
                   statusBar()->showMessage(
                       tr("Displacement analysis result discarded because "
@@ -977,12 +994,12 @@ void MainWindow::onAdaptiveSharpeningFinished(
     const QString &error) {
   if (!success || !result) {
     restoreAdaptiveSharpeningChart();
-    if (!success) {
-      QMessageBox::warning(this, tr("Adaptive Sharpening"),
-                           error.isEmpty()
-                               ? tr("Analysis failed or cancelled.")
-                               : error);
-    }
+    auto *box = new QMessageBox(
+        QMessageBox::Warning, tr("Adaptive Sharpening"),
+        adaptiveSharpeningFailureMessage(error), QMessageBox::Ok, this);
+    box->setObjectName(QStringLiteral("AdaptiveSharpeningFailureDialog"));
+    box->setAttribute(Qt::WA_DeleteOnClose);
+    box->open();
     return;
   }
 

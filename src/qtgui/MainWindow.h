@@ -91,6 +91,8 @@ QString focusAreaSearchFailureMessage(const QString &detail = QString());
 QString focusAreaAnalysisFailureMessage(const QString &detail = QString());
 /** Explain flat-field reference-analysis failure and retained calibration. */
 QString flatFieldFailureMessage(const QString &detail = QString());
+/** Explain adaptive-sharpening analysis failure and retained correction. */
+QString adaptiveSharpeningFailureMessage(const QString &detail = QString());
 
 /** Start the completion-driven workspace ownership/lifecycle smoke test. */
 void startWorkspaceChurnSmoke(ColorScreenApplication &app,
