@@ -456,16 +456,18 @@ geometry. The prompt remains snapshot-bound, so intervening document/image
 changes invalidate it.
 
 The **Show Auto-detected Patch Centers** overlay is session-only detection
-evidence, not saved calibration. Keep its map together with a weak source-scan
-identity and the accepted detector-input snapshot. Geometry-only refinement does
-not stale the map: `screen_map` stores detected elements in screen coordinates
-and drawing projects them through the current mapping. Changing the source scan,
-screen/scanner type, screen-colour detection parameters, capture gamma, or
-capture-sharpening inputs clears the map from every ordinary view and disables
-the menu action. Map availability and the document-level Show/Hide preference
-must also stay synchronized in inactive tiled/cascaded and detached ordinary
-views; use the document's diagnostic-change signal rather than updating only the
-view currently borrowing the inspector. A newly created/refreshed ordinary view
+evidence, not saved calibration. `DetectedScreenDiagnosticsState` keeps its map,
+weak source-scan identity, accepted detector-input snapshot, and shared Show/Hide
+preference together. Geometry-only refinement does not stale the map:
+`screen_map` stores detected elements in screen coordinates and drawing projects
+them through the current mapping. Changing the source scan, screen/scanner type,
+screen-colour detection parameters, capture gamma, or capture-sharpening inputs
+calls `clearEvidence()`: remove map/provenance from every ordinary view and
+disable the menu action, but deliberately retain the Show/Hide preference for a
+later valid detection. Map availability and that document-level preference must
+also stay synchronized in inactive tiled/cascaded and detached ordinary views;
+use the document's diagnostic-change signal rather than updating only the view
+currently borrowing the inspector. A newly created/refreshed ordinary view
 must pull the current diagnostic immediately. Slanted-edge reference views are
 excluded because they display another scan. Do not keep an enabled stale
 diagnostic merely because the underlying `screen_map` object is still allocated.

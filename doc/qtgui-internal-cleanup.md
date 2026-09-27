@@ -729,6 +729,11 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   the render + screen-to-image inputs actually passed to its workers. Clear stale
   transient overlays/results instead of leaving them analyzable; do not include
   solver/detection/profile-spot bookkeeping in that freshness comparison.
+  Detected-screen diagnostics likewise keep map, provenance and the shared patch-
+  visibility preference in one state object. Its `clearEvidence()` removes only
+  stale evidence; the user's Show/Hide preference survives and is reused when a
+  later current detection publishes another map. Workspace churn verifies both
+  peer-view synchronization and this preference/evidence separation.
   Registration discovery groups generation, scan, progress identity and the evolving
   expected document state because accepted worker batches are themselves
   undoable edits. `ScreenAutodetectionState` separately groups the optional

@@ -2713,7 +2713,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
           return;
         }
         const bool savedDetectedPatchVisibility =
-            first->m_showDetectedPatchCenters;
+            first->m_detectedScreenDiagnostics.showCenters;
         const ParameterState patchBaseline = first->documentStateSnapshot();
         const auto patchMap =
             std::make_shared<colorscreen::screen_map>(
@@ -2754,7 +2754,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         view->refreshFromDocument();
         if (!view->imageWidget()->hasDetectedScreenMap() ||
             view->imageWidget()->detectedPatchCentersVisible() !=
-                first->m_showDetectedPatchCenters) {
+                first->m_detectedScreenDiagnostics.showCenters) {
           fail(QStringLiteral(
               "Ordinary-view refresh did not recover detected patch diagnostics"));
           return;
@@ -2785,7 +2785,11 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         if (first->m_detectedScreenDiagnostics.map ||
             first->m_detectedScreenDiagnostics.inputs ||
             !first->m_detectedScreenDiagnostics.scan.expired() ||
+            first->m_detectedScreenDiagnostics.showCenters ==
+                savedDetectedPatchVisibility ||
             first->m_detectedPatchCentersAction->isEnabled() ||
+            first->m_detectedPatchCentersAction->isChecked() !=
+                first->m_detectedScreenDiagnostics.showCenters ||
             first->m_imageWidget->hasDetectedScreenMap() ||
             view->imageWidget()->hasDetectedScreenMap()) {
           fail(QStringLiteral(

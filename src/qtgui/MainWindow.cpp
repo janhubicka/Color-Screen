@@ -2248,7 +2248,7 @@ void MainWindow::createMenus() {
          "The dense overlay is drawn at 100% zoom and above."));
   connect(m_detectedPatchCentersAction, &QAction::toggled, this,
           [this](bool show) {
-            m_showDetectedPatchCenters = show;
+            m_detectedScreenDiagnostics.showCenters = show;
             syncDetectedScreenDiagnostics(m_imageWidget);
             emit detectedScreenDiagnosticsChanged();
           });
@@ -2663,7 +2663,7 @@ void MainWindow::setInspectorImageWidget(ImageWidget *imageWidget) {
   }
   if (m_detectedPatchCentersAction) {
     const QSignalBlocker blocker(m_detectedPatchCentersAction);
-    m_detectedPatchCentersAction->setChecked(m_showDetectedPatchCenters);
+    m_detectedPatchCentersAction->setChecked(m_detectedScreenDiagnostics.showCenters);
     m_detectedPatchCentersAction->setEnabled(
         static_cast<bool>(m_detectedScreenDiagnostics.map));
   }
@@ -2729,7 +2729,7 @@ void MainWindow::syncDetectedScreenDiagnostics(ImageWidget *image) const {
   if (!image || !acceptsInspectorImageWidget(image))
     return;
   image->setDetectedScreenMap(m_detectedScreenDiagnostics.map);
-  image->setShowDetectedPatchCenters(m_showDetectedPatchCenters);
+  image->setShowDetectedPatchCenters(m_detectedScreenDiagnostics.showCenters);
 }
 
 /** Publish one current automatic-detection patch map to every ordinary view.
@@ -2764,7 +2764,7 @@ void MainWindow::publishDetectedScreenDiagnostics(
 
 /** Remove an obsolete patch map from state and every ordinary presentation. */
 void MainWindow::clearDetectedScreenDiagnostics() {
-  m_detectedScreenDiagnostics.clear();
+  m_detectedScreenDiagnostics.clearEvidence();
   syncDetectedScreenDiagnostics(m_imageWidget);
   if (m_detectedPatchCentersAction)
     m_detectedPatchCentersAction->setEnabled(false);
