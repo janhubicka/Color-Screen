@@ -80,11 +80,11 @@ void MainWindow::onOpenParameters() {
    Saving is synchronous so closeEvent can reliably decide whether it is safe
    to close this particular document window.  */
 void MainWindow::onSaveParameters() {
-  if (m_currentParamsFile.isEmpty() || m_currentParamsFileIsWeak) {
+  if (m_parameterFile.path.isEmpty() || m_parameterFile.suggested) {
     saveParametersAs();
     return;
   }
-  saveParametersToFile(m_currentParamsFile);
+  saveParametersToFile(m_parameterFile.path);
 }
 
 /** Save parameters to a new .par file chosen by the user. */
@@ -113,8 +113,7 @@ bool MainWindow::saveParametersToFile(const QString &fileName) {
     return false;
   }
 
-  m_currentParamsFile = absoluteFileName;
-  m_currentParamsFileIsWeak = false;
+  m_parameterFile.setLoaded(absoluteFileName);
   m_recoveryDirty = false;
   addToRecentParams(absoluteFileName);
   if (m_undoStack)
@@ -131,7 +130,7 @@ bool MainWindow::saveParametersToFile(const QString &fileName) {
 bool MainWindow::saveParametersAs() {
   QString fileName = QFileDialog::getSaveFileName(
       this, "Save Parameters",
-      m_currentParamsFile.isEmpty() ? QString() : m_currentParamsFile,
+      m_parameterFile.path.isEmpty() ? QString() : m_parameterFile.path,
       "Parameters (*.par);;All Files (*)");
   if (fileName.isEmpty())
     return false;
@@ -525,9 +524,7 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
             parameterDataLoaded = true;
 
             // Track the loaded parameter file
-            m_currentParamsFile = parFile;
-            m_currentParamsFileIsWeak =
-                false; // This is a real file, not a suggestion
+            m_parameterFile.setLoaded(parFile);
             addToRecentParams(parFile);
 
             // If we have a valid screen type, default to formatted
@@ -541,16 +538,14 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
       } else {
         // User declined to load parameters - suggest filename
         QFileInfo fileInfo(fileName);
-        m_currentParamsFile =
-            fileInfo.path() + "/" + fileInfo.completeBaseName() + ".par";
-        m_currentParamsFileIsWeak = true;
+        m_parameterFile.setSuggested(
+            fileInfo.path() + "/" + fileInfo.completeBaseName() + ".par");
       }
     } else {
       // No parameter file exists - suggest filename
       QFileInfo fileInfo(m_currentImageFile);
-      m_currentParamsFile =
-          fileInfo.path() + "/" + fileInfo.completeBaseName() + ".par";
-      m_currentParamsFileIsWeak = true;
+      m_parameterFile.setSuggested(
+          fileInfo.path() + "/" + fileInfo.completeBaseName() + ".par");
     }
   }
 
@@ -829,9 +824,9 @@ bool MainWindow::maybeSave() {
 
   switch (result) {
   case QMessageBox::Save:
-    if (m_currentParamsFile.isEmpty() || m_currentParamsFileIsWeak)
+    if (m_parameterFile.path.isEmpty() || m_parameterFile.suggested)
       return saveParametersAs();
-    return saveParametersToFile(m_currentParamsFile);
+    return saveParametersToFile(m_parameterFile.path);
   case QMessageBox::Discard:
     return true;
   case QMessageBox::Cancel:
@@ -1124,8 +1119,8 @@ void MainWindow::saveRecoveryState() {
       directory.filePath(QStringLiteral("recovery_params_meta.txt")));
   if (metaFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
     QTextStream out(&metaFile);
-    out << m_currentParamsFile << '\n';
-    out << (m_currentParamsFileIsWeak ? "1" : "0") << '\n';
+    out << m_parameterFile.path << '\n';
+    out << (m_parameterFile.suggested ? "1" : "0") << '\n';
     out << (isDocumentModified() ? "1" : "0") << '\n';
   }
 }
@@ -1176,8 +1171,13 @@ bool MainWindow::restoreRecoveryState() {
       directory.filePath(QStringLiteral("recovery_params_meta.txt")));
   if (metaFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
     QTextStream in(&metaFile);
-    m_currentParamsFile = in.readLine().trimmed();
-    m_currentParamsFileIsWeak = (in.readLine().trimmed() == QLatin1String("1"));
+    const QString recoveredParameterPath = in.readLine().trimmed();
+    const bool recoveredParameterPathSuggested =
+        (in.readLine().trimmed() == QLatin1String("1"));
+    if (recoveredParameterPathSuggested)
+      m_parameterFile.setSuggested(recoveredParameterPath);
+    else
+      m_parameterFile.setLoaded(recoveredParameterPath);
     const QString dirtyFlag = in.readLine().trimmed();
     if (!dirtyFlag.isEmpty())
       m_recoveryDirty = (dirtyFlag == QLatin1String("1"));
@@ -1284,8 +1284,7 @@ bool MainWindow::loadParameterFile(const QString &fileName) {
   m_recoveryDirty = false;
 
   const QString absoluteFileName = QFileInfo(fileName).absoluteFilePath();
-  m_currentParamsFile = absoluteFileName;
-  m_currentParamsFileIsWeak = false;
+  m_parameterFile.setLoaded(absoluteFileName);
 
   updateModeMenu();
   updateUIFromState(getCurrentState());
