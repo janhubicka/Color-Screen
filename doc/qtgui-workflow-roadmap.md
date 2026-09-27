@@ -540,7 +540,11 @@ remain in the document and tells the operator how to retry locally. Geometry-fit
 failure follows the same rule: current geometry and registration points are left
 unchanged, the operator is pointed to coverage/outlier guidance and fit settings,
 and the warning is parent-owned/asynchronous rather than a nested static modal
-call.
+call. Profile optimization now follows the same four-part rule without adding a
+routine modal: the persistent Profile/Workflow status states that existing
+profile correction values remain unchanged, while the status bar identifies the
+failed image/spot/input fit and points the operator to spot distribution and
+geometry/color inputs before retrying **Optimize profile**.
 
 ## Visual style
 
