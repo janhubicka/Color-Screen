@@ -512,9 +512,15 @@ jobs:
             --smoke-test-new-view --smoke-test-slanted-reference \
             "$image" "$image"
 
-        run_asan_smoke workspace-churn 100 \
+        # Workspace churn now exercises several genuine asynchronous analyses
+        # (reference MTF, focus/profile freshness, calibration provenance and
+        # multi-view diagnostics). clang64 ASan routinely needs more than the
+        # historical 100-second process budget even while making progress.
+        # Keep it bounded, but give the smoke enough room to finish; the
+        # phase-transition log distinguishes slow progress from a real wedge.
+        run_asan_smoke workspace-churn 240 \
           ./src/qtgui/colorscreen-qt \
-            --smoke-test 60000 --smoke-test-expect-windows 2 \
+            --smoke-test 180000 --smoke-test-expect-windows 2 \
             --smoke-test-workspace-churn \
             "$image" "$image"
 

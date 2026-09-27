@@ -66,6 +66,7 @@ struct WorkspaceChurnState {
   bool expectedFirstScanMirror = false;
   bool expectedSecondScanMirror = false;
   bool expectedStatesSet = false;
+  int lastLoggedPhase = -1;
   bool oneShotStarted = false;
   bool oneShotApplied = false;
   bool oneShotDone = false;
@@ -174,6 +175,11 @@ void startWorkspaceChurnSmoke(ColorScreenApplication &app,
         fail(message);
         return false;
       };
+
+      if (state->lastLoggedPhase != phase) {
+        state->lastLoggedPhase = phase;
+        qInfo() << "Workspace churn phase" << phase;
+      }
 
       WorkspaceWindow *workspace = state->workspace.data();
       MainWindow *first = state->first.data();
