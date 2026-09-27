@@ -566,7 +566,12 @@ cancellation produces only a status message, while failure explicitly retains
 the accepted spatial correction and all document parameters, restores the chart
 to that accepted state, identifies the current image/geometry/analysis inputs,
 and points back to **Analyze adaptive sharpening** with worker detail kept
-secondary.
+secondary. Coordinate refinement follows the same preserved-state rule: a
+failed local fit retains the existing coordinate basis, nonlinear correction and
+registration points, identifies the scan plus current Screen/capture inputs, and
+tells the operator to **Detect screen coordinates** again when the starting basis
+is wrong or otherwise retry **Optimize coordinates**. Optimizer detail remains
+secondary and the warning is parent-owned/asynchronous.
 
 ## Visual style
 

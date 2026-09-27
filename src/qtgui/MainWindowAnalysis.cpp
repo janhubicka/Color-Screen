@@ -209,6 +209,24 @@ QString adaptiveSharpeningFailureMessage(const QString &detail) {
   return message;
 }
 
+/** Explain failed refinement of an already configured coordinate basis. */
+QString coordinateOptimizationFailureMessage(const QString &detail) {
+  QString message = QCoreApplication::translate(
+      "MainWindow",
+      "Coordinate refinement could not improve the current screen coordinate "
+      "basis for this scan and its current Screen/capture inputs. Existing "
+      "screen coordinates, nonlinear correction, and registration points were "
+      "left unchanged. Inspect whether the current coordinates land on a clear "
+      "raster and whether Screen type and capture gamma/linearization are "
+      "correct. If the starting basis is wrong, run Detect screen coordinates "
+      "again; otherwise retry Optimize coordinates.");
+  const QString trimmedDetail = detail.trimmed();
+  if (!trimmedDetail.isEmpty())
+    message += QCoreApplication::translate("MainWindow", "\n\nOptimizer detail: %1")
+                   .arg(trimmedDetail);
+  return message;
+}
+
 namespace {
 /** Return the physical scan resolution inferred from a configured screen. */
 std::optional<double> estimateScreenDpi(
@@ -1151,9 +1169,14 @@ void MainWindow::onOptimizeCoordinates() {
     if (result->success) {
       applyOptimizedCoordinates(result->finetune);
     } else {
-      QMessageBox::warning(this, tr("Optimization"),
-                           tr("Optimization failed: ") +
-                               QString::fromStdString(result->finetune.err));
+      auto *box = new QMessageBox(
+          QMessageBox::Warning, tr("Coordinate refinement"),
+          coordinateOptimizationFailureMessage(
+              QString::fromStdString(result->finetune.err)),
+          QMessageBox::Ok, this);
+      box->setObjectName(QStringLiteral("CoordinateOptimizationFailureDialog"));
+      box->setAttribute(Qt::WA_DeleteOnClose);
+      box->open();
     }
   };
 

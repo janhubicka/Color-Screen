@@ -535,8 +535,13 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   retains its dedicated Cancel row through an optional one-shot progress title.
   Refinement applies a copied state through `changeParameters()` before updating
   diagnostics; the old live-state mutation caused `changeParameters()` to see
-  a no-op and omit the undo/dirty transition. Workspace-churn smoke checks the
-  exact coordinate-edit Undo/Redo state and dedicated progress-row cleanup.
+  a no-op and omit the undo/dirty transition. Failed refinement is publication-
+  free: the existing coordinates, nonlinear correction and registration points
+  remain untouched, while a parent-owned asynchronous warning identifies the
+  scan/Screen/capture context and directs the operator either to redetect a bad
+  starting basis or retry **Optimize coordinates**. Optimizer text is retained
+  only as diagnostic detail. Workspace-churn smoke checks the exact coordinate-
+  edit Undo/Redo state and dedicated progress-row cleanup.
   Automatic focus-area discovery and multi-area fitting now also share that
   lifecycle, retaining their dedicated Cancel rows and input-model/validation
   settings. Their numerical work lives in `FocusAnalysisWorker`, with immutable
