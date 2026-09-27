@@ -405,8 +405,8 @@ void MainWindow::onAutomaticallyAddPointsInAreaRequested(
 void MainWindow::setScreenAutodetectionProgress(
     const std::shared_ptr<colorscreen::progress_info> &progress,
     bool usesStop) {
-  m_screenAutodetectionProgress = progress;
-  m_screenAutodetectionUsesStop = usesStop;
+  m_screenAutodetection.progress = progress;
+  m_screenAutodetection.usesStop = usesStop;
   updateWorkflowSummary();
 }
 
@@ -417,11 +417,10 @@ void MainWindow::setScreenAutodetectionProgress(
     phase after that handoff has already happened. */
 void MainWindow::clearScreenAutodetectionProgress(
     const std::shared_ptr<colorscreen::progress_info> &progress) {
-  const auto current = m_screenAutodetectionProgress.lock();
+  const auto current = m_screenAutodetection.progress.lock();
   if (!current || current != progress)
     return;
-  m_screenAutodetectionProgress.reset();
-  m_screenAutodetectionUsesStop = false;
+  m_screenAutodetection.clearProgress();
   updateWorkflowSummary();
 }
 
@@ -466,11 +465,9 @@ void MainWindow::cancelStaleRegistrationDiscovery(
   if (progress)
     progress->cancel();
 
-  const auto workflowProgress = m_screenAutodetectionProgress.lock();
-  if (progress && workflowProgress == progress) {
-    m_screenAutodetectionProgress.reset();
-    m_screenAutodetectionUsesStop = false;
-  }
+  const auto workflowProgress = m_screenAutodetection.progress.lock();
+  if (progress && workflowProgress == progress)
+    m_screenAutodetection.clearProgress();
 
   if (!m_closing)
     statusBar()->showMessage(
@@ -501,10 +498,8 @@ void MainWindow::startRegistrationDiscovery(
   if (previousProgress)
     previousProgress->cancel();
   if (previousProgress &&
-      m_screenAutodetectionProgress.lock() == previousProgress) {
-    m_screenAutodetectionProgress.reset();
-    m_screenAutodetectionUsesStop = false;
-  }
+      m_screenAutodetection.progress.lock() == previousProgress)
+    m_screenAutodetection.clearProgress();
 
   auto progress = std::make_shared<colorscreen::progress_info>();
   progress->set_task("finding missing registration points", 1);
@@ -803,14 +798,14 @@ void MainWindow::presentScreenDetectionSuggestions(
       screenName, renderScreenIcon(geometry.type), currentColor,
       preferredColorName, suggestColor, dpi, suggestDpi, this);
   dialog->setAttribute(Qt::WA_DeleteOnClose);
-  m_detectScreenPrompt = dialog;
+  m_screenAutodetection.prompt = dialog;
 
   connect(
       dialog, &QDialog::finished, this,
       [this, dialog, scan, baseline, dpi, apply = std::move(apply)](int result) {
-        if (m_detectScreenPrompt != dialog)
+        if (m_screenAutodetection.prompt != dialog)
           return;
-        m_detectScreenPrompt = nullptr;
+        m_screenAutodetection.prompt = nullptr;
         if (m_closing || m_scan != scan || getCurrentState() != baseline)
           return;
 

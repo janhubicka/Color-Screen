@@ -3498,14 +3498,14 @@ void MainWindow::updateWorkflowSummary() {
   QString nextStep;
   QString nextPanelKey;
   const auto screenAutodetectionProgress =
-      m_screenAutodetectionProgress.lock();
+      m_screenAutodetection.progress.lock();
   if (screenAutodetectionProgress) {
     if (screenAutodetectionProgress->pool_cancel()) {
-      nextStep = m_screenAutodetectionUsesStop
+      nextStep = m_screenAutodetection.usesStop
           ? tr("Next: screen detection is stopping…")
           : tr("Next: screen detection is cancelling…");
     } else {
-      nextStep = m_screenAutodetectionUsesStop
+      nextStep = m_screenAutodetection.usesStop
           ? tr("Next: screen detection is running. Wait for it to finish, or press Stop.")
           : tr("Next: screen detection is running. Wait for it to finish, or press Cancel.");
     }
@@ -4592,10 +4592,10 @@ void MainWindow::startAreaSelection(const QString &message,
 
 /** Close stale final-result confirmations without applying their results. */
 void MainWindow::dismissOneShotPrompts() {
-  if (QDialog *prompt = m_detectScreenPrompt.data()) {
+  if (QDialog *prompt = m_screenAutodetection.prompt.data()) {
     // Clear first: close() emits finished, whose callback must recognize that
     // this prompt no longer owns publication, even after a later Undo.
-    m_detectScreenPrompt = nullptr;
+    m_screenAutodetection.prompt = nullptr;
     prompt->close();
   }
   if (QMessageBox *prompt = m_focusAreaAnalysis.prompt.data()) {
