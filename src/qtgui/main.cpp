@@ -2385,7 +2385,9 @@ bool runBetaInvariantSmoke() {
     return fail("could not allocate flat-field correction fixture");
   for (int y = 0; y < 2; ++y)
     for (int x = 0; x < 2; ++x) {
-      flatCorrection->set_luminosity(x, y, 1.0);
+      const colorscreen::luminosity_t lum =
+          1.0 + 0.05 * (x + 2 * y);
+      flatCorrection->set_luminosity(x, y, lum);
       flatCorrection->set_sub(x, y, 0.0);
     }
   calibrated.rparams.backlight_correction = flatCorrection;
