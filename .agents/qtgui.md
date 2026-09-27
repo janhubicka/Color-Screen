@@ -365,8 +365,9 @@ The `TaskQueue` implements a **two-task scheme** for long-running computations w
 
 Geometry fitting is also image-backed `TaskQueue` work. Each
 `SolverRequestData` carries the exact source `image_data` together with
-screen/solver parameters; the worker must solve against that request-owned scan,
-never mutable `WorkerBase::m_scan`. Pending publication requires the same live
+screen/solver parameters. `GeometrySolverWorker` has no mutable document-scan
+member at all; it solves only against the scan carried by the dispatched request.
+Pending publication requires the same live
 scan, current fit inputs and nonlinear-mode choice. Accepted and failed fit
 provenance retain the source scan weakly, so identical geometry on a replaced
 image is stale rather than "current". Starting image replacement cancels and
@@ -375,9 +376,10 @@ provenance while leaving the persisted geometry parameters usable as
 unverified/manual state.
 
 Profile colour optimization is image-backed even though it uses `TaskQueue`.
-Its request must therefore carry the exact source `image_data` shared pointer in
-addition to geometry, render parameters and profile spots; never let the worker
-read a mutable worker-side scan after dispatch. Publication requires both newest
+Its request therefore carries the exact source `image_data` shared pointer in
+addition to geometry, render parameters and profile spots.
+`ColorOptimizerWorker` likewise owns no mutable document scan and may read only
+the source snapshot supplied to `optimize()`. Publication requires both newest
 request ownership and the same live source scan/input snapshot. Accepted
 provenance stores the scan identity weakly so replacing an image is not prevented
 by diagnostics. Per-spot colour matches and average DeltaE are transient
@@ -484,11 +486,11 @@ thread. Connect `QThread::finished` to the worker's `QObject::deleteLater`
 **before** starting the thread, then request `quit()` and `wait()` from the
 owner during teardown. After the join, clear any non-owning GUI-thread pointer
 but never `delete` the worker from the GUI thread. This is especially
-important for `WorkerBase`: `setScan()` queues assignment of `m_scan` to
-the worker thread, so cross-thread destruction can race that assignment even
-when the GUI thread subsequently waits for QThread to finish. The solver,
-color optimizer, histogram worker, and renderer ownership patterns follow this
-rule.
+important for workers that actually retain mutable thread-owned inputs.
+`WorkerBase` is now limited to the histogram path, whose `setScan()` queues
+assignment of `m_scan` to its worker thread. Geometry and profile optimization
+workers deliberately avoid that pattern and receive immutable scan snapshots per
+request. The renderer has its own explicit shutdown/ownership contract.
 
 ```cpp
 class MyWorker : public QObject {
