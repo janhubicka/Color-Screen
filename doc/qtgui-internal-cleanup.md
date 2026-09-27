@@ -162,8 +162,14 @@ interval could collapse both into one command whose old state predates the first
 change and whose new state follows the second.  One Undo would unexpectedly
 remove both edits.
 
-The beta fix keeps drag coalescing but also requires the command descriptions to
-match.  This is deliberately small and compatible with existing panel helpers.
+The first beta fix separated migrated controls with stable machine-readable
+parameter keys.  The P1 rollout now completes that contract: only a non-empty
+explicit parameter key can coalesce adjacent updates.  Human-readable Undo text
+is presentation only, so two rapid unkeyed operations with the same description
+remain separate commands.  Continuous final rotation from a secondary view
+reuses `geometry.final.rotation`, matching the Geometry-panel editor.  The
+ordinary smoke covers same-key coalescing, same-text/different-key separation,
+and two rapid unkeyed profile-spot-style edits with independent Undo/Redo.
 
 ### Hidden inspector pages used ancestor visibility as tab state
 
@@ -334,8 +340,10 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   no drag may depend on receiving an ideal release sequence.
 - Keep the ordinary Qt smoke regression for undo merge identity: repeated
   updates with one stable parameter key merge, while a different key remains a
-  separate action even when the human-readable Undo text is identical. The probe
-  also verifies the resulting Undo/Redo state sequence.
+  separate action even when the human-readable Undo text is identical. Unkeyed
+  operations are atomic and two rapid commands with the same description must
+  remain independently undoable. The probe verifies the resulting Undo/Redo
+  state sequences.
 - Keep the ordinary Qt smoke regression for `MultiLineTabWidget` logical
   visibility while an ancestor is hidden: fallback and programmatic selection
   must use explicit per-tab hidden state rather than effective onscreen visibility.
@@ -350,13 +358,17 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
 
 ### P1 — early beta
 
-- Give every stateful parameter helper an explicit machine-readable key.
-  `ParameterPanel` now accepts an optional stable `parameterKey`, stores it
-  on the field widget, and uses it for undo merge identity independently of
-  the human Undo description. Unconverted controls deliberately fall back to
-  their historical label-based identity. Screen strip-width controls and the
-  measured-MTF selector are the first migrated users; continue assigning keys
-  as panels gain reset/default/modified metadata. Keyed numeric helpers can
+- Give every continuous saved parameter editor an explicit machine-readable
+  key. `ParameterPanel` stores that stable `parameterKey` on the field widget
+  and uses it as the only Undo merge identity, independently of the human Undo
+  description. An empty key now deliberately means an atomic operation: buttons,
+  canvas clicks, Reset/Clear actions and accepted analysis results do not merge
+  merely because their captions match. All continuous saved editors in Screen,
+  Geometry, Image Layer, Tiles, Digital Capture, Contact Copy, Color and
+  Sharpness are migrated; the secondary-view final-rotation editor explicitly
+  reuses `geometry.final.rotation`. Profile has no continuous saved
+  `ParameterPanel` editor: Auto optimize is session state, Show profile spots
+  is view state, and spot add/remove/clear operations are atomic. Keyed numeric helpers can
   now opt into that presentation without a parallel defaults table: a fresh
   `ParameterState` supplies the reset target, the label is emphasized while
   modified, and Reset is hidden at the default. Digital Capture is the first
@@ -394,7 +406,7 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   Reset changes only that tile, then verifies Reset and both edits remain three
   independent Undo gestures. Workspace churn continues to check the other
   document/operation-state ownership boundaries.
-- Subsequent complete stable-key migrations are Digital Capture (fifth), Contact Copy (sixth), Color (seventh), and Sharpness (eighth). Capture's derived Sensor width shares the pixel-pitch identity while its rotation assumption remains presentation-only. Contact Copy gives each H&D editing surface its own gesture identity. Color adds `color.*` keys for every saved editor, including custom whitepoint/tone-curve widgets. Correlated RGB controls expand their base key to per-channel `.red/.green/.blue` identities; Link channels and Color's area/chart-view controls remain deliberately unkeyed. Sharpness uses `sharpness.*` for saved MTF/deconvolution controls and target-specific `sharpness.measurements.<index>.*` identities for repeated measurement metadata rows; chart presentation, measurement navigation/actions, and focus-analysis setup remain unkeyed. Workspace smoke verifies both the complete Sharpness key set and that adjacent name edits on two measurements require two Undo steps.
+- The later complete stable-key migrations are Digital Capture (fifth), Contact Copy (sixth), Color (seventh), and Sharpness (eighth). Capture's derived Sensor width shares the pixel-pitch identity while its rotation assumption remains presentation-only. Contact Copy gives each H&D editing surface its own gesture identity. Color adds `color.*` keys for every saved editor, including custom whitepoint/tone-curve widgets. Correlated RGB controls expand their base key to per-channel `.red/.green/.blue` identities; Link channels and Color's area/chart-view controls remain deliberately unkeyed. Sharpness uses `sharpness.*` for saved MTF/deconvolution controls and target-specific `sharpness.measurements.<index>.*` identities for repeated measurement metadata rows; chart presentation, measurement navigation/actions, and focus-analysis setup remain unkeyed. Workspace smoke verifies both the complete Sharpness key set and that adjacent name edits on two measurements require two Undo steps. This closes the continuous-editor key rollout; new continuous saved editors must not rely on Undo descriptions for coalescing.
 - Prefer `QSignalBlocker` for temporary signal suppression. Central
   `ParameterPanel` synchronization and ordinary refresh/update paths now use
   scoped blockers throughout the parameter panels, document window and

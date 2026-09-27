@@ -2455,6 +2455,30 @@ bool runBetaInvariantSmoke() {
   if (window.documentStateSnapshot() != rotated)
     return fail("redo did not restore both independent user actions");
 
+  // Unkeyed commands are atomic operations. Two rapid clicks/results with the
+  // same human Undo text must remain separately undoable rather than reviving
+  // the old description-as-merge-key fallback.
+  ParameterState firstSpot = rotated;
+  firstSpot.profileSpots.push_back({1.0, 2.0});
+  window.applySharedDocumentState(firstSpot,
+                                  QStringLiteral("Smoke atomic profile spot"));
+  ParameterState secondSpot = firstSpot;
+  secondSpot.profileSpots.push_back({3.0, 4.0});
+  window.applySharedDocumentState(secondSpot,
+                                  QStringLiteral("Smoke atomic profile spot"));
+  if (undoStack->count() != 4 || window.documentStateSnapshot() != secondSpot)
+    return fail("unkeyed atomic edits merged by matching Undo description");
+  undoStack->undo();
+  if (window.documentStateSnapshot() != firstSpot)
+    return fail("first atomic undo did not remove only the newest spot edit");
+  undoStack->undo();
+  if (window.documentStateSnapshot() != rotated)
+    return fail("second atomic undo did not restore the pre-spot state");
+  undoStack->redo();
+  undoStack->redo();
+  if (window.documentStateSnapshot() != secondSpot)
+    return fail("atomic redo did not restore both independent spot edits");
+
   // Calibration results are not ordinary numeric defaults. They need explicit
   // undoable Clear actions that remove only the accepted result.
   auto *clearFlatField = window.findChild<QPushButton *>(
