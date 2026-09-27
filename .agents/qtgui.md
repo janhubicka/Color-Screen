@@ -339,6 +339,19 @@ The `TaskQueue` implements a **two-task scheme** for long-running computations w
 - **Examples**: Image tile rendering, registration point overlays, geometry solver, color optimizer.
 - **Behavior**: New requests automatically cancel or supersede pending/active tasks in the same queue.
 
+Profile colour optimization is image-backed even though it uses `TaskQueue`.
+Its request must therefore carry the exact source `image_data` shared pointer in
+addition to geometry, render parameters and profile spots; never let the worker
+read a mutable worker-side scan after dispatch. Publication requires both newest
+request ownership and the same live source scan/input snapshot. Accepted
+provenance stores the scan identity weakly so replacing an image is not prevented
+by diagnostics. Per-spot colour matches and average DeltaE are transient
+diagnostics of that accepted input snapshot: clear them when the scan or any
+optimizer input becomes stale, while leaving the persisted profile matrix in
+`ParameterState` so the UI can label that calibration stale/unverified. Output
+profile and final-plane orientation remain irrelevant because the optimizer
+forces its own XYZ comparison space.
+
 ### 2. One-Shot Cancellable Tasks
 Tasks that run in the background and report a final result (or series of intermediate results).
 - **When to Use**: Computations that should work with the freshest data; if the data changes significantly, the old task should be cancelled and a new one started.
