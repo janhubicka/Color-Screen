@@ -18,6 +18,8 @@ public:
 
   // Called by MainWindow after the optimizer finishes.
   void setSpotResults(const std::vector<colorscreen::color_match> &results);
+  /** Mirror the active ordinary view's view-local spot visibility. */
+  void setShowProfileSpots(bool show);
   /** Show document-owned profile calibration readiness/freshness. */
   void setCalibrationStatus(const QString &status);
 
