@@ -60,10 +60,8 @@ void ProfilePanel::setupUi()
 
     addWidgetRow(row);
 
-    connect(m_addSpotBtn, &QPushButton::toggled, this, [this](bool checked) {
-      m_addSpotActive = checked;
-      emit addSpotModeRequested(checked);
-    });
+    connect(m_addSpotBtn, &QPushButton::toggled, this,
+            [this](bool checked) { emit addSpotModeRequested(checked); });
 
     connect(m_clearSpotsBtn, &QPushButton::clicked, this, [this]() {
       applyChange([](ParameterState &s) {
@@ -195,6 +193,14 @@ void ProfilePanel::onParametersRefreshed(const ParameterState &state)
   m_lastAutoSpots = state.profileSpots;
   if (geometryReady && isAutoEnabled() && spotsChanged && n >= 4)
     emit optimizeColorRequested(true);
+}
+
+void ProfilePanel::setAddSpotChecked(bool checked)
+{
+  if (!m_addSpotBtn)
+    return;
+  const QSignalBlocker blocker(m_addSpotBtn);
+  m_addSpotBtn->setChecked(checked);
 }
 
 void ProfilePanel::setShowProfileSpots(bool show)
