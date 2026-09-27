@@ -16,7 +16,7 @@ public:
   ColorOptimizerWorker(std::shared_ptr<colorscreen::image_data> scan,
                        QObject *parent = nullptr);
 
-public slots:
+  /** Optimize one immutable request snapshot on the worker thread. */
   void optimize(int reqId,
                 std::shared_ptr<colorscreen::image_data> scan,
                 colorscreen::scr_to_img_parameters scrParams,
