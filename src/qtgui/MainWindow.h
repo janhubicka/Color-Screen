@@ -89,6 +89,8 @@ QString mtfModelFitFailureMessage(const QString &detail = QString());
 QString focusAreaSearchFailureMessage(const QString &detail = QString());
 /** Explain focus-area model-analysis failure and retained document state. */
 QString focusAreaAnalysisFailureMessage(const QString &detail = QString());
+/** Explain flat-field reference-analysis failure and retained calibration. */
+QString flatFieldFailureMessage(const QString &detail = QString());
 
 /** Start the completion-driven workspace ownership/lifecycle smoke test. */
 void startWorkspaceChurnSmoke(ColorScreenApplication &app,
