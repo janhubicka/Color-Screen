@@ -206,6 +206,15 @@ batch or nothing. Failure messages belong in the gated apply callback, not in
 unconditional cleanup, and must be parent-owned/asynchronous. Never use a
 reference-local watcher to apply a captured whole document state.
 
+Stored measured-MTF spatial provenance shown on the source document is also
+document-owned presentation state. When the selected record belongs to the
+current source scan, its ROI and accepted edge must appear in every ordinary
+view, including inactive tiled/cascaded and detached peers. Existing peers
+follow a document overlay-change signal and newly created/refreshed ordinary
+views pull the current overlay immediately. **Locate** remains view-local: it
+centers/focuses only the active inspector canvas. Slanted-edge reference views
+keep their separate reference-file matching and overlay selection.
+
 Measured-MTF **model fitting** is likewise a source-document final-result
 operation. `SharpnessPanel` owns only `MTFFitDialog`; acceptance is valid only
 for the complete `ParameterState` from which the dialog was opened. The panel
