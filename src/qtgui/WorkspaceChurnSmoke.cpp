@@ -2026,6 +2026,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         first->applyState(workflowReady);
         first->m_geometryFit.clear();
         first->m_geometryFit.baseline = first->documentStateSnapshot();
+        first->m_geometryFit.acceptedScan = first->m_scan;
         first->m_renderTypeParams.type = colorscreen::render_type_interpolated;
         first->m_imageWidget->setShowRegistrationPoints(false);
         first->updateWorkflowSummary();
@@ -2053,6 +2054,27 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
                 QStringLiteral("Current fitted geometry"))) {
           fail(QStringLiteral(
               "Geometry panel did not restore current fit status"));
+          return;
+        }
+
+        // Numerical geometry alone is not provenance: the same parameters on
+        // another source image must not be advertised as the accepted fit.
+        const auto fittedScan = first->m_geometryFit.acceptedScan;
+        const auto unrelatedGeometryScan =
+            std::make_shared<colorscreen::image_data>();
+        first->m_geometryFit.acceptedScan = unrelatedGeometryScan;
+        first->updateWorkflowSummary();
+        if (!geometryFitStatus->text().contains(QStringLiteral("stale"))) {
+          fail(QStringLiteral(
+              "Geometry fit stayed current after source-image provenance changed"));
+          return;
+        }
+        first->m_geometryFit.acceptedScan = fittedScan;
+        first->updateWorkflowSummary();
+        if (!geometryFitStatus->text().contains(
+                QStringLiteral("Current fitted geometry"))) {
+          fail(QStringLiteral(
+              "Restoring geometry source provenance did not restore current fit status"));
           return;
         }
 
@@ -2125,6 +2147,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
 
         // Simulate automatic solving while point discovery is still active.
         first->m_geometryFit.pendingInputs = first->documentStateSnapshot();
+        first->m_geometryFit.pendingScan = first->m_scan;
         first->m_geometryFit.pendingNonlinearEnabled =
             first->m_geometryPanel->isNonlinearEnabled();
         first->updateWorkflowSummary();
@@ -2133,8 +2156,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
               "Geometry fitting changed active screen-detection guidance"));
           return;
         }
-        first->m_geometryFit.pendingInputs.reset();
-        first->m_geometryFit.pendingNonlinearEnabled.reset();
+        first->m_geometryFit.clearRequest();
 
         // The coordinate stage completes after handing off to point discovery.
         // Its old completion must not clear the newer request's guidance.
@@ -2185,6 +2207,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         }
 
         first->m_geometryFit.pendingInputs = first->documentStateSnapshot();
+        first->m_geometryFit.pendingScan = first->m_scan;
         first->m_geometryFit.pendingNonlinearEnabled =
             first->m_geometryPanel->isNonlinearEnabled();
         first->m_geometryFit.pendingRequestId = newerGeometryRequest;
@@ -2210,6 +2233,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         first->onSolverFinished(newerGeometryRequest, workflowReady.scrToImg,
                                 false, true);
         if (first->m_geometryFit.pendingInputs ||
+            first->m_geometryFit.pendingScan ||
             first->m_geometryFit.pendingNonlinearEnabled ||
             first->m_geometryFit.pendingRequestId ||
             nextStepSummary->text().contains(
