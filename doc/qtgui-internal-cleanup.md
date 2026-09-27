@@ -702,9 +702,9 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
 - Give long-lived analysis state explicit structs rather than parallel member
   variables. Profile-calibration, geometry-fit, measured-MTF fit, flat-field
   calibration, automatic multi-area focus analysis, progressive adaptive
-  sharpening, and progressive
-  registration discovery now each live in one lifecycle struct instead of
-  parallel request/result/presentation members. Adaptive sharpening groups its
+  sharpening, progressive registration discovery, and the combined
+  **Detect screen** prompt/progress presentation now each live in one lifecycle
+  struct instead of parallel request/result/presentation members. Adaptive sharpening groups its
   generation, immutable request baseline, scan, and progress identity because
   live chart cells and final publication share that ownership. The same struct
   also retains an accepted-result baseline plus a weak source-scan identity, so
@@ -719,7 +719,10 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   solver/detection/profile-spot bookkeeping in that freshness comparison.
   Registration discovery groups generation, scan, progress identity and the evolving
   expected document state because accepted worker batches are themselves
-  undoable edits. Reference views likewise group the mutex-published
+  undoable edits. `ScreenAutodetectionState` separately groups the optional
+  confirmation prompt with the weak Workflow progress owner and its Cancel-vs-
+  Stop phase. This keeps the coordinate-detection -> progressive-discovery
+  handoff race-safe without three parallel MainWindow members. Reference views likewise group the mutex-published
   reference-load handoff and each reference-MTF request. Keep applying this
   pattern when another analysis has coupled session-local members that are
   always saved, cleared, or restored together.
