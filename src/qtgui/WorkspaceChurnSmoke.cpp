@@ -906,6 +906,13 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
           const ParameterState profileDiagnosticBaseline =
               first->getCurrentState();
           const auto savedProfileCalibration = first->m_profileCalibration;
+          ImageWidget *savedProfileInspector = first->inspectorImageWidget();
+          if (savedProfileInspector != first->m_imageWidget &&
+              savedProfileInspector != view->imageWidget()) {
+            fail(QStringLiteral(
+                "Profile overlay smoke started with an unexpected inspector view"));
+            return;
+          }
 
           first->m_profileCalibration.baseline =
               MainWindow::ColorOptimizerRequestData{
@@ -1043,6 +1050,8 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
           if (!first->m_profileCalibration.spotResults.empty() ||
               first->m_profileCalibration.averageDeltaE >= 0 ||
               !first->m_profileCalibration.baseline ||
+              first->m_imageWidget->profileSpotResultCount() != 0 ||
+              view->imageWidget()->profileSpotResultCount() != 0 ||
               profileCalibrationQuality->text() != QStringLiteral("—")) {
             fail(QStringLiteral(
                 "Source-image mismatch retained stale profile diagnostics"));
@@ -1055,6 +1064,16 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
           first->syncProfileSpotOverlay(first->m_imageWidget);
           emit first->profileSpotOverlayChanged();
           first->updateWorkflowSummary();
+
+          if (savedProfileInspector == first->m_imageWidget)
+            workspace->activateDocument(first);
+          else
+            workspace->activateView(view);
+          if (first->inspectorImageWidget() != savedProfileInspector) {
+            fail(QStringLiteral(
+                "Profile overlay smoke did not restore inspector ownership"));
+            return;
+          }
         }
 
         // Applicability is logical UI state, independent of section folding.
