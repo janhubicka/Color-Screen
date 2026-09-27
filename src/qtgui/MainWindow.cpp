@@ -5054,8 +5054,9 @@ void MainWindow::onFindFocusAreasRequested() {
   };
   operation.applyResult = [this, scan, baseline, result, summary]() {
     if (!result->success) {
-      *summary = tr("Focus-area search failed: %1")
-                     .arg(QString::fromStdString(result->error));
+      const QString error = QString::fromStdString(result->error);
+      *summary = focusAreaSearchFailureMessage(error);
+      statusBar()->showMessage(*summary, 9000);
       return;
     }
     m_focusAreaAnalysis.candidates = std::move(result->candidates);
@@ -5139,10 +5140,13 @@ void MainWindow::onAnalyzeFocusAreasRequested(uint64_t flags) {
     updateFocusAreaOverlays();
     if (!result->success) {
       const QString error = QString::fromStdString(result->error);
-      *summary = tr("Focus-area analysis failed: %1").arg(error);
-      auto *box = new QMessageBox(QMessageBox::Warning,
-                                  tr("Focus analysis areas"), error,
-                                  QMessageBox::Ok, this);
+      *summary =
+          tr("Focus-area analysis failed — parameters unchanged; inspect marked "
+             "regions and retry.");
+      auto *box = new QMessageBox(
+          QMessageBox::Warning, tr("Focus analysis areas"),
+          focusAreaAnalysisFailureMessage(error), QMessageBox::Ok, this);
+      box->setObjectName(QStringLiteral("FocusAreaAnalysisFailureDialog"));
       box->setAttribute(Qt::WA_DeleteOnClose);
       box->open();
       return;

@@ -539,6 +539,12 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   Beta smoke covers missing/pre-cancelled helper inputs; workspace churn covers
   both production cancellation paths, late approval after input restoration,
   prompt supersession, task-row cleanup, and exact Apply/Undo/Redo state.
+  Failure presentation now follows the same preserved-state contract as other
+  beta analyses: discovery accepts no new candidates and changes no saved
+  parameters; a failed joint fit keeps its candidate/failed-region overlays for
+  inspection but still changes no processing/sharpening parameter. Worker error
+  strings remain diagnostic detail, followed by an explicit Find/Analyze retry
+  path rather than standing alone as the user-facing explanation.
   Slanted-edge measurement in an external reference view now also enters the
   owning document's one-shot queue. The old independent watcher could restore
   a whole stale `ParameterState` and had no registered Cancel control. Reference

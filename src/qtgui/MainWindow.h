@@ -85,6 +85,10 @@ QString geometryFitFailureMessage();
 QString profileOptimizationFailureMessage();
 /** Explain measured-MTF fit failure, retained calibration, and next actions. */
 QString mtfModelFitFailureMessage(const QString &detail = QString());
+/** Explain focus-area discovery failure and retained document state. */
+QString focusAreaSearchFailureMessage(const QString &detail = QString());
+/** Explain focus-area model-analysis failure and retained document state. */
+QString focusAreaAnalysisFailureMessage(const QString &detail = QString());
 
 /** Start the completion-driven workspace ownership/lifecycle smoke test. */
 void startWorkspaceChurnSmoke(ColorScreenApplication &app,
