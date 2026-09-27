@@ -599,6 +599,10 @@ specialist stages.
   their point/geometry prerequisites, so saved state cannot expose an enabled
   no-op while an image is absent or being replaced;
 - add explicit stale/result states where analyses depend on changing inputs.
+  Geometry-fit current/failed provenance is tied to the exact source scan as
+  well as points/settings/nonlinear mode. Queued fits own that immutable scan;
+  image replacement cancels pending publication and clears session fit
+  provenance without discarding persisted/manual geometry values.
   The Registration menu's auto-detected patch-center overlay now has explicit
   provenance too: it survives coordinate/mesh refinement because the retained
   map is screen-coordinate evidence projected through current geometry, but a
