@@ -384,7 +384,7 @@ MainWindow::MainWindow(const QString &recoveryDirectory, QWidget *parent)
 
   // Initialize Solver Worker
   m_solverThread = new QThread(this);
-  m_solverWorker = new GeometrySolverWorker(m_scan);
+  m_solverWorker = new GeometrySolverWorker;
   m_solverWorker->moveToThread(m_solverThread);
   connect(m_solverThread, &QThread::finished, m_solverWorker,
           &QObject::deleteLater);
@@ -419,7 +419,7 @@ MainWindow::MainWindow(const QString &recoveryDirectory, QWidget *parent)
 
   // Initialize Color Optimizer Worker
   m_colorOptimizerThread = new QThread(this);
-  m_colorOptimizerWorker = new ColorOptimizerWorker(m_scan);
+  m_colorOptimizerWorker = new ColorOptimizerWorker;
   m_colorOptimizerWorker->moveToThread(m_colorOptimizerThread);
   connect(m_colorOptimizerThread, &QThread::finished, m_colorOptimizerWorker,
           &QObject::deleteLater);

@@ -3,9 +3,8 @@
 #include "mesh.h"
 #include <QDebug>
 
-GeometrySolverWorker::GeometrySolverWorker(
-    std::shared_ptr<colorscreen::image_data> scan, QObject *parent)
-    : WorkerBase(scan, parent) {}
+GeometrySolverWorker::GeometrySolverWorker(QObject *parent)
+    : QObject(parent) {}
 
 void GeometrySolverWorker::solve(
     int reqId, std::shared_ptr<colorscreen::image_data> scan,

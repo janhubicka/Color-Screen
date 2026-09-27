@@ -1,20 +1,25 @@
 #ifndef HISTOGRAM_WORKER_H
 #define HISTOGRAM_WORKER_H
 
-#include "WorkerBase.h"
 #include "../libcolorscreen/include/render-parameters.h"
 #include "../libcolorscreen/include/colorscreen.h"
 #include "../libcolorscreen/include/progress-info.h"
 #include <memory>
 #include <vector>
+#include <QObject>
 
-class HistogramWorker : public WorkerBase {
+namespace colorscreen {
+class image_data;
+}
+
+class HistogramWorker : public QObject {
   Q_OBJECT
 public:
-  HistogramWorker(std::shared_ptr<colorscreen::image_data> scan, QObject *parent = nullptr);
+  explicit HistogramWorker(QObject *parent = nullptr);
 
 public slots:
   void compute(int reqId,
+               std::shared_ptr<colorscreen::image_data> scan,
                colorscreen::render_parameters params,
                int steps,
                double minX,

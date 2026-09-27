@@ -2368,6 +2368,21 @@ bool runBetaInvariantSmoke() {
   inspectorSettings.setValue(inspectorPanelSetting,
                              QStringLiteral("sharpness"));
 
+  // Contact Copy histogram work travels through QVariant/TaskQueue. Keep the
+  // exact source scan in that immutable request so dispatch cannot combine an
+  // older render-parameter snapshot with a newly loaded document image.
+  auto histogramScan = std::make_shared<colorscreen::image_data>();
+  HistogramRequestData histogramRequest;
+  histogramRequest.scan = histogramScan;
+  histogramRequest.steps = 256;
+  histogramRequest.minX = 0;
+  histogramRequest.maxX = 1;
+  histogramRequest.axisType = colorscreen::hd_axis_hd;
+  const QVariant histogramVariant = QVariant::fromValue(histogramRequest);
+  if (!histogramVariant.canConvert<HistogramRequestData>() ||
+      histogramVariant.value<HistogramRequestData>().scan != histogramScan)
+    return fail("histogram request lost its immutable source scan");
+
   const FlatFieldAnalysisResult missingFlatField = FlatFieldWorker::analyze(
       recovery.filePath(QStringLiteral("missing-flat-field-reference.tif")),
       QString(), 1.0, colorscreen::image_data::demosaic_none, nullptr);

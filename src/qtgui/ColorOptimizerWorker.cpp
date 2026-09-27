@@ -1,9 +1,8 @@
 #include "ColorOptimizerWorker.h"
 #include <QDebug>
 
-ColorOptimizerWorker::ColorOptimizerWorker(
-    std::shared_ptr<colorscreen::image_data> scan, QObject *parent)
-    : WorkerBase(scan, parent) {}
+ColorOptimizerWorker::ColorOptimizerWorker(QObject *parent)
+    : QObject(parent) {}
 
 void ColorOptimizerWorker::optimize(
     int reqId,

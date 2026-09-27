@@ -306,9 +306,9 @@ The panel now snapshots the profile-spot coordinates and auto-runs only when the
 spot set actually changes.  Manual **Optimize color** remains unchanged.
 
 Profile fitting also owns an immutable source-image snapshot now. The queued
-request carries the source scan itself instead of letting
-`ColorOptimizerWorker` read its mutable `WorkerBase::m_scan`; completion checks
-that source identity as well as the geometry/render/spot inputs. Accepted and
+request carries the source scan itself and `ColorOptimizerWorker` no longer
+inherits `WorkerBase` or owns a mutable document scan; completion checks that
+source identity as well as the geometry/render/spot inputs. Accepted and
 failed provenance keep only weak scan identities, so old images are not pinned.
 Per-spot colour matches and average DeltaE live inside
 `ProfileCalibrationState` with the rest of the fit diagnostics and are cleared
@@ -656,6 +656,20 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
 
 ### P2 — maintenance refactoring
 
+- Keep background input ownership visible in worker APIs. Geometry and profile
+  optimization now subclass `QObject` directly and receive the source
+  `image_data` only in each immutable request; image reload no longer mutates a
+  second worker-side scan that those algorithms should never consult.
+  Contact Copy histogram requests now capture the source scan too, eliminating
+  the last mutable worker-side image and allowing `WorkerBase` to be removed
+  entirely. The same pass removes the old write-only
+  `m_prevScrToImgParams` / `m_prevDetectParams` snapshots,
+  whose names suggested a change-detection invariant that no code actually used.
+  Existing workspace churn already replaces scans while geometry/profile work is
+  pending and therefore remains the behavioral gate for stale publication.
+  Contact Copy's TaskQueue still owns newest-request publication, while each
+  histogram request now keeps its own scan/parameter pair so dispatch cannot
+  combine stale parameters with a newly loaded image.
 - Split very large source files by responsibility rather than by arbitrary line
   count. `MainWindow` retains document-specific snapshots, UI decisions and
   publication. The first physical split is now complete:

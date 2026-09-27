@@ -76,7 +76,6 @@ set(SOURCES
     FlatFieldWorker.cpp
     FinetuneWorker.cpp
     FinetuneMisregisteredWorker.cpp
-    WorkerBase.cpp
     ContactCopyPanel.cpp
     HDCurveWidget.cpp
     InteractiveChartWidget.cpp
@@ -147,7 +146,6 @@ set(HEADERS
     FlatFieldWorker.h
     FinetuneWorker.h
     FinetuneMisregisteredWorker.h
-    WorkerBase.h
     ContactCopyPanel.h
     HDCurveWidget.h
     InteractiveChartWidget.h

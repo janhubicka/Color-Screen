@@ -2,19 +2,22 @@
 #define COLOR_OPTIMIZER_WORKER_H
 #pragma once
 
-#include "WorkerBase.h"
 #include "../libcolorscreen/include/scr-to-img-parameters.h"
 #include "../libcolorscreen/include/render-parameters.h"
 #include "../libcolorscreen/include/colorscreen.h"
 #include "../libcolorscreen/include/progress-info.h"
 #include <memory>
 #include <vector>
+#include <QObject>
 
-class ColorOptimizerWorker : public WorkerBase {
+namespace colorscreen {
+class image_data;
+}
+
+class ColorOptimizerWorker : public QObject {
   Q_OBJECT
 public:
-  ColorOptimizerWorker(std::shared_ptr<colorscreen::image_data> scan,
-                       QObject *parent = nullptr);
+  explicit ColorOptimizerWorker(QObject *parent = nullptr);
 
   /** Optimize one immutable request snapshot on the worker thread. */
   void optimize(int reqId,

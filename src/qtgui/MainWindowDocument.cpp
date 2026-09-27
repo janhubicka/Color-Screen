@@ -168,20 +168,16 @@ void MainWindow::onOpenImage() {
 }
 
 /** Post-load initialisation after a new image has been opened.
-   Updates the render mode menu, sets the scan reference on all background
-   workers, feeds the image to NavigationView, shows/hides the Tiles tab
-   based on stitch data, shows/hides Profile and ImageLayer tabs based on
-   RGB availability, refreshes all panel state, and enables the Render
-   action.  */
+   Updates the render mode menu, feeds the image to NavigationView, shows/hides
+   the Tiles tab based on stitch data, shows/hides Profile and ImageLayer tabs
+   based on RGB availability, refreshes all panel state, and enables the Render
+   action. Geometry/profile workers receive source scans only in immutable
+   request snapshots. */
 void MainWindow::onImageLoaded() {
   clearFocusAreaAnalysis();
   // Update UI components that depend on loaded image
   updateModeMenu();
   if (m_scan) {
-    if (m_solverWorker)
-      m_solverWorker->setScan(m_scan);
-    if (m_colorOptimizerWorker)
-      m_colorOptimizerWorker->setScan(m_scan);
     m_navigationView->setImage(m_scan, &m_rparams, &m_scrToImgParams,
                                &m_detectParams);
     m_navigationView->setMinScale(m_imageWidget->getMinScale());
@@ -527,8 +523,6 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
                                        : "Unknown error loading parameters.");
           } else {
             parameterDataLoaded = true;
-            m_prevScrToImgParams = m_scrToImgParams;
-            m_prevDetectParams = m_detectParams;
 
             // Track the loaded parameter file
             m_currentParamsFile = parFile;
@@ -1173,8 +1167,6 @@ bool MainWindow::restoreRecoveryState() {
             error ? QString("Error loading parameters: %1").arg(error)
                   : QStringLiteral("Could not load recovered parameters."));
       } else {
-        m_prevScrToImgParams = m_scrToImgParams;
-        m_prevDetectParams = m_detectParams;
       }
     }
   }

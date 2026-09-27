@@ -2,16 +2,20 @@
 #define GEOMETRY_SOLVER_WORKER_H
 #pragma once
 
-#include "WorkerBase.h"
 #include "../libcolorscreen/include/scr-to-img-parameters.h"
 #include "../libcolorscreen/include/solver-parameters.h"
 #include "../libcolorscreen/include/progress-info.h"
 #include <memory>
+#include <QObject>
 
-class GeometrySolverWorker : public WorkerBase {
+namespace colorscreen {
+class image_data;
+}
+
+class GeometrySolverWorker : public QObject {
   Q_OBJECT
 public:
-  GeometrySolverWorker(std::shared_ptr<colorscreen::image_data> scan, QObject *parent = nullptr);
+  explicit GeometrySolverWorker(QObject *parent = nullptr);
 
   /** Fit one immutable source-scan/request snapshot on the worker thread. */
   void solve(int reqId,

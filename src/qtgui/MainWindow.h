@@ -775,10 +775,6 @@ private:
   ParameterState m_gridManipulationOldState;
   colorscreen::render_type_parameters m_renderTypeParams; // New member
 
-  // Copies for change detection
-  colorscreen::scr_detect_parameters m_prevDetectParams;
-  colorscreen::scr_to_img_parameters m_prevScrToImgParams;
-
   void resetParameters();
 
   // Progress Reporting

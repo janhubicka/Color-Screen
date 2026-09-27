@@ -3,6 +3,7 @@
 
 #include "ParameterPanel.h"
 #include "TaskQueue.h"
+#include <memory>
 #include <QThread>
 #include <QVariant>
 
@@ -63,6 +64,7 @@ private:
 };
 
 struct HistogramRequestData {
+    std::shared_ptr<colorscreen::image_data> scan;
     colorscreen::render_parameters params;
     int steps;
     double minX;

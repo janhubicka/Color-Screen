@@ -1,3 +1,5 @@
+#include <utility>
+
 #include <QSignalBlocker>
 #include <QShowEvent>
 #include "ContactCopyPanel.h"
@@ -18,7 +20,7 @@ ContactCopyPanel::ContactCopyPanel(StateGetter stateGetter, StateSetter stateSet
   qRegisterMetaType<std::vector<uint64_t>>("std::vector<uint64_t>");
   qRegisterMetaType<HistogramRequestData>("HistogramRequestData");
 
-  m_worker = new HistogramWorker(m_imageGetter());
+  m_worker = new HistogramWorker;
   m_worker->moveToThread(&m_workerThread);
 
   connect(&m_workerThread, &QThread::finished, m_worker, &QObject::deleteLater);
@@ -463,7 +465,8 @@ void ContactCopyPanel::setupUi() {
   // then reflects both the simulation prerequisite and the user's fold state.
   m_widgetStateUpdaters.push_back([this]() {
       const ParameterState state = m_stateGetter();
-      if (!state.rparams.contact_copy.simulate || !m_imageGetter() ||
+      const auto scan = m_imageGetter();
+      if (!state.rparams.contact_copy.simulate || !scan ||
           !m_hdCurveWidget->isVisible() || !m_hdCurveWidget->isEnabled())
         return;
 
@@ -473,6 +476,7 @@ void ContactCopyPanel::setupUi() {
         return;
 
       HistogramRequestData data;
+      data.scan = scan;
       data.params = state.rparams;
       data.steps = 256;
       data.minX = m_hdCurveWidget->minX();
@@ -509,16 +513,20 @@ void ContactCopyPanel::onTriggerHistogram(int reqId, std::shared_ptr<colorscreen
     }
 
     HistogramRequestData data = userData.value<HistogramRequestData>();
-    m_worker->setScan(m_imageGetter());
-    
-    QMetaObject::invokeMethod(m_worker, "compute", Qt::QueuedConnection,
-                             Q_ARG(int, reqId),
-                             Q_ARG(colorscreen::render_parameters, data.params),
-                             Q_ARG(int, data.steps),
-                             Q_ARG(double, data.minX),
-                             Q_ARG(double, data.maxX),
-                             Q_ARG(colorscreen::hd_axis_type, data.axisType),
-                             Q_ARG(std::shared_ptr<colorscreen::progress_info>, progress));
+    if (!data.scan) {
+        m_taskQueue.reportFinished(reqId, false);
+        return;
+    }
+
+    HistogramWorker *worker = m_worker;
+    QMetaObject::invokeMethod(
+        worker,
+        [worker, reqId, data = std::move(data), progress]() mutable {
+            worker->compute(reqId, std::move(data.scan), std::move(data.params),
+                            data.steps, data.minX, data.maxX, data.axisType,
+                            progress);
+        },
+        Qt::QueuedConnection);
 }
 
 void ContactCopyPanel::onHistogramFinished(int reqId,
