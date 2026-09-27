@@ -978,6 +978,11 @@ void MainWindow::setupUi() {
             }
             if (!m_switchingInspectorImage &&
                 sender() == inspectorImageWidget() &&
+                mode != ImageWidget::AddPointMode &&
+                m_pointClickTool.active())
+              clearPointClickToolPresentation();
+            if (!m_switchingInspectorImage &&
+                sender() == inspectorImageWidget() &&
                 mode != ImageWidget::GenericAreaMode &&
                 m_areaSelectionCallback) {
               // If the active view switches tool during selection, abandon the
@@ -1058,8 +1063,8 @@ void MainWindow::setupUi() {
               image->setShowProfileSpots(show);
           });
 
-  // ImageWidget::pointAdded is routed to onPointAdded; profile spot
-  // handling is done there when m_addingProfileSpot is true.
+  // ImageWidget::pointAdded is routed to onPointAdded; one exclusive
+  // document-owned point-click intent decides Profile, Focus, or registration.
   controlsLayout->addWidget(m_configTabs, 1);
 
   // Register panels for updates
@@ -1572,7 +1577,7 @@ void MainWindow::createToolbar() {
           &MainWindow::onPointAdded);
   connect(m_imageWidget, &ImageWidget::profileSpotRemoveRequested, this,
           [this](int index) {
-            if (!m_addingProfileSpot)
+            if (!m_pointClickTool.profileSpot())
               return;
             ParameterState newState = getCurrentState();
             if (index >= 0 && index < (int)newState.profileSpots.size()) {
@@ -2617,7 +2622,7 @@ void MainWindow::setInspectorImageWidget(ImageWidget *imageWidget) {
     m_inspectorImageConnections.push_back(connect(
         target, &ImageWidget::profileSpotRemoveRequested, this,
         [this](int index) {
-          if (!m_addingProfileSpot)
+          if (!m_pointClickTool.profileSpot())
             return;
           ParameterState state = getCurrentState();
           if (index >= 0 && index < static_cast<int>(state.profileSpots.size())) {
@@ -2629,6 +2634,9 @@ void MainWindow::setInspectorImageWidget(ImageWidget *imageWidget) {
         target, &ImageWidget::interactionModeChanged, this,
         [this](ImageWidget::InteractionMode mode) {
           syncInspectorInteractionActions(mode);
+          if (!m_switchingInspectorImage && sender() == inspectorImageWidget() &&
+              mode != ImageWidget::AddPointMode && m_pointClickTool.active())
+            clearPointClickToolPresentation();
           if (!m_switchingInspectorImage && sender() == inspectorImageWidget() &&
               mode != ImageWidget::GenericAreaMode && m_areaSelectionCallback) {
             m_areaSelectionCallback = nullptr;
@@ -4397,11 +4405,11 @@ void MainWindow::maybeTriggerAutoSolver() {
 
 /** Handle a new point added by clicking in the ImageWidget.
    Three mutually exclusive behaviours:
-   1. Profile spot mode (m_addingProfileSpot): converts the image position
-      to screen coordinates and adds it as a color calibration spot.
-   2. Armed one-area Focus analysis: launches a FocusAnalysisWorker at the
-      clicked position to measure MTF.
-   3. Normal mode: runs synchronous finetune to snap the click to the
+   1. Profile spot intent: converts the image position to screen coordinates
+      and adds it as a color calibration spot.
+   2. One-area Focus intent: launches a FocusAnalysisWorker at the clicked
+      position to measure MTF.
+   3. No temporary intent: runs synchronous finetune to snap the click to the
       nearest screen element, adds the resulting registration point to
       solver_parameters, updates the image widget, creates an undo
       command, and triggers auto-solver if enabled.  */
@@ -4416,7 +4424,7 @@ void MainWindow::onPointAdded(colorscreen::point_t imgPos,
     image = inspectorImageWidget();
 
   // Profile spot mode: convert img coords → screen coords and store
-  if (m_addingProfileSpot) {
+  if (m_pointClickTool.profileSpot()) {
     colorscreen::scr_to_img map;
     if (!map.set_parameters(m_scrToImgParams, *m_scan)) {
       statusBar()->showMessage(tr("Fit screen geometry before adding profile spots."), 3000);
