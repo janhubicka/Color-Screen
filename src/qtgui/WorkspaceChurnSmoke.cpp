@@ -913,6 +913,27 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
           }
 
           first->applyState(profileDiagnosticBaseline);
+
+          // The same numerical inputs on another source image are not the same
+          // calibration evidence. Simulate that provenance mismatch without
+          // replacing the live workspace fixture.
+          const auto unrelatedScan =
+              std::make_shared<colorscreen::image_data>();
+          first->m_profileCalibration.spotResults = {match};
+          first->m_profileCalibration.averageDeltaE = match.deltaE;
+          first->m_profileCalibration.acceptedScan = unrelatedScan;
+          first->m_profilePanel->setSpotResults(
+              first->m_profileCalibration.spotResults);
+          first->applyState(profileDiagnosticBaseline);
+          if (!first->m_profileCalibration.spotResults.empty() ||
+              first->m_profileCalibration.averageDeltaE >= 0 ||
+              !first->m_profileCalibration.baseline ||
+              profileCalibrationQuality->text() != QStringLiteral("—")) {
+            fail(QStringLiteral(
+                "Source-image mismatch retained stale profile diagnostics"));
+            return;
+          }
+
           first->m_profileCalibration = savedProfileCalibration;
           first->m_profilePanel->setSpotResults(
               first->m_profileCalibration.spotResults);
