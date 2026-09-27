@@ -510,6 +510,12 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   chart signal as well as the final correction. Starting another analysis or
   editing its inputs cancels the old request before queued cells can repaint the
   chart; abandoned live data are replaced by the accepted document correction.
+  Completion presentation follows the same ownership rule: cancellation is a
+  non-error status, while a genuine failure leaves the accepted correction and
+  document state untouched, restores the accepted chart, and presents actionable
+  image/geometry/settings guidance before retrying **Analyze adaptive
+  sharpening**. Worker error text is diagnostic context rather than the whole
+  user-facing message.
   Keep migrating custom one-shot `QThread` workers incrementally where their
   intermediate signal requirements allow the same policy without obscuring the
   worker API. Final-result screen-type detection
