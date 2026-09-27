@@ -7,12 +7,13 @@ ColorOptimizerWorker::ColorOptimizerWorker(
 
 void ColorOptimizerWorker::optimize(
     int reqId,
+    std::shared_ptr<colorscreen::image_data> scan,
     colorscreen::scr_to_img_parameters scrParams,
     colorscreen::render_parameters rparams,
     std::vector<colorscreen::point_t> spots,
     std::shared_ptr<colorscreen::progress_info> progress)
 {
-  if (!m_scan || spots.empty()) {
+  if (!scan || spots.empty()) {
     emit finished(reqId, rparams, {}, false, false);
     return;
   }
@@ -25,7 +26,7 @@ void ColorOptimizerWorker::optimize(
     colorscreen::sub_task task(progress.get());
 
     success = colorscreen::optimize_color_model_colors(
-        &scrParams, *m_scan, rparams, spots, &report, progress.get());
+        &scrParams, *scan, rparams, spots, &report, progress.get());
 
     if (progress && progress->cancelled()) {
       success = false;
