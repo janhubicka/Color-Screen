@@ -349,15 +349,20 @@ MainWindow::MainWindow(const QString &recoveryDirectory, QWidget *parent)
        [this](std::shared_ptr<colorscreen::progress_info> progress) {
          removeProgress(std::move(progress));
        },
-       [this](const QString &outputPath, bool success, bool cancelled) {
+       [this](const QString &outputPath, bool success, bool cancelled,
+              const QString &error) {
          if (cancelled) {
            statusBar()->showMessage(tr("Render cancelled"), 3000);
          } else if (success) {
            statusBar()->showMessage(tr("Rendered to %1").arg(outputPath), 5000);
          } else {
-           QMessageBox::critical(
-               this, tr("Render Failed"),
-               tr("Failed to render to:\n%1").arg(outputPath));
+           auto *box = new QMessageBox(
+               QMessageBox::Critical, tr("Render Failed"),
+               renderToFileFailureMessage(outputPath, error),
+               QMessageBox::Ok, this);
+           box->setObjectName(QStringLiteral("RenderFailureDialog"));
+           box->setAttribute(Qt::WA_DeleteOnClose);
+           box->open();
          }
        }});
 

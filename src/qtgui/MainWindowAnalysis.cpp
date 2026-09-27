@@ -245,6 +245,24 @@ QString coordinateOptimizationFailureMessage(const QString &detail) {
   return message;
 }
 
+/** Explain a failed file render without implying document-state mutation. */
+QString renderToFileFailureMessage(const QString &outputPath,
+                                   const QString &detail) {
+  QString message = QCoreApplication::translate(
+      "MainWindow",
+      "Rendering the accepted document snapshot to "%1" did not complete. "
+      "The current document parameters and image state were not changed, and "
+      "no failed partial output is retained at that path. Verify that the "
+      "destination is writable and has enough free space, review the export "
+      "format/size settings, then retry Render to file.")
+                        .arg(outputPath);
+  const QString trimmedDetail = detail.trimmed();
+  if (!trimmedDetail.isEmpty())
+    message += QCoreApplication::translate("MainWindow", "\n\nRender detail: %1")
+                   .arg(trimmedDetail);
+  return message;
+}
+
 /** Explain failure of the experimental one-area Focus analyzer. */
 QString pointFocusAnalysisFailureMessage(const QString &detail) {
   QString message = QCoreApplication::translate(

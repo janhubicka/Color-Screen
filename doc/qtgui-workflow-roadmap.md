@@ -583,7 +583,12 @@ failed local fit retains the existing coordinate basis, nonlinear correction and
 registration points, identifies the scan plus current Screen/capture inputs, and
 tells the operator to **Detect screen coordinates** again when the starting basis
 is wrong or otherwise retry **Optimize coordinates**. Optimizer detail remains
-secondary and the warning is parent-owned/asynchronous.
+secondary and the warning is parent-owned/asynchronous. Render/export failure
+now follows the same contract: the accepted render snapshot is independent of
+the live document, failed/cancelled partial output is removed, renderer/library
+detail is preserved through `FileRenderController`, and the asynchronous warning
+points to destination writability/free space plus export format/size settings
+before retrying **Render to file**.
 
 ## Visual style
 

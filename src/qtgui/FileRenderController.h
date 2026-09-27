@@ -54,7 +54,7 @@ public:
                        const QString &)> addProgress;
     std::function<void(std::shared_ptr<colorscreen::progress_info>)>
         removeProgress;
-    std::function<void(const QString &, bool, bool)> finished;
+    std::function<void(const QString &, bool, bool, const QString &)> finished;
   };
 
   /** Ensure no render worker survives the controller. */
@@ -83,11 +83,16 @@ private:
   /** Return whether the owning document is closing. */
   bool isClosing() const;
 
+  struct RenderResult {
+    bool success = false;
+    QString error;
+  };
+
   struct ActiveJob {
     std::shared_ptr<colorscreen::progress_info> progress;
     QString outputPath;
-    QPointer<QFutureWatcher<bool>> watcher;
-    QFuture<bool> future;
+    QPointer<QFutureWatcher<RenderResult>> watcher;
+    QFuture<RenderResult> future;
   };
 
   /** Forget one completed render job. */

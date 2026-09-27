@@ -97,6 +97,9 @@ QString flatFieldFailureMessage(const QString &detail = QString());
 QString adaptiveSharpeningFailureMessage(const QString &detail = QString());
 /** Explain coordinate-refinement failure and retained registration state. */
 QString coordinateOptimizationFailureMessage(const QString &detail = QString());
+/** Explain failed render/export, snapshot isolation, and retry actions. */
+QString renderToFileFailureMessage(const QString &outputPath,
+                                   const QString &detail = QString());
 /** Explain one-area focus-analysis failure and retained sharpening state. */
 QString pointFocusAnalysisFailureMessage(const QString &detail = QString());
 
