@@ -465,11 +465,9 @@ void MainWindow::cancelStaleRegistrationDiscovery(
   if (progress)
     progress->cancel();
 
-  const auto workflowProgress = m_screenAutodetectionProgress.lock();
-  if (progress && workflowProgress == progress) {
-    m_screenAutodetectionProgress.reset();
-    m_screenAutodetectionUsesStop = false;
-  }
+  const auto workflowProgress = m_screenAutodetection.progress.lock();
+  if (progress && workflowProgress == progress)
+    m_screenAutodetection.clearProgress();
 
   if (!m_closing)
     statusBar()->showMessage(
@@ -500,10 +498,8 @@ void MainWindow::startRegistrationDiscovery(
   if (previousProgress)
     previousProgress->cancel();
   if (previousProgress &&
-      m_screenAutodetectionProgress.lock() == previousProgress) {
-    m_screenAutodetectionProgress.reset();
-    m_screenAutodetectionUsesStop = false;
-  }
+      m_screenAutodetection.progress.lock() == previousProgress)
+    m_screenAutodetection.clearProgress();
 
   auto progress = std::make_shared<colorscreen::progress_info>();
   progress->set_task("finding missing registration points", 1);
