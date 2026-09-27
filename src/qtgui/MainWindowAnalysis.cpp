@@ -142,6 +142,39 @@ QString mtfModelFitFailureMessage(const QString &detail) {
   return message;
 }
 
+/** Explain automatic focus-area discovery failure without guessing its cause. */
+QString focusAreaSearchFailureMessage(const QString &detail) {
+  QString message = QCoreApplication::translate(
+      "MainWindow",
+      "Focus-area search could not complete for the current image, screen "
+      "geometry, and focus-analysis inputs. Existing processing parameters were "
+      "left unchanged, and no new focus-area candidates were accepted. Verify "
+      "the image and fitted Screen/Geometry setup, then retry Find focus areas; "
+      "if necessary use a clearer scan with larger uniform colour regions.");
+  const QString trimmedDetail = detail.trimmed();
+  if (!trimmedDetail.isEmpty())
+    message += QCoreApplication::translate("MainWindow", "\n\nSearch detail: %1")
+                   .arg(trimmedDetail);
+  return message;
+}
+
+/** Explain focus-area joint-analysis failure without guessing its cause. */
+QString focusAreaAnalysisFailureMessage(const QString &detail) {
+  QString message = QCoreApplication::translate(
+      "MainWindow",
+      "Focus-area analysis could not build a validated shared focus model from "
+      "the current candidate regions and analysis settings. Existing processing "
+      "and sharpening parameters were left unchanged. The candidate and failed-"
+      "region overlays remain available for inspection. Review the marked "
+      "regions and validation setup, rerun Find focus areas if the candidates "
+      "are weak, then retry Analyze focus areas.");
+  const QString trimmedDetail = detail.trimmed();
+  if (!trimmedDetail.isEmpty())
+    message += QCoreApplication::translate("MainWindow", "\n\nAnalysis detail: %1")
+                   .arg(trimmedDetail);
+  return message;
+}
+
 namespace {
 /** Return the physical scan resolution inferred from a configured screen. */
 std::optional<double> estimateScreenDpi(
