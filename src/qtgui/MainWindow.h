@@ -756,8 +756,11 @@ private:
     std::shared_ptr<const colorscreen::screen_map> map;
     std::optional<Inputs> inputs;
     std::weak_ptr<colorscreen::image_data> scan;
+    // View preference survives stale-evidence clearing and is reused when a
+    // later current detection publishes another map.
+    bool showCenters = false;
 
-    void clear() {
+    void clearEvidence() {
       map.reset();
       inputs.reset();
       scan.reset();
@@ -780,7 +783,6 @@ private:
     }
   };
   ScreenAutodetectionState m_screenAutodetection;
-  bool m_showDetectedPatchCenters = false;
   /** Last slanted-edge setup used in this session.  Each accepted measurement
       stores an independent copy of its metadata, while the numerical controls
       determine the generated curve.  */
