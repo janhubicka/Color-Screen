@@ -4,6 +4,7 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPushButton>
+#include <QSignalBlocker>
 #include <QVBoxLayout>
 
 ProfilePanel::ProfilePanel(StateGetter stateGetter, StateSetter stateSetter,
@@ -194,6 +195,14 @@ void ProfilePanel::onParametersRefreshed(const ParameterState &state)
   m_lastAutoSpots = state.profileSpots;
   if (geometryReady && isAutoEnabled() && spotsChanged && n >= 4)
     emit optimizeColorRequested(true);
+}
+
+void ProfilePanel::setShowProfileSpots(bool show)
+{
+  if (!m_showProfileSpotsCheck)
+    return;
+  const QSignalBlocker blocker(m_showProfileSpotsCheck);
+  m_showProfileSpotsCheck->setChecked(show);
 }
 
 void ProfilePanel::setCalibrationStatus(const QString &status)
