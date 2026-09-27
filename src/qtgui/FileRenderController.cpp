@@ -96,7 +96,7 @@ void FileRenderController::start(Request request) {
   const QString outputPath = request.outputPath;
   const std::string outputPathStd = outputPath.toStdString();
   auto *watcher = new QFutureWatcher<RenderResult>(this);
-  connect(watcher, &QFutureWatcher<bool>::finished, this,
+  connect(watcher, &QFutureWatcher<RenderResult>::finished, this,
           [this, watcher, progress, outputPath]() {
             RenderResult result;
             try {
@@ -152,6 +152,7 @@ void FileRenderController::start(Request request) {
       });
 
   m_activeJobs.push_back(
-      {progress, outputPath, QPointer<QFutureWatcher<bool>>(watcher), future});
+      {progress, outputPath,
+       QPointer<QFutureWatcher<RenderResult>>(watcher), future});
   watcher->setFuture(future);
 }
