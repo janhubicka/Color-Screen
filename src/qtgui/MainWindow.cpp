@@ -3154,8 +3154,9 @@ void MainWindow::updateWorkflowSummary() {
 
   if (m_profileCalibration.pendingInputs) {
     const ColorOptimizerRequestData currentProfileInputs{
-        m_scrToImgParams, m_rparams, m_profileSpots};
-    if (profileCalibrationInputsDiffer(*m_profileCalibration.pendingInputs,
+        m_scan, m_scrToImgParams, m_rparams, m_profileSpots};
+    if (m_profileCalibration.pendingInputs->scan != m_scan ||
+        profileCalibrationInputsDiffer(*m_profileCalibration.pendingInputs,
                                        currentProfileInputs)) {
       // Reset identity first because cancellation can synchronously drive
       // progress/UI callbacks.
