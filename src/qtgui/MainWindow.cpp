@@ -3359,8 +3359,10 @@ void MainWindow::updateWorkflowSummary() {
     } else {
       registration = tr("%1 — %2 points").arg(prefix).arg(pointCount);
       fitCurrent = m_geometryFit.baseline &&
+          m_geometryFit.acceptedScan.lock() == m_scan &&
           !geometryFitInputsDiffer(*m_geometryFit.baseline, currentState);
       failureCurrent = m_geometryFit.failureInputs &&
+          m_geometryFit.failureScan.lock() == m_scan &&
           !geometryFitInputsDiffer(*m_geometryFit.failureInputs, currentState);
       if (m_geometryFit.pendingInputs) {
         registration += tr(" • fitting geometry…");
