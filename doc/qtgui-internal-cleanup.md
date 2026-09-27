@@ -563,7 +563,12 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   replacement, and a newer final-result operation cancels model fitting through
   the same queue. Workspace churn covers a real successful objective evaluation,
   exact Apply/Undo/Redo state, edit-and-restore cancellation, validator failure,
-  stale dialog acceptance, supersession and progress-row cleanup.
+  stale dialog acceptance, supersession and progress-row cleanup. Failed model
+  fits now follow the GUI's four-part failure contract too: the selected saved
+  measurements/model settings are identified, existing measurements and the
+  current fitted model remain unchanged, numerical fitter detail is kept as
+  diagnostics, and the operator is directed back to the fit dialog inputs before
+  retrying.
   Geometry's accepted-fit baseline is also the source for the panel-local
   **Status** row: MainWindow translates the existing session provenance into
   current/running/failed/stale/unverified presentation, while GeometryPanel owns

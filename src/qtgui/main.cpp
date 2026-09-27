@@ -1820,6 +1820,8 @@ bool runBetaInvariantSmoke() {
   const QString geometryFitFailure = geometryFitFailureMessage();
   const QString profileOptimizationFailure =
       profileOptimizationFailureMessage();
+  const QString mtfFitFailure =
+      mtfModelFitFailureMessage(QStringLiteral("insufficient observations"));
   if (!unknownScreenFailure.contains(
           QStringLiteral("No supported regular screen lattice")) ||
       !unknownScreenFailure.contains(QStringLiteral("left unchanged")) ||
@@ -1849,7 +1851,13 @@ bool runBetaInvariantSmoke() {
       !profileOptimizationFailure.contains(
           QStringLiteral("geometry/color inputs")) ||
       !profileOptimizationFailure.contains(
-          QStringLiteral("retry Optimize profile")))
+          QStringLiteral("retry Optimize profile")) ||
+      !mtfFitFailure.contains(QStringLiteral("selected saved measurements")) ||
+      !mtfFitFailure.contains(
+          QStringLiteral("MTF measurements and model parameters were left unchanged")) ||
+      !mtfFitFailure.contains(QStringLiteral("Fit measured MTF model")) ||
+      !mtfFitFailure.contains(
+          QStringLiteral("Fitter detail: insufficient observations")))
     return fail("analysis failure guidance lost actionable preserved-state semantics");
 
   if (!backgroundThreadRegistryShutdownSmoke()
