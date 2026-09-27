@@ -1822,6 +1822,10 @@ bool runBetaInvariantSmoke() {
       profileOptimizationFailureMessage();
   const QString mtfFitFailure =
       mtfModelFitFailureMessage(QStringLiteral("insufficient observations"));
+  const QString focusSearchFailure =
+      focusAreaSearchFailureMessage(QStringLiteral("insufficient contrast"));
+  const QString focusAnalysisFailure =
+      focusAreaAnalysisFailureMessage(QStringLiteral("joint fit failed"));
   if (!unknownScreenFailure.contains(
           QStringLiteral("No supported regular screen lattice")) ||
       !unknownScreenFailure.contains(QStringLiteral("left unchanged")) ||
@@ -1857,7 +1861,19 @@ bool runBetaInvariantSmoke() {
           QStringLiteral("MTF measurements and model parameters were left unchanged")) ||
       !mtfFitFailure.contains(QStringLiteral("Fit measured MTF model")) ||
       !mtfFitFailure.contains(
-          QStringLiteral("Fitter detail: insufficient observations")))
+          QStringLiteral("Fitter detail: insufficient observations")) ||
+      !focusSearchFailure.contains(
+          QStringLiteral("no new focus-area candidates were accepted")) ||
+      !focusSearchFailure.contains(QStringLiteral("retry Find focus areas")) ||
+      !focusSearchFailure.contains(
+          QStringLiteral("Search detail: insufficient contrast")) ||
+      !focusAnalysisFailure.contains(
+          QStringLiteral("processing and sharpening parameters were left unchanged")) ||
+      !focusAnalysisFailure.contains(
+          QStringLiteral("overlays remain available for inspection")) ||
+      !focusAnalysisFailure.contains(QStringLiteral("retry Analyze focus areas")) ||
+      !focusAnalysisFailure.contains(
+          QStringLiteral("Analysis detail: joint fit failed")))
     return fail("analysis failure guidance lost actionable preserved-state semantics");
 
   if (!backgroundThreadRegistryShutdownSmoke()
