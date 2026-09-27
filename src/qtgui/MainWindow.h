@@ -95,6 +95,8 @@ QString flatFieldFailureMessage(const QString &detail = QString());
 QString adaptiveSharpeningFailureMessage(const QString &detail = QString());
 /** Explain coordinate-refinement failure and retained registration state. */
 QString coordinateOptimizationFailureMessage(const QString &detail = QString());
+/** Explain one-area focus-analysis failure and retained sharpening state. */
+QString pointFocusAnalysisFailureMessage(const QString &detail = QString());
 
 /** Start the completion-driven workspace ownership/lifecycle smoke test. */
 void startWorkspaceChurnSmoke(ColorScreenApplication &app,
