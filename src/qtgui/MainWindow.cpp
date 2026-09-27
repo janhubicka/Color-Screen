@@ -4354,7 +4354,7 @@ void MainWindow::updateRegistrationActions() {
    This snapshot becomes the "old state" for the undo command that
    is created when the drag finishes in maybeTriggerAutoSolver().  */
 void MainWindow::onPointManipulationStarted() {
-  m_undoSnapshot = getCurrentState();
+  m_canvasGestureUndo.pointEdit = getCurrentState();
 }
 
 /** Called after a point drag or point addition via ImageWidget.
@@ -4366,11 +4366,12 @@ void MainWindow::maybeTriggerAutoSolver() {
     image = inspectorImageWidget();
 
   ParameterState newState = getCurrentState();
-  if (newState != m_undoSnapshot) {
+  const std::optional<ParameterState> oldState =
+      std::move(m_canvasGestureUndo.pointEdit);
+  m_canvasGestureUndo.pointEdit.reset();
+  if (oldState && newState != *oldState)
     m_undoStack->push(new ChangeParametersCommand(
-        this, m_undoSnapshot, newState, "Move registration point"));
-    m_undoSnapshot = newState;
-  }
+        this, *oldState, newState, "Move registration point"));
 
   if (m_geometryPanel && m_geometryPanel->isAutoEnabled()) {
     size_t count = image ? image->registrationPointCount() : 0;
