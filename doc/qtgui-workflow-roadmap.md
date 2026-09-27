@@ -713,8 +713,11 @@ specialist stages.
   application clears the grid before any producing operation can republish fresh
   diagnostics. This prevents an old optical/registration comparison from
   masquerading as current after later edits or Undo/Redo.
-  Other panels keep the previous initially-expanded behavior until their
-  sections receive explicit keys;
+  All nine panels now have explicit section keys; there is no remaining
+  initially-expanded compatibility panel in the processing inspector;
+- keep Undo coalescing explicit: continuous saved editors use stable parameter
+  keys, while unkeyed buttons, canvas clicks, calibration/results and Reset/Clear
+  actions are atomic even when repeated rapidly with identical Undo text.
 - add consistent per-module reset/bypass only where semantically valid.
   The standard numeric Reset/default presentation now covers straightforward
   saved controls in Digital Capture, Tiles, Sharpness, Color, Image Layer,
