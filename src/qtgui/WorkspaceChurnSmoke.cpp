@@ -2078,6 +2078,23 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
           return;
         }
 
+        // A queued fit is likewise owned by one source image. Simulate image
+        // replacement by giving the pending request another scan identity; the
+        // normal workflow refresh must disown it before it can publish.
+        first->m_geometryFit.pendingInputs = first->documentStateSnapshot();
+        first->m_geometryFit.pendingScan = unrelatedGeometryScan;
+        first->m_geometryFit.pendingNonlinearEnabled =
+            first->m_geometryPanel->isNonlinearEnabled();
+        first->updateWorkflowSummary();
+        if (first->m_geometryFit.pendingInputs ||
+            first->m_geometryFit.pendingScan ||
+            first->m_geometryFit.pendingNonlinearEnabled ||
+            first->m_geometryFit.pendingRequestId) {
+          fail(QStringLiteral(
+              "Geometry fit kept pending provenance after source-image change"));
+          return;
+        }
+
         // Loaded/manual geometry has no session fit baseline. Keep it usable,
         // but never imply that this session verified it by running the solver.
         const auto workflowFitBaseline = first->m_geometryFit.baseline;
