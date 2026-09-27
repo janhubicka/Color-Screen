@@ -903,8 +903,25 @@ private:
   bool m_recoveryDirty = false;
   bool m_closing = false;
   bool m_applicationClosePrepared = false;
-  bool m_focusAnalysisPending = false;
-  uint64_t m_focusAnalysisFlags = 0;
+
+  /** Session-only one-area Focus tool state.
+      Arming Analyze area remembers the requested finetune flags until exactly
+      one image click consumes the tool. */
+  struct PointFocusAnalysisState {
+    bool pending = false;
+    uint64_t flags = 0;
+
+    void arm(uint64_t requestedFlags) {
+      pending = true;
+      flags = requestedFlags;
+    }
+    void clear() {
+      pending = false;
+      flags = 0;
+    }
+  };
+  PointFocusAnalysisState m_pointFocusAnalysis;
+
   /** Session-local automatic multi-area focus-analysis state.
       Candidate rectangles, accepted diagnostics, approval prompt and running
       presentation share one lifecycle but never enter ParameterState. */

@@ -4385,8 +4385,8 @@ void MainWindow::maybeTriggerAutoSolver() {
    Three mutually exclusive behaviours:
    1. Profile spot mode (m_addingProfileSpot): converts the image position
       to screen coordinates and adds it as a color calibration spot.
-   2. Focus analysis mode (m_focusAnalysisPending): launches a
-      FocusAnalysisWorker at the clicked position to measure MTF.
+   2. Armed one-area Focus analysis: launches a FocusAnalysisWorker at the
+      clicked position to measure MTF.
    3. Normal mode: runs synchronous finetune to snap the click to the
       nearest screen element, adds the resulting registration point to
       solver_parameters, updates the image widget, creates an undo
@@ -4415,14 +4415,15 @@ void MainWindow::onPointAdded(colorscreen::point_t imgPos,
     return;
   }
 
-  if (m_focusAnalysisPending) {
-    m_focusAnalysisPending = false;
+  if (m_pointFocusAnalysis.pending) {
+    const uint64_t focusFlags = m_pointFocusAnalysis.flags;
+    m_pointFocusAnalysis.clear();
     restoreInteractionMode();
 
     colorscreen::finetune_parameters fparam;
     fparam.multitile = 3;
     fparam.range = 4;
-    fparam.flags = m_focusAnalysisFlags;
+    fparam.flags = focusFlags;
     fparam.flags |= colorscreen::finetune_position | colorscreen::finetune_bw |
                     colorscreen::finetune_verbose |
                     colorscreen::finetune_produce_images;
@@ -4877,8 +4878,10 @@ void MainWindow::onFlatFieldRequested() {
 void MainWindow::onFocusAnalysisRequested(bool checked, uint64_t flags) {
   if (!m_imageWidget)
     return;
-  m_focusAnalysisPending = checked;
-  m_focusAnalysisFlags = flags;
+  if (checked)
+    m_pointFocusAnalysis.arm(flags);
+  else
+    m_pointFocusAnalysis.clear();
   if (checked) {
     saveInteractionMode();
     m_imageWidget->setInteractionMode(ImageWidget::AddPointMode);
