@@ -1832,6 +1832,8 @@ bool runBetaInvariantSmoke() {
       adaptiveSharpeningFailureMessage(QStringLiteral("insufficient texture"));
   const QString coordinateOptimizationFailure =
       coordinateOptimizationFailureMessage(QStringLiteral("local fit failed"));
+  const QString pointFocusFailure =
+      pointFocusAnalysisFailureMessage(QStringLiteral("low local contrast"));
   if (!unknownScreenFailure.contains(
           QStringLiteral("No supported regular screen lattice")) ||
       !unknownScreenFailure.contains(QStringLiteral("left unchanged")) ||
@@ -1903,7 +1905,14 @@ bool runBetaInvariantSmoke() {
       !coordinateOptimizationFailure.contains(
           QStringLiteral("retry Optimize coordinates")) ||
       !coordinateOptimizationFailure.contains(
-          QStringLiteral("Optimizer detail: local fit failed")))
+          QStringLiteral("Optimizer detail: local fit failed")) ||
+      !pointFocusFailure.contains(
+          QStringLiteral("Existing MTF/sharpening parameters were left unchanged")) ||
+      !pointFocusFailure.contains(
+          QStringLiteral("clear area with visible screen structure")) ||
+      !pointFocusFailure.contains(QStringLiteral("retry Analyze area")) ||
+      !pointFocusFailure.contains(
+          QStringLiteral("Analysis detail: low local contrast")))
     return fail("analysis failure guidance lost actionable preserved-state semantics");
 
   if (!backgroundThreadRegistryShutdownSmoke()
@@ -2232,7 +2241,8 @@ bool runBetaInvariantSmoke() {
   const FocusAnalysisResult missingFocus = FocusAnalysisWorker::analyze(
       colorscreen::render_parameters(), colorscreen::scr_to_img_parameters(),
       std::shared_ptr<colorscreen::image_data>(), {0, 0}, focusParams, nullptr);
-  if (missingFocus.success || missingFocus.cancelled)
+  if (missingFocus.success || missingFocus.cancelled ||
+      missingFocus.finetune.err.empty())
     return fail("focus-analysis helper accepted a missing scan");
 
   const DetectScreenAnalysisResult missingDetection =

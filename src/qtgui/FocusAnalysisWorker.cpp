@@ -14,16 +14,24 @@ FocusAnalysisResult FocusAnalysisWorker::analyze(
     colorscreen::point_t point, colorscreen::finetune_parameters fparam,
     colorscreen::progress_info *progress) {
   FocusAnalysisResult result;
-  if (!scan)
+  if (!scan) {
+    result.finetune.err = "No scan available.";
     return result;
+  }
   if (progress && progress->pool_cancel()) {
     result.cancelled = true;
     return result;
   }
 
-  const std::vector<colorscreen::point_t> points = {point};
-  result.finetune = colorscreen::finetune(rparams, scrToImg, *scan, points,
-                                          nullptr, fparam, progress);
+  try {
+    const std::vector<colorscreen::point_t> points = {point};
+    result.finetune = colorscreen::finetune(rparams, scrToImg, *scan, points,
+                                            nullptr, fparam, progress);
+  } catch (const std::exception &e) {
+    result.finetune.err = e.what();
+  } catch (...) {
+    result.finetune.err = "Unknown focus-analysis exception.";
+  }
   result.cancelled = progress &&
       (progress->pool_cancel() || progress->cancelled());
   result.success = !result.cancelled && result.finetune.success;

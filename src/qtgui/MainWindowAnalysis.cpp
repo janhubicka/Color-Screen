@@ -227,6 +227,22 @@ QString coordinateOptimizationFailureMessage(const QString &detail) {
   return message;
 }
 
+/** Explain failure of the experimental one-area Focus analyzer. */
+QString pointFocusAnalysisFailureMessage(const QString &detail) {
+  QString message = QCoreApplication::translate(
+      "MainWindow",
+      "Focus analysis could not fit the selected image area with the current "
+      "screen geometry and focus settings. Existing MTF/sharpening parameters "
+      "were left unchanged. Choose a clear area with visible screen structure, "
+      "verify the fitted Screen/Geometry setup, or adjust the focus-analysis "
+      "options, then retry Analyze area.");
+  const QString trimmedDetail = detail.trimmed();
+  if (!trimmedDetail.isEmpty())
+    message += QCoreApplication::translate("MainWindow", "\n\nAnalysis detail: %1")
+                   .arg(trimmedDetail);
+  return message;
+}
+
 namespace {
 /** Return the physical scan resolution inferred from a configured screen. */
 std::optional<double> estimateScreenDpi(

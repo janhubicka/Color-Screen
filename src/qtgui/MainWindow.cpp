@@ -4433,7 +4433,10 @@ void MainWindow::onPointAdded(colorscreen::point_t imgPos,
     operation.applyResult = [this, result]() {
       if (!result->success) {
         if (!result->cancelled)
-          statusBar()->showMessage(tr("Focus analysis failed"), 3000);
+          statusBar()->showMessage(
+              pointFocusAnalysisFailureMessage(
+                  QString::fromStdString(result->finetune.err)),
+              9000);
         return;
       }
 

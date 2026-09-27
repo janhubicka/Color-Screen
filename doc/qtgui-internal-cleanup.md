@@ -542,6 +542,12 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   starting basis or retry **Optimize coordinates**. Optimizer text is retained
   only as diagnostic detail. Workspace-churn smoke checks the exact coordinate-
   edit Undo/Redo state and dedicated progress-row cleanup.
+  The older point-based Focus **Analyze area** helper is also exception-safe:
+  missing input and thrown finetune failures retain diagnostic text in
+  `finetune.err`, cancellation stays distinct, and failed publication changes
+  no MTF/sharpening state. Its non-modal status guidance names the selected-area,
+  geometry and focus-setting context and points to a clearer area/setup before
+  retrying.
   Automatic focus-area discovery and multi-area fitting now also share that
   lifecycle, retaining their dedicated Cancel rows and input-model/validation
   settings. Their numerical work lives in `FocusAnalysisWorker`, with immutable
