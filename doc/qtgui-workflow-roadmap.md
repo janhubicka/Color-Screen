@@ -615,7 +615,9 @@ specialist stages.
   Focus-area rectangles are likewise document-owned diagnostics: candidate,
   selected and held-out-result overlays synchronize to every ordinary peer view
   and clear from all of them when focus inputs become stale; reference scans are
-  intentionally excluded.
+  intentionally excluded. Stored MTF measurement ROI/edge overlays follow the
+  same ordinary-view synchronization rule, while Locate remains an active-view
+  navigation action and reference scans keep their own source-matched overlay.
 
 ### Phase C — module grammar
 
