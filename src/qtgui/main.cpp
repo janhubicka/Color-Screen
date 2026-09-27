@@ -1828,6 +1828,8 @@ bool runBetaInvariantSmoke() {
       focusAreaAnalysisFailureMessage(QStringLiteral("joint fit failed"));
   const QString flatFieldFailure =
       flatFieldFailureMessage(QStringLiteral("could not load white reference"));
+  const QString adaptiveFailure =
+      adaptiveSharpeningFailureMessage(QStringLiteral("insufficient texture"));
   if (!unknownScreenFailure.contains(
           QStringLiteral("No supported regular screen lattice")) ||
       !unknownScreenFailure.contains(QStringLiteral("left unchanged")) ||
@@ -1881,7 +1883,15 @@ bool runBetaInvariantSmoke() {
       !flatFieldFailure.contains(QStringLiteral("capture gamma and demosaic")) ||
       !flatFieldFailure.contains(QStringLiteral("Flat field — Set reference")) ||
       !flatFieldFailure.contains(
-          QStringLiteral("Analysis detail: could not load white reference")))
+          QStringLiteral("Analysis detail: could not load white reference")) ||
+      !adaptiveFailure.contains(
+          QStringLiteral("Existing adaptive sharpening correction and document parameters were left unchanged")) ||
+      !adaptiveFailure.contains(
+          QStringLiteral("chart was restored to the accepted correction")) ||
+      !adaptiveFailure.contains(
+          QStringLiteral("retry Analyze adaptive sharpening")) ||
+      !adaptiveFailure.contains(
+          QStringLiteral("Analysis detail: insufficient texture")))
     return fail("analysis failure guidance lost actionable preserved-state semantics");
 
   if (!backgroundThreadRegistryShutdownSmoke()
