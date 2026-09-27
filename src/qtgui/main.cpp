@@ -2241,7 +2241,8 @@ bool runBetaInvariantSmoke() {
   const FocusAnalysisResult missingFocus = FocusAnalysisWorker::analyze(
       colorscreen::render_parameters(), colorscreen::scr_to_img_parameters(),
       std::shared_ptr<colorscreen::image_data>(), {0, 0}, focusParams, nullptr);
-  if (missingFocus.success || missingFocus.cancelled)
+  if (missingFocus.success || missingFocus.cancelled ||
+      missingFocus.finetune.err.empty())
     return fail("focus-analysis helper accepted a missing scan");
 
   const DetectScreenAnalysisResult missingDetection =
