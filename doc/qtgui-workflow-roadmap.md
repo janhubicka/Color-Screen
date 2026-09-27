@@ -536,7 +536,9 @@ Geometry registration workflow now follows this rule: unsupported/failed regular
 screen discovery and coordinate detection state what prior state remains intact
 and suggest a clearer raster or corrected Screen/capture setup, while progressive
 point discovery explicitly says that already accepted point/geometry batches
-remain in the document and tells the operator how to retry locally. Geometry-fit
+remain in the document and tells the operator how to retry locally. These
+background-analysis failures use parent-owned asynchronous dialogs, so reporting
+a numerical failure does not block unrelated document/workspace interaction. Geometry-fit
 failure follows the same rule: current geometry and registration points are left
 unchanged, the operator is pointed to coverage/outlier guidance and fit settings,
 and the warning is parent-owned/asynchronous rather than a nested static modal
