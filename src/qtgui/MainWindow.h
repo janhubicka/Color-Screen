@@ -828,8 +828,8 @@ private:
   TilesPanel   *m_tilesPanel = nullptr;
   ImageLayerPanel *m_imageLayerPanel = nullptr;
 
-  // Color optimizer results (kept outside ParameterState — not undo-able)
-  std::vector<colorscreen::color_match> m_profileSpotResults;
+  // Profile optimizer results are session-only and live in
+  // ProfileCalibrationState below; they never enter ParameterState.
   bool m_addingProfileSpot = false;
 
   // List of all panels for automated updates
@@ -966,14 +966,20 @@ private:
     std::optional<ColorOptimizerRequestData> pendingInputs;
     std::optional<int> pendingRequestId;
     std::optional<ColorOptimizerRequestData> failureInputs;
+    std::vector<colorscreen::color_match> spotResults;
     double averageDeltaE = -1;
+
+    void clearDiagnostics() {
+      spotResults.clear();
+      averageDeltaE = -1;
+    }
 
     void clear() {
       baseline.reset();
       pendingInputs.reset();
       pendingRequestId.reset();
       failureInputs.reset();
-      averageDeltaE = -1;
+      clearDiagnostics();
     }
   };
   ProfileCalibrationState m_profileCalibration;
