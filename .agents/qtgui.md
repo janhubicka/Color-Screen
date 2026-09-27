@@ -350,6 +350,17 @@ The `TaskQueue` implements a **two-task scheme** for long-running computations w
 - **Examples**: Image tile rendering, registration point overlays, geometry solver, color optimizer.
 - **Behavior**: New requests automatically cancel or supersede pending/active tasks in the same queue.
 
+Geometry fitting is also image-backed `TaskQueue` work. Each
+`SolverRequestData` carries the exact source `image_data` together with
+screen/solver parameters; the worker must solve against that request-owned scan,
+never mutable `WorkerBase::m_scan`. Pending publication requires the same live
+scan, current fit inputs and nonlinear-mode choice. Accepted and failed fit
+provenance retain the source scan weakly, so identical geometry on a replaced
+image is stale rather than "current". Starting image replacement cancels and
+disowns a pending fit; successful replacement clears accepted/failure session
+provenance while leaving the persisted geometry parameters usable as
+unverified/manual state.
+
 Profile colour optimization is image-backed even though it uses `TaskQueue`.
 Its request must therefore carry the exact source `image_data` shared pointer in
 addition to geometry, render parameters and profile spots; never let the worker
