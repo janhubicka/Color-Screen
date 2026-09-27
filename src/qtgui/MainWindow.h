@@ -895,11 +895,17 @@ private:
   QString m_currentImageFile;
   QString m_currentParamsFile;
   bool m_currentParamsFileIsWeak = false; // true if filename is suggested, not loaded
-  bool m_imageLoadPending = false;
-  uint64_t m_imageLoadGeneration = 0;
-  // Exact reload generation that should continue into screen autodetection.
-  // A newer image load clears the handoff rather than detecting on another file.
-  std::optional<uint64_t> m_screenAutodetectAfterLoadGeneration;
+
+  /** Session-only ownership for asynchronous image replacement.
+      Generation gates stale completions; the optional autodetect handoff names
+      the exact reload generation allowed to continue into Detect screen. */
+  struct ImageLoadState {
+    bool pending = false;
+    uint64_t generation = 0;
+    std::optional<uint64_t> screenAutodetectAfterGeneration;
+  };
+  ImageLoadState m_imageLoad;
+
   bool m_recoveryDirty = false;
   bool m_closing = false;
   bool m_applicationClosePrepared = false;
