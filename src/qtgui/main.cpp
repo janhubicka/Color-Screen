@@ -1822,6 +1822,8 @@ bool runBetaInvariantSmoke() {
       profileOptimizationFailureMessage();
   const QString mtfFitFailure =
       mtfModelFitFailureMessage(QStringLiteral("insufficient observations"));
+  const QString mtfMeasurementFailure =
+      mtfMeasurementFailureMessage(QStringLiteral("Red: edge contrast too low"));
   const QString focusSearchFailure =
       focusAreaSearchFailureMessage(QStringLiteral("insufficient contrast"));
   const QString focusAnalysisFailure =
@@ -1870,6 +1872,15 @@ bool runBetaInvariantSmoke() {
       !mtfFitFailure.contains(QStringLiteral("Fit measured MTF model")) ||
       !mtfFitFailure.contains(
           QStringLiteral("Fitter detail: insufficient observations")) ||
+      !mtfMeasurementFailure.contains(
+          QStringLiteral("current measurement and capture settings")) ||
+      !mtfMeasurementFailure.contains(
+          QStringLiteral("saved MTF measurements and model parameters were left unchanged")) ||
+      !mtfMeasurementFailure.contains(
+          QStringLiteral("no partial per-channel measurement batch was accepted")) ||
+      !mtfMeasurementFailure.contains(QStringLiteral("retry Measure MTF")) ||
+      !mtfMeasurementFailure.contains(
+          QStringLiteral("Measurement detail: Red: edge contrast too low")) ||
       !focusSearchFailure.contains(
           QStringLiteral("no new focus-area candidates were accepted")) ||
       !focusSearchFailure.contains(QStringLiteral("retry Find focus areas")) ||

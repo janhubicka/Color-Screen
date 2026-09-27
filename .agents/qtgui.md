@@ -209,9 +209,15 @@ and validates both scan identities plus the complete document snapshot. The
 view so close/reload can cancel that request without cancelling a newer task.
 Only the owning request may reset the measurement controls on completion. The
 worker owns immutable scan/parameter snapshots and publishes a complete channel
-batch or nothing. Failure messages belong in the gated apply callback, not in
-unconditional cleanup, and must be parent-owned/asynchronous. Never use a
-reference-local watcher to apply a captured whole document state.
+batch or nothing. The source-document **Measure MTF** path has the same atomic
+batch rule: if any requested native channel fails qualification, no new
+measurement is committed. Its parent-owned asynchronous warning must say that
+existing saved measurements/model parameters remain unchanged, keep the
+per-channel numerical reason as secondary detail, and point the operator back
+to selecting one clean isolated edge plus the measurement/capture settings
+before retrying **Measure MTF**. Failure messages belong in the gated apply
+callback, not in unconditional cleanup. Never use a reference-local watcher to
+apply a captured whole document state.
 
 Stored measured-MTF spatial provenance shown on the source document is also
 document-owned presentation state. When the selected record belongs to the

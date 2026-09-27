@@ -142,6 +142,24 @@ QString mtfModelFitFailureMessage(const QString &detail) {
   return message;
 }
 
+/** Explain a failed slanted-edge measurement without implying partial commit. */
+QString mtfMeasurementFailureMessage(const QString &detail) {
+  QString message = QCoreApplication::translate(
+      "MainWindow",
+      "Slanted-edge MTF measurement could not qualify the selected edge region "
+      "with the current measurement and capture settings. Existing saved MTF "
+      "measurements and model parameters were left unchanged; no partial "
+      "per-channel measurement batch was accepted. Select one straight, "
+      "isolated edge with clear plateaus on both sides, avoid dust, texture, "
+      "multiple edges and edges parallel to the pixel grid, review the "
+      "measurement/capture settings if needed, then retry Measure MTF.");
+  const QString trimmedDetail = detail.trimmed();
+  if (!trimmedDetail.isEmpty())
+    message += QCoreApplication::translate("MainWindow", "\n\nMeasurement detail: %1")
+                   .arg(trimmedDetail);
+  return message;
+}
+
 /** Explain automatic focus-area discovery failure without guessing its cause. */
 QString focusAreaSearchFailureMessage(const QString &detail) {
   QString message = QCoreApplication::translate(

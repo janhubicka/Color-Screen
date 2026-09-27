@@ -550,8 +550,15 @@ curves and model/fit settings are named as the failed inputs, existing
 measurements and model parameters are explicitly retained, numerical fitter
 detail remains secondary diagnostic context, and the operator is sent back to
 measurement selection, capture metadata and fit options before retrying
-**Fit measured MTF model**. The experimental one-area Focus **Analyze area**
-path follows the same preserved-state rule without adding a routine modal:
+**Fit measured MTF model**. Slanted-edge **Measure MTF** now follows the
+same rule for acquisition failures: the selected edge region and current
+measurement/capture settings are identified as the failed inputs, existing
+saved measurements/model parameters are explicitly retained, partial
+per-channel batches are never accepted, the numerical edge/channel reason is
+secondary diagnostic context, and the asynchronous warning tells the operator
+to select one clean isolated edge and retry **Measure MTF**. The experimental
+one-area Focus **Analyze area** path follows the same preserved-state rule
+without adding a routine modal:
 failure leaves all MTF/sharpening parameters unchanged, identifies the selected
 area plus current geometry/focus settings, preserves worker detail as secondary
 diagnostics, and suggests a clearer area or corrected setup before retrying.
