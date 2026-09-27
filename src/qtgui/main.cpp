@@ -1495,6 +1495,14 @@ bool profileSectionPreferencesSmoke() {
       first->findChild<QCheckBox *>(QStringLiteral("autoColorOptBox"));
   auto *optimize = first->findChild<QPushButton *>(
       QStringLiteral("ProfileOptimizeButton"));
+  first->setAddSpotChecked(true);
+  if (!addSpot || !addSpot->isChecked() || addSpotRequests != 0)
+    return fail(QStringLiteral(
+        "Programmatic Profile spot toggle emitted an operation request"));
+  first->setAddSpotChecked(false);
+  if (addSpot->isChecked() || addSpotRequests != 0)
+    return fail(QStringLiteral(
+        "Programmatic Profile spot clear emitted an operation request"));
   if (!prerequisite || !addSpot || !clearSpots || !autoOptimize || !optimize
       || !prerequisite->text().contains(QStringLiteral("Load an image"))
       || addSpot->isEnabled() || clearSpots->isEnabled()
