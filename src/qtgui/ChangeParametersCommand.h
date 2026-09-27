@@ -7,10 +7,10 @@
 
 /** Undoable full-document parameter change.
 
-    Adjacent updates carrying the same stable parameter key may merge within a
-    short gesture window. Human-visible Undo text remains independent of that
-    identity; legacy callers without a key continue to fall back to the
-    description, preserving the pre-migration behavior. */
+    Adjacent updates carrying the same explicit stable parameter key may merge
+    within a short gesture window. Human-visible Undo text is presentation only:
+    unkeyed edits are atomic commands and never merge merely because their
+    descriptions happen to match. */
 class ChangeParametersCommand final : public QUndoCommand {
 public:
   /** Capture OLDSTATE and NEWSTATE for one undoable document edit. */
@@ -19,7 +19,7 @@ public:
                           const QString &description = QString(),
                           const QString &parameterKey = QString())
       : m_window(window), m_oldState(oldState), m_newState(newState),
-        m_mergeKey(parameterKey.isEmpty() ? description : parameterKey),
+        m_mergeKey(parameterKey),
         m_timestamp(QDateTime::currentMSecsSinceEpoch()) {
     setText(description.isEmpty() ? "Change Parameters" : description);
   }
