@@ -3150,13 +3150,12 @@ void MainWindow::updateWorkflowSummary() {
       *m_geometryFit.pendingNonlinearEnabled !=
           m_geometryPanel->isNonlinearEnabled();
   if (m_geometryFit.pendingInputs &&
-      (geometryFitInputsDiffer(*m_geometryFit.pendingInputs, currentState) ||
+      (m_geometryFit.pendingScan != m_scan ||
+       geometryFitInputsDiffer(*m_geometryFit.pendingInputs, currentState) ||
        pendingNonlinearModeChanged)) {
     // Reset first because cancelAll() may synchronously trigger progress/UI
     // callbacks that refresh this summary again.
-    m_geometryFit.pendingInputs.reset();
-    m_geometryFit.pendingNonlinearEnabled.reset();
-    m_geometryFit.pendingRequestId.reset();
+    m_geometryFit.clearRequest();
     m_solverQueue.cancelAll();
   }
 
@@ -3189,9 +3188,11 @@ void MainWindow::updateWorkflowSummary() {
     } else {
       const bool fitCurrent =
           m_geometryFit.baseline &&
+          m_geometryFit.acceptedScan.lock() == m_scan &&
           !geometryFitInputsDiffer(*m_geometryFit.baseline, currentState);
       const bool failureCurrent =
           m_geometryFit.failureInputs &&
+          m_geometryFit.failureScan.lock() == m_scan &&
           !geometryFitInputsDiffer(*m_geometryFit.failureInputs, currentState);
       if (m_geometryFit.pendingInputs) {
         fitStatus = tr("Fitting geometry…");
@@ -3358,8 +3359,10 @@ void MainWindow::updateWorkflowSummary() {
     } else {
       registration = tr("%1 — %2 points").arg(prefix).arg(pointCount);
       fitCurrent = m_geometryFit.baseline &&
+          m_geometryFit.acceptedScan.lock() == m_scan &&
           !geometryFitInputsDiffer(*m_geometryFit.baseline, currentState);
       failureCurrent = m_geometryFit.failureInputs &&
+          m_geometryFit.failureScan.lock() == m_scan &&
           !geometryFitInputsDiffer(*m_geometryFit.failureInputs, currentState);
       if (m_geometryFit.pendingInputs) {
         registration += tr(" • fitting geometry…");
@@ -3833,18 +3836,22 @@ void MainWindow::requestGeometryOptimization(bool computeMesh) {
     return;
 
   SolverRequestData data;
+  data.scan = m_scan;
   data.scrToImg = m_scrToImgParams;
   data.solver = m_solverParams;
   data.computeMesh = computeMesh;
 
-  // The document snapshot and current nonlinear presentation mode form the
-  // domain-level stale gate beyond TaskQueue's newest-request check. The
-  // worker's COMPUTEMESH choice is deliberately independent: automatic screen
-  // detection can refine the remaining geometry while preserving its mesh.
+  // The source scan, document snapshot and current nonlinear presentation mode
+  // form the domain-level stale gate beyond TaskQueue's newest-request check.
+  // The worker's COMPUTEMESH choice is deliberately independent: automatic
+  // screen detection can refine the remaining geometry while preserving its
+  // mesh.
   m_geometryFit.pendingInputs = getCurrentState();
+  m_geometryFit.pendingScan = m_scan;
   m_geometryFit.pendingNonlinearEnabled = m_geometryPanel->isNonlinearEnabled();
   m_geometryFit.pendingRequestId.reset();
   m_geometryFit.failureInputs.reset();
+  m_geometryFit.failureScan.reset();
   updateWorkflowSummary();
 
   m_solverQueue.requestRender(QVariant::fromValue(data));
@@ -3863,32 +3870,39 @@ void MainWindow::onTriggerSolve(
   if (m_geometryFit.pendingInputs)
     m_geometryFit.pendingRequestId = reqId;
 
-  if (!m_scan || !m_solverWorker || !userData.canConvert<SolverRequestData>()) {
+  if (!m_solverWorker || !userData.canConvert<SolverRequestData>()) {
     m_solverQueue.reportFinished(reqId, false);
     if (m_geometryFit.pendingRequestId &&
         *m_geometryFit.pendingRequestId == reqId) {
-      m_geometryFit.pendingInputs.reset();
-      m_geometryFit.pendingNonlinearEnabled.reset();
-      m_geometryFit.pendingRequestId.reset();
+      m_geometryFit.clearRequest();
       updateWorkflowSummary();
     }
     return;
   }
 
   SolverRequestData data = userData.value<SolverRequestData>();
-
-  if (progress) {
-    progress->set_task("Optimizing geometry", 1);
+  if (!data.scan || data.scan != m_scan ||
+      m_geometryFit.pendingScan != data.scan) {
+    m_solverQueue.reportFinished(reqId, false);
+    if (m_geometryFit.pendingRequestId &&
+        *m_geometryFit.pendingRequestId == reqId) {
+      m_geometryFit.clearRequest();
+      updateWorkflowSummary();
+    }
+    return;
   }
-  // colorscreen::sub_task task (progress.get ());
 
-  // Invoke solver in worker
+  if (progress)
+    progress->set_task("Optimizing geometry", 1);
+
+  GeometrySolverWorker *worker = m_solverWorker;
   QMetaObject::invokeMethod(
-      m_solverWorker, "solve", Qt::QueuedConnection, Q_ARG(int, reqId),
-      Q_ARG(colorscreen::scr_to_img_parameters, data.scrToImg),
-      Q_ARG(colorscreen::solver_parameters, data.solver),
-      Q_ARG(std::shared_ptr<colorscreen::progress_info>, progress),
-      Q_ARG(bool, data.computeMesh));
+      worker,
+      [worker, reqId, data = std::move(data), progress]() mutable {
+        worker->solve(reqId, std::move(data.scan), std::move(data.scrToImg),
+                      std::move(data.solver), progress, data.computeMesh);
+      },
+      Qt::QueuedConnection);
 }
 
 /** Handle geometry solver completion.
@@ -3918,11 +3932,12 @@ void MainWindow::onSolverFinished(int reqId,
       *m_geometryFit.pendingNonlinearEnabled ==
           m_geometryPanel->isNonlinearEnabled();
   const bool inputsStillCurrent =
-      m_geometryFit.pendingInputs && nonlinearModeStillCurrent &&
+      m_geometryFit.pendingInputs && m_geometryFit.pendingScan &&
+      m_geometryFit.pendingScan == m_scan && nonlinearModeStillCurrent &&
       !geometryFitInputsDiffer(*m_geometryFit.pendingInputs, now);
-  m_geometryFit.pendingInputs.reset();
-  m_geometryFit.pendingNonlinearEnabled.reset();
-  m_geometryFit.pendingRequestId.reset();
+  const std::shared_ptr<colorscreen::image_data> completedScan =
+      m_geometryFit.pendingScan;
+  m_geometryFit.clearRequest();
 
   if (!publishable || cancelled || !inputsStillCurrent) {
     updateWorkflowSummary();
@@ -3934,10 +3949,13 @@ void MainWindow::onSolverFinished(int reqId,
     newState.scrToImg.merge_solver_solution(result);
     changeParameters(newState, "Optimize Geometry");
     m_geometryFit.baseline = getCurrentState();
+    m_geometryFit.acceptedScan = completedScan;
     updateScreenCoordinateToolPresentation();
     m_geometryFit.failureInputs.reset();
+    m_geometryFit.failureScan.reset();
   } else {
     m_geometryFit.failureInputs = now;
+    m_geometryFit.failureScan = completedScan;
     QMessageBox::warning(this, "Optimization Failed",
                          "The geometry solver failed to find a solution.");
   }
@@ -4204,6 +4222,7 @@ bool MainWindow::screenCoordinateToolAvailable() const {
       (m_geometryPanel && m_geometryPanel->isNonlinearEnabled()))
     return false;
   return !(m_geometryFit.baseline &&
+           m_geometryFit.acceptedScan.lock() == m_scan &&
            screenGeometryMatchesFitBaseline(*m_geometryFit.baseline,
                                             getCurrentState()));
 }

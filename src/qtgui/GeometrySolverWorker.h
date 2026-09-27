@@ -13,8 +13,9 @@ class GeometrySolverWorker : public WorkerBase {
 public:
   GeometrySolverWorker(std::shared_ptr<colorscreen::image_data> scan, QObject *parent = nullptr);
 
-public slots:
+  /** Fit one immutable source-scan/request snapshot on the worker thread. */
   void solve(int reqId,
+             std::shared_ptr<colorscreen::image_data> scan,
              colorscreen::scr_to_img_parameters params,
              colorscreen::solver_parameters solverParams,
              std::shared_ptr<colorscreen::progress_info> progress,
