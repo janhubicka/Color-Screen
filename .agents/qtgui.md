@@ -737,7 +737,7 @@ The application supports several interaction modes (e.g., Pan, Select, Add Point
 
 #### Persistent vs. Temporary Modes
 - **Persistent Tools**: Pan, Select, Add Point, Set Center. These are managed via `QActionGroup` in the toolbar.
-- **Temporary Modes**: `CropMode`, `GenericAreaMode`. These are usually triggered by buttons in panels (e.g., "Set by neutral area" or "Crop").
+- **Temporary Modes**: `CropMode`, `GenericAreaMode`. Profile **Add spot** and Sharpness **Analyze area** are temporary *intent owners* that borrow the persistent `AddPointMode` rather than defining another ImageWidget mode. They are mutually exclusive: switching Profile ↔ Focus transfers the one document-owned point-click intent without overwriting the originally saved canvas tool, and an explicit switch to Pan/Select/another mode cancels the temporary intent. Programmatic toggle synchronization must block signals so ownership changes do not recursively launch operations.
 
 #### State Persistence Logic
 To maintain a smooth user workflow, `MainWindow` tracks the user's active tool using `saveInteractionMode()` and `restoreInteractionMode()`:
