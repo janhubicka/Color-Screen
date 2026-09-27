@@ -85,6 +85,8 @@ QString geometryFitFailureMessage();
 QString profileOptimizationFailureMessage();
 /** Explain measured-MTF fit failure, retained calibration, and next actions. */
 QString mtfModelFitFailureMessage(const QString &detail = QString());
+/** Explain slanted-edge MTF measurement failure and retained calibration. */
+QString mtfMeasurementFailureMessage(const QString &detail = QString());
 /** Explain focus-area discovery failure and retained document state. */
 QString focusAreaSearchFailureMessage(const QString &detail = QString());
 /** Explain focus-area model-analysis failure and retained document state. */
