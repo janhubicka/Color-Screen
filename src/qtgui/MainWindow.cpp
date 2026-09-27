@@ -3711,7 +3711,8 @@ void MainWindow::setDocumentFinalRotation(double degrees) {
   if (newState.scrToImg.final_rotation == degrees)
     return;
   newState.scrToImg.final_rotation = degrees;
-  changeParameters(newState, "Set final rotation");
+  changeParameters(newState, "Set final rotation",
+                   QStringLiteral("geometry.final.rotation"));
 }
 
 /** Change final-coordinate mirroring on behalf of an ordinary view. */
@@ -3742,9 +3743,9 @@ ParameterState MainWindow::getCurrentState() const {
 /** Push an undoable parameter change.
    Compares the current state with NEWSTATE; if different, creates a
    ChangeParametersCommand and pushes it onto the undo stack.
-   DESCRIPTION appears in the Edit > Undo/Redo menu text. PARAMETERKEY is a
-   stable machine-readable merge identity; when empty, DESCRIPTION preserves
-   the historical behavior for controls not migrated yet. */
+   DESCRIPTION appears in the Edit > Undo/Redo menu text. PARAMETERKEY is the
+   only machine-readable merge identity; when empty, the edit is atomic and
+   cannot merge with an adjacent command that merely has the same text. */
 void MainWindow::changeParameters(const ParameterState &newState,
                                   const QString &description,
                                   const QString &parameterKey) {
