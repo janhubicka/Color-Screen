@@ -306,6 +306,15 @@ though the spots were unchanged.  Other unrelated edits could do the same.
 The panel now snapshots the profile-spot coordinates and auto-runs only when the
 spot set actually changes.  Manual **Optimize color** remains unchanged.
 
+Profile **Add spot** and Sharpness **Analyze area** both borrow the ordinary
+registration `AddPointMode`. They now share one document-owned
+`PointClickToolState` rather than independent booleans: handing ownership from
+Profile to Focus (or back) unchecks the previous panel toggle with signals
+blocked, preserves the original canvas tool, and leaves only one interpretation
+for the next click. Choosing another canvas tool cancels the temporary owner
+instead of leaving a hidden action armed. Workspace churn exercises both handoff
+directions plus explicit-tool cancellation.
+
 Profile fitting also owns an immutable source-image snapshot now. The queued
 request carries the source scan itself and `ColorOptimizerWorker` no longer
 inherits `WorkerBase` or owns a mutable document scan; completion checks that
@@ -702,8 +711,9 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   dependencies it must link explicitly.
 - Give long-lived analysis state explicit structs rather than parallel member
   variables. Profile-calibration, geometry-fit, measured-MTF fit, flat-field
-  calibration, automatic multi-area focus analysis, the armed one-area Focus
-  tool, asynchronous image replacement, progressive adaptive sharpening,
+  calibration, automatic multi-area focus analysis, the exclusive
+  Profile/one-area-Focus point-click tool, asynchronous image replacement,
+  progressive adaptive sharpening,
   progressive registration discovery, and the combined **Detect screen**
   prompt/progress presentation now each live in one lifecycle struct instead of
   parallel request/result/presentation members. Adaptive sharpening groups its

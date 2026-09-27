@@ -18,6 +18,8 @@ public:
 
   // Called by MainWindow after the optimizer finishes.
   void setSpotResults(const std::vector<colorscreen::color_match> &results);
+  /** Synchronize the temporary Add spot toggle without emitting a request. */
+  void setAddSpotChecked(bool checked);
   /** Mirror the active ordinary view's view-local spot visibility. */
   void setShowProfileSpots(bool show);
   /** Show document-owned profile calibration readiness/freshness. */
@@ -45,8 +47,6 @@ private:
   QLabel    *m_calibrationStatusLabel = nullptr;
   QLabel    *m_resultLabel           = nullptr;
   std::vector<colorscreen::point_t> m_lastAutoSpots;
-
-  bool m_addSpotActive = false;
 };
 
 #endif // PROFILE_PANEL_H

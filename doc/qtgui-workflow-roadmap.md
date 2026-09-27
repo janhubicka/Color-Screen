@@ -256,9 +256,12 @@ as calibration of the appearance stage, not as an ordinary last-minute colour
 slider.
 
 **Recommendation:** retain it near Color but label it **Color profile** or
-**Profile calibration**.  Auto optimize should mean "rerun when calibration
-spots change", not "rerun after every unrelated parameter refresh".  The beta
-hardening patch corrects that behaviour.
+**Profile calibration**. Auto optimize should mean "rerun when calibration
+spots change", not "rerun after every unrelated parameter refresh". The beta
+hardening patch corrects that behaviour. Profile **Add spot** and Sharpness
+**Analyze area** also share one temporary point-click owner: switching between
+them preserves the operator's prior canvas tool, and choosing another canvas
+tool cancels the temporary action rather than leaving an invisible pending mode.
 
 ### Stage 8 — Output
 

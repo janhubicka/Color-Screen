@@ -565,6 +565,10 @@ private:
    */
   void restoreInteractionMode();
 
+  /** Clear the temporary Profile/Focus point-click owner without changing the
+      canvas mode. Panel toggles are synchronized with signals blocked. */
+  void clearPointClickToolPresentation();
+
   /** Synchronize shared toolbar/menu tool state with the active ordinary view. */
   void syncInspectorInteractionActions(ImageWidget::InteractionMode mode);
 
@@ -890,7 +894,6 @@ private:
 
   // Profile optimizer results are session-only and live in
   // ProfileCalibrationState below; they never enter ParameterState.
-  bool m_addingProfileSpot = false;
 
   // List of all panels for automated updates
   std::vector<ParameterPanel *> m_panels;
@@ -917,23 +920,33 @@ private:
   bool m_closing = false;
   bool m_applicationClosePrepared = false;
 
-  /** Session-only one-area Focus tool state.
-      Arming Analyze area remembers the requested finetune flags until exactly
-      one image click consumes the tool. */
-  struct PointFocusAnalysisState {
-    bool pending = false;
-    uint64_t flags = 0;
+  /** Exclusive session-only owner of ImageWidget::AddPointMode when that mode
+      is temporarily borrowed by Profile calibration or one-area Focus analysis.
+      Ordinary registration Add Point is represented by Intent::None. */
+  struct PointClickToolState {
+    enum class Intent { None, ProfileSpot, FocusAnalysis };
 
-    void arm(uint64_t requestedFlags) {
-      pending = true;
-      flags = requestedFlags;
+    Intent intent = Intent::None;
+    uint64_t focusFlags = 0;
+
+    bool active() const { return intent != Intent::None; }
+    bool profileSpot() const { return intent == Intent::ProfileSpot; }
+    bool focusAnalysis() const { return intent == Intent::FocusAnalysis; }
+
+    void armProfileSpot() {
+      intent = Intent::ProfileSpot;
+      focusFlags = 0;
+    }
+    void armFocusAnalysis(uint64_t requestedFlags) {
+      intent = Intent::FocusAnalysis;
+      focusFlags = requestedFlags;
     }
     void clear() {
-      pending = false;
-      flags = 0;
+      intent = Intent::None;
+      focusFlags = 0;
     }
   };
-  PointFocusAnalysisState m_pointFocusAnalysis;
+  PointClickToolState m_pointClickTool;
 
   /** Session-local automatic multi-area focus-analysis state.
       Candidate rectangles, accepted diagnostics, approval prompt and running

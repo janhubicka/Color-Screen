@@ -978,6 +978,11 @@ void MainWindow::setupUi() {
             }
             if (!m_switchingInspectorImage &&
                 sender() == inspectorImageWidget() &&
+                mode != ImageWidget::AddPointMode &&
+                m_pointClickTool.active())
+              clearPointClickToolPresentation();
+            if (!m_switchingInspectorImage &&
+                sender() == inspectorImageWidget() &&
                 mode != ImageWidget::GenericAreaMode &&
                 m_areaSelectionCallback) {
               // If the active view switches tool during selection, abandon the
@@ -1058,8 +1063,8 @@ void MainWindow::setupUi() {
               image->setShowProfileSpots(show);
           });
 
-  // ImageWidget::pointAdded is routed to onPointAdded; profile spot
-  // handling is done there when m_addingProfileSpot is true.
+  // ImageWidget::pointAdded is routed to onPointAdded; one exclusive
+  // document-owned point-click intent decides Profile, Focus, or registration.
   controlsLayout->addWidget(m_configTabs, 1);
 
   // Register panels for updates
@@ -1572,7 +1577,7 @@ void MainWindow::createToolbar() {
           &MainWindow::onPointAdded);
   connect(m_imageWidget, &ImageWidget::profileSpotRemoveRequested, this,
           [this](int index) {
-            if (!m_addingProfileSpot)
+            if (!m_pointClickTool.profileSpot())
               return;
             ParameterState newState = getCurrentState();
             if (index >= 0 && index < (int)newState.profileSpots.size()) {
@@ -2617,7 +2622,7 @@ void MainWindow::setInspectorImageWidget(ImageWidget *imageWidget) {
     m_inspectorImageConnections.push_back(connect(
         target, &ImageWidget::profileSpotRemoveRequested, this,
         [this](int index) {
-          if (!m_addingProfileSpot)
+          if (!m_pointClickTool.profileSpot())
             return;
           ParameterState state = getCurrentState();
           if (index >= 0 && index < static_cast<int>(state.profileSpots.size())) {
@@ -2629,6 +2634,9 @@ void MainWindow::setInspectorImageWidget(ImageWidget *imageWidget) {
         target, &ImageWidget::interactionModeChanged, this,
         [this](ImageWidget::InteractionMode mode) {
           syncInspectorInteractionActions(mode);
+          if (!m_switchingInspectorImage && sender() == inspectorImageWidget() &&
+              mode != ImageWidget::AddPointMode && m_pointClickTool.active())
+            clearPointClickToolPresentation();
           if (!m_switchingInspectorImage && sender() == inspectorImageWidget() &&
               mode != ImageWidget::GenericAreaMode && m_areaSelectionCallback) {
             m_areaSelectionCallback = nullptr;
@@ -3771,6 +3779,19 @@ void MainWindow::restoreInteractionMode() {
   inspectorImageWidget()->setInteractionMode(m_previousInteractionMode);
 }
 
+/** Clear whichever temporary point-click tool currently owns AddPointMode.
+    This never changes the canvas mode; callers decide whether they are handing
+    ownership to another temporary tool or honoring an explicit user tool. */
+void MainWindow::clearPointClickToolPresentation() {
+  if (m_pointClickTool.profileSpot() && m_profilePanel)
+    m_profilePanel->setAddSpotChecked(false);
+  if (m_pointClickTool.focusAnalysis() && m_sharpnessPanel) {
+    m_sharpnessPanel->setFocusAnalysisChecked(false);
+    statusBar()->clearMessage();
+  }
+  m_pointClickTool.clear();
+}
+
 
 // Recent Parameters Implementation
 
@@ -4384,11 +4405,11 @@ void MainWindow::maybeTriggerAutoSolver() {
 
 /** Handle a new point added by clicking in the ImageWidget.
    Three mutually exclusive behaviours:
-   1. Profile spot mode (m_addingProfileSpot): converts the image position
-      to screen coordinates and adds it as a color calibration spot.
-   2. Armed one-area Focus analysis: launches a FocusAnalysisWorker at the
-      clicked position to measure MTF.
-   3. Normal mode: runs synchronous finetune to snap the click to the
+   1. Profile spot intent: converts the image position to screen coordinates
+      and adds it as a color calibration spot.
+   2. One-area Focus intent: launches a FocusAnalysisWorker at the clicked
+      position to measure MTF.
+   3. No temporary intent: runs synchronous finetune to snap the click to the
       nearest screen element, adds the resulting registration point to
       solver_parameters, updates the image widget, creates an undo
       command, and triggers auto-solver if enabled.  */
@@ -4403,7 +4424,7 @@ void MainWindow::onPointAdded(colorscreen::point_t imgPos,
     image = inspectorImageWidget();
 
   // Profile spot mode: convert img coords → screen coords and store
-  if (m_addingProfileSpot) {
+  if (m_pointClickTool.profileSpot()) {
     colorscreen::scr_to_img map;
     if (!map.set_parameters(m_scrToImgParams, *m_scan)) {
       statusBar()->showMessage(tr("Fit screen geometry before adding profile spots."), 3000);
@@ -4416,9 +4437,9 @@ void MainWindow::onPointAdded(colorscreen::point_t imgPos,
     return;
   }
 
-  if (m_pointFocusAnalysis.pending) {
-    const uint64_t focusFlags = m_pointFocusAnalysis.flags;
-    m_pointFocusAnalysis.clear();
+  if (m_pointClickTool.focusAnalysis()) {
+    const uint64_t focusFlags = m_pointClickTool.focusFlags;
+    m_pointClickTool.clear();
     restoreInteractionMode();
 
     colorscreen::finetune_parameters fparam;
@@ -4871,26 +4892,30 @@ void MainWindow::onFlatFieldRequested() {
   });
 }
 
-/** Toggle focus analysis mode.
-   When CHECKED is true, saves the current tool, switches to AddPoint
-   mode, and sets a flag so the next point-add triggers a focus analysis
-   worker instead of adding a registration point.  FLAGS controls which
-   finetune features to run (e.g. strip widths).  */
+/** Toggle the one-area Focus point-click tool.
+    Profile-spot and Focus tools are mutually exclusive owners of AddPointMode;
+    handing ownership between them preserves the original canvas tool. */
 void MainWindow::onFocusAnalysisRequested(bool checked, uint64_t flags) {
-  if (!m_imageWidget)
+  ImageWidget *image = inspectorImageWidget();
+  if (!image)
     return;
-  if (checked)
-    m_pointFocusAnalysis.arm(flags);
-  else
-    m_pointFocusAnalysis.clear();
+
   if (checked) {
-    saveInteractionMode();
-    m_imageWidget->setInteractionMode(ImageWidget::AddPointMode);
+    const bool alreadyTemporary = m_pointClickTool.active();
+    if (!alreadyTemporary)
+      saveInteractionMode();
+    if (!m_pointClickTool.focusAnalysis())
+      clearPointClickToolPresentation();
+    m_pointClickTool.armFocusAnalysis(flags);
+    image->setInteractionMode(ImageWidget::AddPointMode);
     statusBar()->showMessage(tr("Select point for focus analysis"), 5000);
-  } else {
-    restoreInteractionMode();
-    statusBar()->clearMessage();
+    return;
   }
+
+  if (!m_pointClickTool.focusAnalysis())
+    return;
+  clearPointClickToolPresentation();
+  restoreInteractionMode();
 }
 
 /** Return the selected stored MTF measurement when its spatial provenance
@@ -5341,18 +5366,29 @@ void MainWindow::onRender() {
   });
 }
 
-/** Enter or exit profile spot adding mode.
-   When ACTIVE is true, saves the current tool and switches to AddPoint
-   mode.  The m_addingProfileSpot flag causes onPointAdded to add
-   profile calibration spots instead of registration points.  */
+/** Enter or exit the Profile spot point-click tool.
+    Profile and one-area Focus share AddPointMode but never own it concurrently;
+    switching directly between them must not overwrite the saved prior tool. */
 void MainWindow::onAddSpotModeRequested(bool active) {
-  m_addingProfileSpot = active;
+  ImageWidget *image = inspectorImageWidget();
+  if (!image)
+    return;
+
   if (active) {
-    saveInteractionMode();
-    inspectorImageWidget()->setInteractionMode(ImageWidget::AddPointMode);
-  } else {
-    inspectorImageWidget()->setInteractionMode(m_previousInteractionMode);
+    const bool alreadyTemporary = m_pointClickTool.active();
+    if (!alreadyTemporary)
+      saveInteractionMode();
+    if (!m_pointClickTool.profileSpot())
+      clearPointClickToolPresentation();
+    m_pointClickTool.armProfileSpot();
+    image->setInteractionMode(ImageWidget::AddPointMode);
+    return;
   }
+
+  if (!m_pointClickTool.profileSpot())
+    return;
+  clearPointClickToolPresentation();
+  restoreInteractionMode();
 }
 
 /** Handle profile color optimisation request from ProfilePanel.

@@ -373,6 +373,10 @@ QLabel *profileCalibrationQuality = inspector->findChild<QLabel *>(
     QStringLiteral("ProfileCalibrationQuality"));
 QPushButton *profileOptimizeButton = inspector->findChild<QPushButton *>(
     QStringLiteral("ProfileOptimizeButton"));
+QPushButton *profileAddSpotButton = inspector->findChild<QPushButton *>(
+    QStringLiteral("ProfileAddSpotButton"));
+QPushButton *pointFocusButton = inspector->findChild<QPushButton *>(
+    QStringLiteral("SharpnessAnalyzeFocusAreaButton"));
 QPushButton *mtfMeasureButton = inspector->findChild<QPushButton *>(
     QStringLiteral("MtfMeasureButton"));
 QPushButton *findFocusAreasButton = inspector->findChild<QPushButton *>(
@@ -511,8 +515,8 @@ const bool profileApplicable =
     colorscreen::render_parameters::capture_supports_screen_detection_p(
         profileCapture);
 
-if (!profileOptimizeButton || !mtfMeasureButton ||
-    !findFocusAreasButton || !analyzeFocusAreasButton ||
+if (!profileOptimizeButton || !profileAddSpotButton || !pointFocusButton ||
+    !mtfMeasureButton || !findFocusAreasButton || !analyzeFocusAreasButton ||
     profileOptimizeButton->text() != QStringLiteral("Optimize profile") ||
     mtfMeasureButton->text() != QStringLiteral("Measure MTF from edge") ||
     findFocusAreasButton->text() != QStringLiteral("Find focus areas") ||
@@ -521,6 +525,58 @@ if (!profileOptimizeButton || !mtfMeasureButton ||
       "Workspace churn lost canonical Profile/Sharpness operation wording"));
   return;
 }
+
+// Profile Add spot and one-area Focus both temporarily borrow AddPointMode.
+// They must hand ownership to each other without overwriting the original tool,
+// and an explicit user tool change must cancel whichever temporary owner remains.
+ImageWidget *pointToolImage = first->inspectorImageWidget();
+if (!pointToolImage || !profileAddSpotButton->isCheckable() ||
+    !pointFocusButton->isCheckable()) {
+  fail(QStringLiteral(
+      "Workspace churn lost temporary Profile/Focus point-tool controls"));
+  return;
+}
+const ImageWidget::InteractionMode originalPointToolMode =
+    pointToolImage->interactionMode();
+pointToolImage->setInteractionMode(ImageWidget::SelectMode);
+profileAddSpotButton->setChecked(true);
+if (!first->m_pointClickTool.profileSpot() ||
+    pointToolImage->interactionMode() != ImageWidget::AddPointMode ||
+    !profileAddSpotButton->isChecked()) {
+  fail(QStringLiteral("Profile Add spot did not acquire the point-click tool"));
+  return;
+}
+pointFocusButton->setChecked(true);
+if (!first->m_pointClickTool.focusAnalysis() ||
+    profileAddSpotButton->isChecked() || !pointFocusButton->isChecked() ||
+    pointToolImage->interactionMode() != ImageWidget::AddPointMode) {
+  fail(QStringLiteral(
+      "Focus Analyze area did not exclusively take point-click ownership"));
+  return;
+}
+profileAddSpotButton->setChecked(true);
+if (!first->m_pointClickTool.profileSpot() ||
+    !profileAddSpotButton->isChecked() || pointFocusButton->isChecked()) {
+  fail(QStringLiteral(
+      "Profile Add spot did not exclusively retake point-click ownership"));
+  return;
+}
+profileAddSpotButton->setChecked(false);
+if (first->m_pointClickTool.active() ||
+    pointToolImage->interactionMode() != ImageWidget::SelectMode) {
+  fail(QStringLiteral(
+      "Temporary point-tool handoff overwrote the original canvas tool"));
+  return;
+}
+profileAddSpotButton->setChecked(true);
+pointToolImage->setInteractionMode(ImageWidget::PanMode);
+if (first->m_pointClickTool.active() || profileAddSpotButton->isChecked() ||
+    pointFocusButton->isChecked()) {
+  fail(QStringLiteral(
+      "Explicit canvas tool change left a hidden temporary point tool armed"));
+  return;
+}
+pointToolImage->setInteractionMode(originalPointToolMode);
 
 const bool expectedNativeImageLayer =
     first->sharedImageData()->has_grayscale_or_ir() &&
