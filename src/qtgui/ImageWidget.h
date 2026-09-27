@@ -102,6 +102,14 @@ public:
    */
   void setProfileSpots(const std::vector<colorscreen::point_t> *spots,
                        const std::vector<colorscreen::color_match> *results);
+  /** Read-only profile-overlay state used by multi-view synchronization smoke. */
+  std::size_t profileSpotCount() const {
+    return m_profileSpots ? m_profileSpots->size() : 0;
+  }
+  std::size_t profileSpotResultCount() const {
+    return m_profileSpotResults ? m_profileSpotResults->size() : 0;
+  }
+  bool profileSpotsVisible() const { return m_showProfileSpots; }
 
   /** Replace the focus-analysis overlay shown by this view. */
   void setFocusAreaOverlays(const std::vector<FocusAreaOverlay> &areas);
