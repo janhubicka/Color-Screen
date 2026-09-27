@@ -126,6 +126,22 @@ QString profileOptimizationFailureMessage() {
       "the spots or inputs if needed, then retry Optimize profile.");
 }
 
+/** Explain a measured-MTF model-fit failure without guessing its numerical cause. */
+QString mtfModelFitFailureMessage(const QString &detail) {
+  QString message = QCoreApplication::translate(
+      "MainWindow",
+      "Measured-MTF model fitting could not fit the selected saved measurements "
+      "with the current model and fit settings. Existing MTF measurements and "
+      "model parameters were left unchanged. Inspect the selected measurement "
+      "curves, capture metadata, and fit options in Fit measured MTF model, "
+      "adjust them if needed, then retry Fit measured MTF model.");
+  const QString trimmedDetail = detail.trimmed();
+  if (!trimmedDetail.isEmpty())
+    message += QCoreApplication::translate("MainWindow", "\n\nFitter detail: %1")
+                   .arg(trimmedDetail);
+  return message;
+}
+
 namespace {
 /** Return the physical scan resolution inferred from a configured screen. */
 std::optional<double> estimateScreenDpi(
