@@ -2861,9 +2861,10 @@ QString MainWindow::mtfCalibrationSummary() const {
     if (m_mtfFit.rms >= 0)
       summary += tr(" • RMS %1 pp").arg(m_mtfFit.rms, 0, 'g', 4);
     if (failureCurrent)
-      summary += tr(" • last refit failed");
+      summary += tr(" • last refit failed — current model retained");
   } else if (failureCurrent) {
-    summary += tr(" • fit failed — adjust settings and retry");
+    summary +=
+        tr(" • fit failed — existing model retained; review measurements/settings and retry");
   } else if (m_mtfFit.baseline) {
     summary += tr(" • model stale — refit");
   } else {
@@ -2921,13 +2922,12 @@ bool MainWindow::requestMtfModelFit(
     if (result->objective < 0 || !result->error.empty()) {
       m_mtfFit.failureInputs = baselineMtf;
       refreshMtfCalibrationPresentation();
+      const QString detail = result->error.empty()
+                                 ? QString()
+                                 : QString::fromStdString(result->error);
       auto *box = new QMessageBox(
           QMessageBox::Warning, tr("MTF model fit"),
-          tr("The MTF model could not be fitted: %1")
-              .arg(QString::fromStdString(
-                  result->error.empty() ? "unknown fitting error"
-                                        : result->error)),
-          QMessageBox::Ok,
+          mtfModelFitFailureMessage(detail), QMessageBox::Ok,
           guardedResultParent ? guardedResultParent.data() : this);
       box->setObjectName(QStringLiteral("MtfFitErrorDialog"));
       box->setAttribute(Qt::WA_DeleteOnClose);
