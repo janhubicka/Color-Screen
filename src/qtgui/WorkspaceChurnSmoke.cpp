@@ -7,6 +7,7 @@
 #include "MultiLineTabWidget.h"
 #include "ScreenPanel.h"
 #include "WorkspaceWindow.h"
+#include "../libcolorscreen/include/backlight-correction-parameters.h"
 #include "../libcolorscreen/include/screen-map.h"
 
 #include <QAction>
@@ -3431,12 +3432,19 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
           const ParameterState flatOriginal = first->getCurrentState();
           const auto savedFlatCalibration = first->m_flatFieldCalibration;
 
-          auto correctionOwner = std::make_shared<int>(0);
           auto flatCorrection =
-              std::shared_ptr<colorscreen::backlight_correction_parameters>(
-                  correctionOwner,
-                  reinterpret_cast<colorscreen::backlight_correction_parameters *>(
-                      correctionOwner.get()));
+              std::make_shared<colorscreen::backlight_correction_parameters>();
+          bool flatChannels[4] = {true, true, true, true};
+          if (!flatCorrection->alloc(2, 2, flatChannels)) {
+            fail(QStringLiteral(
+                "Workspace churn could not allocate flat-field correction fixture"));
+            return;
+          }
+          for (int y = 0; y < 2; ++y)
+            for (int x = 0; x < 2; ++x) {
+              flatCorrection->set_luminosity(x, y, 1.0);
+              flatCorrection->set_sub(x, y, 0.0);
+            }
           ParameterState flatBaseline = flatOriginal;
           flatBaseline.rparams.backlight_correction = flatCorrection;
 
