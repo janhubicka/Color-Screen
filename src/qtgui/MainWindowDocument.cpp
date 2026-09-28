@@ -1,4 +1,5 @@
 #include "MainWindow.h"
+#include "AtomicFileSave.h"
 #include "../libcolorscreen/include/base.h"
 #include "../libcolorscreen/include/render-parameters.h"
 #include "../libcolorscreen/include/stitch.h"
@@ -25,7 +26,6 @@
 #include <QMessageBox>
 #include <QObject>
 #include <QPointer>
-#include <QSaveFile>
 #include <QScreen>
 #include <QSettings>
 #include <QSignalBlocker>
@@ -67,90 +67,25 @@ void rememberFileDialogDirectory(const QString &settingsKey,
   settings.setValue(settingsKey, QFileInfo(fileName).absolutePath());
 }
 
-/** Stage one FILE*-based parameter payload, then atomically replace PATH.
-
-    libcolorscreen's portable serializer is intentionally FILE*-based. QSaveFile
-    owns the final replacement so a serialization/write/commit failure never
-    truncates a previously usable parameter file. */
+/** Serialize one Qt parameter payload through the shared atomic FILE* bridge. */
 bool saveParameterPayloadAtomically(
     const QString &path, const colorscreen::scr_to_img_parameters &scrToImg,
     const colorscreen::scr_detect_parameters *detect,
     const colorscreen::render_parameters &render,
     const colorscreen::solver_parameters &solver,
     const std::vector<colorscreen::point_t> &profileSpots, QString *error) {
-  FILE *staged = std::tmpfile();
-  if (!staged) {
-    if (error)
-      *error = QStringLiteral("Could not create a temporary parameter payload.");
-    return false;
-  }
-
-  bool serialized = colorscreen::save_csp_with_profile_spots(
-      staged, &scrToImg, detect, &render, &solver, profileSpots);
-  if (serialized && std::fflush(staged) != 0)
-    serialized = false;
-  if (!serialized || std::fseek(staged, 0, SEEK_SET) != 0) {
-    std::fclose(staged);
-    if (error)
-      *error = QStringLiteral("Could not serialize the complete parameter payload.");
-    return false;
-  }
-
-  QSaveFile output(path);
-  output.setDirectWriteFallback(false);
-  if (!output.open(QIODevice::WriteOnly)) {
-    std::fclose(staged);
-    if (error)
-      *error = output.errorString();
-    return false;
-  }
-
-  char buffer[64 * 1024];
-  bool copied = true;
-  while (copied) {
-    const size_t count = std::fread(buffer, 1, sizeof(buffer), staged);
-    if (count > 0 &&
-        output.write(buffer, static_cast<qint64>(count)) !=
-            static_cast<qint64>(count)) {
-      copied = false;
-      break;
-    }
-    if (count < sizeof(buffer)) {
-      if (std::ferror(staged))
-        copied = false;
-      break;
-    }
-  }
-  std::fclose(staged);
-
-  if (!copied) {
-    if (error)
-      *error = output.errorString().isEmpty()
-                   ? QStringLiteral("Could not write the complete parameter payload.")
-                   : output.errorString();
-    output.cancelWriting();
-    return false;
-  }
-  if (!output.commit()) {
-    if (error)
-      *error = output.errorString();
-    return false;
-  }
-  return true;
+  return qtgui_io::saveStdioAtomically(
+      path,
+      [&scrToImg, detect, &render, &solver, &profileSpots](FILE *staged) {
+        return colorscreen::save_csp_with_profile_spots(
+            staged, &scrToImg, detect, &render, &solver, profileSpots);
+      },
+      error);
 }
 
 /** Atomically replace a small UTF-8 recovery metadata file. */
 bool saveRecoveryTextAtomically(const QString &path, const QString &text) {
-  QSaveFile file(path);
-  file.setDirectWriteFallback(false);
-  if (!file.open(QIODevice::WriteOnly | QIODevice::Text))
-    return false;
-  const QByteArray bytes = text.toUtf8();
-  if (file.write(bytes) != bytes.size()) {
-    file.cancelWriting();
-    return false;
-  }
-  return file.commit();
+  return qtgui_io::saveTextAtomically(path, text);
 }
 } // namespace
 
