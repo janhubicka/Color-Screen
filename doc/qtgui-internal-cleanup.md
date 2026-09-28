@@ -743,6 +743,15 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   reference-load handoff and each reference-MTF request. Keep applying this
   pattern when another analysis has coupled session-local members that are
   always saved, cleared, or restored together.
+- Group inspector-routing state that moves as one presentation unit.
+  `InspectorImageRoutingState` owns the weak currently inspected
+  `ImageWidget`, exactly the dynamic signal connections attached to that view,
+  and the temporary switching guard used while a document tool is transferred
+  between compatible ordinary views. Closing a secondary view still rebinds the
+  primary image through `WorkspaceWindow`; the grouping removes three parallel
+  MainWindow members without changing that lifecycle. Existing workspace churn
+  remains the regression for view activation, tool transfer, secondary close and
+  inspector rebinding.
 - Group file-target semantics that must change atomically. `ParameterFileState`
   now owns the current `.par` path together with whether that path is merely an
   auto-suggested Save-As default. Save/load paths use `setLoaded()` and
