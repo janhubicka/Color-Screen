@@ -1808,18 +1808,19 @@ void MainWindow::toggleFullscreen() {
     m_mainSplitter->insertWidget(0, m_imageWidget);
     m_imageWidget->show();
 
-    // Restore splitter sizes after a short delay
-    // We use the fullscreen size as the reference for the final jump
-    if (!m_splitterSizesBeforeFullscreen.isEmpty() &&
-        m_splitterSizesBeforeFullscreen.size() == 2) {
-      QList<int> savedSizes = m_splitterSizesBeforeFullscreen;
-
-      QTimer::singleShot(10, this, [this, fullscreenSize, savedSizes]() {
-        m_imageWidget->setLastSize(fullscreenSize);
+    // Reconcile the fullscreen -> embedded/standalone resize after Qt has
+    // settled the reparent.  Workspace embedding borrows the inspector column,
+    // so the splitter may have one child here instead of two.  lastSize must
+    // still be restored in either layout; apply the saved splitter allocation
+    // only when it matches the current child count.
+    const QList<int> savedSizes = m_splitterSizesBeforeFullscreen;
+    m_splitterSizesBeforeFullscreen.clear();
+    QTimer::singleShot(10, this, [this, fullscreenSize, savedSizes]() {
+      m_imageWidget->setLastSize(fullscreenSize);
+      if (!savedSizes.isEmpty() &&
+          savedSizes.size() == m_mainSplitter->count())
         m_mainSplitter->setSizes(savedSizes);
-      });
-      m_splitterSizesBeforeFullscreen.clear();
-    }
+    });
   } else {
     // Save current splitter sizes BEFORE removing the widget
     m_splitterSizesBeforeFullscreen = m_mainSplitter->sizes();

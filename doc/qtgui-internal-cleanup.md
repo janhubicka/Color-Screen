@@ -202,6 +202,16 @@ has been identified before emitting `pointManipulationStarted()`. Ordinary Qt
 smoke covers lost-release/tool-switch behavior, and workspace churn verifies that
 a duplicate coordinate completion does not add a second Undo command.
 
+### Workspace fullscreen exit assumed a two-child splitter
+
+When a document is embedded, WorkspaceWindow borrows its inspector column and the
+document's main splitter contains only the image. The old fullscreen-exit path
+restored `ImageWidget::lastSize` only inside a `savedSizes.size() == 2` branch,
+so leaving fullscreen from an embedded document skipped the resize handoff and
+left a stale splitter snapshot. Fullscreen exit now always restores the resize
+reference after reparenting, clears the saved snapshot, and reapplies splitter
+sizes only when their entry count matches the current standalone/embedded layout.
+
 ### Dynamic inspector status text resized the canvas
 
 Registration updates change both the persistent Workflow recommendation and
