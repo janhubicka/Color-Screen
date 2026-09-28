@@ -542,16 +542,28 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
           first->m_recoveryDir = originalRecoveryDirectory;
 
           const QDir recoveryDirectory(state->recoveryProbeDirectory);
-          for (const QString &name :
-               {QStringLiteral("recovery_image.txt"),
-                QStringLiteral("recovery_params.par"),
-                QStringLiteral("recovery_params_meta.txt")}) {
-            if (!QFile::exists(recoveryDirectory.filePath(name))) {
-              fail(QStringLiteral(
-                       "Recovery round-trip smoke did not write %1")
-                       .arg(name));
-              return;
-            }
+          const QString recoveryParams =
+              recoveryDirectory.filePath(QStringLiteral("recovery_params.par"));
+          if (!QFile::exists(recoveryParams)) {
+            fail(QStringLiteral(
+                "Recovery round-trip smoke did not write recovery_params.par"));
+            return;
+          }
+          QFile recoveryPayload(recoveryParams);
+          if (!recoveryPayload.open(QIODevice::ReadOnly) ||
+              !recoveryPayload.readAll().contains(
+                  "colorscreen_qt_recovery_metadata:")) {
+            fail(QStringLiteral(
+                "Recovery round-trip smoke did not embed recovery metadata"));
+            return;
+          }
+          if (QFile::exists(recoveryDirectory.filePath(
+                  QStringLiteral("recovery_image.txt"))) ||
+              QFile::exists(recoveryDirectory.filePath(
+                  QStringLiteral("recovery_params_meta.txt")))) {
+            fail(QStringLiteral(
+                "Recovery round-trip smoke rewrote obsolete recovery sidecars"));
+            return;
           }
 
           auto *probe = new MainWindow(state->recoveryProbeDirectory);
