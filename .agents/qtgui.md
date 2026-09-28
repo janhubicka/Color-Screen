@@ -81,8 +81,11 @@ each document has independent:
 
 Workspace geometry and recent-file lists remain application preferences in
 `QSettings`; they are not document state. Detached-document geometry is also
-presentation state. Recent lists are persisted when they change so a
-later-closing document cannot overwrite newer entries.
+presentation state. Image and parameter MRUs use the same `RecentItemsState`
+plumbing. Before adding an entry, re-read the application-wide persisted list so
+concurrent document loads/saves merge rather than letting a stale window overwrite
+newer entries. Rebuild menu actions from the captured path itself; do not depend
+on a sender QAction surviving a nested save/load prompt.
 
 The one shared document inspector may follow any compatible ordinary
 `ImageWidget`. Keep its weak target pointer, the dynamic signal connections
