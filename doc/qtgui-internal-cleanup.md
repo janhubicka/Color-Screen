@@ -870,7 +870,14 @@ minimum is:
    restores it into a fresh hidden document, waits for asynchronous image load,
    and verifies source image, saved scalar/profile-spot state, loaded parameter
    target metadata, and recovered dirty state before continuing the close tests;
-8. a small fixture test for each nontrivial parameter-widget mapping;
+8. a small fixture test for each nontrivial parameter-widget mapping.
+   This is now covered by the lightweight/workspace smoke probes: saved enum and
+   checkbox mappings (including default/Reset state), correlated RGB scaling and
+   per-channel identities, linear/gamma/logarithmic sliders, below-range sentinel
+   slots, dynamic Tiles target/default mapping, and the interactive tone-curve
+   plot/control-point mapping all have direct round-trip or gesture checks. New
+   custom widget mappings should extend the same focused probes rather than rely
+   only on a full-panel screenshot or manual inspection;
 9. manual workflow passes for at least one regular screen, one line screen and
    one RGB+IR or monochrome capture. Workspace churn provides a synthetic
    automated floor for these capability branches: monochrome stochastic-screen
