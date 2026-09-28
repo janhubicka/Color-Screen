@@ -443,12 +443,6 @@ private slots:
   void onMeasureMtfRequested(bool checked);
   void onDistanceMeasured(colorscreen::point_t p1, colorscreen::point_t p2);
 
-  // Recent Files
-  // Recent Files
-  void openRecentFile();
-  // Recent Parameters
-  void openRecentParams();
-
 protected:
   void closeEvent(QCloseEvent *event) override;
   void changeEvent(QEvent *event) override;
@@ -622,17 +616,32 @@ private:
   void saveWindowState();
   void restoreWindowState();
 
-  // Recent Files
+  /** One application-wide recent-items list as presented by this document. */
+  struct RecentItemsState {
+    QMenu *menu = nullptr;
+    QStringList items;
+    QString settingsKey;
+    QString emptyLabel;
+    QString clearLabel;
+  };
+  using RecentItemHandler = void (MainWindow::*)(const QString &);
+
+  void updateRecentItemsActions(RecentItemsState &state,
+                                RecentItemHandler handler);
+  void addToRecentItems(RecentItemsState &state, const QString &filePath,
+                        RecentItemHandler handler);
+  void loadRecentItems(RecentItemsState &state, RecentItemHandler handler);
+  void saveRecentItems(const RecentItemsState &state);
+
   void updateRecentFileActions();
   void addToRecentFiles(const QString &filePath);
   void loadRecentFiles();
-  void saveRecentFiles();
+  void openRecentFile(const QString &fileName);
 
-  // Recent Parameters
   void updateRecentParamsActions();
   void addToRecentParams(const QString &filePath);
   void loadRecentParams();
-  void saveRecentParams();
+  void openRecentParams(const QString &fileName);
 
   QMenu *m_fileMenu;
   QMenu *m_editMenu;
@@ -675,15 +684,10 @@ private:
   QAction
       *m_colorCheckBoxAction; // Added to control visibility of color checkbox
   QList<QAction*> m_registrationActions; // Track registration group actions for visibility
-  QMenu *m_recentFilesMenu;
   enum { MaxRecentFiles = 10 };
-  QList<QAction *> m_recentFileActions;
+  RecentItemsState m_recentFiles;
+  RecentItemsState m_recentParams;
   QList<QAction *> m_modeActions; // 1-0 hotkeys for modes
-  QStringList m_recentFiles;
-
-  QMenu *m_recentParamsMenu;
-  QList<QAction *> m_recentParamsActions;
-  QStringList m_recentParams;
 
   QSplitter *m_mainSplitter;
   QByteArray m_workspaceSplitterState;
