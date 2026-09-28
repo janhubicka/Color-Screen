@@ -67,6 +67,8 @@ struct WorkspaceChurnState {
   bool expectedFirstScanMirror = false;
   bool expectedSecondScanMirror = false;
   bool expectedStatesSet = false;
+  int initialFirstUndoIndex = 0;
+  bool initialFirstUndoClean = true;
   int lastLoggedPhase = -1;
   bool oneShotStarted = false;
   bool oneShotApplied = false;
@@ -134,6 +136,10 @@ void startWorkspaceChurnSmoke(ColorScreenApplication &app,
     state->workspace = workspace;
     state->first = documents[0];
     state->second = documents[1];
+    if (state->first->m_undoStack) {
+      state->initialFirstUndoIndex = state->first->m_undoStack->index();
+      state->initialFirstUndoClean = state->first->m_undoStack->isClean();
+    }
     state->workspaceToolBar = workspace->findChild<QToolBar *>(
         QStringLiteral("WorkspaceToolbar"), Qt::FindDirectChildrenOnly);
     state->workspaceToolBarHost = state->workspaceToolBar
@@ -4320,13 +4326,34 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
               "Workspace churn final sole-document reattachment was incomplete"));
           return;
         }
-        // Restore only the sentinel changed by this smoke test. Reapplying the
-        // whole pre-load snapshot here could overwrite unrelated parameters
-        // that legitimately finished settling while sanitizers slowed the UI.
+        // Return the Undo stack to the exact entry point of this smoke before
+        // restoring the direct state sentinel. UI probes intentionally create
+        // real commands, but those commands belong to the test harness rather
+        // than to the loaded document. Leaving them active makes the generic
+        // post-smoke teardown open an Unsaved Changes dialog with nobody to
+        // answer it (notably under Windows ASan).
+        state->expectedStatesSet = false;
+        if (first->m_undoStack) {
+          while (first->m_undoStack->index() > state->initialFirstUndoIndex &&
+                 first->m_undoStack->canUndo())
+            first->m_undoStack->undo();
+          while (first->m_undoStack->index() < state->initialFirstUndoIndex &&
+                 first->m_undoStack->canRedo())
+            first->m_undoStack->redo();
+          if (first->m_undoStack->index() != state->initialFirstUndoIndex ||
+              first->m_undoStack->isClean() != state->initialFirstUndoClean) {
+            fail(QStringLiteral(
+                "Workspace churn did not restore the source Undo/clean state"));
+            return;
+          }
+        }
+
+        // Restore only the sentinel changed directly by this smoke test.
+        // Reapplying the whole pre-load snapshot here could overwrite unrelated
+        // parameters that legitimately finished settling under instrumentation.
         ParameterState restoredState = first->documentStateSnapshot();
         restoredState.rparams.scan_mirror = state->originalFirstScanMirror;
         first->applyState(restoredState);
-        state->expectedStatesSet = false;
         if (state->completed)
           state->completed();
         return;
