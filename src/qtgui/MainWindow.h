@@ -416,6 +416,8 @@ private slots:
                     colorscreen::point_t color);
   void onAreaSelected(QRect area);
   void startAreaSelection(const QString &message, std::function<void(QRect)> callback);
+  /** Cancel one pending Generic Area operation and synchronize all UI owners. */
+  void cancelAreaSelectionPresentation();
   void onSetCenter(colorscreen::point_t imgPos);
   void onPointManipulationStarted();
   void onCoordinateSystemManipulationStarted();
