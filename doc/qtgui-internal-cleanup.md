@@ -312,8 +312,15 @@ registration `AddPointMode`. They now share one document-owned
 Profile to Focus (or back) unchecks the previous panel toggle with signals
 blocked, preserves the original canvas tool, and leaves only one interpretation
 for the next click. Choosing another canvas tool cancels the temporary owner
-instead of leaving a hidden action armed. Workspace churn exercises both handoff
-directions plus explicit-tool cancellation.
+instead of leaving a hidden action armed.
+
+The same restore target now spans *all* temporary canvas operations. Crop,
+Generic Area, Measure, and Profile/Focus-borrowed Add Point are never saved as
+the next restore target themselves. This fixes chains such as Select → Profile
+Add spot → Measure → area selection, which previously could finish in ordinary
+Add Point because the first temporary handoff overwrote `m_previousInteractionMode`.
+Workspace churn exercises Profile/Focus handoff, explicit-tool cancellation, and
+a cross-tool temporary chain returning to the original Select tool.
 
 Profile fitting also owns an immutable source-image snapshot now. The queued
 request carries the source scan itself and `ColorOptimizerWorker` no longer
