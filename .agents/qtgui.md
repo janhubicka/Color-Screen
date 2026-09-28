@@ -750,11 +750,11 @@ The application supports several interaction modes (e.g., Pan, Select, Add Point
 
 #### Persistent vs. Temporary Modes
 - **Persistent Tools**: Pan, Select, Add Point, Set Center. These are managed via `QActionGroup` in the toolbar.
-- **Temporary Modes**: `CropMode`, `GenericAreaMode`. Profile **Add spot** and Sharpness **Analyze area** are temporary *intent owners* that borrow the persistent `AddPointMode` rather than defining another ImageWidget mode. They are mutually exclusive: switching Profile ↔ Focus transfers the one document-owned point-click intent without overwriting the originally saved canvas tool, and an explicit switch to Pan/Select/another mode cancels the temporary intent. Programmatic toggle synchronization must block signals so ownership changes do not recursively launch operations.
+- **Temporary Modes**: `CropMode`, `GenericAreaMode`, and `MeasureMode`. Profile **Add spot** and Sharpness **Analyze area** are temporary *intent owners* that borrow the persistent `AddPointMode` rather than defining another ImageWidget mode. They are mutually exclusive: switching Profile ↔ Focus transfers the one document-owned point-click intent without overwriting the originally saved canvas tool, and an explicit switch to Pan/Select/another mode cancels the temporary intent. Programmatic toggle synchronization must block signals so ownership changes do not recursively launch operations.
 
 #### State Persistence Logic
 To maintain a smooth user workflow, `MainWindow` tracks the user's active tool using `saveInteractionMode()` and `restoreInteractionMode()`:
-- **`saveInteractionMode()`**: Captures the current mode before entering a temporary mode. It avoids saving `GenericAreaMode` to prevent state corruption.
+- **`saveInteractionMode()`**: Captures the current persistent mode before entering a temporary mode. It must not overwrite the restore target when the current mode is Crop, Generic Area, Measure, or Add Point borrowed by Profile/Focus. Temporary operations may hand off directly to one another; after the final operation completes they still restore the original persistent Pan/Select/Add Point/Set Center tool.
 - **`restoreInteractionMode()`**: Returns to the previously saved mode. Crucially, it synchronizes the toolbar state by updating the `checked` property of the corresponding `QAction`.
 
 #### Toolbar Synchronization
