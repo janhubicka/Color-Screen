@@ -287,7 +287,7 @@ bool focusAnalysisUsesMonochromeInput(const colorscreen::image_data &scan) {
 
 /** Return the one status bar belonging to the current top-level window. */
 QStatusBar *MainWindow::statusBar() const {
-  return m_workspaceStatusBar ? m_workspaceStatusBar.data()
+  return m_workspacePresentation.statusBar ? m_workspacePresentation.statusBar.data()
                               : QMainWindow::statusBar();
 }
 
@@ -298,12 +298,12 @@ QStatusBar *MainWindow::standaloneStatusBar() const {
 
 /** Share STATUSBAR with every tab in the enclosing workspace window. */
 void MainWindow::setWorkspaceStatusBar(QStatusBar *sharedStatusBar) {
-  if (m_workspaceStatusBar.data() == sharedStatusBar)
+  if (m_workspacePresentation.statusBar.data() == sharedStatusBar)
     return;
 
   QStatusBar *localStatusBar = QMainWindow::statusBar();
   const QString localMessage = localStatusBar->currentMessage();
-  m_workspaceStatusBar = sharedStatusBar;
+  m_workspacePresentation.statusBar = sharedStatusBar;
   if (sharedStatusBar) {
     localStatusBar->hide();
     if (!localMessage.isEmpty())
@@ -2398,7 +2398,7 @@ void MainWindow::releaseUserVisibleProgressFocus(QWidget *row) {
   if (!row || !focus || (focus != row && !row->isAncestorOf(focus)))
     return;
 
-  if (m_workspaceEmbedded) {
+  if (m_workspacePresentation.embedded) {
     if (ColorScreenApplication *application = documentApplication()) {
       if (WorkspaceWindow *workspace = application->workspaceWindow()) {
         if (workspace->restoreFocusFromTaskControl(focus))
@@ -2465,8 +2465,8 @@ void MainWindow::restoreWorkspaceInspector() {
   if (m_rightColumn->parentWidget() != m_mainSplitter) {
     takeWorkspaceInspector();
     m_mainSplitter->addWidget(m_rightColumn);
-    if (!m_workspaceSplitterState.isEmpty())
-      m_mainSplitter->restoreState(m_workspaceSplitterState);
+    if (!m_workspacePresentation.splitterState.isEmpty())
+      m_mainSplitter->restoreState(m_workspacePresentation.splitterState);
   }
   setInspectorImageWidget(m_imageWidget);
   m_rightColumn->show();
@@ -2687,7 +2687,7 @@ void MainWindow::setInspectorImageWidget(ImageWidget *imageWidget) {
 /** Reclaim the inspector when a detached primary document becomes active. */
 void MainWindow::changeEvent(QEvent *event) {
   QMainWindow::changeEvent(event);
-  if (event && event->type() == QEvent::WindowActivate && !m_workspaceEmbedded)
+  if (event && event->type() == QEvent::WindowActivate && !m_workspacePresentation.embedded)
     restoreWorkspaceInspector();
 }
 
@@ -2697,11 +2697,11 @@ void MainWindow::changeEvent(QEvent *event) {
     presents the active document's menu and toolbar; document-owned diagnostic
     docks and progress state remain with the embedded document. */
 void MainWindow::prepareForWorkspaceEmbedding() {
-  if (m_workspaceEmbedded)
+  if (m_workspacePresentation.embedded)
     return;
 
   if (m_mainSplitter)
-    m_workspaceSplitterState = m_mainSplitter->saveState();
+    m_workspacePresentation.splitterState = m_mainSplitter->saveState();
   takeWorkspaceInspector();
   if (m_toolbar)
     m_toolbar->hide();
@@ -2709,12 +2709,12 @@ void MainWindow::prepareForWorkspaceEmbedding() {
     menuBar()->hide();
   if (statusBar())
     statusBar()->hide();
-  m_workspaceEmbedded = true;
+  m_workspacePresentation.embedded = true;
 }
 
 /** Restore this document's ordinary standalone QMainWindow presentation. */
 void MainWindow::restoreFromWorkspaceEmbedding() {
-  if (!m_workspaceEmbedded)
+  if (!m_workspacePresentation.embedded)
     return;
 
   restoreWorkspaceInspector();
@@ -2724,7 +2724,7 @@ void MainWindow::restoreFromWorkspaceEmbedding() {
     menuBar()->show();
   if (statusBar())
     statusBar()->show();
-  m_workspaceEmbedded = false;
+  m_workspacePresentation.embedded = false;
 }
 
 // Undo/Redo Implementation
