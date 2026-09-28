@@ -12,6 +12,7 @@
 #include <QDir>
 #include <QDebug>
 #include <QFile>
+#include <QFileInfo>
 #include <QMessageBox>
 #include <QMetaObject>
 #include <QObject>
