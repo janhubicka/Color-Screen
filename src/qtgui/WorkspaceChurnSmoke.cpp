@@ -29,6 +29,7 @@
 #include <QPointer>
 #include <QPushButton>
 #include <QSettings>
+#include <QSignalBlocker>
 #include <QStatusBar>
 #include <QSizePolicy>
 #include <QSplitter>
@@ -628,7 +629,10 @@ pointToolImage->setInteractionMode(originalPointToolMode);
 // abandoning Sharpness Measure MTF by choosing another canvas tool must clear
 // both the callback and its toggle/status presentation.
 pointToolImage->setInteractionMode(ImageWidget::SelectMode);
-first->m_sharpnessPanel->setMeasureMtfChecked(true);
+{
+  const QSignalBlocker blocker(mtfMeasureButton);
+  mtfMeasureButton->setChecked(true);
+}
 first->startAreaSelection(QStringLiteral("Area cancellation smoke"),
                           [](QRect) {});
 if (!mtfMeasureButton->isChecked() || !first->m_areaSelectionCallback ||
