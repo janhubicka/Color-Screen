@@ -307,24 +307,25 @@ The panel now snapshots the profile-spot coordinates and auto-runs only when the
 spot set actually changes.  Manual **Optimize color** remains unchanged.
 
 Profile **Add spot** and Sharpness **Analyze area** both borrow the ordinary
-registration `AddPointMode`. They now share one document-owned
-`PointClickToolState` rather than independent booleans: handing ownership from
-Profile to Focus (or back) unchecks the previous panel toggle with signals
-blocked, preserves the original canvas tool, and leaves only one interpretation
-for the next click. Choosing another canvas tool cancels the temporary owner
-instead of leaving a hidden action armed.
+registration `AddPointMode`. The one `TemporaryCanvasToolState` now owns
+their exclusive point-click intent, the persistent mode to restore after any
+temporary canvas operation, and the optional Generic Area callback. Handing
+ownership from Profile to Focus (or back) unchecks the previous panel toggle
+with signals blocked, preserves the original canvas tool, and leaves only one
+interpretation for the next click. Choosing another canvas tool cancels the
+temporary owner instead of leaving a hidden action armed.
 
-The same restore target now spans *all* temporary canvas operations. Crop,
-Generic Area, Measure, and Profile/Focus-borrowed Add Point are never saved as
-the next restore target themselves. This fixes chains such as Select → Profile
-Add spot → Measure → area selection, which previously could finish in ordinary
-Add Point because the first temporary handoff overwrote `m_previousInteractionMode`.
-Workspace churn exercises Profile/Focus handoff, explicit-tool cancellation, and
-a cross-tool temporary chain returning to the original Select tool.
+The same restore target spans *all* temporary canvas operations. Crop, Generic
+Area, Measure, and Profile/Focus-borrowed Add Point are never saved as the next
+restore target themselves. This fixes chains such as Select → Profile Add spot
+→ Measure → area selection, which previously could finish in ordinary Add Point
+because one temporary handoff overwrote the persistent restore target. Workspace
+churn exercises Profile/Focus handoff, explicit-tool cancellation, and a
+cross-tool temporary chain returning to the original Select tool.
 
 Generic Area presentation is centralized too. Image Layer calibration, Color
 area actions, Sharpness **Measure MTF**, and Geometry area discovery all share
-one `m_areaSelectionCallback`. If another canvas tool replaces Generic Area
+the state's one area-selection callback. If another canvas tool replaces Generic Area
 before a rectangle is accepted, `cancelAreaSelectionPresentation()` clears that
 callback, every checkable panel owner, and the stale status instruction together.
 It deliberately does not invoke the later background-operation `onDone`, because
@@ -728,9 +729,9 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   dependencies it must link explicitly.
 - Give long-lived analysis state explicit structs rather than parallel member
   variables. Profile-calibration, geometry-fit, measured-MTF fit, flat-field
-  calibration, automatic multi-area focus analysis, the exclusive
-  Profile/one-area-Focus point-click tool, asynchronous image replacement,
-  progressive adaptive sharpening,
+  calibration, automatic multi-area focus analysis, temporary canvas-tool
+  ownership (restore mode, Generic Area callback and exclusive Profile/Focus
+  point-click intent), asynchronous image replacement, progressive adaptive sharpening,
   progressive registration discovery, and the combined **Detect screen**
   prompt/progress presentation now each live in one lifecycle struct instead of
   parallel request/result/presentation members. Adaptive sharpening groups its

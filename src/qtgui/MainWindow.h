@@ -726,10 +726,6 @@ private:
   QString m_lastOpenDir;
   QString m_lastSaveDir;
 
-  std::function<void(QRect)> m_areaSelectionCallback = nullptr;
-  ImageWidget::InteractionMode m_previousInteractionMode = ImageWidget::PanMode;
-
-
   std::shared_ptr<colorscreen::image_data> m_scan;
   colorscreen::render_parameters m_rparams;
   colorscreen::scr_detect_parameters m_detectParams;
@@ -1005,7 +1001,19 @@ private:
       focusFlags = 0;
     }
   };
-  PointClickToolState m_pointClickTool;
+
+  /** Session-only ownership for temporary canvas operations.
+
+      All temporary tools restore one persistent canvas mode. Generic Area owns
+      at most one callback, while Profile/Focus may borrow AddPointMode through
+      POINTCLICK. Keeping these together prevents one temporary operation from
+      overwriting or outliving another operation's restoration state. */
+  struct TemporaryCanvasToolState {
+    ImageWidget::InteractionMode restoreMode = ImageWidget::PanMode;
+    std::function<void(QRect)> areaSelectionCallback;
+    PointClickToolState pointClick;
+  };
+  TemporaryCanvasToolState m_temporaryCanvas;
 
   /** Session-local automatic multi-area focus-analysis state.
       Candidate rectangles, accepted diagnostics, approval prompt and running
