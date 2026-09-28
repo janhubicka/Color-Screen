@@ -22,6 +22,9 @@
 #include <QFileInfo>
 #include <QFuture>
 #include <QFutureWatcher>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonParseError>
 #include <QMenu>
 #include <QMessageBox>
 #include <QObject>
@@ -83,9 +86,98 @@ bool saveParameterPayloadAtomically(
       error);
 }
 
-/** Atomically replace a small UTF-8 recovery metadata file. */
-bool saveRecoveryTextAtomically(const QString &path, const QString &text) {
-  return qtgui_io::saveTextAtomically(path, text);
+struct RecoverySnapshotMetadata {
+  QString imageFile;
+  QString parameterFile;
+  bool parameterSuggested = false;
+  bool dirty = true;
+};
+
+constexpr char recoveryMetadataPrefix[] = "colorscreen_qt_recovery_metadata: ";
+
+/** Append recovery-only metadata after the ordinary Qt parameter end marker. */
+bool appendRecoveryMetadata(FILE *file,
+                            const RecoverySnapshotMetadata &metadata) {
+  QJsonObject object;
+  object.insert(QStringLiteral("version"), 1);
+  object.insert(QStringLiteral("imageFile"), metadata.imageFile);
+  object.insert(QStringLiteral("parameterFile"), metadata.parameterFile);
+  object.insert(QStringLiteral("parameterSuggested"),
+                metadata.parameterSuggested);
+  object.insert(QStringLiteral("dirty"), metadata.dirty);
+  const QByteArray json =
+      QJsonDocument(object).toJson(QJsonDocument::Compact);
+  return std::fputs(recoveryMetadataPrefix, file) >= 0 &&
+         std::fwrite(json.constData(), 1, static_cast<size_t>(json.size()),
+                     file) == static_cast<size_t>(json.size()) &&
+         std::fputc('\n', file) != EOF;
+}
+
+enum class RecoveryMetadataReadResult { Absent, Valid, Invalid };
+
+/** Read recovery-only metadata left unread by load_csp_with_profile_spots(). */
+RecoveryMetadataReadResult readRecoveryMetadata(
+    FILE *file, RecoverySnapshotMetadata *metadata, QString *error) {
+  if (!file || !metadata)
+    return RecoveryMetadataReadResult::Absent;
+
+  QByteArray trailing;
+  char buffer[4096];
+  while (true) {
+    const size_t count = std::fread(buffer, 1, sizeof(buffer), file);
+    if (count)
+      trailing.append(buffer, static_cast<qsizetype>(count));
+    if (count < sizeof(buffer)) {
+      if (std::ferror(file)) {
+        if (error)
+          *error = QStringLiteral("Could not read recovery metadata.");
+        return RecoveryMetadataReadResult::Invalid;
+      }
+      break;
+    }
+  }
+
+  const QByteArray prefix(recoveryMetadataPrefix);
+  QByteArray json;
+  for (const QByteArray &rawLine : trailing.split('\n')) {
+    const QByteArray line = rawLine.trimmed();
+    if (line.startsWith(prefix)) {
+      json = line.mid(prefix.size()).trimmed();
+      break;
+    }
+  }
+  if (json.isEmpty())
+    return RecoveryMetadataReadResult::Absent;
+
+  QJsonParseError parseError;
+  const QJsonDocument document = QJsonDocument::fromJson(json, &parseError);
+  if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
+    if (error)
+      *error = QStringLiteral("Recovery metadata JSON is invalid.");
+    return RecoveryMetadataReadResult::Invalid;
+  }
+
+  const QJsonObject object = document.object();
+  const QJsonValue version = object.value(QStringLiteral("version"));
+  const QJsonValue imageFile = object.value(QStringLiteral("imageFile"));
+  const QJsonValue parameterFile =
+      object.value(QStringLiteral("parameterFile"));
+  const QJsonValue parameterSuggested =
+      object.value(QStringLiteral("parameterSuggested"));
+  const QJsonValue dirty = object.value(QStringLiteral("dirty"));
+  if (!version.isDouble() || version.toInt(-1) != 1 ||
+      !imageFile.isString() || !parameterFile.isString() ||
+      !parameterSuggested.isBool() || !dirty.isBool()) {
+    if (error)
+      *error = QStringLiteral("Recovery metadata fields are invalid.");
+    return RecoveryMetadataReadResult::Invalid;
+  }
+
+  metadata->imageFile = imageFile.toString();
+  metadata->parameterFile = parameterFile.toString();
+  metadata->parameterSuggested = parameterSuggested.toBool();
+  metadata->dirty = dirty.toBool();
+  return RecoveryMetadataReadResult::Valid;
 }
 } // namespace
 
@@ -1078,10 +1170,12 @@ void MainWindow::loadRecentParams() {
   loadRecentItems(m_recentParams, &MainWindow::openRecentParams);
 }
 
-/** Auto-save this document into its private crash-recovery directory.
-   Called by a 30-second timer and immediately after image load/save.  The
-   payload contains the image path, complete parameters, and current parameter
-   filename metadata.  */
+/** Auto-save this document as one atomically replaced recovery bundle.
+
+    The portable/Qt parameter payload is followed by recovery-only JSON after
+    colorscreen_qt_metadata_end. Ordinary parameter readers intentionally stop
+    before that record. Legacy sidecars are removed only after the new bundle
+    has committed, so a failed save leaves the previous recovery snapshot intact. */
 void MainWindow::saveRecoveryState() {
   if (!m_scan || m_recoveryDir.isEmpty())
     return;
@@ -1089,91 +1183,120 @@ void MainWindow::saveRecoveryState() {
     return;
 
   const QDir directory(m_recoveryDir);
-  saveRecoveryTextAtomically(
-      directory.filePath(QStringLiteral("recovery_image.txt")),
-      m_currentImageFile);
-
   const QString paramsPath =
       directory.filePath(QStringLiteral("recovery_params.par"));
   const bool hasRgb = m_scan->has_rgb();
-  QString paramsError;
-  if (!saveParameterPayloadAtomically(
-          paramsPath, m_scrToImgParams, hasRgb ? &m_detectParams : nullptr,
-          m_rparams, m_solverParams, m_profileSpots, &paramsError)) {
-    qWarning() << "Could not atomically save recovery parameters to" << paramsPath
-               << paramsError;
+  const RecoverySnapshotMetadata metadata{
+      m_currentImageFile, m_parameterFile.path, m_parameterFile.suggested,
+      isDocumentModified()};
+
+  QString error;
+  const bool saved = qtgui_io::saveStdioAtomically(
+      paramsPath,
+      [this, hasRgb, metadata](FILE *staged) {
+        if (!colorscreen::save_csp_with_profile_spots(
+                staged, &m_scrToImgParams,
+                hasRgb ? &m_detectParams : nullptr, &m_rparams,
+                &m_solverParams, m_profileSpots))
+          return false;
+        return appendRecoveryMetadata(staged, metadata);
+      },
+      &error);
+  if (!saved) {
+    qWarning() << "Could not atomically save recovery bundle to" << paramsPath
+               << error;
+    return;
   }
 
-  const QString meta =
-      m_parameterFile.path + QLatin1Char('\n') +
-      (m_parameterFile.suggested ? QStringLiteral("1\n")
-                                 : QStringLiteral("0\n")) +
-      (isDocumentModified() ? QStringLiteral("1\n")
-                            : QStringLiteral("0\n"));
-  if (!saveRecoveryTextAtomically(
-          directory.filePath(QStringLiteral("recovery_params_meta.txt")),
-          meta)) {
-    qWarning() << "Could not atomically save recovery metadata in"
-               << m_recoveryDir;
-  }
+  // New bundles are self-contained. These files remain supported only as a
+  // read fallback for recovery data written by older Color-Screen versions.
+  QFile::remove(directory.filePath(QStringLiteral("recovery_image.txt")));
+  QFile::remove(directory.filePath(QStringLiteral("recovery_params_meta.txt")));
 }
 
 /** Restore this document from its private recovery payload.
-   Restores the saved dirty flag when present; legacy payloads are treated as
-   modified because they may contain edits never written to the user's .par
-   file. Returns false only when the directory contains no usable data.  */
+
+    New snapshots carry document metadata inside recovery_params.par and are
+    therefore one atomic generation. Legacy recovery_image.txt and
+    recovery_params_meta.txt remain read-compatible. */
 bool MainWindow::restoreRecoveryState() {
   if (m_recoveryDir.isEmpty())
     return false;
 
   const QDir directory(m_recoveryDir);
-  const QString imagePath =
+  const QString legacyImagePath =
       directory.filePath(QStringLiteral("recovery_image.txt"));
   const QString paramsPath =
       directory.filePath(QStringLiteral("recovery_params.par"));
-  if (!QFile::exists(imagePath) && !QFile::exists(paramsPath))
+  const QString legacyMetaPath =
+      directory.filePath(QStringLiteral("recovery_params_meta.txt"));
+  if (!QFile::exists(legacyImagePath) && !QFile::exists(paramsPath))
     return false;
 
   QString imageToLoad;
-  QFile imageFile(imagePath);
-  if (imageFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
-    QTextStream in(&imageFile);
-    imageToLoad = in.readLine().trimmed();
-  }
+  bool haveEmbeddedMetadata = false;
+  RecoverySnapshotMetadata embeddedMetadata;
 
   if (QFile::exists(paramsPath)) {
-    FILE *f = fopen(paramsPath.toUtf8().constData(), "r");
-    if (f) {
-      const char *error = nullptr;
+    FILE *file = std::fopen(paramsPath.toUtf8().constData(), "r");
+    if (file) {
+      const char *loadError = nullptr;
       const bool loaded = colorscreen::load_csp_with_profile_spots(
-          f, &m_scrToImgParams, &m_detectParams, &m_rparams, &m_solverParams,
-          &error, &m_profileSpots, &m_profileCalibration.spotResults);
-      fclose(f);
-      if (!loaded || error) {
+          file, &m_scrToImgParams, &m_detectParams, &m_rparams, &m_solverParams,
+          &loadError, &m_profileSpots, &m_profileCalibration.spotResults);
+      QString metadataError;
+      RecoveryMetadataReadResult metadataResult =
+          loaded ? readRecoveryMetadata(file, &embeddedMetadata, &metadataError)
+                 : RecoveryMetadataReadResult::Absent;
+      std::fclose(file);
+
+      if (!loaded || loadError) {
         QMessageBox::warning(
             this, "Recovery Warning",
-            error ? QString("Error loading parameters: %1").arg(error)
-                  : QStringLiteral("Could not load recovered parameters."));
-      } else {
+            loadError
+                ? QString("Error loading parameters: %1").arg(loadError)
+                : QStringLiteral("Could not load recovered parameters."));
+      } else if (metadataResult == RecoveryMetadataReadResult::Valid) {
+        haveEmbeddedMetadata = true;
+        imageToLoad = embeddedMetadata.imageFile;
+        if (embeddedMetadata.parameterSuggested)
+          m_parameterFile.setSuggested(embeddedMetadata.parameterFile);
+        else
+          m_parameterFile.setLoaded(embeddedMetadata.parameterFile);
+        m_recoveryDirty = embeddedMetadata.dirty;
+      } else if (metadataResult == RecoveryMetadataReadResult::Invalid) {
+        QMessageBox::warning(
+            this, "Recovery Warning",
+            metadataError.isEmpty()
+                ? QStringLiteral("Could not read recovery metadata.")
+                : metadataError);
       }
     }
   }
 
-  m_recoveryDirty = true; // Legacy recovery metadata has no dirty flag.
-  QFile metaFile(
-      directory.filePath(QStringLiteral("recovery_params_meta.txt")));
-  if (metaFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
-    QTextStream in(&metaFile);
-    const QString recoveredParameterPath = in.readLine().trimmed();
-    const bool recoveredParameterPathSuggested =
-        (in.readLine().trimmed() == QLatin1String("1"));
-    if (recoveredParameterPathSuggested)
-      m_parameterFile.setSuggested(recoveredParameterPath);
-    else
-      m_parameterFile.setLoaded(recoveredParameterPath);
-    const QString dirtyFlag = in.readLine().trimmed();
-    if (!dirtyFlag.isEmpty())
-      m_recoveryDirty = (dirtyFlag == QLatin1String("1"));
+  if (!haveEmbeddedMetadata) {
+    // Legacy per-document and migrated pre-multi-document recovery format.
+    m_recoveryDirty = true;
+    QFile imageFile(legacyImagePath);
+    if (imageFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+      QTextStream in(&imageFile);
+      imageToLoad = in.readLine().trimmed();
+    }
+
+    QFile metaFile(legacyMetaPath);
+    if (metaFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+      QTextStream in(&metaFile);
+      const QString recoveredParameterPath = in.readLine().trimmed();
+      const bool recoveredParameterPathSuggested =
+          (in.readLine().trimmed() == QLatin1String("1"));
+      if (recoveredParameterPathSuggested)
+        m_parameterFile.setSuggested(recoveredParameterPath);
+      else
+        m_parameterFile.setLoaded(recoveredParameterPath);
+      const QString dirtyFlag = in.readLine().trimmed();
+      if (!dirtyFlag.isEmpty())
+        m_recoveryDirty = (dirtyFlag == QLatin1String("1"));
+    }
   }
 
   if (!imageToLoad.isEmpty() && QFile::exists(imageToLoad)) {
