@@ -988,18 +988,7 @@ void MainWindow::setupUi() {
               // If the active view switches tool during selection, abandon the
               // pending callback. Merely moving the inspector to another view
               // must not cancel the operation.
-              m_areaSelectionCallback = nullptr;
-              if (m_imageLayerPanel) {
-                m_imageLayerPanel->setNeutralAreaChecked(false);
-                m_imageLayerPanel->setInfraredAreaChecked(false);
-                m_imageLayerPanel->setDarkAreaChecked(false);
-                m_imageLayerPanel->updateUI();
-              }
-              if (m_colorPanel) {
-                m_colorPanel->setNeutralAreaChecked(false);
-                m_colorPanel->setAutoLevelsChecked(false);
-                m_colorPanel->updateUI();
-              }
+              cancelAreaSelectionPresentation();
             }
           });
   connect(m_imageWidget, &ImageWidget::distanceMeasured, this, &MainWindow::onDistanceMeasured);
@@ -2638,20 +2627,8 @@ void MainWindow::setInspectorImageWidget(ImageWidget *imageWidget) {
               mode != ImageWidget::AddPointMode && m_pointClickTool.active())
             clearPointClickToolPresentation();
           if (!m_inspectorImageRouting.switching && sender() == inspectorImageWidget() &&
-              mode != ImageWidget::GenericAreaMode && m_areaSelectionCallback) {
-            m_areaSelectionCallback = nullptr;
-            if (m_imageLayerPanel) {
-              m_imageLayerPanel->setNeutralAreaChecked(false);
-              m_imageLayerPanel->setInfraredAreaChecked(false);
-              m_imageLayerPanel->setDarkAreaChecked(false);
-              m_imageLayerPanel->updateUI();
-            }
-            if (m_colorPanel) {
-              m_colorPanel->setNeutralAreaChecked(false);
-              m_colorPanel->setAutoLevelsChecked(false);
-              m_colorPanel->updateUI();
-            }
-          }
+              mode != ImageWidget::GenericAreaMode && m_areaSelectionCallback)
+            cancelAreaSelectionPresentation();
         }));
   }
 
@@ -4613,11 +4590,8 @@ void MainWindow::startAreaSelection(const QString &message,
     return;
 
   if (inspectorImageWidget()->interactionMode() == ImageWidget::GenericAreaMode) {
+    cancelAreaSelectionPresentation();
     restoreInteractionMode();
-    statusBar()->clearMessage();
-    m_areaSelectionCallback = nullptr;
-    if (m_imageLayerPanel)
-      m_imageLayerPanel->setNeutralAreaChecked(false);
     return;
   }
 
@@ -4626,6 +4600,32 @@ void MainWindow::startAreaSelection(const QString &message,
   inspectorImageWidget()->setInteractionMode(ImageWidget::GenericAreaMode);
   inspectorImageWidget()->setAreaSelectionInstruction(message);
   statusBar()->showMessage(message);
+}
+
+/** Clear one pending Generic Area operation without changing canvas mode.
+
+    Area selection is shared by Image Layer, Color, Sharpness MTF measurement,
+    and Geometry. A tool switch must clear every toggle/prompt that can own the
+    same callback rather than leaving a visually armed operation behind. */
+void MainWindow::cancelAreaSelectionPresentation() {
+  if (!m_areaSelectionCallback)
+    return;
+
+  m_areaSelectionCallback = nullptr;
+  if (m_imageLayerPanel) {
+    m_imageLayerPanel->setNeutralAreaChecked(false);
+    m_imageLayerPanel->setInfraredAreaChecked(false);
+    m_imageLayerPanel->setDarkAreaChecked(false);
+    m_imageLayerPanel->updateUI();
+  }
+  if (m_colorPanel) {
+    m_colorPanel->setNeutralAreaChecked(false);
+    m_colorPanel->setAutoLevelsChecked(false);
+    m_colorPanel->updateUI();
+  }
+  if (m_sharpnessPanel)
+    m_sharpnessPanel->setMeasureMtfChecked(false);
+  statusBar()->clearMessage();
 }
 
 /** Close stale final-result confirmations without applying their results. */
@@ -5732,9 +5732,8 @@ void MainWindow::onMeasureMtfRequested(bool checked) {
     dialog->open();
   } else {
     if (inspectorImageWidget()->interactionMode() == ImageWidget::GenericAreaMode) {
+      cancelAreaSelectionPresentation();
       restoreInteractionMode();
-      statusBar()->clearMessage();
-      m_areaSelectionCallback = nullptr;
     }
   }
 }
