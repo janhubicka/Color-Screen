@@ -84,7 +84,11 @@ each document has independent:
 - current image filename, one `ParameterFileState` (path + whether it is only
   a suggested Save-As target), and a UUID-named recovery directory. Never let a
   suggested `.par` name become an overwrite target without an explicit save/load
-  transition.
+  transition. User parameter saves must stage the complete FILE*-serialized CSP
+  payload before committing it through `QSaveFile` with direct-write fallback
+  disabled; a failed save must leave any previous usable target unchanged.
+  Recovery image/parameter/metadata files use the same per-file atomic replacement
+  rule rather than truncating their previous payloads in place.
 
 Workspace geometry, image/parameter file-dialog directory history, and
 recent-file lists remain application preferences in `QSettings`; they are not
