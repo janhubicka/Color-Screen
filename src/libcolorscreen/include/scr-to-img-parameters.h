@@ -5,8 +5,10 @@
 #ifndef SCR_TO_IMG_PARAMETERS_H
 #define SCR_TO_IMG_PARAMETERS_H
 #include "base.h"
+#include "color.h"
 #include "dllpublic.h"
 #include "lens-warp-correction-parameters.h"
+#include "matrix.h"
 #include <cmath>
 #include <memory>
 namespace colorscreen
