@@ -250,7 +250,7 @@ QString renderToFileFailureMessage(const QString &outputPath,
                                    const QString &detail) {
   QString message = QCoreApplication::translate(
       "MainWindow",
-      "Rendering the accepted document snapshot to "%1" did not complete. "
+      "Rendering the accepted document snapshot to \"%1\" did not complete. "
       "The current document parameters and image state were not changed, and "
       "no failed partial output is retained at that path. Verify that the "
       "destination is writable and has enough free space, review the export "
