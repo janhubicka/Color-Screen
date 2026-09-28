@@ -558,7 +558,8 @@ private:
       std::function<void()> onDone,
       std::function<bool(ParameterState &, colorscreen::image_data &,
                          const colorscreen::int_image_area &,
-                         colorscreen::progress_info *)> worker);
+                         colorscreen::progress_info *)> worker,
+      bool showGenericFailure = true);
 
   /**
    * @brief Saves the current interaction mode (if not a temporary mode like GenericAreaMode).
