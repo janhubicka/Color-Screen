@@ -624,6 +624,31 @@ if (pointToolImage->interactionMode() != ImageWidget::SelectMode) {
 }
 pointToolImage->setInteractionMode(originalPointToolMode);
 
+// Generic Area cancellation is shared by several panels. In particular,
+// abandoning Sharpness Measure MTF by choosing another canvas tool must clear
+// both the callback and its toggle/status presentation.
+pointToolImage->setInteractionMode(ImageWidget::SelectMode);
+first->m_sharpnessPanel->setMeasureMtfChecked(true);
+first->startAreaSelection(QStringLiteral("Area cancellation smoke"),
+                          [](QRect) {});
+if (!mtfMeasureButton->isChecked() || !first->m_areaSelectionCallback ||
+    pointToolImage->interactionMode() != ImageWidget::GenericAreaMode ||
+    !first->statusBar()->currentMessage().contains(
+        QStringLiteral("Area cancellation smoke"))) {
+  fail(QStringLiteral(
+      "Sharpness MTF area selection did not enter one owned selection state"));
+  return;
+}
+pointToolImage->setInteractionMode(ImageWidget::PanMode);
+if (mtfMeasureButton->isChecked() || first->m_areaSelectionCallback ||
+    first->statusBar()->currentMessage().contains(
+        QStringLiteral("Area cancellation smoke"))) {
+  fail(QStringLiteral(
+      "Tool switch left stale Sharpness MTF area-selection presentation"));
+  return;
+}
+pointToolImage->setInteractionMode(originalPointToolMode);
+
 const bool expectedNativeImageLayer =
     first->sharedImageData()->has_grayscale_or_ir() &&
     (!first->sharedImageData()->has_rgb() ||
