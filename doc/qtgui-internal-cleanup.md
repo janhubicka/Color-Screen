@@ -789,6 +789,12 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   MainWindow members without changing that lifecycle. Existing workspace churn
   remains the regression for view activation, tool transfer, secondary close and
   inspector rebinding.
+- Keep file-dialog history at application scope. The image Open dialog now reads
+  and writes `lastOpenDir` in `QSettings`, ignoring a persisted directory that
+  no longer exists. The old per-document `m_lastOpenDir` therefore disappears,
+  along with the completely unused `m_lastSaveDir`. Parameter Save As remains
+  document-target-driven through `ParameterFileState`, which is a different
+  ownership concern.
 - Keep application-wide recent-item plumbing shared and stateless with respect to
   document processing. Image and parameter MRUs now use two `RecentItemsState`
   instances plus one menu/QSettings implementation. The old cached QAction

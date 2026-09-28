@@ -732,8 +732,6 @@ private:
   // Core Data
   // We keep shared copies or references.
   // These parameter objects are document-local, so direct members are appropriate.
-  QString m_lastOpenDir;
-  QString m_lastSaveDir;
 
   std::shared_ptr<colorscreen::image_data> m_scan;
   colorscreen::render_parameters m_rparams;
