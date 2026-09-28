@@ -594,6 +594,33 @@ if (first->m_pointClickTool.active() || profileAddSpotButton->isChecked() ||
 }
 pointToolImage->setInteractionMode(originalPointToolMode);
 
+//
+// Temporary-tool restoration is shared beyond Profile/Focus. Starting Measure
+// or Crop while Add spot owns AddPointMode must preserve the original Select
+// tool rather than saving the borrowed AddPointMode as the restore target.
+//
+pointToolImage->setInteractionMode(ImageWidget::SelectMode);
+profileAddSpotButton->setChecked(true);
+first->onMeasureRequested();
+if (first->m_pointClickTool.active() || profileAddSpotButton->isChecked() ||
+    pointToolImage->interactionMode() != ImageWidget::MeasureMode) {
+  fail(QStringLiteral(
+      "Measure did not replace the temporary Profile point tool cleanly"));
+  return;
+}
+first->onCropRequested();
+if (pointToolImage->interactionMode() != ImageWidget::CropMode) {
+  fail(QStringLiteral("Crop did not replace Measure as a temporary tool"));
+  return;
+}
+first->onCropRequested();
+if (pointToolImage->interactionMode() != ImageWidget::SelectMode) {
+  fail(QStringLiteral(
+      "Nested temporary tools overwrote the original persistent canvas tool"));
+  return;
+}
+pointToolImage->setInteractionMode(originalPointToolMode);
+
 const bool expectedNativeImageLayer =
     first->sharedImageData()->has_grayscale_or_ir() &&
     (!first->sharedImageData()->has_rgb() ||
