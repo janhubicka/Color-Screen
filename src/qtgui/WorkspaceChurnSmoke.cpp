@@ -608,12 +608,15 @@ if (first->m_pointClickTool.active() || profileAddSpotButton->isChecked() ||
       "Measure did not replace the temporary Profile point tool cleanly"));
   return;
 }
-first->onCropRequested();
-if (pointToolImage->interactionMode() != ImageWidget::CropMode) {
-  fail(QStringLiteral("Crop did not replace Measure as a temporary tool"));
+first->startAreaSelection(
+    QStringLiteral("Temporary tool restore smoke"), [](QRect) {});
+if (pointToolImage->interactionMode() != ImageWidget::GenericAreaMode) {
+  fail(QStringLiteral(
+      "Area selection did not replace Measure as a temporary tool"));
   return;
 }
-first->onCropRequested();
+first->startAreaSelection(
+    QStringLiteral("Temporary tool restore smoke"), [](QRect) {});
 if (pointToolImage->interactionMode() != ImageWidget::SelectMode) {
   fail(QStringLiteral(
       "Nested temporary tools overwrote the original persistent canvas tool"));
