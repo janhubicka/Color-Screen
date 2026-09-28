@@ -2045,8 +2045,11 @@ void MainWindow::createMenus() {
   m_openAction->setShortcutContext(Qt::WindowShortcut);
   connect(m_openAction, &QAction::triggered, this, &MainWindow::onOpenImage);
 
-  m_recentFilesMenu = m_fileMenu->addMenu("Open &Recent");
-  connect(m_recentFilesMenu, &QMenu::aboutToShow, this,
+  m_recentFiles.menu = m_fileMenu->addMenu("Open &Recent");
+  m_recentFiles.settingsKey = QStringLiteral("recentFiles");
+  m_recentFiles.emptyLabel = tr("No Recent Files");
+  m_recentFiles.clearLabel = tr("Clear Recent Files");
+  connect(m_recentFiles.menu, &QMenu::aboutToShow, this,
           &MainWindow::loadRecentFiles);
   updateRecentFileActions();
 
@@ -2056,8 +2059,11 @@ void MainWindow::createMenus() {
   connect(openParamsAction, &QAction::triggered, this,
           &MainWindow::onOpenParameters);
 
-  m_recentParamsMenu = m_fileMenu->addMenu("Open Recent &Parameters");
-  connect(m_recentParamsMenu, &QMenu::aboutToShow, this,
+  m_recentParams.menu = m_fileMenu->addMenu("Open Recent &Parameters");
+  m_recentParams.settingsKey = QStringLiteral("recentParams");
+  m_recentParams.emptyLabel = tr("No Recent Parameters");
+  m_recentParams.clearLabel = tr("Clear Recent Parameters");
+  connect(m_recentParams.menu, &QMenu::aboutToShow, this,
           &MainWindow::loadRecentParams);
   updateRecentParamsActions();
 

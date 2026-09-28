@@ -222,63 +222,81 @@ void MainWindow::onImageLoaded() {
   m_renderAction->setEnabled(m_scan != nullptr);
 }
 
-/** Add a file path to the most-recently-used image files list.
-   Moves it to the front, caps the list at MaxRecentFiles, rebuilds
-   the menu, and persists to QSettings.  */
-void MainWindow::addToRecentFiles(const QString &filePath) {
-  // Another document may have updated the application-wide list since this
-  // window was created.  Merge against the latest persisted value before
-  // writing so independently finishing image loads cannot lose entries.
+/** Persist one application-wide recent-items list. */
+void MainWindow::saveRecentItems(const RecentItemsState &state) {
   QSettings settings;
-  m_recentFiles = settings.value("recentFiles").toStringList();
-  QString absolutePath = QFileInfo(filePath).absoluteFilePath();
-  m_recentFiles.removeAll(absolutePath);
-  m_recentFiles.prepend(absolutePath);
-
-  while (m_recentFiles.size() > MaxRecentFiles)
-    m_recentFiles.removeLast();
-
-  settings.setValue("recentFiles", m_recentFiles);
-  updateRecentFileActions();
+  settings.setValue(state.settingsKey, state.items);
 }
 
-/** Rebuild the "Open Recent" submenu from the m_recentFiles list.
-   Adds a "Clear Recent Files" action at the bottom.  */
-void MainWindow::updateRecentFileActions() {
-  m_recentFilesMenu->clear();
-  m_recentFileActions.clear();
+/** Rebuild one recent-items submenu from its application-wide list. */
+void MainWindow::updateRecentItemsActions(RecentItemsState &state,
+                                          RecentItemHandler handler) {
+  if (!state.menu)
+    return;
 
-  for (int i = 0; i < m_recentFiles.size(); ++i) {
-    QString fileName = QFileInfo(m_recentFiles[i]).fileName();
+  state.menu->clear();
+  for (int i = 0; i < state.items.size(); ++i) {
+    const QString path = state.items[i];
+    QString fileName = QFileInfo(path).fileName();
     fileName.replace(QLatin1Char('&'), QStringLiteral("&&"));
-    QString text = tr("&%1 %2").arg(i + 1).arg(fileName);
-    QAction *action =
-        m_recentFilesMenu->addAction(text, this, &MainWindow::openRecentFile);
-    action->setData(m_recentFiles[i]);
-    action->setToolTip(m_recentFiles[i]);
-    m_recentFileActions.append(action);
+    QAction *action = state.menu->addAction(
+        tr("&%1 %2").arg(i + 1).arg(fileName));
+    action->setData(path);
+    action->setToolTip(path);
+    connect(action, &QAction::triggered, this,
+            [this, handler, path]() { (this->*handler)(path); });
   }
 
-  if (m_recentFiles.isEmpty()) {
-    m_recentFilesMenu->addAction("No Recent Files")->setEnabled(false);
-  } else {
-    m_recentFilesMenu->addSeparator();
-    QAction *clearAction = m_recentFilesMenu->addAction("Clear Recent Files");
-    connect(clearAction, &QAction::triggered, this, [this]() {
-      m_recentFiles.clear();
-      updateRecentFileActions();
-      saveRecentFiles();
-    });
+  if (state.items.isEmpty()) {
+    state.menu->addAction(state.emptyLabel)->setEnabled(false);
+    return;
   }
+
+  state.menu->addSeparator();
+  QAction *clearAction = state.menu->addAction(state.clearLabel);
+  RecentItemsState *const statePtr = &state;
+  connect(clearAction, &QAction::triggered, this,
+          [this, statePtr, handler]() {
+            statePtr->items.clear();
+            saveRecentItems(*statePtr);
+            updateRecentItemsActions(*statePtr, handler);
+          });
+}
+
+/** Reload one recent-items list from QSettings and rebuild its menu. */
+void MainWindow::loadRecentItems(RecentItemsState &state,
+                                 RecentItemHandler handler) {
+  QSettings settings;
+  state.items = settings.value(state.settingsKey).toStringList();
+  updateRecentItemsActions(state, handler);
+}
+
+/** Add PATH to one MRU list without overwriting entries from another window. */
+void MainWindow::addToRecentItems(RecentItemsState &state,
+                                  const QString &filePath,
+                                  RecentItemHandler handler) {
+  QSettings settings;
+  state.items = settings.value(state.settingsKey).toStringList();
+  const QString absolutePath = QFileInfo(filePath).absoluteFilePath();
+  state.items.removeAll(absolutePath);
+  state.items.prepend(absolutePath);
+  while (state.items.size() > MaxRecentFiles)
+    state.items.removeLast();
+
+  saveRecentItems(state);
+  updateRecentItemsActions(state, handler);
+}
+
+void MainWindow::addToRecentFiles(const QString &filePath) {
+  addToRecentItems(m_recentFiles, filePath, &MainWindow::openRecentFile);
+}
+
+void MainWindow::updateRecentFileActions() {
+  updateRecentItemsActions(m_recentFiles, &MainWindow::openRecentFile);
 }
 
 /** Open a recent image without replacing an occupied document window. */
-void MainWindow::openRecentFile() {
-  QAction *action = qobject_cast<QAction *>(sender());
-  if (!action)
-    return;
-
-  const QString fileName = action->data().toString();
+void MainWindow::openRecentFile(const QString &fileName) {
   if (ColorScreenApplication *application = documentApplication())
     application->openFiles({fileName}, this);
   else
@@ -770,17 +788,9 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
   watcher->setFuture(future);
 }
 
-/** Load the recent image files list from QSettings on startup.  */
+/** Load the recent image files list from QSettings. */
 void MainWindow::loadRecentFiles() {
-  QSettings settings;
-  m_recentFiles = settings.value("recentFiles").toStringList();
-  updateRecentFileActions();
-}
-
-/** Persist the recent image files list to QSettings.  */
-void MainWindow::saveRecentFiles() {
-  QSettings settings;
-  settings.setValue("recentFiles", m_recentFiles);
+  loadRecentItems(m_recentFiles, &MainWindow::openRecentFile);
 }
 
 /** Return whether this document has parameters not represented by its saved
@@ -1002,84 +1012,24 @@ void MainWindow::restoreWindowState() {
   }
 }
 
-/** Add a file path to the most-recently-used parameter files list.
-   Same pattern as addToRecentFiles.  */
 void MainWindow::addToRecentParams(const QString &filePath) {
-  // Parameter saves and loads can finish in different document windows; start
-  // from QSettings so the most recent writer merges rather than overwrites.
-  QSettings settings;
-  m_recentParams = settings.value("recentParams").toStringList();
-  QString absolutePath = QFileInfo(filePath).absoluteFilePath();
-  m_recentParams.removeAll(absolutePath);
-  m_recentParams.prepend(absolutePath);
-
-  while (m_recentParams.size() > MaxRecentFiles)
-    m_recentParams.removeLast();
-
-  settings.setValue("recentParams", m_recentParams);
-  updateRecentParamsActions();
+  addToRecentItems(m_recentParams, filePath, &MainWindow::openRecentParams);
 }
 
-/** Rebuild the "Open Recent Parameters" submenu.  */
 void MainWindow::updateRecentParamsActions() {
-  m_recentParamsMenu->clear();
-  m_recentParamsActions.clear();
-
-  for (int i = 0; i < m_recentParams.size(); ++i) {
-    QString fileName = QFileInfo(m_recentParams[i]).fileName();
-    fileName.replace(QLatin1Char('&'), QStringLiteral("&&"));
-    QString text = tr("&%1 %2").arg(i + 1).arg(fileName);
-    QAction *action = m_recentParamsMenu->addAction(
-        text, this, &MainWindow::openRecentParams);
-    action->setData(m_recentParams[i]);
-    action->setToolTip(m_recentParams[i]);
-    m_recentParamsActions.append(action);
-  }
-
-  if (m_recentParams.isEmpty()) {
-    m_recentParamsMenu->addAction("No Recent Parameters")->setEnabled(false);
-  } else {
-    m_recentParamsMenu->addSeparator();
-    QAction *clearAction =
-        m_recentParamsMenu->addAction("Clear Recent Parameters");
-    connect(clearAction, &QAction::triggered, this, [this]() {
-      m_recentParams.clear();
-      updateRecentParamsActions();
-      saveRecentParams();
-    });
-  }
+  updateRecentItemsActions(m_recentParams, &MainWindow::openRecentParams);
 }
 
-/** Slot invoked when a recent parameter menu item is clicked.
-   Loads the .par file (reset + merge), updates the renderer and UI,
-   syncs gamut warning state, and clears undo history.  */
-void MainWindow::openRecentParams() {
-  QAction *action = qobject_cast<QAction *>(sender());
-  if (!action)
-    return;
-
-  // maybeSave() can rebuild this submenu and delete ACTION, so capture its
-  // payload before opening a nested save dialog.
-  const QString fileName = action->data().toString();
-  if (maybeSave()) {
-    if (loadParameterFile(fileName)) {
-      statusBar()->showMessage(QString("Parameters loaded from %1").arg(fileName),
-                               3000);
-    }
-  }
+/** Load one recent parameter file after resolving unsaved document state. */
+void MainWindow::openRecentParams(const QString &fileName) {
+  if (maybeSave() && loadParameterFile(fileName))
+    statusBar()->showMessage(
+        QString("Parameters loaded from %1").arg(fileName), 3000);
 }
 
-/** Load the recent parameter files list from QSettings on startup.  */
+/** Load the recent parameter files list from QSettings. */
 void MainWindow::loadRecentParams() {
-  QSettings settings;
-  m_recentParams = settings.value("recentParams").toStringList();
-  updateRecentParamsActions();
-}
-
-/** Persist the recent parameter files list to QSettings.  */
-void MainWindow::saveRecentParams() {
-  QSettings settings;
-  settings.setValue("recentParams", m_recentParams);
+  loadRecentItems(m_recentParams, &MainWindow::openRecentParams);
 }
 
 /** Auto-save this document into its private crash-recovery directory.
