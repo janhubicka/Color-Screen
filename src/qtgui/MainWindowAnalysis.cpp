@@ -264,6 +264,15 @@ QString renderToFileFailureMessage(const QString &outputPath,
 }
 
 /** Explain failure of the experimental one-area Focus analyzer. */
+QString areaComputationFailureMessage(const QString &operation) {
+  return QCoreApplication::translate(
+             "MainWindow",
+             "The selected area could not be analyzed for %1. Existing "
+             "processing parameters were left unchanged. Choose a larger, "
+             "clearer area that matches the operation's requirements and retry.")
+      .arg(operation);
+}
+
 QString pointFocusAnalysisFailureMessage(const QString &detail) {
   QString message = QCoreApplication::translate(
       "MainWindow",

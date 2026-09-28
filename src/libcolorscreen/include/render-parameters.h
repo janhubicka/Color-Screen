@@ -866,7 +866,7 @@ struct render_parameters
      AREA is area to analyze.
      PROGRESS is progress info.
      DARK_CUT and LIGHT_CUT are percentages of pixels to be cut.  */
-  DLL_PUBLIC bool auto_dark_brightness (image_data &img,
+  nodiscard_attr DLL_PUBLIC bool auto_dark_brightness (image_data &img,
                                         scr_to_img_parameters &par,
                                         int_image_area area,
                                         progress_info *progress = NULL,
@@ -901,7 +901,7 @@ struct render_parameters
      AREA is area to analyze.
      PROGRESS is progress info.
      DARK_CUT and LIGHT_CUT are percentages of pixels to be cut.  */
-  DLL_PUBLIC bool auto_white_balance (image_data &img,
+  nodiscard_attr DLL_PUBLIC bool auto_white_balance (image_data &img,
                                       scr_to_img_parameters &par,
                                       int_image_area area,
                                       progress_info *progress = NULL,

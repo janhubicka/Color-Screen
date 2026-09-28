@@ -1074,11 +1074,14 @@ void MainWindow::setupUi() {
             tr("Select neutral area for simulated mixing"),
             tr("Set simulated mix parameters by neutral area"),
             [this]() { m_imageLayerPanel->setNeutralAreaEnabled(false); },
-            [this]() { m_imageLayerPanel->setNeutralAreaChecked(false); },
+            [this]() {
+              m_imageLayerPanel->setNeutralAreaChecked(false);
+              m_imageLayerPanel->updateUI();
+            },
             [](ParameterState &s, colorscreen::image_data &scan,
                const colorscreen::int_image_area &area,
                colorscreen::progress_info *p) {
-              s.rparams.auto_mix_weights(scan, s.scrToImg, area, p);
+              return s.rparams.auto_mix_weights(scan, s.scrToImg, area, p);
             });
       });
 
@@ -1089,11 +1092,15 @@ void MainWindow::setupUi() {
             tr("Select area to set simulated mix parameters using infrared"),
             tr("Set simulated mix parameters using infrared"),
             [this]() { m_imageLayerPanel->setInfraredAreaEnabled(false); },
-            [this]() { m_imageLayerPanel->setInfraredAreaChecked(false); },
+            [this]() {
+              m_imageLayerPanel->setInfraredAreaChecked(false);
+              m_imageLayerPanel->updateUI();
+            },
             [](ParameterState &s, colorscreen::image_data &scan,
                const colorscreen::int_image_area &area,
                colorscreen::progress_info *p) {
-              s.rparams.auto_mix_weights_using_ir(scan, s.scrToImg, area, p);
+              return s.rparams.auto_mix_weights_using_ir(
+                  scan, s.scrToImg, area, p);
             });
       });
 
@@ -1103,11 +1110,14 @@ void MainWindow::setupUi() {
             tr("Select dark area for simulated mixing"),
             tr("Set dark mix parameters by area"),
             [this]() { m_imageLayerPanel->setDarkAreaEnabled(false); },
-            [this]() { m_imageLayerPanel->setDarkAreaChecked(false); },
+            [this]() {
+              m_imageLayerPanel->setDarkAreaChecked(false);
+              m_imageLayerPanel->updateUI();
+            },
             [](ParameterState &s, colorscreen::image_data &scan,
                const colorscreen::int_image_area &area,
                colorscreen::progress_info *p) {
-              s.rparams.auto_mix_dark(scan, s.scrToImg, area, p);
+              return s.rparams.auto_mix_dark(scan, s.scrToImg, area, p);
             });
       });
 
@@ -1116,11 +1126,14 @@ void MainWindow::setupUi() {
         tr("Select neutral area for white balance"),
         tr("Set white balance by neutral area"),
         [this]() { m_colorPanel->setNeutralAreaEnabled(false); },
-        [this]() { m_colorPanel->setNeutralAreaChecked(false); },
+        [this]() {
+          m_colorPanel->setNeutralAreaChecked(false);
+          m_colorPanel->updateUI();
+        },
         [](ParameterState &s, colorscreen::image_data &scan,
            const colorscreen::int_image_area &area,
            colorscreen::progress_info *p) {
-          s.rparams.auto_white_balance(scan, s.scrToImg, area, p);
+          return s.rparams.auto_white_balance(scan, s.scrToImg, area, p);
         });
   });
 
@@ -1129,11 +1142,14 @@ void MainWindow::setupUi() {
         tr("Select area for auto levels"),
         tr("Set auto levels by area"),
         [this]() { m_colorPanel->setAutoLevelsEnabled(false); },
-        [this]() { m_colorPanel->setAutoLevelsChecked(false); },
+        [this]() {
+          m_colorPanel->setAutoLevelsChecked(false);
+          m_colorPanel->updateUI();
+        },
         [](ParameterState &s, colorscreen::image_data &scan,
            const colorscreen::int_image_area &area,
            colorscreen::progress_info *p) {
-          s.rparams.auto_dark_brightness(scan, s.scrToImg, area, p);
+          return s.rparams.auto_dark_brightness(scan, s.scrToImg, area, p);
         });
   });
 
@@ -4659,17 +4675,19 @@ void MainWindow::runAreaComputation(
     const QString &description,
     std::function<void()> onStart,
     std::function<void()> onDone,
-    std::function<void(ParameterState &, colorscreen::image_data &,
+    std::function<bool(ParameterState &, colorscreen::image_data &,
                        const colorscreen::int_image_area &,
-                       colorscreen::progress_info *)> worker) {
+                       colorscreen::progress_info *)> worker,
+    bool showGenericFailure) {
   startAreaSelection(message, [this, description, onStart, onDone,
-                               worker](QRect area) {
+                               worker, showGenericFailure](QRect area) {
     if (area.width() <= 0 || area.height() <= 0 || !m_scan)
       return;
 
     const auto scan = m_scan;
     const ParameterState baseline = getCurrentState();
     auto result = std::make_shared<ParameterState>(baseline);
+    auto succeeded = std::make_shared<bool>(false);
 
     OneShotOperation operation;
     operation.description = description;
@@ -4683,16 +4701,25 @@ void MainWindow::runAreaComputation(
     operation.resultValid = [this, scan, baseline]() {
       return m_scan == scan && getCurrentState() == baseline;
     };
-    operation.applyResult = [this, result, description]() {
+    operation.applyResult =
+        [this, result, succeeded, description, showGenericFailure]() {
+      if (!*succeeded) {
+        if (showGenericFailure)
+          statusBar()->showMessage(areaComputationFailureMessage(description),
+                                   9000);
+        return;
+      }
       changeParameters(*result, description);
     };
     operation.onDone = std::move(onDone);
 
     runOneShotOperation(
         std::move(operation),
-        [scan, result, area, worker](colorscreen::progress_info *progress) {
-          worker(*result, *scan,
-                 {area.x(), area.y(), area.width(), area.height()}, progress);
+        [scan, result, succeeded, area, worker](
+            colorscreen::progress_info *progress) {
+          *succeeded = worker(
+              *result, *scan,
+              {area.x(), area.y(), area.width(), area.height()}, progress);
         });
   });
 }
@@ -5711,13 +5738,17 @@ void MainWindow::onMeasureMtfRequested(bool checked) {
                   colorscreen::slanted_edge_mtf(
                       s.rparams, scan, area, parameters, progress);
               if (!result.success) {
+                if (progress && progress->cancel_requested()) {
+                  results->clear();
+                  return false;
+                }
                 *batchError =
                     parameters.name + ": "
                     + (result.error.empty()
                            ? std::string("no usable single slanted edge was found")
                            : result.error);
                 results->push_back(std::move(result));
-                return;
+                return false;
               }
               results->push_back(std::move(result));
             }
@@ -5727,7 +5758,9 @@ void MainWindow::onMeasureMtfRequested(bool checked) {
             for (auto &result : *results)
               s.rparams.sharpen.scanner_mtf.measurements.push_back(
                   std::move(result.measurement));
-          });
+            return true;
+          },
+          false);
     });
     dialog->open();
   } else {
