@@ -284,8 +284,14 @@ void DeformationChartWidget::paintEvent(QPaintEvent *event)
     colorscreen::scr_to_img deformed_map;
     colorscreen::scr_to_img undeformed_map;
     
-    deformed_map.set_parameters(m_deformedParams, m_fullScanWidth, m_fullScanHeight);
-    undeformed_map.set_parameters(m_undeformedParams, m_fullScanWidth, m_fullScanHeight);
+    if (!deformed_map.set_parameters(m_deformedParams, m_fullScanWidth,
+                                     m_fullScanHeight) ||
+        !undeformed_map.set_parameters(m_undeformedParams, m_fullScanWidth,
+                                       m_fullScanHeight)) {
+        painter.setPen(palette().text().color());
+        painter.drawText(chartRect, Qt::AlignCenter, tr("Geometry unavailable"));
+        return;
+    }
     
     // Calculate grid size (approximately 10 pixels)
     const int gridPixelSize = 10;
