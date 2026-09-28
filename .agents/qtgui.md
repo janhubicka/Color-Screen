@@ -66,6 +66,13 @@ and `QFileOpenEvent` from the desktop—route through
 empty document; every other path receives a new `MainWindow` and is attached
 to the primary workspace by default.
 
+Fullscreen image presentation must work in both document layouts. A detached
+document normally has a two-child main splitter (image + inspector); an embedded
+document has only the image there because WorkspaceWindow borrows the inspector.
+On fullscreen exit always restore ImageWidget's resize reference (`lastSize`),
+and restore saved splitter sizes only when their count matches the current
+splitter children. Never assume two children.
+
 The document boundary is intentionally the entire `MainWindow`. In particular,
 each document has independent:
 
