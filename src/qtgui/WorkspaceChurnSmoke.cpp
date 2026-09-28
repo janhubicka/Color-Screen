@@ -557,14 +557,14 @@ const ImageWidget::InteractionMode originalPointToolMode =
     pointToolImage->interactionMode();
 pointToolImage->setInteractionMode(ImageWidget::SelectMode);
 profileAddSpotButton->setChecked(true);
-if (!first->m_pointClickTool.profileSpot() ||
+if (!first->m_temporaryCanvas.pointClick.profileSpot() ||
     pointToolImage->interactionMode() != ImageWidget::AddPointMode ||
     !profileAddSpotButton->isChecked()) {
   fail(QStringLiteral("Profile Add spot did not acquire the point-click tool"));
   return;
 }
 pointFocusButton->setChecked(true);
-if (!first->m_pointClickTool.focusAnalysis() ||
+if (!first->m_temporaryCanvas.pointClick.focusAnalysis() ||
     profileAddSpotButton->isChecked() || !pointFocusButton->isChecked() ||
     pointToolImage->interactionMode() != ImageWidget::AddPointMode) {
   fail(QStringLiteral(
@@ -572,14 +572,14 @@ if (!first->m_pointClickTool.focusAnalysis() ||
   return;
 }
 profileAddSpotButton->setChecked(true);
-if (!first->m_pointClickTool.profileSpot() ||
+if (!first->m_temporaryCanvas.pointClick.profileSpot() ||
     !profileAddSpotButton->isChecked() || pointFocusButton->isChecked()) {
   fail(QStringLiteral(
       "Profile Add spot did not exclusively retake point-click ownership"));
   return;
 }
 profileAddSpotButton->setChecked(false);
-if (first->m_pointClickTool.active() ||
+if (first->m_temporaryCanvas.pointClick.active() ||
     pointToolImage->interactionMode() != ImageWidget::SelectMode) {
   fail(QStringLiteral(
       "Temporary point-tool handoff overwrote the original canvas tool"));
@@ -587,7 +587,7 @@ if (first->m_pointClickTool.active() ||
 }
 profileAddSpotButton->setChecked(true);
 pointToolImage->setInteractionMode(ImageWidget::PanMode);
-if (first->m_pointClickTool.active() || profileAddSpotButton->isChecked() ||
+if (first->m_temporaryCanvas.pointClick.active() || profileAddSpotButton->isChecked() ||
     pointFocusButton->isChecked()) {
   fail(QStringLiteral(
       "Explicit canvas tool change left a hidden temporary point tool armed"));
@@ -603,7 +603,7 @@ pointToolImage->setInteractionMode(originalPointToolMode);
 pointToolImage->setInteractionMode(ImageWidget::SelectMode);
 profileAddSpotButton->setChecked(true);
 first->onMeasureRequested();
-if (first->m_pointClickTool.active() || profileAddSpotButton->isChecked() ||
+if (first->m_temporaryCanvas.pointClick.active() || profileAddSpotButton->isChecked() ||
     pointToolImage->interactionMode() != ImageWidget::MeasureMode) {
   fail(QStringLiteral(
       "Measure did not replace the temporary Profile point tool cleanly"));
@@ -635,7 +635,7 @@ pointToolImage->setInteractionMode(ImageWidget::SelectMode);
 }
 first->startAreaSelection(QStringLiteral("Area cancellation smoke"),
                           [](QRect) {});
-if (!mtfMeasureButton->isChecked() || !first->m_areaSelectionCallback ||
+if (!mtfMeasureButton->isChecked() || !first->m_temporaryCanvas.areaSelectionCallback ||
     pointToolImage->interactionMode() != ImageWidget::GenericAreaMode ||
     !first->statusBar()->currentMessage().contains(
         QStringLiteral("Area cancellation smoke"))) {
@@ -644,7 +644,7 @@ if (!mtfMeasureButton->isChecked() || !first->m_areaSelectionCallback ||
   return;
 }
 pointToolImage->setInteractionMode(ImageWidget::PanMode);
-if (mtfMeasureButton->isChecked() || first->m_areaSelectionCallback ||
+if (mtfMeasureButton->isChecked() || first->m_temporaryCanvas.areaSelectionCallback ||
     first->statusBar()->currentMessage().contains(
         QStringLiteral("Area cancellation smoke"))) {
   fail(QStringLiteral(
