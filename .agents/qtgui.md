@@ -121,7 +121,11 @@ dock. The workspace owns the one status bar for the whole top-level window.
 Every attached `MainWindow` and `ImageViewWindow` routes `statusBar()` directly
 to that same `QStatusBar`; tabs must not keep private status-message state or
 mirror messages when activation changes. Only detached top-level windows use
-their private status bars. Every represented document's transient progress controls are attached to the
+their private status bars. Keep each window's embedding flag and shared
+status-bar route together in `WorkspacePresentationState`; MainWindow also keeps
+the saved standalone splitter state there because that snapshot belongs to the
+same inspector-borrowing transition. Fullscreen splitter-size snapshots remain a
+separate resize gesture and must not be folded into this state. Every represented document's transient progress controls are attached to the
 workspace once, independently of active chrome. The shared status line displays
 the most recently started visible document task and provides document-level
 previous/next controls when several documents work concurrently; changing tabs

@@ -318,7 +318,7 @@ public:
   void restoreFromWorkspaceEmbedding();
 
   /** Return whether this document is currently presented by the workspace. */
-  bool isWorkspaceEmbedded() const { return m_workspaceEmbedded; }
+  bool isWorkspaceEmbedded() const { return m_workspacePresentation.embedded; }
 
   struct SolverRequestData {
     std::shared_ptr<colorscreen::image_data> scan;
@@ -697,9 +697,17 @@ private:
   QList<QAction *> m_modeActions; // 1-0 hotkeys for modes
 
   QSplitter *m_mainSplitter;
-  QByteArray m_workspaceSplitterState;
-  QPointer<QStatusBar> m_workspaceStatusBar;
-  bool m_workspaceEmbedded = false;
+
+  /** Presentation handoff while this document is hosted by WorkspaceWindow.
+      STATUSBAR routes transient messages to the outer window; EMBEDDED gates
+      detached-only chrome behavior; SPLITTERSTATE restores the document's own
+      inspector split after the borrowed inspector returns. */
+  struct WorkspacePresentationState {
+    QByteArray splitterState;
+    QPointer<QStatusBar> statusBar;
+    bool embedded = false;
+  };
+  WorkspacePresentationState m_workspacePresentation;
   QList<int> m_splitterSizesBeforeFullscreen; // Save splitter state before fullscreen
 
   // Left side

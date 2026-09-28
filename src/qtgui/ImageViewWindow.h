@@ -94,7 +94,7 @@ public:
   void restoreFromWorkspaceEmbedding();
 
   /** Return whether this view is currently presented inside the workspace. */
-  bool isWorkspaceEmbedded() const { return m_workspaceEmbedded; }
+  bool isWorkspaceEmbedded() const { return m_workspacePresentation.embedded; }
 
   /** Return true when this view displays an external slanted-edge reference. */
   bool isSlantedEdgeReference() const { return m_slantedEdgeReference; }
@@ -205,8 +205,13 @@ private:
   QDockWidget *m_referenceInspectorDock = nullptr;
   QDockWidget *m_documentInspectorDock = nullptr;
   QWidget *m_documentInspectorHost = nullptr;
-  QPointer<QStatusBar> m_workspaceStatusBar;
-  bool m_workspaceEmbedded = false;
+
+  /** Presentation handoff while this secondary view is hosted by WorkspaceWindow. */
+  struct WorkspacePresentationState {
+    QPointer<QStatusBar> statusBar;
+    bool embedded = false;
+  };
+  WorkspacePresentationState m_workspacePresentation;
   bool m_slantedEdgeReference = false;
   bool m_referenceLoadPending = false;
   QString m_referenceFile;
