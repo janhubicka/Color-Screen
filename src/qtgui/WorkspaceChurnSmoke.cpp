@@ -69,6 +69,7 @@ struct WorkspaceChurnState {
   bool expectedStatesSet = false;
   int initialFirstUndoIndex = 0;
   bool initialFirstUndoClean = true;
+  bool initialFirstModified = false;
   int lastLoggedPhase = -1;
   bool oneShotStarted = false;
   bool oneShotApplied = false;
@@ -140,6 +141,7 @@ void startWorkspaceChurnSmoke(ColorScreenApplication &app,
       state->initialFirstUndoIndex = state->first->m_undoStack->index();
       state->initialFirstUndoClean = state->first->m_undoStack->isClean();
     }
+    state->initialFirstModified = state->first->isDocumentModified();
     state->workspaceToolBar = workspace->findChild<QToolBar *>(
         QStringLiteral("WorkspaceToolbar"), Qt::FindDirectChildrenOnly);
     state->workspaceToolBarHost = state->workspaceToolBar
@@ -4354,6 +4356,11 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         ParameterState restoredState = first->documentStateSnapshot();
         restoredState.rparams.scan_mirror = state->originalFirstScanMirror;
         first->applyState(restoredState);
+        if (first->isDocumentModified() != state->initialFirstModified) {
+          fail(QStringLiteral(
+              "Workspace churn changed the source document modified state"));
+          return;
+        }
         if (state->completed)
           state->completed();
         return;
