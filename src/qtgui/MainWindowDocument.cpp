@@ -574,7 +574,7 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
       watcher, &QFutureWatcher<std::pair<bool, QString>>::finished, this,
       [this, watcher, tempScan, progress, fileName, isCsprj,
        allowInitialGuide, suggestDetectedMetadata, loadGeneration]() {
-        if (m_closing) {
+        if (m_closeLifecycle.closing()) {
           watcher->deleteLater();
           return;
         }
@@ -656,7 +656,7 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
                 0, this,
                 [this, analysis, suggestDetectedMetadata, loadGeneration,
                  tempScan]() {
-                  if (m_closing || loadGeneration != m_imageLoad.generation ||
+                  if (m_closeLifecycle.closing() || loadGeneration != m_imageLoad.generation ||
                       m_scan != tempScan)
                     return;
                   maybeOfferInitialSetupGuide(analysis,
@@ -686,7 +686,7 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
                 connect(tileWatcher, &QFutureWatcher<bool>::finished, this,
                         [this, tileWatcher, tileProgress, scanRef, capturedX,
                          capturedY]() {
-                          if (m_closing) {
+                          if (m_closeLifecycle.closing()) {
                             tileWatcher->deleteLater();
                             return;
                           }
@@ -792,7 +792,7 @@ bool MainWindow::isDocumentModified() const {
 
 /** Return whether a new image may safely reuse this document window. */
 bool MainWindow::canReuseForOpen() const {
-  return !m_closing && !m_scan && !m_imageLoad.pending &&
+  return !m_closeLifecycle.closing() && !m_scan && !m_imageLoad.pending &&
          m_currentImageFile.isEmpty() && !isDocumentModified();
 }
 
@@ -853,17 +853,17 @@ bool MainWindow::confirmClose() {
 
 /** Preflight final application closure without tearing down this document. */
 bool MainWindow::prepareForApplicationClose() {
-  if (m_closing || m_applicationClosePrepared)
+  if (m_closeLifecycle.closing() || m_closeLifecycle.preflightApproved())
     return true;
   if (!confirmClose())
     return false;
-  m_applicationClosePrepared = true;
+  m_closeLifecycle.approvePreflight();
   return true;
 }
 
 /** Forget a preflight approval when another document vetoes File -> Exit. */
 void MainWindow::cancelPreparedApplicationClose() {
-  m_applicationClosePrepared = false;
+  m_closeLifecycle.cancelPreflight();
 }
 
 /** Handle closing one image-document window.
@@ -871,7 +871,7 @@ void MainWindow::cancelPreparedApplicationClose() {
    render, cancels only its background tasks, removes only its recovery data,
    and saves the shared preferred window layout.  */
 void MainWindow::closeEvent(QCloseEvent *event) {
-  if (m_closing) {
+  if (m_closeLifecycle.closing()) {
     event->accept();
     return;
   }
@@ -886,16 +886,15 @@ void MainWindow::closeEvent(QCloseEvent *event) {
     }
   }
 
-  if (m_applicationClosePrepared) {
+  if (m_closeLifecycle.consumePreflight()) {
     // File -> Exit already resolved every user-visible veto before it started
-    // tearing down secondary views.  Consume the one-shot approval here.
-    m_applicationClosePrepared = false;
+    // tearing down secondary views. Consume the one-shot approval here.
   } else if (!confirmClose()) {
     event->ignore();
     return;
   }
 
-  m_closing = true;
+  m_closeLifecycle.beginClosing();
   dismissOneShotPrompts();
 
   // Cancel all active processes.

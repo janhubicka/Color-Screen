@@ -154,9 +154,14 @@ Closing `WorkspaceWindow` closes only the presentations currently hosted in its
 MDI area. Detached documents and views are independent top-level windows and
 keep the application alive. **File → Exit** is the explicit application-wide
 close path and must close every presentation while respecting save/close vetoes.
-Do not create a replacement empty document merely because the last real document
-closed; once no image presentation remains, the workspace shell should disappear
-and normal Qt last-window lifetime rules apply.
+Each document models that transaction with `DocumentCloseLifecycleState`:
+`Open → ApplicationPreflightApproved → Closing`. A later document veto rolls
+an unused preflight approval back to `Open`; the final close consumes the
+approval before beginning teardown. Do not replace these mutually exclusive
+phases with independent booleans. Recovery dirty state is separate document
+state and is not a close phase. Do not create a replacement empty document merely
+because the last real document closed; once no image presentation remains, the
+workspace shell should disappear and normal Qt last-window lifetime rules apply.
 
 Sanitizer GUI coverage includes a completion-driven workspace-churn smoke test.
 Starting from two loaded documents, it creates an ordinary peer view, changes

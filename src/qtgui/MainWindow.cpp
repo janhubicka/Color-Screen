@@ -341,7 +341,7 @@ MainWindow::MainWindow(const QString &recoveryDirectory, QWidget *parent)
   setupUi();
 
   m_fileRenderController.configure(
-      {[this]() { return m_closing; },
+      {[this]() { return m_closeLifecycle.closing(); },
        [this](std::shared_ptr<colorscreen::progress_info> progress,
               const QString &title) {
          addUserVisibleProgress(std::move(progress), title);
@@ -403,7 +403,7 @@ MainWindow::MainWindow(const QString &recoveryDirectory, QWidget *parent)
 
   m_oneShotOperations.configure(
       this,
-      {[this]() { return m_closing; },
+      {[this]() { return m_closeLifecycle.closing(); },
        [this]() { dismissOneShotPrompts(); },
        [this](std::shared_ptr<colorscreen::progress_info> progress) {
          addProgress(progress);
@@ -465,7 +465,7 @@ MainWindow::~MainWindow() {
   // Destruction can also happen without a preceding closeEvent.  Make every
   // queued result stale, request cooperative cancellation, and join one-shot
   // workers before any document parameters or panels can disappear.
-  m_closing = true;
+  m_closeLifecycle.beginClosing();
   dismissOneShotPrompts();
   m_solverQueue.cancelAll();
   m_colorOptimizerQueue.cancelAll();
@@ -2874,7 +2874,7 @@ bool MainWindow::requestMtfModelFit(
     const ParameterState &baseline, const colorscreen::mtf_parameters &input,
     const colorscreen::mtf_estimation_options &options, int flags,
     QWidget *resultParent) {
-  if (m_closing || m_mtfFit.running || getCurrentState() != baseline)
+  if (m_closeLifecycle.closing() || m_mtfFit.running || getCurrentState() != baseline)
     return false;
 
   const colorscreen::mtf_parameters baselineMtf =
@@ -3937,7 +3937,7 @@ void MainWindow::onSolverFinished(int reqId,
   // a domain-level gate: even the newest request is obsolete if its geometry
   // inputs changed without starting another solve.
   const bool publishable = m_solverQueue.reportFinished(reqId, success);
-  if (m_closing)
+  if (m_closeLifecycle.closing())
     return;
 
   // reportFinished() deliberately rejects cancelled and superseded work.
@@ -4674,7 +4674,7 @@ void MainWindow::runAreaComputation(
     OneShotOperation operation;
     operation.description = description;
     operation.prerequisites =
-        [this, scan]() { return !m_closing && m_scan == scan; };
+        [this, scan]() { return !m_closeLifecycle.closing() && m_scan == scan; };
     operation.onStart = [onStart = std::move(onStart)](
                             std::shared_ptr<colorscreen::progress_info>) {
       if (onStart)
@@ -4766,7 +4766,7 @@ void MainWindow::onAreaSelected(QRect area) {
   OneShotOperation operation;
   operation.description = tr("Finding registration points");
   operation.prerequisites =
-      [this, scan]() { return !m_closing && m_scan == scan; };
+      [this, scan]() { return !m_closeLifecycle.closing() && m_scan == scan; };
   operation.resultValid =
       [this, scan, baseline, finetuneParams, result]() {
         if (m_scan != scan || getCurrentState() != baseline ||
@@ -5226,7 +5226,7 @@ QString MainWindow::presentFocusAreaAnalysisResult(
     const colorscreen::finetune_focus_analysis_result &analysis,
     std::shared_ptr<colorscreen::image_data> scan,
     const ParameterState &baseline, uint64_t flags) {
-  if (m_closing || m_scan != scan || getCurrentState() != baseline ||
+  if (m_closeLifecycle.closing() || m_scan != scan || getCurrentState() != baseline ||
       !analysis.success)
     return QString();
   dismissOneShotPrompts();
@@ -5285,7 +5285,7 @@ QString MainWindow::presentFocusAreaAnalysisResult(
             if (m_focusAreaAnalysis.prompt != box)
               return;
             m_focusAreaAnalysis.prompt = nullptr;
-            if (m_closing || m_scan != scan || getCurrentState() != baseline ||
+            if (m_closeLifecycle.closing() || m_scan != scan || getCurrentState() != baseline ||
                 box->clickedButton() != applyButton)
               return;
 
@@ -5491,7 +5491,7 @@ void MainWindow::onColorOptimizerFinished(
     bool cancelled) {
   const bool publishable =
       m_colorOptimizerQueue.reportFinished(reqId, success);
-  if (m_closing)
+  if (m_closeLifecycle.closing())
     return;
 
   // Request identity owns provenance cleanup. TaskQueue's boolean controls
