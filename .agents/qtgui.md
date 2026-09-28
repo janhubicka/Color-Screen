@@ -84,6 +84,14 @@ Workspace geometry and recent-file lists remain application preferences in
 presentation state. Recent lists are persisted when they change so a
 later-closing document cannot overwrite newer entries.
 
+The one shared document inspector may follow any compatible ordinary
+`ImageWidget`. Keep its weak target pointer, the dynamic signal connections
+bound to that target, and the temporary tool-transfer guard together in
+`InspectorImageRoutingState`. When a secondary inspected view closes,
+`WorkspaceWindow` explicitly rebinds the primary image; do not rely only on the
+`QPointer` becoming null, because the navigator/editing connections must be
+reinstalled as part of the same transition.
+
 `WorkspaceWindow` must use `QMdiArea`, rather than maintaining a parallel custom
 tab implementation. The default view is `QMdiArea::TabbedView`; its internal
 `QTabBar` uses Qt's standard document-mode behavior, including a visible tab
