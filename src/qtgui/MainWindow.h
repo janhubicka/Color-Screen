@@ -102,6 +102,8 @@ QString renderToFileFailureMessage(const QString &outputPath,
                                    const QString &detail = QString());
 /** Explain one-area focus-analysis failure and retained sharpening state. */
 QString pointFocusAnalysisFailureMessage(const QString &detail = QString());
+/** Explain a failed selected-area auto adjustment without guessing its cause. */
+QString areaComputationFailureMessage(const QString &operation);
 
 /** Start the completion-driven workspace ownership/lifecycle smoke test. */
 void startWorkspaceChurnSmoke(ColorScreenApplication &app,
@@ -546,13 +548,15 @@ private:
   /** Launch an area-based parameter computation.
       Shows MESSAGE, captures the current image/ParameterState snapshot, then
       runs WORKER through runOneShotOperation(). The whole-state result is
-      published only if the same image and exact input state are still current. */
+      published only if the same image and exact input state are still current
+      and WORKER reports success. A non-cancelled false result leaves the
+      document unchanged and presents actionable retry guidance. */
   void runAreaComputation(
       const QString &message,
       const QString &description,
       std::function<void()> onStart,
       std::function<void()> onDone,
-      std::function<void(ParameterState &, colorscreen::image_data &,
+      std::function<bool(ParameterState &, colorscreen::image_data &,
                          const colorscreen::int_image_area &,
                          colorscreen::progress_info *)> worker);
 
