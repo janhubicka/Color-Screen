@@ -52,6 +52,7 @@ set(SOURCES
     MainWindow.cpp
     MainWindowAnalysis.cpp
     MainWindowDocument.cpp
+    AtomicFileSave.cpp
     BackgroundThreadRegistry.cpp
     DocumentProgressController.cpp
     FileRenderController.cpp
@@ -113,6 +114,7 @@ set(SOURCES
 
 set(HEADERS
     ColorScreenApplication.h
+    AtomicFileSave.h
     DocumentLifecycleSmoke.h
     WorkspaceChurnSmoke.h
     WorkspaceWindow.h
