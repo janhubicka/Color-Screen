@@ -976,12 +976,12 @@ void MainWindow::setupUi() {
             if (m_capturePanel) {
               m_capturePanel->setCropChecked(mode == ImageWidget::CropMode);
             }
-            if (!m_switchingInspectorImage &&
+            if (!m_inspectorImageRouting.switching &&
                 sender() == inspectorImageWidget() &&
                 mode != ImageWidget::AddPointMode &&
                 m_pointClickTool.active())
               clearPointClickToolPresentation();
-            if (!m_switchingInspectorImage &&
+            if (!m_inspectorImageRouting.switching &&
                 sender() == inspectorImageWidget() &&
                 mode != ImageWidget::GenericAreaMode &&
                 m_areaSelectionCallback) {
@@ -2528,10 +2528,10 @@ void MainWindow::setInspectorImageWidget(ImageWidget *imageWidget) {
       previousMode != ImageWidget::PanMode &&
       previousMode != ImageWidget::ExploreMode;
 
-  for (const QMetaObject::Connection &connection : m_inspectorImageConnections)
+  for (const QMetaObject::Connection &connection : m_inspectorImageRouting.connections)
     disconnect(connection);
-  m_inspectorImageConnections.clear();
-  m_inspectorImageWidget = target;
+  m_inspectorImageRouting.connections.clear();
+  m_inspectorImageRouting.image = target;
   syncDetectedScreenDiagnostics(target);
   syncProfileSpotOverlay(target);
   if (m_profilePanel)
@@ -2541,18 +2541,18 @@ void MainWindow::setInspectorImageWidget(ImageWidget *imageWidget) {
   // canvas that happened to be active when it was armed. Move it to the newly
   // active compatible view and leave the old view harmlessly in Pan mode.
   if (transferTool) {
-    m_switchingInspectorImage = true;
+    m_inspectorImageRouting.switching = true;
     previous->setInteractionMode(ImageWidget::PanMode);
     target->setInteractionMode(previousMode);
-    m_switchingInspectorImage = false;
+    m_inspectorImageRouting.switching = false;
   }
 
   if (m_navigationView) {
     m_navigationView->setCoordinateSpace(target->coordinateSpace());
-    m_inspectorImageConnections.push_back(
+    m_inspectorImageRouting.connections.push_back(
         connect(target, &ImageWidget::viewStateChanged, m_navigationView,
                 &NavigationView::onViewStateChanged));
-    m_inspectorImageConnections.push_back(connect(
+    m_inspectorImageRouting.connections.push_back(connect(
         target, &ImageWidget::viewCoordinateSpaceChanged, this,
         [this](int space) {
           if (m_navigationView)
@@ -2566,60 +2566,60 @@ void MainWindow::setInspectorImageWidget(ImageWidget *imageWidget) {
   // wiring installed by setupUi(). Secondary ordinary views acquire the same
   // document-side behavior only while they present this inspector.
   if (target != m_imageWidget) {
-    m_inspectorImageConnections.push_back(
+    m_inspectorImageRouting.connections.push_back(
         connect(target, &ImageWidget::progressStarted, this,
                 &MainWindow::addProgress));
-    m_inspectorImageConnections.push_back(
+    m_inspectorImageRouting.connections.push_back(
         connect(target, &ImageWidget::progressFinished, this,
                 &MainWindow::removeProgress));
-    m_inspectorImageConnections.push_back(
+    m_inspectorImageRouting.connections.push_back(
         connect(target, &ImageWidget::distanceMeasured, this,
                 &MainWindow::onDistanceMeasured));
-    m_inspectorImageConnections.push_back(
+    m_inspectorImageRouting.connections.push_back(
         connect(target, &ImageWidget::selectionChanged, this,
                 &MainWindow::updateRegistrationActions));
-    m_inspectorImageConnections.push_back(
+    m_inspectorImageRouting.connections.push_back(
         connect(target, &ImageWidget::registrationPointsVisibilityChanged, this,
                 &MainWindow::updateRegistrationActions));
-    m_inspectorImageConnections.push_back(connect(
+    m_inspectorImageRouting.connections.push_back(connect(
         target, &ImageWidget::registrationPointsVisibilityChanged, this,
         [this](bool) { updateWorkflowSummary(); }));
     if (m_registrationPointsAction) {
-      m_inspectorImageConnections.push_back(connect(
+      m_inspectorImageRouting.connections.push_back(connect(
           target, &ImageWidget::registrationPointsVisibilityChanged,
           m_registrationPointsAction, &QAction::setChecked));
     }
     if (m_geometryPanel) {
-      m_inspectorImageConnections.push_back(connect(
+      m_inspectorImageRouting.connections.push_back(connect(
           target, &ImageWidget::registrationPointsVisibilityChanged,
           m_geometryPanel, &GeometryPanel::setRegistrationPointsVisible));
     }
-    m_inspectorImageConnections.push_back(
+    m_inspectorImageRouting.connections.push_back(
         connect(target, &ImageWidget::pointManipulationStarted, this,
                 &MainWindow::onPointManipulationStarted));
-    m_inspectorImageConnections.push_back(
+    m_inspectorImageRouting.connections.push_back(
         connect(target, &ImageWidget::pointsChanged, this,
                 &MainWindow::maybeTriggerAutoSolver));
-    m_inspectorImageConnections.push_back(
+    m_inspectorImageRouting.connections.push_back(
         connect(target, &ImageWidget::pointsChanged, this,
                 [this]() { emit documentStateChanged(); }));
-    m_inspectorImageConnections.push_back(
+    m_inspectorImageRouting.connections.push_back(
         connect(target, &ImageWidget::pointAdded, this, &MainWindow::onPointAdded));
-    m_inspectorImageConnections.push_back(
+    m_inspectorImageRouting.connections.push_back(
         connect(target, &ImageWidget::areaSelected, this, &MainWindow::onAreaSelected));
-    m_inspectorImageConnections.push_back(
+    m_inspectorImageRouting.connections.push_back(
         connect(target, &ImageWidget::setCenterRequested, this,
                 &MainWindow::onSetCenter));
-    m_inspectorImageConnections.push_back(
+    m_inspectorImageRouting.connections.push_back(
         connect(target, &ImageWidget::coordinateSystemChanged, this,
                 &MainWindow::onCoordinateSystemChanged));
-    m_inspectorImageConnections.push_back(connect(
+    m_inspectorImageRouting.connections.push_back(connect(
         target, &ImageWidget::coordinateSystemManipulationStarted, this,
         &MainWindow::onCoordinateSystemManipulationStarted));
-    m_inspectorImageConnections.push_back(connect(
+    m_inspectorImageRouting.connections.push_back(connect(
         target, &ImageWidget::coordinateSystemManipulationFinished, this,
         &MainWindow::onCoordinateSystemManipulationFinished));
-    m_inspectorImageConnections.push_back(connect(
+    m_inspectorImageRouting.connections.push_back(connect(
         target, &ImageWidget::profileSpotRemoveRequested, this,
         [this](int index) {
           if (!m_pointClickTool.profileSpot())
@@ -2630,14 +2630,14 @@ void MainWindow::setInspectorImageWidget(ImageWidget *imageWidget) {
             changeParameters(state, "Remove profile spot");
           }
         }));
-    m_inspectorImageConnections.push_back(connect(
+    m_inspectorImageRouting.connections.push_back(connect(
         target, &ImageWidget::interactionModeChanged, this,
         [this](ImageWidget::InteractionMode mode) {
           syncInspectorInteractionActions(mode);
-          if (!m_switchingInspectorImage && sender() == inspectorImageWidget() &&
+          if (!m_inspectorImageRouting.switching && sender() == inspectorImageWidget() &&
               mode != ImageWidget::AddPointMode && m_pointClickTool.active())
             clearPointClickToolPresentation();
-          if (!m_switchingInspectorImage && sender() == inspectorImageWidget() &&
+          if (!m_inspectorImageRouting.switching && sender() == inspectorImageWidget() &&
               mode != ImageWidget::GenericAreaMode && m_areaSelectionCallback) {
             m_areaSelectionCallback = nullptr;
             if (m_imageLayerPanel) {

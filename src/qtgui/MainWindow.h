@@ -263,7 +263,9 @@ public:
 
   /** Return the image view currently controlled by the document inspector. */
   ImageWidget *inspectorImageWidget() const {
-    return m_inspectorImageWidget ? m_inspectorImageWidget.data() : m_imageWidget;
+    return m_inspectorImageRouting.image
+               ? m_inspectorImageRouting.image.data()
+               : m_imageWidget;
   }
 
   /** Return the document's primary image view. */
@@ -684,8 +686,17 @@ private:
 
   // Left side
   ImageWidget *m_imageWidget;
-  QPointer<ImageWidget> m_inspectorImageWidget;
-  std::vector<QMetaObject::Connection> m_inspectorImageConnections;
+
+  /** Dynamic routing for the one shared document inspector.
+      IMAGE is weak because secondary views are independently closable;
+      CONNECTIONS belong exactly to that image; SWITCHING suppresses temporary
+      tool cancellation while ownership moves between compatible ordinary views. */
+  struct InspectorImageRoutingState {
+    QPointer<ImageWidget> image;
+    std::vector<QMetaObject::Connection> connections;
+    bool switching = false;
+  };
+  InspectorImageRoutingState m_inspectorImageRouting;
 
   // Right side
   QWidget *m_rightColumn;
@@ -715,7 +726,6 @@ private:
 
   std::function<void(QRect)> m_areaSelectionCallback = nullptr;
   ImageWidget::InteractionMode m_previousInteractionMode = ImageWidget::PanMode;
-  bool m_switchingInspectorImage = false;
 
 
   std::shared_ptr<colorscreen::image_data> m_scan;
