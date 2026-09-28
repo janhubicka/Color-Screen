@@ -789,6 +789,14 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   MainWindow members without changing that lifecycle. Existing workspace churn
   remains the regression for view activation, tool transfer, secondary close and
   inspector rebinding.
+- Keep application-wide recent-item plumbing shared and stateless with respect to
+  document processing. Image and parameter MRUs now use two `RecentItemsState`
+  instances plus one menu/QSettings implementation. The old cached QAction
+  vectors were write-only and are gone. Adding an item always reloads the latest
+  persisted list before de-duplicating/prepending/capping it, preserving
+  multi-document merge semantics; action callbacks capture their path directly,
+  so rebuilding the menu during a nested save prompt cannot invalidate the path
+  being opened.
 - Group file-target semantics that must change atomically. `ParameterFileState`
   now owns the current `.par` path together with whether that path is merely an
   auto-suggested Save-As default. Save/load paths use `setLoaded()` and
