@@ -3830,8 +3830,9 @@ void MainWindow::clearTemporaryCanvasInstruction() {
 void MainWindow::clearPointClickToolPresentation() {
   if (m_temporaryCanvas.pointClick.profileSpot() && m_profilePanel)
     m_profilePanel->setAddSpotChecked(false);
-  if (m_temporaryCanvas.pointClick.focusAnalysis() && m_sharpnessPanel) {
-    m_sharpnessPanel->setFocusAnalysisChecked(false);
+  if (m_temporaryCanvas.pointClick.focusAnalysis()) {
+    if (m_sharpnessPanel)
+      m_sharpnessPanel->setFocusAnalysisChecked(false);
     clearTemporaryCanvasInstruction();
   }
   m_temporaryCanvas.pointClick.clear();
@@ -4791,7 +4792,7 @@ void MainWindow::onAreaSelected(QRect area) {
     m_temporaryCanvas.areaSelectionCallback =
         nullptr; // Clear first so interactionModeChanged doesn't uncheck
     restoreInteractionMode();
-    statusBar()->clearMessage();
+    clearTemporaryCanvasInstruction();
     if (cb) {
       cb(imgArea);
     }
@@ -4816,7 +4817,7 @@ void MainWindow::onAreaSelected(QRect area) {
     image->centerOn(center);
 
     restoreInteractionMode();
-    statusBar()->clearMessage();
+    clearTemporaryCanvasInstruction();
     return;
   }
 
