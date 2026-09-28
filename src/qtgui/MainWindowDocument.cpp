@@ -64,6 +64,92 @@ void rememberFileDialogDirectory(const QString &settingsKey,
   QSettings settings;
   settings.setValue(settingsKey, QFileInfo(fileName).absolutePath());
 }
+
+/** Stage one FILE*-based parameter payload, then atomically replace PATH.
+
+    libcolorscreen's portable serializer is intentionally FILE*-based. QSaveFile
+    owns the final replacement so a serialization/write/commit failure never
+    truncates a previously usable parameter file. */
+bool saveParameterPayloadAtomically(
+    const QString &path, const colorscreen::scr_to_img_parameters &scrToImg,
+    const colorscreen::scr_detect_parameters *detect,
+    const colorscreen::render_parameters &render,
+    const colorscreen::solver_parameters &solver,
+    const std::vector<colorscreen::point_t> &profileSpots, QString *error) {
+  FILE *staged = std::tmpfile();
+  if (!staged) {
+    if (error)
+      *error = QStringLiteral("Could not create a temporary parameter payload.");
+    return false;
+  }
+
+  bool serialized = colorscreen::save_csp_with_profile_spots(
+      staged, &scrToImg, detect, &render, &solver, profileSpots);
+  if (serialized && std::fflush(staged) != 0)
+    serialized = false;
+  if (!serialized || std::fseek(staged, 0, SEEK_SET) != 0) {
+    std::fclose(staged);
+    if (error)
+      *error = QStringLiteral("Could not serialize the complete parameter payload.");
+    return false;
+  }
+
+  QSaveFile output(path);
+  output.setDirectWriteFallback(false);
+  if (!output.open(QIODevice::WriteOnly)) {
+    std::fclose(staged);
+    if (error)
+      *error = output.errorString();
+    return false;
+  }
+
+  char buffer[64 * 1024];
+  bool copied = true;
+  while (copied) {
+    const size_t count = std::fread(buffer, 1, sizeof(buffer), staged);
+    if (count > 0 &&
+        output.write(buffer, static_cast<qint64>(count)) !=
+            static_cast<qint64>(count)) {
+      copied = false;
+      break;
+    }
+    if (count < sizeof(buffer)) {
+      if (std::ferror(staged))
+        copied = false;
+      break;
+    }
+  }
+  std::fclose(staged);
+
+  if (!copied) {
+    if (error)
+      *error = output.errorString().isEmpty()
+                   ? QStringLiteral("Could not write the complete parameter payload.")
+                   : output.errorString();
+    output.cancelWriting();
+    return false;
+  }
+  if (!output.commit()) {
+    if (error)
+      *error = output.errorString();
+    return false;
+  }
+  return true;
+}
+
+/** Atomically replace a small UTF-8 recovery metadata file. */
+bool saveRecoveryTextAtomically(const QString &path, const QString &text) {
+  QSaveFile file(path);
+  file.setDirectWriteFallback(false);
+  if (!file.open(QIODevice::WriteOnly | QIODevice::Text))
+    return false;
+  const QByteArray bytes = text.toUtf8();
+  if (file.write(bytes) != bytes.size()) {
+    file.cancelWriting();
+    return false;
+  }
+  return file.commit();
+}
 } // namespace
 
 /** Open a .par parameter file chosen by the user.
@@ -110,26 +196,21 @@ void MainWindow::onSaveParameters() {
 /** Save parameters to a new .par file chosen by the user. */
 void MainWindow::onSaveParametersAs() { saveParametersAs(); }
 
-/** Write the current document parameters to FILENAME and mark them saved. */
+/** Atomically write the current document parameters and mark them saved. */
 bool MainWindow::saveParametersToFile(const QString &fileName) {
   const QString absoluteFileName = QFileInfo(fileName).absoluteFilePath();
-  FILE *f = fopen(absoluteFileName.toUtf8().constData(), "wt");
-  if (!f) {
+  const bool hasRgb = m_scan && m_scan->has_rgb();
+  QString error;
+  if (!saveParameterPayloadAtomically(
+          absoluteFileName, m_scrToImgParams,
+          hasRgb ? &m_detectParams : nullptr, m_rparams, m_solverParams,
+          m_profileSpots, &error)) {
     QMessageBox::critical(
         this, "Error",
-        QString("Could not open file for writing: %1").arg(absoluteFileName));
-    return false;
-  }
-
-  const bool hasRgb = m_scan && m_scan->has_rgb();
-  bool saved = colorscreen::save_csp_with_profile_spots(
-      f, &m_scrToImgParams, hasRgb ? &m_detectParams : nullptr, &m_rparams,
-      &m_solverParams, m_profileSpots);
-  if (fclose(f) != 0)
-    saved = false;
-
-  if (!saved) {
-    QMessageBox::critical(this, "Error", "Failed to save parameters.");
+        tr("Failed to save parameters to %1. The previous file was left "
+           "unchanged.\n\n%2")
+            .arg(absoluteFileName,
+                 error.isEmpty() ? tr("Unknown write error.") : error));
     return false;
   }
 
@@ -1072,34 +1153,32 @@ void MainWindow::saveRecoveryState() {
     return;
 
   const QDir directory(m_recoveryDir);
-  QFile imageFile(directory.filePath(QStringLiteral("recovery_image.txt")));
-  if (imageFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
-    QTextStream out(&imageFile);
-    out << m_currentImageFile;
-  }
+  saveRecoveryTextAtomically(
+      directory.filePath(QStringLiteral("recovery_image.txt")),
+      m_currentImageFile);
 
   const QString paramsPath =
       directory.filePath(QStringLiteral("recovery_params.par"));
-  bool paramsSaved = false;
-  FILE *f = fopen(paramsPath.toUtf8().constData(), "wt");
-  if (f) {
-    const bool hasRgb = m_scan->has_rgb();
-    paramsSaved = colorscreen::save_csp_with_profile_spots(
-        f, &m_scrToImgParams, hasRgb ? &m_detectParams : nullptr, &m_rparams,
-        &m_solverParams, m_profileSpots);
-    if (fclose(f) != 0)
-      paramsSaved = false;
+  const bool hasRgb = m_scan->has_rgb();
+  QString paramsError;
+  if (!saveParameterPayloadAtomically(
+          paramsPath, m_scrToImgParams, hasRgb ? &m_detectParams : nullptr,
+          m_rparams, m_solverParams, m_profileSpots, &paramsError)) {
+    qWarning() << "Could not atomically save recovery parameters to" << paramsPath
+               << paramsError;
   }
-  if (!paramsSaved)
-    QFile::remove(paramsPath);
 
-  QFile metaFile(
-      directory.filePath(QStringLiteral("recovery_params_meta.txt")));
-  if (metaFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
-    QTextStream out(&metaFile);
-    out << m_parameterFile.path << '\n';
-    out << (m_parameterFile.suggested ? "1" : "0") << '\n';
-    out << (isDocumentModified() ? "1" : "0") << '\n';
+  const QString meta =
+      m_parameterFile.path + QLatin1Char('\n') +
+      (m_parameterFile.suggested ? QStringLiteral("1\n")
+                                 : QStringLiteral("0\n")) +
+      (isDocumentModified() ? QStringLiteral("1\n")
+                            : QStringLiteral("0\n"));
+  if (!saveRecoveryTextAtomically(
+          directory.filePath(QStringLiteral("recovery_params_meta.txt")),
+          meta)) {
+    qWarning() << "Could not atomically save recovery metadata in"
+               << m_recoveryDir;
   }
 }
 
