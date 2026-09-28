@@ -51,7 +51,7 @@ QIcon viewIcon(const char *resource) {
 
 /** Return the one status bar belonging to the current top-level window. */
 QStatusBar *ImageViewWindow::statusBar() const {
-  return m_workspaceStatusBar ? m_workspaceStatusBar.data()
+  return m_workspacePresentation.statusBar ? m_workspacePresentation.statusBar.data()
                               : QMainWindow::statusBar();
 }
 
@@ -62,12 +62,12 @@ QStatusBar *ImageViewWindow::standaloneStatusBar() const {
 
 /** Share STATUSBAR with every tab in the enclosing workspace window. */
 void ImageViewWindow::setWorkspaceStatusBar(QStatusBar *sharedStatusBar) {
-  if (m_workspaceStatusBar.data() == sharedStatusBar)
+  if (m_workspacePresentation.statusBar.data() == sharedStatusBar)
     return;
 
   QStatusBar *localStatusBar = QMainWindow::statusBar();
   const QString localMessage = localStatusBar->currentMessage();
-  m_workspaceStatusBar = sharedStatusBar;
+  m_workspacePresentation.statusBar = sharedStatusBar;
   if (sharedStatusBar) {
     localStatusBar->hide();
     if (!localMessage.isEmpty())
@@ -1196,7 +1196,7 @@ void ImageViewWindow::startReferenceMtfMeasurement(
 
 /** Present the source document's full inspector in this detached ordinary view. */
 void ImageViewWindow::claimDocumentInspector() {
-  if (m_slantedEdgeReference || m_workspaceEmbedded || !m_document ||
+  if (m_slantedEdgeReference || m_workspacePresentation.embedded || !m_document ||
       !m_documentInspectorHost || !m_documentInspectorDock ||
       !m_imageWidget || m_imageWidget->sharedImageData() !=
                             m_document->sharedImageData())
@@ -1244,13 +1244,13 @@ void ImageViewWindow::closeEvent(QCloseEvent *event) {
 /** Reclaim panels when this detached ordinary view becomes active. */
 void ImageViewWindow::changeEvent(QEvent *event) {
   QMainWindow::changeEvent(event);
-  if (event && event->type() == QEvent::WindowActivate && !m_workspaceEmbedded)
+  if (event && event->type() == QEvent::WindowActivate && !m_workspacePresentation.embedded)
     claimDocumentInspector();
 }
 
 /** Remove standalone chrome while the view is hosted by WorkspaceWindow. */
 void ImageViewWindow::prepareForWorkspaceEmbedding() {
-  if (m_workspaceEmbedded)
+  if (m_workspacePresentation.embedded)
     return;
   releaseDocumentInspector();
   if (m_documentInspectorDock)
@@ -1266,12 +1266,12 @@ void ImageViewWindow::prepareForWorkspaceEmbedding() {
     menuBar()->hide();
   if (statusBar())
     statusBar()->hide();
-  m_workspaceEmbedded = true;
+  m_workspacePresentation.embedded = true;
 }
 
 /** Restore standalone chrome after leaving WorkspaceWindow. */
 void ImageViewWindow::restoreFromWorkspaceEmbedding() {
-  if (!m_workspaceEmbedded)
+  if (!m_workspacePresentation.embedded)
     return;
   if (m_referenceInspectorDock && m_referenceInspector) {
     m_referenceInspector->setParent(nullptr);
@@ -1284,7 +1284,7 @@ void ImageViewWindow::restoreFromWorkspaceEmbedding() {
     menuBar()->show();
   if (statusBar())
     statusBar()->show();
-  m_workspaceEmbedded = false;
+  m_workspacePresentation.embedded = false;
 
   // Detaching is an explicit ownership transition. Do not rely on the window
   // system to synthesize WindowActivate before the view receives its panels;
