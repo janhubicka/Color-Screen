@@ -831,10 +831,16 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   now owns the current `.par` path together with whether that path is merely an
   auto-suggested Save-As default. Save/load paths use `setLoaded()` and
   `setSuggested()` transitions instead of assigning a filename and weak flag
-  independently. Recovery serialization is deliberately unchanged: it still
-  stores path, suggested flag, and dirty flag on separate lines, then restores
-  the first two through the grouped transition. Workspace churn contains a small
-  friend-level transition probe.
+  independently. The user-visible `.par` writer now stages the existing
+  FILE*-based CSP serialization in a temporary stream and copies that complete
+  payload into `QSaveFile`; direct-write fallback is disabled, so serialization,
+  disk-write or commit failure leaves an older usable target untouched.
+  Recovery image, parameter and metadata payloads likewise replace each file
+  atomically instead of truncating it in place. Recovery metadata format remains
+  unchanged: path, suggested flag and dirty flag still occupy separate lines and
+  restore through the grouped transition. Workspace churn contains a small
+  friend-level target transition probe, while DocumentLifecycleSmoke continues to
+  round-trip the real recovery payload.
 - Keep diagnostic/presentation mapping fail-closed. A configured
   `scr_to_img_parameters` is still not proof that `scr_to_img::set_parameters()`
   can build its inverse/mesh/lens state. Sharpness screen-frequency display,
