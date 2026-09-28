@@ -864,7 +864,11 @@ minimum is:
 3. macOS and Windows production builds;
 4. ASan/UBSan GUI smoke on supported platforms;
 5. TSan/Archer coverage for Qt paths that the platform runtime supports;
-6. the completion-driven multi-document workspace churn smoke;
+6. the completion-driven multi-document workspace churn smoke. The probe may
+   create real Undo commands while exercising controls, but before reporting
+   success it must return the surviving source document to the exact Undo index
+   and modified/clean contract it had on entry. Otherwise noninteractive
+   sanitizer teardown can block in the production Unsaved Changes dialog;
 7. save/load/recovery round trips for a representative parameter file.
    `DocumentLifecycleSmoke` now writes a real per-document recovery payload,
    restores it into a fresh hidden document, waits for asynchronous image load,
