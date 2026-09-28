@@ -919,11 +919,13 @@ Avoid code duplication by extracting shared UI patterns into helper methods in `
 
 ### 6. Use Centralized Helpers
 To maintain consistency across different UI actions, use the following standardized helpers in `MainWindow`:
-- **`runAreaComputation()`**: Use this for any task that involves: 
+- **`runAreaComputation()`**: Use this for any task that involves:
     1. Status bar instruction.
     2. Area selection on the image.
     3. Background computation with progress tracking.
-    4. Pushing an undoable parameter change.
+    4. A `bool` success result from the numerical worker.
+    5. Pushing an undoable parameter change only on success.
+  Cancellation is not a numerical failure. Generic Image Layer/Color callers use the shared preserved-state failure guidance; callers with a more specific failure surface (currently slanted-edge MTF) may suppress that generic message while still returning `false`.
 - **`loadParameterFile()`**: Use this for all parameter loading operations (from dialogs, recent files, or drag-and-drop). It ensures consistent state reset, UI refresh, and undo history management.
 
 ### 7. Documentation
