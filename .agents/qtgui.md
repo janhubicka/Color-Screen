@@ -86,11 +86,14 @@ each document has independent:
   suggested `.par` name become an overwrite target without an explicit save/load
   transition.
 
-Workspace geometry, the image Open dialog's last-used directory, and
+Workspace geometry, image/parameter file-dialog directory history, and
 recent-file lists remain application preferences in `QSettings`; they are not
 document state. Detached-document geometry is also presentation state. Do not
 add per-document "last open/save directory" members for application file-dialog
-history. Image and parameter MRUs use the same `RecentItemsState`
+history. Parameter dialogs still prefer the document's current/suggested
+`ParameterFileState::path`; only when that target is empty do they fall back to
+the application-wide `lastParameterDir`. Successful parameter loads/saves
+refresh that preference. Image and parameter MRUs use the same `RecentItemsState`
 plumbing. Before adding an entry, re-read the application-wide persisted list so
 concurrent document loads/saves merge rather than letting a stale window overwrite
 newer entries. Rebuild menu actions from the captured path itself; do not depend
