@@ -406,7 +406,7 @@ print_help (char *err = NULL)
   if (subhelp == help_read_chemcad_spectra || subhelp == help_basic)
     {
       fprintf (stderr,
-               "  read-chemcad-spectra <out_filename> <in_filename>\n");
+               "  read-chemcad-spectra [<in_filename>]\n");
       fprintf (stderr,
                "    read spectrum in chemcad database format and output it in "
                "format that can be built into libcolorscreen\n");
@@ -1901,17 +1901,20 @@ read_chemcad (int argc, char **argv)
       perror ("cannot open input file");
       exit (1);
     }
-  while (getc (f) != '\n')
-    if (feof (f))
-      {
-        fprintf (stderr, "parse error\n");
-        exit (1);
-      }
-  while (!feof (f))
+  int ch;
+  while ((ch = getc (f)) != '\n' && ch != EOF)
+    ;
+  if (ch == EOF)
     {
-      float b, v;
-      scanf ("%f %f\n", &b, &v);
-      // printf ("%f %f\n",b,v);
+      fprintf (stderr, "parse error: missing ChemCAD header line\n");
+      if (f != stdin)
+        fclose (f);
+      exit (1);
+    }
+
+  float b, v;
+  while (fscanf (f, "%f %f", &b, &v) == 2)
+    {
       int band = nearest_int ((b - SPECTRUM_START) / SPECTRUM_STEP);
       if (band >= 0 && band < SPECTRUM_SIZE)
         {
@@ -1919,6 +1922,15 @@ read_chemcad (int argc, char **argv)
           sum[band]++;
         }
     }
+  if (!feof (f))
+    {
+      fprintf (stderr, "parse error: invalid ChemCAD spectrum row\n");
+      if (f != stdin)
+        fclose (f);
+      exit (1);
+    }
+  if (f != stdin)
+    fclose (f);
   for (int i = 0; i < SPECTRUM_SIZE; i++)
     {
       float v = 0;
