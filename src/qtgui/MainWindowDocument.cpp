@@ -48,6 +48,22 @@ namespace {
 ColorScreenApplication *documentApplication() {
   return dynamic_cast<ColorScreenApplication *>(QCoreApplication::instance());
 }
+
+/** Return an application-wide file-dialog directory when it still exists. */
+QString fileDialogDirectoryPreference(const QString &settingsKey) {
+  QSettings settings;
+  const QString directory = settings.value(settingsKey).toString();
+  return directory.isEmpty() || QDir(directory).exists() ? directory : QString();
+}
+
+/** Remember the containing directory of one successfully chosen/used file. */
+void rememberFileDialogDirectory(const QString &settingsKey,
+                                 const QString &fileName) {
+  if (fileName.isEmpty())
+    return;
+  QSettings settings;
+  settings.setValue(settingsKey, QFileInfo(fileName).absolutePath());
+}
 } // namespace
 
 /** Open a .par parameter file chosen by the user.
@@ -62,8 +78,12 @@ void MainWindow::onOpenParameters() {
     return;
   }
 
+  QString initialPath = m_parameterFile.path;
+  if (initialPath.isEmpty())
+    initialPath =
+        fileDialogDirectoryPreference(QStringLiteral("lastParameterDir"));
   QString fileName = QFileDialog::getOpenFileName(
-      this, "Open Parameters", QString(), "Parameters (*.par);;All Files (*)");
+      this, "Open Parameters", initialPath, "Parameters (*.par);;All Files (*)");
   if (fileName.isEmpty())
     return;
 
@@ -115,6 +135,8 @@ bool MainWindow::saveParametersToFile(const QString &fileName) {
 
   m_parameterFile.setLoaded(absoluteFileName);
   m_recoveryDirty = false;
+  rememberFileDialogDirectory(QStringLiteral("lastParameterDir"),
+                              absoluteFileName);
   addToRecentParams(absoluteFileName);
   if (m_undoStack)
     m_undoStack->setClean();
@@ -128,9 +150,12 @@ bool MainWindow::saveParametersToFile(const QString &fileName) {
 
 /** Ask for a parameter filename and save it before returning to the caller. */
 bool MainWindow::saveParametersAs() {
+  QString initialPath = m_parameterFile.path;
+  if (initialPath.isEmpty())
+    initialPath =
+        fileDialogDirectoryPreference(QStringLiteral("lastParameterDir"));
   QString fileName = QFileDialog::getSaveFileName(
-      this, "Save Parameters",
-      m_parameterFile.path.isEmpty() ? QString() : m_parameterFile.path,
+      this, "Save Parameters", initialPath,
       "Parameters (*.par);;All Files (*)");
   if (fileName.isEmpty())
     return false;
@@ -146,10 +171,8 @@ bool MainWindow::saveParametersAs() {
    deferred by one event-loop turn so KDE can dispose of KIO file-dialog jobs
    before an associated parameter prompt is shown.  */
 void MainWindow::onOpenImage() {
-  QSettings settings;
-  QString startDirectory = settings.value("lastOpenDir").toString();
-  if (!startDirectory.isEmpty() && !QDir(startDirectory).exists())
-    startDirectory.clear();
+  const QString startDirectory =
+      fileDialogDirectoryPreference(QStringLiteral("lastOpenDir"));
 
   const QStringList fileNames = QFileDialog::getOpenFileNames(
       this, "Open Images", startDirectory,
@@ -159,8 +182,8 @@ void MainWindow::onOpenImage() {
   if (fileNames.isEmpty())
     return;
 
-  settings.setValue("lastOpenDir",
-                    QFileInfo(fileNames.constFirst()).absolutePath());
+  rememberFileDialogDirectory(QStringLiteral("lastOpenDir"),
+                              fileNames.constFirst());
   const QPointer<MainWindow> guardedWindow(this);
   QTimer::singleShot(0, qApp, [guardedWindow, fileNames]() {
     if (!guardedWindow)
@@ -1240,6 +1263,8 @@ bool MainWindow::loadParameterFile(const QString &fileName) {
 
   const QString absoluteFileName = QFileInfo(fileName).absoluteFilePath();
   m_parameterFile.setLoaded(absoluteFileName);
+  rememberFileDialogDirectory(QStringLiteral("lastParameterDir"),
+                              absoluteFileName);
 
   updateModeMenu();
   updateUIFromState(getCurrentState());
