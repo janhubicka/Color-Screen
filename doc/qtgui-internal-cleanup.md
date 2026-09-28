@@ -760,6 +760,16 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   reference-load handoff and each reference-MTF request. Keep applying this
   pattern when another analysis has coupled session-local members that are
   always saved, cleared, or restored together.
+- Model transactional document close as one explicit phase.
+  `DocumentCloseLifecycleState` replaces the independent `m_closing` and
+  `m_applicationClosePrepared` booleans with exactly three states: Open,
+  application-exit preflight approved, and Closing. A later document's veto can
+  cancel only the unused preflight phase; actual teardown is terminal. Worker
+  publication gates query the same Closing phase, while `m_recoveryDirty`
+  deliberately remains separate saved-document state. The existing document-
+  lifecycle smoke already exercises first-document approval followed by a
+  second-document veto, rollback, re-prompting, failed Save, and final Discard
+  with active background work.
 - Group inspector-routing state that moves as one presentation unit.
   `InspectorImageRoutingState` owns the weak currently inspected
   `ImageWidget`, exactly the dynamic signal connections attached to that view,
