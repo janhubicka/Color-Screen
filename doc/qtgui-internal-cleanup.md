@@ -508,7 +508,16 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   final result validation and an apply callback. Area-based parameter
   computations (white balance, auto
   levels, image-layer calibration and slanted-edge measurement) were the first
-  migrated users. Flat-field analysis now follows the same lifecycle and its
+  migrated users. Their numerical callback now has an explicit `bool`
+  publication contract: only success can publish the private whole-state copy.
+  Image Layer/Color analysis failure leaves saved state untouched and gives
+  selected-area retry guidance; cancellation remains non-error. Completion also
+  refreshes the panel after unchecking its operation control, so failure or stale
+  publication cannot strand a disabled action. The source-document slanted-edge
+  path reuses the same success gate but keeps its existing detailed atomic-batch
+  failure dialog instead of stacking the generic area message. The corresponding
+  libcolorscreen area helpers are `[[nodiscard]]` so future callers cannot
+  silently discard these success results. Flat-field analysis now follows the same lifecycle and its
   former QObject/QThread/generation wrapper has been reduced to a synchronous
   background helper. Failed reference analysis is presentation-only: the current
   saved correction and all document parameters stay untouched, the selected
