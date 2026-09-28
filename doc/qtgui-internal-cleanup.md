@@ -729,9 +729,9 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   dependencies it must link explicitly.
 - Give long-lived analysis state explicit structs rather than parallel member
   variables. Profile-calibration, geometry-fit, measured-MTF fit, flat-field
-  calibration, automatic multi-area focus analysis, the exclusive
-  Profile/one-area-Focus point-click tool, asynchronous image replacement,
-  progressive adaptive sharpening,
+  calibration, automatic multi-area focus analysis, temporary canvas-tool
+  ownership (restore mode, Generic Area callback and exclusive Profile/Focus
+  point-click intent), asynchronous image replacement, progressive adaptive sharpening,
   progressive registration discovery, and the combined **Detect screen**
   prompt/progress presentation now each live in one lifecycle struct instead of
   parallel request/result/presentation members. Adaptive sharpening groups its
