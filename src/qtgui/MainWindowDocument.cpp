@@ -1106,7 +1106,6 @@ void MainWindow::restoreWindowState() {
   if (desktopSizeValid && settings.contains("windowGeometry")) {
     restoreGeometry(settings.value("windowGeometry").toByteArray());
     restoreState(settings.value("windowState").toByteArray());
-    restoreState(settings.value("windowState").toByteArray());
   } else {
     // Default size and position
     resize(1200, 800);
