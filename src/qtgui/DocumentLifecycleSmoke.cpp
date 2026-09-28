@@ -12,6 +12,7 @@
 #include <QDir>
 #include <QDebug>
 #include <QFile>
+#include <QFileInfo>
 #include <QMessageBox>
 #include <QMetaObject>
 #include <QObject>
@@ -43,7 +44,13 @@ struct DocumentLifecycleState {
   QPointer<MainWindow> first;
   QPointer<MainWindow> second;
   QPointer<ImageViewWindow> view;
+  QPointer<MainWindow> recoveryProbe;
   std::unique_ptr<QTemporaryDir> temporaryDirectory;
+  QString recoveryProbeDirectory;
+  QString recoveryExpectedImage;
+  QString recoveryExpectedParameterPath;
+  ParameterState recoveryExpectedState;
+  bool recoveryStarted = false;
   QString firstParameters;
   QString secondParameters;
   QByteArray firstBaselineParameters;
@@ -497,6 +504,108 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
       WorkspaceWindow *workspace = state->workspace.data();
 
       switch (phase) {
+      case -1: {
+        if (!first || !second || !view || !workspace) {
+          fail(QStringLiteral(
+              "Recovery round-trip smoke lost its source document setup"));
+          return;
+        }
+
+        if (!state->recoveryStarted) {
+          // Make the payload exercise a stable scalar and the profile-spot
+          // extension in addition to the already-dirty mirror edit.
+          ParameterState fixture = first->documentStateSnapshot();
+          fixture.rparams.gamma = 2.0;
+          fixture.profileSpots.push_back({1.25, -2.5});
+          first->applySharedDocumentState(
+              fixture, QStringLiteral("Recovery round-trip fixture"));
+
+          state->recoveryExpectedState = first->documentStateSnapshot();
+          state->recoveryExpectedImage =
+              QFileInfo(first->currentImageFile()).absoluteFilePath();
+          state->recoveryExpectedParameterPath =
+              QFileInfo(state->firstParameters).absoluteFilePath();
+          state->recoveryProbeDirectory =
+              state->temporaryDirectory->filePath(
+                  QStringLiteral("recovery-roundtrip"));
+          if (!QDir().mkpath(state->recoveryProbeDirectory)) {
+            fail(QStringLiteral(
+                "Recovery round-trip smoke could not create its payload directory"));
+            return;
+          }
+
+          // Exercise the production writer without stealing the live
+          // document's real crash-recovery directory.
+          const QString originalRecoveryDirectory = first->m_recoveryDir;
+          first->m_recoveryDir = state->recoveryProbeDirectory;
+          first->saveRecoveryState();
+          first->m_recoveryDir = originalRecoveryDirectory;
+
+          const QDir recoveryDirectory(state->recoveryProbeDirectory);
+          for (const QString &name :
+               {QStringLiteral("recovery_image.txt"),
+                QStringLiteral("recovery_params.par"),
+                QStringLiteral("recovery_params_meta.txt")}) {
+            if (!QFile::exists(recoveryDirectory.filePath(name))) {
+              fail(QStringLiteral(
+                       "Recovery round-trip smoke did not write %1")
+                       .arg(name));
+              return;
+            }
+          }
+
+          auto *probe = new MainWindow(state->recoveryProbeDirectory);
+          probe->hide();
+          state->recoveryProbe = probe;
+          if (!probe->restoreRecoveryState()) {
+            delete probe;
+            state->recoveryProbe = nullptr;
+            fail(QStringLiteral(
+                "Recovery round-trip smoke rejected its saved payload"));
+            return;
+          }
+
+          state->recoveryStarted = true;
+          schedule(-1, 50, 120);
+          return;
+        }
+
+        MainWindow *probe = state->recoveryProbe.data();
+        if (!probe || probe->m_imageLoad.pending || !probe->sharedImageData()) {
+          if (retryOrFail(QStringLiteral(
+                  "Recovery round-trip smoke did not finish restoring its image")))
+            return;
+          return;
+        }
+
+        const ParameterState recovered = probe->documentStateSnapshot();
+        const auto &expected = state->recoveryExpectedState;
+        const bool profileSpotMatches =
+            recovered.profileSpots.size() == expected.profileSpots.size() &&
+            !recovered.profileSpots.empty() &&
+            recovered.profileSpots.back().x == 1.25 &&
+            recovered.profileSpots.back().y == -2.5;
+        if (QFileInfo(probe->currentImageFile()).absoluteFilePath() !=
+                state->recoveryExpectedImage ||
+            recovered.rparams.scan_mirror !=
+                expected.rparams.scan_mirror ||
+            recovered.rparams.gamma != 2.0 ||
+            !profileSpotMatches ||
+            QFileInfo(probe->m_parameterFile.path).absoluteFilePath() !=
+                state->recoveryExpectedParameterPath ||
+            probe->m_parameterFile.suggested ||
+            !probe->isDocumentModified()) {
+          fail(QStringLiteral(
+              "Recovery round-trip smoke did not restore document state/metadata"));
+          return;
+        }
+
+        delete probe;
+        state->recoveryProbe = nullptr;
+        schedule(0, 0, 40);
+        return;
+      }
+
       case 0: {
         if (!first || !second || !view || !workspace || app.tabCount() != 3) {
           if (retryOrFail(QStringLiteral(
@@ -710,7 +819,7 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
       }
     };
 
-    QTimer::singleShot(0, &app, [runPhase]() { (*runPhase)(0, 40); });
+    QTimer::singleShot(0, &app, [runPhase]() { (*runPhase)(-1, 120); });
   };
 
   startTaskQueueAsyncPublicationSmoke(

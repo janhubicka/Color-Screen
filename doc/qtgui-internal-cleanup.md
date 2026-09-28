@@ -848,7 +848,11 @@ minimum is:
 4. ASan/UBSan GUI smoke on supported platforms;
 5. TSan/Archer coverage for Qt paths that the platform runtime supports;
 6. the completion-driven multi-document workspace churn smoke;
-7. save/load/recovery round trips for a representative parameter file;
+7. save/load/recovery round trips for a representative parameter file.
+   `DocumentLifecycleSmoke` now writes a real per-document recovery payload,
+   restores it into a fresh hidden document, waits for asynchronous image load,
+   and verifies source image, saved scalar/profile-spot state, loaded parameter
+   target metadata, and recovered dirty state before continuing the close tests;
 8. a small fixture test for each nontrivial parameter-widget mapping;
 9. manual workflow passes for at least one regular screen, one line screen and
    one RGB+IR or monochrome capture. Workspace churn provides a synthetic
