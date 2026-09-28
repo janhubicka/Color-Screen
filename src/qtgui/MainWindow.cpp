@@ -4680,7 +4680,7 @@ void MainWindow::runAreaComputation(
                        colorscreen::progress_info *)> worker,
     bool showGenericFailure) {
   startAreaSelection(message, [this, description, onStart, onDone,
-                               worker](QRect area) {
+                               worker, showGenericFailure](QRect area) {
     if (area.width() <= 0 || area.height() <= 0 || !m_scan)
       return;
 
