@@ -7,9 +7,11 @@ on:
     branches: [ "main" ]
   workflow_dispatch:
 
+# New commits supersede older CI/release-gate runs for the same PR or branch.
+# Manual dispatches stay independent so explicit diagnostics are never cancelled.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.event_name == 'push' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'push' }}
 
 jobs:
   build:
