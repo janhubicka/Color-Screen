@@ -990,6 +990,11 @@ void MainWindow::setupUi() {
               // must not cancel the operation.
               cancelAreaSelectionPresentation();
             }
+            if (!m_inspectorImageRouting.switching &&
+                sender() == inspectorImageWidget() &&
+                m_temporaryCanvas.instructionOwner &&
+                mode != *m_temporaryCanvas.instructionOwner)
+              clearTemporaryCanvasInstruction();
           });
   connect(m_imageWidget, &ImageWidget::distanceMeasured, this, &MainWindow::onDistanceMeasured);
   m_configTabs->addTab(m_sharpnessPanel, "Sharpness",
@@ -2652,6 +2657,10 @@ void MainWindow::setInspectorImageWidget(ImageWidget *imageWidget) {
           if (!m_inspectorImageRouting.switching && sender() == inspectorImageWidget() &&
               mode != ImageWidget::GenericAreaMode && m_temporaryCanvas.areaSelectionCallback)
             cancelAreaSelectionPresentation();
+          if (!m_inspectorImageRouting.switching && sender() == inspectorImageWidget() &&
+              m_temporaryCanvas.instructionOwner &&
+              mode != *m_temporaryCanvas.instructionOwner)
+            clearTemporaryCanvasInstruction();
         }));
   }
 
@@ -3794,6 +3803,27 @@ void MainWindow::restoreInteractionMode() {
   inspectorImageWidget()->setInteractionMode(m_temporaryCanvas.restoreMode);
 }
 
+/** Publish one status-bar instruction owned by a temporary canvas mode. */
+void MainWindow::showTemporaryCanvasInstruction(
+    ImageWidget::InteractionMode owner, const QString &message, int timeoutMs) {
+  m_temporaryCanvas.instructionOwner = owner;
+  m_temporaryCanvas.instructionText = message;
+  statusBar()->showMessage(message, timeoutMs);
+}
+
+/** Clear only the temporary instruction we still own.
+
+    Another subsystem may have replaced the status text while the temporary
+    tool remained active. In that case release ownership without erasing the
+    newer message. */
+void MainWindow::clearTemporaryCanvasInstruction() {
+  if (!m_temporaryCanvas.instructionText.isEmpty() &&
+      statusBar()->currentMessage() == m_temporaryCanvas.instructionText)
+    statusBar()->clearMessage();
+  m_temporaryCanvas.instructionOwner.reset();
+  m_temporaryCanvas.instructionText.clear();
+}
+
 /** Clear whichever temporary point-click tool currently owns AddPointMode.
     This never changes the canvas mode; callers decide whether they are handing
     ownership to another temporary tool or honoring an explicit user tool. */
@@ -3802,7 +3832,7 @@ void MainWindow::clearPointClickToolPresentation() {
     m_profilePanel->setAddSpotChecked(false);
   if (m_temporaryCanvas.pointClick.focusAnalysis() && m_sharpnessPanel) {
     m_sharpnessPanel->setFocusAnalysisChecked(false);
-    statusBar()->clearMessage();
+    clearTemporaryCanvasInstruction();
   }
   m_temporaryCanvas.pointClick.clear();
 }
@@ -4577,7 +4607,7 @@ void MainWindow::onPointAdded(colorscreen::point_t imgPos,
 void MainWindow::onCropRequested() {
   if (inspectorImageWidget()->interactionMode() == ImageWidget::CropMode) {
     restoreInteractionMode();
-    statusBar()->clearMessage();
+    clearTemporaryCanvasInstruction();
     return;
   }
 
@@ -4597,8 +4627,9 @@ void MainWindow::onCropRequested() {
 
   saveInteractionMode();
   inspectorImageWidget()->setInteractionMode(ImageWidget::CropMode);
-  inspectorImageWidget()->setAreaSelectionInstruction(tr("Select crop"));
-  statusBar()->showMessage(tr("Select crop"));
+  const QString instruction = tr("Select crop");
+  inspectorImageWidget()->setAreaSelectionInstruction(instruction);
+  showTemporaryCanvasInstruction(ImageWidget::CropMode, instruction);
 }
 
 /** Enter generic area selection mode with a callback.
@@ -4622,7 +4653,7 @@ void MainWindow::startAreaSelection(const QString &message,
   saveInteractionMode();
   inspectorImageWidget()->setInteractionMode(ImageWidget::GenericAreaMode);
   inspectorImageWidget()->setAreaSelectionInstruction(message);
-  statusBar()->showMessage(message);
+  showTemporaryCanvasInstruction(ImageWidget::GenericAreaMode, message);
 }
 
 /** Clear one pending Generic Area operation without changing canvas mode.
@@ -4648,7 +4679,7 @@ void MainWindow::cancelAreaSelectionPresentation() {
   }
   if (m_sharpnessPanel)
     m_sharpnessPanel->setMeasureMtfChecked(false);
-  statusBar()->clearMessage();
+  clearTemporaryCanvasInstruction();
 }
 
 /** Close stale final-result confirmations without applying their results. */
@@ -4957,7 +4988,8 @@ void MainWindow::onFocusAnalysisRequested(bool checked, uint64_t flags) {
       clearPointClickToolPresentation();
     m_temporaryCanvas.pointClick.armFocusAnalysis(flags);
     image->setInteractionMode(ImageWidget::AddPointMode);
-    statusBar()->showMessage(tr("Select point for focus analysis"), 5000);
+    showTemporaryCanvasInstruction(
+        ImageWidget::AddPointMode, tr("Select point for focus analysis"), 5000);
     return;
   }
 
@@ -5600,7 +5632,8 @@ void MainWindow::onMeasureRequested() {
 
   saveInteractionMode();
   inspectorImageWidget()->setInteractionMode(ImageWidget::MeasureMode);
-  statusBar()->showMessage(
+  showTemporaryCanvasInstruction(
+      ImageWidget::MeasureMode,
       tr("Click the first point, zoom as needed, then click the second point; dragging also works"),
       7000);
 }
@@ -5615,7 +5648,7 @@ void MainWindow::onDistanceMeasured(colorscreen::point_t p1, colorscreen::point_
     if (image != inspectorImageWidget())
       return;
   restoreInteractionMode();
-  statusBar()->clearMessage();
+  clearTemporaryCanvasInstruction();
 
   double dx = p1.x - p2.x;
   double dy = p1.y - p2.y;
