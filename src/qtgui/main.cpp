@@ -1847,6 +1847,8 @@ bool runBetaInvariantSmoke() {
                                  QStringLiteral("write error"));
   const QString pointFocusFailure =
       pointFocusAnalysisFailureMessage(QStringLiteral("low local contrast"));
+  const QString areaFailure =
+      areaComputationFailureMessage(QStringLiteral("automatic white balance"));
   if (!unknownScreenFailure.contains(
           QStringLiteral("No supported regular screen lattice")) ||
       !unknownScreenFailure.contains(QStringLiteral("left unchanged")) ||
@@ -1941,7 +1943,11 @@ bool runBetaInvariantSmoke() {
           QStringLiteral("clear area with visible screen structure")) ||
       !pointFocusFailure.contains(QStringLiteral("retry Analyze area")) ||
       !pointFocusFailure.contains(
-          QStringLiteral("Analysis detail: low local contrast")))
+          QStringLiteral("Analysis detail: low local contrast")) ||
+      !areaFailure.contains(QStringLiteral("automatic white balance")) ||
+      !areaFailure.contains(
+          QStringLiteral("Existing processing parameters were left unchanged")) ||
+      !areaFailure.contains(QStringLiteral("larger, clearer area")))
     return fail("analysis failure guidance lost actionable preserved-state semantics");
 
   if (!backgroundThreadRegistryShutdownSmoke()
