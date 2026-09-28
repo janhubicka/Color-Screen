@@ -849,9 +849,13 @@ void SharpnessPanel::updateMTFChart() {
   double screenFreq = -1;
   if (img && colorscreen::screen_geometry_configured_p(state.scrToImg)) {
       colorscreen::scr_to_img scrToImgObj;
-      scrToImgObj.set_parameters(state.scrToImg, *img);
-      double pixel_size = scrToImgObj.pixel_size({0, 0, img->width, img->height});
-      screenFreq = colorscreen::scr_names[(int)state.scrToImg.type].frequency * pixel_size;
+      if (scrToImgObj.set_parameters(state.scrToImg, *img)) {
+          double pixel_size =
+              scrToImgObj.pixel_size({0, 0, img->width, img->height});
+          screenFreq =
+              colorscreen::scr_names[(int)state.scrToImg.type].frequency *
+              pixel_size;
+      }
   }
 
   m_mtfChart->setChannelsPresence(img ? img->has_rgb() : true, img ? img->has_grayscale_or_ir() : true);

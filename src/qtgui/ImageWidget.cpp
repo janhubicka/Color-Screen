@@ -663,7 +663,10 @@ void ImageWidget::drawProfileSpots(QPainter &p) {
   p.setRenderHint(QPainter::Antialiasing);
 
   colorscreen::scr_to_img map;
-  (void)map.set_parameters(*m_scrToImg, *m_scan);
+  if (!m_scan->stitch && !map.set_parameters(*m_scrToImg, *m_scan)) {
+    p.restore();
+    return;
+  }
   
   colorscreen::bradford_whitepoint_adaptation_matrix m_bradford(colorscreen::d50_white, colorscreen::srgb_white);
 
@@ -1325,7 +1328,10 @@ void ImageWidget::mousePressEvent(QMouseEvent *event) {
     // Right-click removal of profile spots is an atomic click, not a drag.
     if (m_profileSpots && !m_profileSpots->empty() && m_scrToImg && m_scan) {
       colorscreen::scr_to_img map;
-      (void)map.set_parameters(*m_scrToImg, *m_scan);
+      if (!m_scan->stitch && !map.set_parameters(*m_scrToImg, *m_scan)) {
+        event->accept();
+        return;
+      }
 
       int bestIdx = -1;
       double bestDistSq = 1e9;
@@ -2592,7 +2598,10 @@ void ImageWidget::schedulePointsOverlayRender ()
         p.setRenderHint (QPainter::Antialiasing);
 
         colorscreen::scr_to_img map;
-        (void)map.set_parameters (scrToImg, *scan);
+        if (!map.set_parameters (scrToImg, *scan)) {
+          *result = std::move (overlay);
+          return;
+        }
 
         /* Background-safe equivalent of imageToWidget.
            Must account for rotation/mirror via CoordinateTransformer.  */

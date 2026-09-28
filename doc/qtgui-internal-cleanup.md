@@ -797,6 +797,14 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   stores path, suggested flag, and dirty flag on separate lines, then restores
   the first two through the grouped transition. Workspace churn contains a small
   friend-level transition probe.
+- Keep diagnostic/presentation mapping fail-closed. A configured
+  `scr_to_img_parameters` is still not proof that `scr_to_img::set_parameters()`
+  can build its inverse/mesh/lens state. Sharpness screen-frequency display,
+  deformation visualization, profile-spot overlays/removal, and registration-
+  point overlays now all check the `[[nodiscard]]` result and suppress the
+  affected diagnostic when mapping construction fails rather than consuming a
+  partially initialized transform. Do not silence this contract with a `(void)`
+  cast.
 - Keep linear/gamma/logarithmic slider conversions centralized in
   `SliderValueMapping`; do not reintroduce separate mapping formulas in stateful
   and stateless helpers.
