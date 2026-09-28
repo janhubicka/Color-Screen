@@ -14,6 +14,7 @@
 #include <QCloseEvent>
 #include <QCoreApplication>
 #include <QDialog>
+#include <QDebug>
 #include <QDir>
 #include <QFile>
 #include <QFileDialog>
@@ -38,6 +39,7 @@
 #include <QtConcurrent>
 
 #include <algorithm>
+#include <cstdio>
 #include <exception>
 #include <memory>
 #include <utility>
