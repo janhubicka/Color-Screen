@@ -2,6 +2,7 @@
 #include "../libcolorscreen/include/backlight-correction-parameters.h"
 #include "../libcolorscreen/include/imagedata.h"
 #include "GeometryPanel.h"
+#include "AtomicFileSave.h"
 #include "BackgroundThreadRegistry.h"
 #include "ColorScreenApplication.h"
 #include "CapturePanel.h"
@@ -41,6 +42,7 @@
 #include <QDebug>
 #include <QDockWidget>
 #include <QDoubleSpinBox>
+#include <QFile>
 #include <QFileInfo>
 #include <QFormLayout>
 #include <QGroupBox>
@@ -224,6 +226,58 @@ bool backgroundThreadRegistryShutdownSmoke() {
     qCritical() << "Background-thread registry retained joined workers";
     return false;
   }
+  return true;
+}
+
+/** Verify all-or-nothing replacement independently of parameter serialization. */
+bool atomicFileSaveSmoke() {
+  auto fail = [](const char *reason) {
+    qCritical() << "Atomic-file smoke failed:" << reason;
+    return false;
+  };
+
+  QTemporaryDir temporary;
+  if (!temporary.isValid())
+    return fail("could not create temporary directory");
+  const QString path = temporary.filePath(QStringLiteral("atomic-save.txt"));
+
+  QFile seed(path);
+  if (!seed.open(QIODevice::WriteOnly) ||
+      seed.write("stable payload") != 14 || !seed.flush())
+    return fail("could not seed existing target");
+  seed.close();
+
+  QString error;
+  const bool failedWrite = qtgui_io::saveStdioAtomically(
+      path,
+      [](FILE *staged) {
+        if (std::fputs("partial replacement", staged) < 0)
+          return false;
+        return false; // Simulate a serializer that rejects its staged payload.
+      },
+      &error);
+  if (failedWrite)
+    return fail("failed serializer was committed");
+
+  QFile preserved(path);
+  if (!preserved.open(QIODevice::ReadOnly) ||
+      preserved.readAll() != QByteArray("stable payload"))
+    return fail("failed serializer changed the existing target");
+  preserved.close();
+
+  error.clear();
+  if (!qtgui_io::saveStdioAtomically(
+          path,
+          [](FILE *staged) {
+            return std::fputs("replacement payload", staged) >= 0;
+          },
+          &error))
+    return fail("successful serializer was not committed");
+
+  QFile replaced(path);
+  if (!replaced.open(QIODevice::ReadOnly) ||
+      replaced.readAll() != QByteArray("replacement payload"))
+    return fail("successful atomic save did not replace the target");
   return true;
 }
 
@@ -1951,6 +2005,7 @@ bool runBetaInvariantSmoke() {
     return fail("analysis failure guidance lost actionable preserved-state semantics");
 
   if (!backgroundThreadRegistryShutdownSmoke()
+      || !atomicFileSaveSmoke()
       || !numericDoubleClickResetSmoke()
       || !discreteDefaultPresentationSmoke()
       || !parameterSectionPreferencesSmoke()
