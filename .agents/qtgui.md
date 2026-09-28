@@ -695,7 +695,12 @@ not move them relative to the photograph. A live second-endpoint preview resumes
 the current pointer as soon as a temporary Hand drag finishes. Right-click and Escape both cancel a
 pending click-click anchor. Temporary area
 operations should pass their operation-specific instruction into the canvas rather
-than falling back to a generic "Select area" message.
+than falling back to a generic "Select area" message. Generic Area selection has
+one document-owned callback regardless of which panel requested it. Abandoning
+that mode before a rectangle is accepted must clear the callback, stale status
+instruction, Image Layer area toggles, Color area toggles, and Sharpness
+**Measure MTF** toggle together. Do not run the operation's completion callback
+for this pre-dispatch cancellation: its background `onStart` has not run yet.
 
 The manual tool is an initializer/editor for the base linear coordinate system,
 not a competing editor for a control-point model. Hide it when the screen has no
