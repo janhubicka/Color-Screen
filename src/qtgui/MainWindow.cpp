@@ -979,12 +979,12 @@ void MainWindow::setupUi() {
             if (!m_inspectorImageRouting.switching &&
                 sender() == inspectorImageWidget() &&
                 mode != ImageWidget::AddPointMode &&
-                m_pointClickTool.active())
+                m_temporaryCanvas.pointClick.active())
               clearPointClickToolPresentation();
             if (!m_inspectorImageRouting.switching &&
                 sender() == inspectorImageWidget() &&
                 mode != ImageWidget::GenericAreaMode &&
-                m_areaSelectionCallback) {
+                m_temporaryCanvas.areaSelectionCallback) {
               // If the active view switches tool during selection, abandon the
               // pending callback. Merely moving the inspector to another view
               // must not cancel the operation.
@@ -1566,7 +1566,7 @@ void MainWindow::createToolbar() {
           &MainWindow::onPointAdded);
   connect(m_imageWidget, &ImageWidget::profileSpotRemoveRequested, this,
           [this](int index) {
-            if (!m_pointClickTool.profileSpot())
+            if (!m_temporaryCanvas.pointClick.profileSpot())
               return;
             ParameterState newState = getCurrentState();
             if (index >= 0 && index < (int)newState.profileSpots.size()) {
@@ -2611,7 +2611,7 @@ void MainWindow::setInspectorImageWidget(ImageWidget *imageWidget) {
     m_inspectorImageRouting.connections.push_back(connect(
         target, &ImageWidget::profileSpotRemoveRequested, this,
         [this](int index) {
-          if (!m_pointClickTool.profileSpot())
+          if (!m_temporaryCanvas.pointClick.profileSpot())
             return;
           ParameterState state = getCurrentState();
           if (index >= 0 && index < static_cast<int>(state.profileSpots.size())) {
@@ -2624,10 +2624,10 @@ void MainWindow::setInspectorImageWidget(ImageWidget *imageWidget) {
         [this](ImageWidget::InteractionMode mode) {
           syncInspectorInteractionActions(mode);
           if (!m_inspectorImageRouting.switching && sender() == inspectorImageWidget() &&
-              mode != ImageWidget::AddPointMode && m_pointClickTool.active())
+              mode != ImageWidget::AddPointMode && m_temporaryCanvas.pointClick.active())
             clearPointClickToolPresentation();
           if (!m_inspectorImageRouting.switching && sender() == inspectorImageWidget() &&
-              mode != ImageWidget::GenericAreaMode && m_areaSelectionCallback)
+              mode != ImageWidget::GenericAreaMode && m_temporaryCanvas.areaSelectionCallback)
             cancelAreaSelectionPresentation();
         }));
   }
@@ -3759,29 +3759,29 @@ void MainWindow::saveInteractionMode() {
       mode == ImageWidget::CropMode ||
       mode == ImageWidget::GenericAreaMode ||
       mode == ImageWidget::MeasureMode ||
-      (mode == ImageWidget::AddPointMode && m_pointClickTool.active());
+      (mode == ImageWidget::AddPointMode && m_temporaryCanvas.pointClick.active());
   if (!temporary)
-    m_previousInteractionMode = mode;
+    m_temporaryCanvas.restoreMode = mode;
 }
 
 // Return to the interaction mode that was active before a temporary operation
 // started. This handles both setting the ImageWidget mode and updating the
 // checked state of the corresponding toolbar actions.
 void MainWindow::restoreInteractionMode() {
-  inspectorImageWidget()->setInteractionMode(m_previousInteractionMode);
+  inspectorImageWidget()->setInteractionMode(m_temporaryCanvas.restoreMode);
 }
 
 /** Clear whichever temporary point-click tool currently owns AddPointMode.
     This never changes the canvas mode; callers decide whether they are handing
     ownership to another temporary tool or honoring an explicit user tool. */
 void MainWindow::clearPointClickToolPresentation() {
-  if (m_pointClickTool.profileSpot() && m_profilePanel)
+  if (m_temporaryCanvas.pointClick.profileSpot() && m_profilePanel)
     m_profilePanel->setAddSpotChecked(false);
-  if (m_pointClickTool.focusAnalysis() && m_sharpnessPanel) {
+  if (m_temporaryCanvas.pointClick.focusAnalysis() && m_sharpnessPanel) {
     m_sharpnessPanel->setFocusAnalysisChecked(false);
     statusBar()->clearMessage();
   }
-  m_pointClickTool.clear();
+  m_temporaryCanvas.pointClick.clear();
 }
 
 
@@ -4416,7 +4416,7 @@ void MainWindow::onPointAdded(colorscreen::point_t imgPos,
     image = inspectorImageWidget();
 
   // Profile spot mode: convert img coords → screen coords and store
-  if (m_pointClickTool.profileSpot()) {
+  if (m_temporaryCanvas.pointClick.profileSpot()) {
     colorscreen::scr_to_img map;
     if (!map.set_parameters(m_scrToImgParams, *m_scan)) {
       statusBar()->showMessage(tr("Fit screen geometry before adding profile spots."), 3000);
@@ -4429,9 +4429,9 @@ void MainWindow::onPointAdded(colorscreen::point_t imgPos,
     return;
   }
 
-  if (m_pointClickTool.focusAnalysis()) {
-    const uint64_t focusFlags = m_pointClickTool.focusFlags;
-    m_pointClickTool.clear();
+  if (m_temporaryCanvas.pointClick.focusAnalysis()) {
+    const uint64_t focusFlags = m_temporaryCanvas.pointClick.focusFlags;
+    m_temporaryCanvas.pointClick.clear();
     restoreInteractionMode();
 
     colorscreen::finetune_parameters fparam;
@@ -4595,7 +4595,7 @@ void MainWindow::startAreaSelection(const QString &message,
     return;
   }
 
-  m_areaSelectionCallback = callback;
+  m_temporaryCanvas.areaSelectionCallback = callback;
   saveInteractionMode();
   inspectorImageWidget()->setInteractionMode(ImageWidget::GenericAreaMode);
   inspectorImageWidget()->setAreaSelectionInstruction(message);
@@ -4608,10 +4608,10 @@ void MainWindow::startAreaSelection(const QString &message,
     and Geometry. A tool switch must clear every toggle/prompt that can own the
     same callback rather than leaving a visually armed operation behind. */
 void MainWindow::cancelAreaSelectionPresentation() {
-  if (!m_areaSelectionCallback)
+  if (!m_temporaryCanvas.areaSelectionCallback)
     return;
 
-  m_areaSelectionCallback = nullptr;
+  m_temporaryCanvas.areaSelectionCallback = nullptr;
   if (m_imageLayerPanel) {
     m_imageLayerPanel->setNeutralAreaChecked(false);
     m_imageLayerPanel->setInfraredAreaChecked(false);
@@ -4705,7 +4705,7 @@ QRect MainWindow::getImageArea(QRect area, ImageWidget *imageWidget) {
 
 /** Dispatch a drawn rectangle to the appropriate handler based on the
    current interaction mode.
-   - GenericAreaMode: invokes the m_areaSelectionCallback and restores
+   - GenericAreaMode: invokes the m_temporaryCanvas.areaSelectionCallback and restores
      the previous tool.
    - CropMode: sets the crop rectangle in the parameter state.
    - SelectMode/AddPointMode: runs a one-shot finetune to find
@@ -4722,8 +4722,8 @@ void MainWindow::onAreaSelected(QRect area) {
     return;
 
   if (image->interactionMode() == ImageWidget::GenericAreaMode) {
-    auto cb = m_areaSelectionCallback;
-    m_areaSelectionCallback =
+    auto cb = m_temporaryCanvas.areaSelectionCallback;
+    m_temporaryCanvas.areaSelectionCallback =
         nullptr; // Clear first so interactionModeChanged doesn't uncheck
     restoreInteractionMode();
     statusBar()->clearMessage();
@@ -4916,18 +4916,18 @@ void MainWindow::onFocusAnalysisRequested(bool checked, uint64_t flags) {
     return;
 
   if (checked) {
-    const bool alreadyTemporary = m_pointClickTool.active();
+    const bool alreadyTemporary = m_temporaryCanvas.pointClick.active();
     if (!alreadyTemporary)
       saveInteractionMode();
-    if (!m_pointClickTool.focusAnalysis())
+    if (!m_temporaryCanvas.pointClick.focusAnalysis())
       clearPointClickToolPresentation();
-    m_pointClickTool.armFocusAnalysis(flags);
+    m_temporaryCanvas.pointClick.armFocusAnalysis(flags);
     image->setInteractionMode(ImageWidget::AddPointMode);
     statusBar()->showMessage(tr("Select point for focus analysis"), 5000);
     return;
   }
 
-  if (!m_pointClickTool.focusAnalysis())
+  if (!m_temporaryCanvas.pointClick.focusAnalysis())
     return;
   clearPointClickToolPresentation();
   restoreInteractionMode();
@@ -5390,17 +5390,17 @@ void MainWindow::onAddSpotModeRequested(bool active) {
     return;
 
   if (active) {
-    const bool alreadyTemporary = m_pointClickTool.active();
+    const bool alreadyTemporary = m_temporaryCanvas.pointClick.active();
     if (!alreadyTemporary)
       saveInteractionMode();
-    if (!m_pointClickTool.profileSpot())
+    if (!m_temporaryCanvas.pointClick.profileSpot())
       clearPointClickToolPresentation();
-    m_pointClickTool.armProfileSpot();
+    m_temporaryCanvas.pointClick.armProfileSpot();
     image->setInteractionMode(ImageWidget::AddPointMode);
     return;
   }
 
-  if (!m_pointClickTool.profileSpot())
+  if (!m_temporaryCanvas.pointClick.profileSpot())
     return;
   clearPointClickToolPresentation();
   restoreInteractionMode();
