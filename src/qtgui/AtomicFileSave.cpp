@@ -1,6 +1,5 @@
 #include "AtomicFileSave.h"
 
-#include <QByteArray>
 #include <QIODevice>
 #include <QSaveFile>
 
@@ -65,33 +64,6 @@ bool saveStdioAtomically(const QString &path,
   if (!output.commit()) {
     if (error)
       *error = output.errorString();
-    return false;
-  }
-  return true;
-}
-
-bool saveTextAtomically(const QString &path, const QString &text,
-                        QString *error) {
-  QSaveFile file(path);
-  file.setDirectWriteFallback(false);
-  if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
-    if (error)
-      *error = file.errorString();
-    return false;
-  }
-
-  const QByteArray bytes = text.toUtf8();
-  if (file.write(bytes) != bytes.size()) {
-    if (error)
-      *error = file.errorString().isEmpty()
-                   ? QStringLiteral("Could not write the complete payload.")
-                   : file.errorString();
-    file.cancelWriting();
-    return false;
-  }
-  if (!file.commit()) {
-    if (error)
-      *error = file.errorString();
     return false;
   }
   return true;
