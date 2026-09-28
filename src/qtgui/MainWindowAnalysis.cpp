@@ -435,7 +435,7 @@ void MainWindow::onAutomaticallyAddPointsRequested(
 bool MainWindow::registrationDiscoveryRequestCurrent(
     uint64_t generation,
     const std::shared_ptr<colorscreen::progress_info> &progress) const {
-  if (m_closing || !progress || progress->pool_cancel() ||
+  if (m_closeLifecycle.closing() || !progress || progress->pool_cancel() ||
       progress->cancelled() ||
       generation != m_registrationDiscovery.generation)
     return false;
@@ -469,7 +469,7 @@ void MainWindow::cancelStaleRegistrationDiscovery(
   if (progress && workflowProgress == progress)
     m_screenAutodetection.clearProgress();
 
-  if (!m_closing)
+  if (!m_closeLifecycle.closing())
     statusBar()->showMessage(
         tr("Automatic point discovery stopped because its inputs changed."),
         3000);
@@ -613,12 +613,12 @@ void MainWindow::startRegistrationDiscovery(
         if (ownsRequest)
           m_registrationDiscovery.clearRequest();
 
-        if (!m_closing)
+        if (!m_closeLifecycle.closing())
           removeProgress(progress);
-        if (!m_closing && screenAutodetection)
+        if (!m_closeLifecycle.closing() && screenAutodetection)
           clearScreenAutodetectionProgress(progress);
 
-        if (!m_closing && ownsRequest && publishable &&
+        if (!m_closeLifecycle.closing() && ownsRequest && publishable &&
             screenAutodetection && success && !cancelled && m_scan) {
           const auto currentScan = m_scan;
           const ParameterState current = getCurrentState();
@@ -645,7 +645,7 @@ void MainWindow::startRegistrationDiscovery(
               });
         }
 
-        if (!m_closing && ownsRequest && publishable && !success &&
+        if (!m_closeLifecycle.closing() && ownsRequest && publishable && !success &&
             !cancelled) {
           auto *box = new QMessageBox(
               QMessageBox::Warning, tr("Automatic Registration"),
@@ -728,7 +728,7 @@ void MainWindow::onAutodetectScreen() {
   OneShotOperation operation;
   operation.description = tr("Detecting screen");
   operation.prerequisites =
-      [this, scan]() { return !m_closing && m_scan == scan; };
+      [this, scan]() { return !m_closeLifecycle.closing() && m_scan == scan; };
   operation.resultValid = [this, scan, baseline, result]() {
     return m_scan == scan && getCurrentState() == baseline &&
            !result->cancelled;
@@ -806,7 +806,7 @@ void MainWindow::presentScreenDetectionSuggestions(
         if (m_screenAutodetection.prompt != dialog)
           return;
         m_screenAutodetection.prompt = nullptr;
-        if (m_closing || m_scan != scan || getCurrentState() != baseline)
+        if (m_closeLifecycle.closing() || m_scan != scan || getCurrentState() != baseline)
           return;
 
         // Closing the window still accepts the mandatory detected geometry in
@@ -890,7 +890,7 @@ void MainWindow::presentDetectedScreenResult(
 bool MainWindow::adaptiveSharpeningRequestCurrent(
     uint64_t generation,
     const std::shared_ptr<colorscreen::progress_info> &progress) const {
-  if (m_closing || !progress || progress->pool_cancel() ||
+  if (m_closeLifecycle.closing() || !progress || progress->pool_cancel() ||
       progress->cancelled() ||
       generation != m_adaptiveSharpening.generation)
     return false;
@@ -930,7 +930,7 @@ void MainWindow::cancelStaleAdaptiveSharpening(
   if (progress)
     progress->cancel();
   restoreAdaptiveSharpeningChart();
-  if (!m_closing)
+  if (!m_closeLifecycle.closing())
     statusBar()->showMessage(
         tr("Adaptive sharpening analysis stopped because its inputs changed."),
         3000);
@@ -1037,7 +1037,7 @@ void MainWindow::onAdaptiveSharpeningRequested(
             if (ownsRequest)
               m_adaptiveSharpening.clearRequest();
 
-            if (!m_closing && ownsRequest) {
+            if (!m_closeLifecycle.closing() && ownsRequest) {
               if (publishable && !cancelled)
                 onAdaptiveSharpeningFinished(success, result, error);
               else {
@@ -1052,7 +1052,7 @@ void MainWindow::onAdaptiveSharpeningRequested(
                       4000);
               }
             }
-            if (!m_closing)
+            if (!m_closeLifecycle.closing())
               removeProgress(progress);
           });
 
