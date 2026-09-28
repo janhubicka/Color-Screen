@@ -568,6 +568,13 @@ private:
    */
   void restoreInteractionMode();
 
+  /** Show one status instruction owned by a temporary canvas mode. */
+  void showTemporaryCanvasInstruction(ImageWidget::InteractionMode owner,
+                                      const QString &message,
+                                      int timeoutMs = 0);
+  /** Drop the owned temporary instruction without clearing newer status text. */
+  void clearTemporaryCanvasInstruction();
+
   /** Clear the temporary Profile/Focus point-click owner without changing the
       canvas mode. Panel toggles are synchronized with signals blocked. */
   void clearPointClickToolPresentation();
@@ -1019,6 +1026,8 @@ private:
     ImageWidget::InteractionMode restoreMode = ImageWidget::PanMode;
     std::function<void(QRect)> areaSelectionCallback;
     PointClickToolState pointClick;
+    std::optional<ImageWidget::InteractionMode> instructionOwner;
+    QString instructionText;
   };
   TemporaryCanvasToolState m_temporaryCanvas;
 

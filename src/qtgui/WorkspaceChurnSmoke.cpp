@@ -633,6 +633,38 @@ if (pointToolImage->interactionMode() != ImageWidget::SelectMode) {
 }
 pointToolImage->setInteractionMode(originalPointToolMode);
 
+// Measure owns its temporary status instruction. Leaving the tool must clear
+// that instruction, but must not erase a newer message posted by another owner.
+pointToolImage->setInteractionMode(ImageWidget::SelectMode);
+first->onMeasureRequested();
+const QString measureInstruction = first->statusBar()->currentMessage();
+if (measureInstruction.isEmpty() ||
+    !first->m_temporaryCanvas.instructionOwner ||
+    *first->m_temporaryCanvas.instructionOwner != ImageWidget::MeasureMode) {
+  fail(QStringLiteral("Measure did not own its temporary status instruction"));
+  return;
+}
+pointToolImage->setInteractionMode(ImageWidget::PanMode);
+if (first->m_temporaryCanvas.instructionOwner ||
+    first->statusBar()->currentMessage() == measureInstruction) {
+  fail(QStringLiteral("Tool switch left the Measure instruction behind"));
+  return;
+}
+
+pointToolImage->setInteractionMode(ImageWidget::SelectMode);
+first->onMeasureRequested();
+const QString newerStatus = QStringLiteral("newer temporary-status smoke");
+first->statusBar()->showMessage(newerStatus);
+pointToolImage->setInteractionMode(ImageWidget::PanMode);
+if (first->m_temporaryCanvas.instructionOwner ||
+    first->statusBar()->currentMessage() != newerStatus) {
+  fail(QStringLiteral(
+      "Temporary-tool cleanup erased a newer unrelated status message"));
+  return;
+}
+first->statusBar()->clearMessage();
+pointToolImage->setInteractionMode(originalPointToolMode);
+
 // Generic Area cancellation is shared by several panels. In particular,
 // abandoning Sharpness Measure MTF by choosing another canvas tool must clear
 // both the callback and its toggle/status presentation.

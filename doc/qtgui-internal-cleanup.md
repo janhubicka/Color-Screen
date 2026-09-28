@@ -335,13 +335,16 @@ cross-tool temporary chain returning to the original Select tool.
 
 Generic Area presentation is centralized too. Image Layer calibration, Color
 area actions, Sharpness **Measure MTF**, and Geometry area discovery all share
-the state's one area-selection callback. If another canvas tool replaces Generic Area
-before a rectangle is accepted, `cancelAreaSelectionPresentation()` clears that
-callback, every checkable panel owner, and the stale status instruction together.
-It deliberately does not invoke the later background-operation `onDone`, because
-no area was accepted and `onStart` has not run. Workspace churn specifically
-checks that abandoning a simulated Sharpness MTF area selection leaves neither a
-checked Measure button nor a live callback/status prompt.
+the state's one area-selection callback. If another canvas tool replaces Generic
+Area before a rectangle is accepted, `cancelAreaSelectionPresentation()` clears
+that callback, every checkable panel owner, and the stale status instruction
+together. Crop, Measure and one-area Focus use the same owned-instruction
+mechanism. The state records both the owning temporary mode and exact text, so a
+tool switch clears an instruction only while that exact message is still current;
+a newer unrelated status message survives. It deliberately does not invoke the
+later background-operation `onDone` for pre-dispatch area cancellation, because
+no area was accepted and `onStart` has not run. Workspace churn checks Generic
+Area cancellation plus Measure instruction cleanup and newer-message preservation.
 
 Profile fitting also owns an immutable source-image snapshot now. The queued
 request carries the source scan itself and `ColorOptimizerWorker` no longer
