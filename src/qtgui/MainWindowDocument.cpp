@@ -146,15 +146,21 @@ bool MainWindow::saveParametersAs() {
    deferred by one event-loop turn so KDE can dispose of KIO file-dialog jobs
    before an associated parameter prompt is shown.  */
 void MainWindow::onOpenImage() {
+  QSettings settings;
+  QString startDirectory = settings.value("lastOpenDir").toString();
+  if (!startDirectory.isEmpty() && !QDir(startDirectory).exists())
+    startDirectory.clear();
+
   const QStringList fileNames = QFileDialog::getOpenFileNames(
-      this, "Open Images", m_lastOpenDir,
+      this, "Open Images", startDirectory,
       "Images (*.tif *.tiff *.jpg *.jpeg *.jp2 *.j2k *.jpc *.jpf *.jpx *.png "
       "*.raw *.dng *.iiq *.nef *.cr2 *.eip *.arw *.raf *.arq *.csprj);;All "
       "Files (*)");
   if (fileNames.isEmpty())
     return;
 
-  m_lastOpenDir = QFileInfo(fileNames.constFirst()).absolutePath();
+  settings.setValue("lastOpenDir",
+                    QFileInfo(fileNames.constFirst()).absolutePath());
   const QPointer<MainWindow> guardedWindow(this);
   QTimer::singleShot(0, qApp, [guardedWindow, fileNames]() {
     if (!guardedWindow)
