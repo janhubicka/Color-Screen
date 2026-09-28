@@ -793,6 +793,16 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   lifecycle smoke already exercises first-document approval followed by a
   second-document veto, rollback, re-prompting, failed Save, and final Discard
   with active background work.
+- Group workspace-embedding presentation state consistently across window
+  types. `MainWindow::WorkspacePresentationState` owns the embedded flag,
+  shared workspace-status-bar route, and saved standalone splitter state needed
+  when the borrowed inspector returns. `ImageViewWindow` uses the same concept
+  without the splitter snapshot. This removes parallel embedding/status members
+  while preserving the existing detach ordering and one-status-bar invariant.
+  Fullscreen splitter sizes remain separate because they belong to one resize
+  gesture rather than workspace ownership. Workspace churn already exercises
+  repeated attach/detach, shared status routing, secondary views and inspector
+  restoration.
 - Group inspector-routing state that moves as one presentation unit.
   `InspectorImageRoutingState` owns the weak currently inspected
   `ImageWidget`, exactly the dynamic signal connections attached to that view,
