@@ -322,6 +322,16 @@ Add Point because the first temporary handoff overwrote `m_previousInteractionMo
 Workspace churn exercises Profile/Focus handoff, explicit-tool cancellation, and
 a cross-tool temporary chain returning to the original Select tool.
 
+Generic Area presentation is centralized too. Image Layer calibration, Color
+area actions, Sharpness **Measure MTF**, and Geometry area discovery all share
+one `m_areaSelectionCallback`. If another canvas tool replaces Generic Area
+before a rectangle is accepted, `cancelAreaSelectionPresentation()` clears that
+callback, every checkable panel owner, and the stale status instruction together.
+It deliberately does not invoke the later background-operation `onDone`, because
+no area was accepted and `onStart` has not run. Workspace churn specifically
+checks that abandoning a simulated Sharpness MTF area selection leaves neither a
+checked Measure button nor a live callback/status prompt.
+
 Profile fitting also owns an immutable source-image snapshot now. The queued
 request carries the source scan itself and `ColorOptimizerWorker` no longer
 inherits `WorkerBase` or owns a mutable document scan; completion checks that
