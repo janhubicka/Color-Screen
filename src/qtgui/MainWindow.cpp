@@ -3765,11 +3765,26 @@ void MainWindow::changeParameters(const ParameterState &newState,
       this, currentState, newState, description, parameterKey));
 }
 
-// Save the current interaction mode so it can be restored later.
-// We ignore GenericAreaMode to avoid "saving" a temporary selection state.
+/** Save the persistent canvas tool that temporary operations should restore.
+
+    Temporary tools may hand off directly to one another. Never overwrite the
+    restore target with another temporary mode, otherwise Profile Add spot ->
+    Crop/Measure/area selection can later restore ordinary Add Point instead of
+    the user's original Pan/Select/etc. Registration Add Point remains a real
+    persistent tool when no Profile/Focus point-click intent owns it. */
 void MainWindow::saveInteractionMode() {
-  if (inspectorImageWidget()->interactionMode() != ImageWidget::GenericAreaMode)
-    m_previousInteractionMode = inspectorImageWidget()->interactionMode();
+  ImageWidget *image = inspectorImageWidget();
+  if (!image)
+    return;
+
+  const ImageWidget::InteractionMode mode = image->interactionMode();
+  const bool temporary =
+      mode == ImageWidget::CropMode ||
+      mode == ImageWidget::GenericAreaMode ||
+      mode == ImageWidget::MeasureMode ||
+      (mode == ImageWidget::AddPointMode && m_pointClickTool.active());
+  if (!temporary)
+    m_previousInteractionMode = mode;
 }
 
 // Return to the interaction mode that was active before a temporary operation
