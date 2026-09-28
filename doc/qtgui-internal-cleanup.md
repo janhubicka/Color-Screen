@@ -793,6 +793,10 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   lifecycle smoke already exercises first-document approval followed by a
   second-document veto, rollback, re-prompting, failed Save, and final Discard
   with active background work.
+- Keep window-layout restoration single-shot. `restoreWindowState()` restores
+  Qt's serialized dock/toolbar state exactly once after geometry restoration;
+  replaying the same `restoreState()` payload can emit duplicate layout/dock
+  transitions and makes workspace/detached ownership harder to reason about.
 - Group workspace-embedding presentation state consistently across window
   types. `MainWindow::WorkspacePresentationState` owns the embedded flag,
   shared workspace-status-bar route, and saved standalone splitter state needed
