@@ -4677,7 +4677,8 @@ void MainWindow::runAreaComputation(
     std::function<void()> onDone,
     std::function<bool(ParameterState &, colorscreen::image_data &,
                        const colorscreen::int_image_area &,
-                       colorscreen::progress_info *)> worker) {
+                       colorscreen::progress_info *)> worker,
+    bool showGenericFailure) {
   startAreaSelection(message, [this, description, onStart, onDone,
                                worker](QRect area) {
     if (area.width() <= 0 || area.height() <= 0 || !m_scan)
@@ -4700,10 +4701,12 @@ void MainWindow::runAreaComputation(
     operation.resultValid = [this, scan, baseline]() {
       return m_scan == scan && getCurrentState() == baseline;
     };
-    operation.applyResult = [this, result, succeeded, description]() {
+    operation.applyResult =
+        [this, result, succeeded, description, showGenericFailure]() {
       if (!*succeeded) {
-        statusBar()->showMessage(areaComputationFailureMessage(description),
-                                 9000);
+        if (showGenericFailure)
+          statusBar()->showMessage(areaComputationFailureMessage(description),
+                                   9000);
         return;
       }
       changeParameters(*result, description);
@@ -5735,13 +5738,17 @@ void MainWindow::onMeasureMtfRequested(bool checked) {
                   colorscreen::slanted_edge_mtf(
                       s.rparams, scan, area, parameters, progress);
               if (!result.success) {
+                if (progress && progress->cancel_requested()) {
+                  results->clear();
+                  return false;
+                }
                 *batchError =
                     parameters.name + ": "
                     + (result.error.empty()
                            ? std::string("no usable single slanted edge was found")
                            : result.error);
                 results->push_back(std::move(result));
-                return;
+                return false;
               }
               results->push_back(std::move(result));
             }
@@ -5751,7 +5758,9 @@ void MainWindow::onMeasureMtfRequested(bool checked) {
             for (auto &result : *results)
               s.rparams.sharpen.scanner_mtf.measurements.push_back(
                   std::move(result.measurement));
-          });
+            return true;
+          },
+          false);
     });
     dialog->open();
   } else {
