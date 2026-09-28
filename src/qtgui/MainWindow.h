@@ -947,8 +947,37 @@ private:
   ImageLoadState m_imageLoad;
 
   bool m_recoveryDirty = false;
-  bool m_closing = false;
-  bool m_applicationClosePrepared = false;
+
+  /** Transactional close lifecycle for one logical document.
+
+      File -> Exit may preflight several documents before destroying any of
+      them. Keep that one-shot approval mutually exclusive with active teardown
+      rather than representing the phases with independent booleans. */
+  struct DocumentCloseLifecycleState {
+    enum class Phase { Open, ApplicationPreflightApproved, Closing };
+    Phase phase = Phase::Open;
+
+    bool closing() const { return phase == Phase::Closing; }
+    bool preflightApproved() const {
+      return phase == Phase::ApplicationPreflightApproved;
+    }
+    void approvePreflight() {
+      if (!closing())
+        phase = Phase::ApplicationPreflightApproved;
+    }
+    void cancelPreflight() {
+      if (preflightApproved())
+        phase = Phase::Open;
+    }
+    bool consumePreflight() {
+      if (!preflightApproved())
+        return false;
+      phase = Phase::Open;
+      return true;
+    }
+    void beginClosing() { phase = Phase::Closing; }
+  };
+  DocumentCloseLifecycleState m_closeLifecycle;
 
   /** Exclusive session-only owner of ImageWidget::AddPointMode when that mode
       is temporarily borrowed by Profile calibration or one-area Focus analysis.
