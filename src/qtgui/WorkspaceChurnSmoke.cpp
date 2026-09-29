@@ -570,6 +570,7 @@ profileAddSpotButton->setChecked(true);
 const QString profileSpotInstruction = first->statusBar()->currentMessage();
 if (!first->m_temporaryCanvas.pointClick.profileSpot() ||
     pointToolImage->interactionMode() != ImageWidget::AddPointMode ||
+    !pointToolImage->profileSpotEditing() ||
     !profileAddSpotButton->isChecked() ||
     profileSpotInstruction.isEmpty() ||
     first->m_temporaryCanvas.instructionText != profileSpotInstruction ||
@@ -584,6 +585,7 @@ const QString focusInstruction = first->statusBar()->currentMessage();
 if (!first->m_temporaryCanvas.pointClick.focusAnalysis() ||
     profileAddSpotButton->isChecked() || !pointFocusButton->isChecked() ||
     pointToolImage->interactionMode() != ImageWidget::AddPointMode ||
+    pointToolImage->profileSpotEditing() ||
     focusInstruction.isEmpty() || focusInstruction == profileSpotInstruction ||
     first->m_temporaryCanvas.instructionText != focusInstruction ||
     !first->m_temporaryCanvas.instructionOwner ||
@@ -594,13 +596,16 @@ if (!first->m_temporaryCanvas.pointClick.focusAnalysis() ||
 }
 profileAddSpotButton->setChecked(true);
 if (!first->m_temporaryCanvas.pointClick.profileSpot() ||
-    !profileAddSpotButton->isChecked() || pointFocusButton->isChecked()) {
+    !profileAddSpotButton->isChecked() || pointFocusButton->isChecked() ||
+    !pointToolImage->profileSpotEditing()) {
   fail(QStringLiteral(
       "Profile Add spot did not exclusively retake point-click ownership"));
   return;
 }
 profileAddSpotButton->setChecked(false);
 if (first->m_temporaryCanvas.pointClick.active() ||
+    pointToolImage->profileSpotEditing() ||
+    first->m_temporaryCanvas.instructionOwner ||
     pointToolImage->interactionMode() != ImageWidget::SelectMode) {
   fail(QStringLiteral(
       "Temporary point-tool handoff overwrote the original canvas tool"));
@@ -609,7 +614,7 @@ if (first->m_temporaryCanvas.pointClick.active() ||
 profileAddSpotButton->setChecked(true);
 pointToolImage->setInteractionMode(ImageWidget::PanMode);
 if (first->m_temporaryCanvas.pointClick.active() || profileAddSpotButton->isChecked() ||
-    pointFocusButton->isChecked()) {
+    pointFocusButton->isChecked() || pointToolImage->profileSpotEditing()) {
   fail(QStringLiteral(
       "Explicit canvas tool change left a hidden temporary point tool armed"));
   return;
@@ -1184,6 +1189,41 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
                 "Profile visibility checkbox did not follow peer ordinary view"));
             return;
           }
+
+          // Forced visibility is an edit affordance, not a side effect of
+          // generic AddPointMode. With both view-local preferences hidden,
+          // only the ordinary view currently owning Profile Add spot may force
+          // the overlay visible; that edit presentation follows the inspector.
+          first->m_imageWidget->setShowProfileSpots(false);
+          view->imageWidget()->setShowProfileSpots(false);
+          workspace->activateDocument(first);
+          profileAddSpotButton->setChecked(true);
+          if (!first->m_imageWidget->profileSpotEditing() ||
+              view->imageWidget()->profileSpotEditing() ||
+              first->m_imageWidget->profileSpotsVisible() ||
+              view->imageWidget()->profileSpotsVisible()) {
+            fail(QStringLiteral(
+                "Profile Add spot did not isolate forced visibility to the active view"));
+            return;
+          }
+          workspace->activateView(view);
+          if (first->m_imageWidget->profileSpotEditing() ||
+              !view->imageWidget()->profileSpotEditing() ||
+              first->m_imageWidget->profileSpotsVisible() ||
+              view->imageWidget()->profileSpotsVisible()) {
+            fail(QStringLiteral(
+                "Profile Add spot edit visibility did not follow the inspector view"));
+            return;
+          }
+          profileAddSpotButton->setChecked(false);
+          if (first->m_imageWidget->profileSpotEditing() ||
+              view->imageWidget()->profileSpotEditing() ||
+              first->m_temporaryCanvas.instructionOwner) {
+            fail(QStringLiteral(
+                "Ending Profile Add spot left forced overlay presentation active"));
+            return;
+          }
+
           first->m_imageWidget->setShowProfileSpots(primaryProfileVisible);
           view->imageWidget()->setShowProfileSpots(peerProfileVisible);
           first->m_profilePanel->setShowProfileSpots(

@@ -453,8 +453,13 @@ every ordinary New View and refresh them when either ParameterState or the
 session-only optimizer diagnostics change. The **Show profile spots** choice is
 different: it remains view-local, and the one shared Profile-panel checkbox
 mirrors whichever ordinary view currently owns the inspector. Do not propagate
-that visibility toggle to inactive tiled/detached peers. Slanted-edge reference
-views display another scan and never receive profile overlays.
+that visibility toggle to inactive tiled/detached peers. Generic
+`ImageWidget::AddPointMode` is not profile-edit state: registration Add Point
+and one-area Focus must respect a hidden profile overlay. Only Profile **Add
+spot** sets the separate view-local `profileSpotEditing` affordance that forces
+spots visible while editing; that affordance follows the inspector to another
+ordinary view and is cleared on Profile→Focus/tool cancellation. Slanted-edge
+reference views display another scan and never receive profile overlays.
 
 ### 2. One-Shot Cancellable Tasks
 Tasks that run in the background and report a final result (or series of intermediate results).
