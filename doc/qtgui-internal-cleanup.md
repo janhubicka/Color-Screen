@@ -323,7 +323,15 @@ temporary canvas operation, and the optional Generic Area callback. Handing
 ownership from Profile to Focus (or back) unchecks the previous panel toggle
 with signals blocked, preserves the original canvas tool, and leaves only one
 interpretation for the next click. Choosing another canvas tool cancels the
-temporary owner instead of leaving a hidden action armed.
+temporary owner instead of leaving a hidden action armed. Profile overlay
+editing is deliberately separate from generic Add Point mode: only the ordinary
+view currently owning **Add spot** sets `ImageWidget::profileSpotEditing` and
+therefore force-shows hidden spots. Registration Add Point and Focus respect each
+view's **Show profile spots** preference. Inspector handoff clears the old view's
+edit affordance and transfers it to the new compatible ordinary view; ending
+Add spot clears both the affordance and its persistent status instruction.
+Workspace churn checks Profile→Focus cleanup and primary↔peer edit-presentation
+transfer with both view-local visibility preferences disabled.
 
 The same restore target spans *all* temporary canvas operations. Crop, Generic
 Area, Measure, and Profile/Focus-borrowed Add Point are never saved as the next
