@@ -623,7 +623,7 @@ void ImageViewWindow::finishReferenceLoad() {
           return;
         if (auto *application = dynamic_cast<ColorScreenApplication *>(
                 QApplication::instance()))
-          application->closeView(guarded);
+          application->closeView(guarded.data());
         else
           guarded->close();
       });
