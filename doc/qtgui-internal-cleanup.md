@@ -840,14 +840,21 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   payload into `QSaveFile`; direct-write fallback is disabled, so serialization,
   disk-write or commit failure leaves an older usable target untouched.
   Recovery image, parameter and metadata payloads likewise replace each file
-  atomically instead of truncating it in place. The common
-  `AtomicFileSave` helper has a lightweight deterministic smoke: a staged writer
-  that emits bytes and then reports failure must leave the old target byte-for-
-  byte intact, while a successful writer must replace it. Recovery metadata
-  format remains unchanged: path, suggested flag and dirty flag still occupy
-  separate lines and restore through the grouped transition. Workspace churn
-  contains a small friend-level target transition probe, while
-  DocumentLifecycleSmoke continues to round-trip the real recovery payload.
+  atomically instead of truncating it in place. Recovery *reads* are
+  transactional as well: `restoreRecoveryState()` parses the recovered CSP and
+  Qt metadata into private temporary state and commits only after a complete
+  success. A truncated/corrupt payload therefore cannot leave half-loaded
+  geometry/render/profile state behind. Partial recovery warnings are
+  parent-owned/asynchronous and the original recovery files remain available for
+  inspection or retry. The common `AtomicFileSave` helper has a lightweight
+  deterministic smoke: a staged writer that emits bytes and then reports failure
+  must leave the old target byte-for-byte intact, while a successful writer must
+  replace it. Recovery metadata format remains unchanged: path, suggested flag
+  and dirty flag still occupy separate lines and restore through the grouped
+  transition. Workspace churn contains a small friend-level target transition
+  probe, while DocumentLifecycleSmoke round-trips the real recovery payload and
+  also truncates a copy at the Qt metadata end marker to verify fail-closed
+  recovery publication.
 - Keep diagnostic/presentation mapping fail-closed. A configured
   `scr_to_img_parameters` is still not proof that `scr_to_img::set_parameters()`
   can build its inverse/mesh/lens state. Sharpness screen-frequency display,
