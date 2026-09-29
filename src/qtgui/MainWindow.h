@@ -568,10 +568,10 @@ private:
    */
   void restoreInteractionMode();
 
-  /** Show one status instruction owned by a temporary canvas mode. */
+  /** Show one persistent status instruction owned by a temporary canvas mode.
+      It remains visible until completion/cancellation or a newer status owner. */
   void showTemporaryCanvasInstruction(ImageWidget::InteractionMode owner,
-                                      const QString &message,
-                                      int timeoutMs = 0);
+                                      const QString &message);
   /** Drop the owned temporary instruction without clearing newer status text. */
   void clearTemporaryCanvasInstruction();
 
