@@ -4261,7 +4261,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         return;
       }
 
-      case 3:
+      case 3: {
         if (!second || !view || !workspace->isTabbedView() ||
             !workspace->isTabBarVisible() || app.tabCount() != 3 ||
             !hasExactWrappers()) {
@@ -4269,25 +4269,64 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
               "Workspace churn did not restore the three-tab presentation"));
           return;
         }
+
+        // Temporary document-tool feedback belongs to the presentation that
+        // owns the inspector. Arm it while this peer is attached so detaching
+        // the same ImageWidget must migrate the message to its private bar.
+        workspace->activateView(view);
+        const QString marker =
+            QStringLiteral("detached-inspector-status-routing-smoke");
+        first->startAreaSelection(marker, [](QRect) {});
+        if (first->inspectorImageWidget() != view->imageWidget() ||
+            !first->m_temporaryCanvas.areaSelectionCallback ||
+            first->m_temporaryCanvas.instructionStatusBar.data() !=
+                workspace->statusBar() ||
+            workspace->statusBar()->currentMessage() != marker) {
+          fail(QStringLiteral(
+              "Workspace churn could not arm inspector-owned status guidance"));
+          return;
+        }
+
         app.detachView(view);
         schedule(4, 50, 40);
         return;
+      }
 
-      case 4:
+      case 4: {
+        const QString marker =
+            QStringLiteral("detached-inspector-status-routing-smoke");
         if (!second || !view || !view->isWindow() ||
             view->isWorkspaceEmbedded() || workspace->containsView(view) ||
             app.tabCount() != 2 || !workspace->containsDocument(first) ||
             !workspace->containsDocument(second) ||
             view->statusBar() != view->standaloneStatusBar() ||
             !view->standaloneStatusBar()->isVisible() ||
-            first->statusBar() != workspace->statusBar()) {
+            first->statusBar() != workspace->statusBar() ||
+            first->inspectorImageWidget() != view->imageWidget() ||
+            first->m_temporaryCanvas.instructionStatusBar.data() !=
+                view->standaloneStatusBar() ||
+            view->standaloneStatusBar()->currentMessage() != marker ||
+            workspace->statusBar()->currentMessage() == marker) {
           fail(QStringLiteral(
-              "Workspace churn did not detach the ordinary view cleanly"));
+              "Workspace churn did not route inspector status to detached view"));
           return;
         }
+
+        // Cancel in the detached presentation and verify cleanup targets the
+        // migrated owner rather than the source document's workspace bar.
+        first->startAreaSelection(marker, [](QRect) {});
+        if (first->m_temporaryCanvas.areaSelectionCallback ||
+            first->m_temporaryCanvas.instructionStatusBar ||
+            view->standaloneStatusBar()->currentMessage() == marker) {
+          fail(QStringLiteral(
+              "Detached inspector did not clear its temporary status guidance"));
+          return;
+        }
+
         app.attachView(view);
         schedule(5, 50, 40);
         return;
+      }
 
       case 5:
         if (!second || !view || !view->isWorkspaceEmbedded() ||
