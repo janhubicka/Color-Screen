@@ -654,9 +654,12 @@ void ImageWidget::drawPointsOverlay(QPainter &p) {
  * @param p The QPainter to use.
  */
 void ImageWidget::drawProfileSpots(QPainter &p) {
-  // Draw profile spots while adding points or when their overlay is enabled.
-  bool showSpots = m_profileSpots && !m_profileSpots->empty() && m_scan && m_scrToImg &&
-                   (m_interactionMode == AddPointMode || m_showProfileSpots);
+  // The view-local visibility preference is overridden only by the actual
+  // Profile Add-spot tool. Generic registration/Focus AddPointMode must not
+  // resurrect a profile overlay the user hid.
+  const bool showSpots =
+      m_profileSpots && !m_profileSpots->empty() && m_scan && m_scrToImg &&
+      (m_profileSpotEditing || m_showProfileSpots);
   if (!showSpots) return;
 
   p.save();
