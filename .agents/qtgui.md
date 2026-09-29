@@ -132,6 +132,12 @@ their private status bars. When a document-owned inspector is borrowed by an
 ordinary peer view, panel/tool feedback that belongs to the inspected canvas
 must use `MainWindow::inspectorStatusBar()`: it resolves to the shared workspace
 bar while attached and to the borrowing view's private bar while detached.
+Inspector-driven dialogs/file prompts owned by MainWindow use
+`inspectorDialogParent()` for the same reason: attached views parent them to the
+workspace, while detached peers parent them to their own top-level window.
+Current examples are DPI **Measure**, source-document **Measure MTF**, and
+**Flat field → Set reference**. Document/File menu dialogs that are not tied to
+the borrowed inspector keep their ordinary document/application parent.
 TemporaryCanvasToolState remembers the exact bar holding an owned instruction so
 an attached↔detached reparenting can migrate that message even when the
 ImageWidget pointer itself does not change. Keep each window's embedding flag and shared
