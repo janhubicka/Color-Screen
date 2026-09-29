@@ -87,14 +87,76 @@ bool saveParameterPayloadAtomically(
 bool saveRecoveryTextAtomically(const QString &path, const QString &text) {
   return qtgui_io::saveTextAtomically(path, text);
 }
+
+/** Parse one parameter payload into private default state.
+
+    LOAD_CSP merges into its outputs, so callers must never pass live document
+    members here. ERROR receives a copied open/parse diagnostic on failure. */
+bool loadParameterPayload(
+    const QString &path, ParameterState *state,
+    std::vector<colorscreen::color_match> *spotResults, QString *error) {
+  if (!state)
+    return false;
+
+  FILE *f = fopen(path.toUtf8().constData(), "r");
+  if (!f) {
+    if (error)
+      *error = QCoreApplication::translate(
+          "MainWindow", "Could not open %1.").arg(path);
+    return false;
+  }
+
+  ParameterState loadedState;
+  std::vector<colorscreen::color_match> loadedSpotResults;
+  const char *libraryError = nullptr;
+  const bool loaded = colorscreen::load_csp_with_profile_spots(
+      f, &loadedState.scrToImg, &loadedState.detect, &loadedState.rparams,
+      &loadedState.solver, &libraryError, &loadedState.profileSpots,
+      &loadedSpotResults);
+  const QString errorDetail =
+      libraryError ? QString::fromUtf8(libraryError) : QString();
+  fclose(f);
+
+  if (!loaded || !errorDetail.isEmpty()) {
+    if (error)
+      *error = errorDetail.isEmpty()
+                   ? QCoreApplication::translate(
+                         "MainWindow",
+                         "The file contains invalid or incomplete parameter data.")
+                   : errorDetail;
+    return false;
+  }
+
+  *state = std::move(loadedState);
+  if (spotResults)
+    *spotResults = std::move(loadedSpotResults);
+  if (error)
+    error->clear();
+  return true;
+}
+
+/** Present one nonblocking parameter-load failure without changing state. */
+void showParameterLoadFailure(QWidget *parent, const QString &detail) {
+  auto *box = new QMessageBox(
+      QMessageBox::Critical,
+      QCoreApplication::translate("MainWindow", "Parameter Load Failed"),
+      QCoreApplication::translate(
+          "MainWindow",
+          "The parameter file could not be loaded. The current document "
+          "parameters and calibration state were left unchanged.\n\n%1")
+          .arg(detail),
+      QMessageBox::Ok, parent);
+  box->setObjectName(QStringLiteral("ParameterLoadFailureDialog"));
+  box->setAttribute(Qt::WA_DeleteOnClose);
+  box->open();
+}
 } // namespace
 
 /** Open a .par parameter file chosen by the user.
-   Prompts for unsaved changes first, then resets all parameter structs to
-   defaults before loading (load_csp merges into existing values, so a reset
-   is needed for clean loading).  On success, re-initialises the image widget
-   and renderer with new parameters, clears undo history, and refreshes the
-   UI.  On error, restores the previous parameter values.  */
+   Prompts for unsaved changes first, then delegates to the transactional
+   parameter loader. On success, re-initialises the image widget and renderer,
+   clears undo history, and refreshes the UI. Failed parsing never mutates live
+   document parameters. */
 void MainWindow::onOpenParameters() {
   // Check for unsaved changes before loading new parameters
   if (!maybeSave()) {
@@ -1243,43 +1305,12 @@ bool MainWindow::loadParameterFile(const QString &fileName) {
   dismissOneShotPrompts();
   m_oneShotOperations.cancelAll();
 
-  auto showLoadError = [this](const QString &detail) {
-    auto *box = new QMessageBox(
-        QMessageBox::Critical, tr("Parameter Load Failed"),
-        tr("The parameter file could not be loaded. The current document "
-           "parameters and calibration state were left unchanged.\n\n%1")
-            .arg(detail),
-        QMessageBox::Ok, this);
-    box->setObjectName(QStringLiteral("ParameterLoadFailureDialog"));
-    box->setAttribute(Qt::WA_DeleteOnClose);
-    box->open();
-  };
-
-  FILE *f = fopen(fileName.toUtf8().constData(), "r");
-  if (!f) {
-    showLoadError(tr("Could not open %1.").arg(fileName));
-    return false;
-  }
-
-  // load_csp merges into its outputs, so parse into a private default state.
-  // This prevents a late core/Qt-metadata failure from ever exposing partially
-  // loaded parameters to the live document or to a nested UI event loop.
   ParameterState loadedState;
   std::vector<colorscreen::color_match> loadedSpotResults;
-  const char *error = nullptr;
-  const bool loaded = colorscreen::load_csp_with_profile_spots(
-      f, &loadedState.scrToImg, &loadedState.detect, &loadedState.rparams,
-      &loadedState.solver, &error, &loadedState.profileSpots,
-      &loadedSpotResults);
-  const QString errorDetail =
-      error ? QString::fromUtf8(error) : QString();
-  fclose(f);
-
-  if (!loaded || !errorDetail.isEmpty()) {
-    showLoadError(
-        errorDetail.isEmpty()
-            ? tr("The file contains invalid or incomplete parameter data.")
-            : errorDetail);
+  QString loadError;
+  if (!loadParameterPayload(fileName, &loadedState, &loadedSpotResults,
+                            &loadError)) {
+    showParameterLoadFailure(this, loadError);
     return false;
   }
 
