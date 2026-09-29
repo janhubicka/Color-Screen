@@ -3803,12 +3803,15 @@ void MainWindow::restoreInteractionMode() {
   inspectorImageWidget()->setInteractionMode(m_temporaryCanvas.restoreMode);
 }
 
-/** Publish one status-bar instruction owned by a temporary canvas mode. */
+/** Publish one persistent status-bar instruction owned by a temporary mode.
+
+    Temporary canvas tools remain armed until the user completes or cancels
+    them. Their guidance must therefore not expire on a wall-clock timeout. */
 void MainWindow::showTemporaryCanvasInstruction(
-    ImageWidget::InteractionMode owner, const QString &message, int timeoutMs) {
+    ImageWidget::InteractionMode owner, const QString &message) {
   m_temporaryCanvas.instructionOwner = owner;
   m_temporaryCanvas.instructionText = message;
-  statusBar()->showMessage(message, timeoutMs);
+  statusBar()->showMessage(message);
 }
 
 /** Clear only the temporary instruction we still own.
@@ -4990,7 +4993,7 @@ void MainWindow::onFocusAnalysisRequested(bool checked, uint64_t flags) {
     m_temporaryCanvas.pointClick.armFocusAnalysis(flags);
     image->setInteractionMode(ImageWidget::AddPointMode);
     showTemporaryCanvasInstruction(
-        ImageWidget::AddPointMode, tr("Select point for focus analysis"), 5000);
+        ImageWidget::AddPointMode, tr("Select point for focus analysis"));
     return;
   }
 
@@ -5464,6 +5467,9 @@ void MainWindow::onAddSpotModeRequested(bool active) {
       clearPointClickToolPresentation();
     m_temporaryCanvas.pointClick.armProfileSpot();
     image->setInteractionMode(ImageWidget::AddPointMode);
+    showTemporaryCanvasInstruction(
+        ImageWidget::AddPointMode,
+        tr("Click image to add profile spots; right-click a spot to remove it"));
     return;
   }
 
@@ -5635,8 +5641,7 @@ void MainWindow::onMeasureRequested() {
   inspectorImageWidget()->setInteractionMode(ImageWidget::MeasureMode);
   showTemporaryCanvasInstruction(
       ImageWidget::MeasureMode,
-      tr("Click the first point, zoom as needed, then click the second point; dragging also works"),
-      7000);
+      tr("Click the first point, zoom as needed, then click the second point; dragging also works"));
 }
 
 /** Handle a completed distance measurement.
