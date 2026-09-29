@@ -3409,7 +3409,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
 
       case 200: {
         ImageViewWindow *reference = state->reference.data();
-        if (!reference || reference->m_referenceLoadPending ||
+        if (!reference || reference->m_referenceLoad.pending ||
             !reference->sharedImageData()) {
           retryOrFail(QStringLiteral("Reference MTF smoke image did not load"));
           return;
@@ -3551,7 +3551,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
 
       case 204: {
         ImageViewWindow *reference = state->reference.data();
-        if (!reference || reference->m_referenceLoadPending ||
+        if (!reference || reference->m_referenceLoad.pending ||
             first->m_oneShotOperations.hasActiveTasks()) {
           retryOrFail(QStringLiteral("Reference reload/cancellation did not settle"));
           return;
