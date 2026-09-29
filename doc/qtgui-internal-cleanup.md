@@ -829,11 +829,16 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   guidance follows the same presentation owner through `inspectorStatusBar()`.
   `TemporaryCanvasToolState` retains the exact `QStatusBar` on which its
   current instruction was published, allowing an attached peer to detach (or
-  reattach) without leaving the message in the source workspace. Exact-text
-  cleanup still prevents an older tool from erasing a newer unrelated message.
-  Workspace churn exercises view activation/tool transfer, secondary close and
-  inspector rebinding, plus a live Generic Area instruction moving from the
-  workspace bar to the detached peer's private bar.
+  reattach) without leaving the message in the source workspace. Inspector-
+  driven dialogs created by MainWindow resolve `inspectorDialogParent()` from
+  that same presentation: workspace while attached, borrowing ImageViewWindow
+  while detached. DPI Measure, source-document slanted-edge MTF setup/failure,
+  and Flat-field reference prompts now follow this rule instead of parenting to
+  a potentially hidden source document. Exact-text cleanup still prevents an
+  older tool from erasing a newer unrelated message. Workspace churn exercises
+  view activation/tool transfer, secondary close and inspector rebinding, a live
+  Generic Area instruction moving from the workspace bar to the detached peer's
+  private bar, and the matching dialog-parent resolution across detach/reattach.
 - Keep file-dialog history at application scope. Image Open uses
   `lastOpenDir`; parameter Open/Save As use `lastParameterDir` only when the
   document has no current/suggested `ParameterFileState::path`. Successful

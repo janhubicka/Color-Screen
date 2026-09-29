@@ -572,6 +572,8 @@ private:
       the document inspector. Attached views resolve to the shared workspace bar;
       detached peer views resolve to their private top-level bar. */
   QStatusBar *inspectorStatusBar() const;
+  /** Return the top-level presentation that should own inspector-driven dialogs. */
+  QWidget *inspectorDialogParent() const;
 
   /** Show one persistent status instruction owned by a temporary canvas mode.
       It remains visible until completion/cancellation or a newer status owner. */

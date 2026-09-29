@@ -314,6 +314,14 @@ QStatusBar *MainWindow::inspectorStatusBar() const {
   return statusBar();
 }
 
+/** Return the top-level presentation that currently owns the inspector. */
+QWidget *MainWindow::inspectorDialogParent() const {
+  if (QStatusBar *bar = inspectorStatusBar())
+    if (QWidget *window = bar->window())
+      return window;
+  return const_cast<MainWindow *>(this);
+}
+
 /** Share STATUSBAR with every tab in the enclosing workspace window. */
 void MainWindow::setWorkspaceStatusBar(QStatusBar *sharedStatusBar) {
   if (m_workspacePresentation.statusBar.data() == sharedStatusBar)
@@ -4952,18 +4960,20 @@ void MainWindow::onFlatFieldRequested() {
       "*.CR2 *.eip *.arw *.ARW *.raf *.RAF *.arq *.ARQ *.csprj);;All Files "
       "(*)";
   const QString whiteFile = QFileDialog::getOpenFileName(
-      this, "Choose White Reference", m_currentImageFile, filters);
+      inspectorDialogParent(), "Choose White Reference", m_currentImageFile,
+      filters);
   if (whiteFile.isEmpty())
     return;
 
   QTimer::singleShot(0, this, [this, filters, whiteFile]() {
     QString blackFile;
+    QWidget *dialogParent = inspectorDialogParent();
     if (QMessageBox::question(
-            this, "Flat Field",
+            dialogParent, "Flat Field",
             "Do you want to provide a black reference image (optional)?",
             QMessageBox::Yes | QMessageBox::No) == QMessageBox::Yes) {
-      blackFile = QFileDialog::getOpenFileName(this, "Choose Black Reference",
-                                               m_currentImageFile, filters);
+      blackFile = QFileDialog::getOpenFileName(
+          dialogParent, "Choose Black Reference", m_currentImageFile, filters);
     }
 
     const colorscreen::luminosity_t gamma = m_rparams.gamma;
@@ -4991,7 +5001,8 @@ void MainWindow::onFlatFieldRequested() {
         if (!result->cancelled) {
           auto *box = new QMessageBox(
               QMessageBox::Warning, tr("Flat Field"),
-              flatFieldFailureMessage(result->error), QMessageBox::Ok, this);
+              flatFieldFailureMessage(result->error), QMessageBox::Ok,
+              inspectorDialogParent());
           box->setObjectName(QStringLiteral("FlatFieldFailureDialog"));
           box->setAttribute(Qt::WA_DeleteOnClose);
           box->open();
@@ -5009,7 +5020,7 @@ void MainWindow::onFlatFieldRequested() {
       m_flatFieldCalibration.whiteReference = whiteFile;
       m_flatFieldCalibration.blackReference = blackFile;
       updateWorkflowSummary();
-      statusBar()->showMessage(
+      inspectorStatusBar()->showMessage(
           tr("Flat-field correction applied."), 4000);
     };
     operation.onDone = [this, requestProgress]() {
@@ -5718,7 +5729,8 @@ void MainWindow::onDistanceMeasured(colorscreen::point_t p1, colorscreen::point_
     return;
 
   auto *dialog = new MeasureDialog(
-      distPixels, m_rparams.sharpen.scanner_mtf.scan_dpi, this);
+      distPixels, m_rparams.sharpen.scanner_mtf.scan_dpi,
+      inspectorDialogParent());
   dialog->setAttribute(Qt::WA_DeleteOnClose);
   connect(dialog, &QDialog::accepted, this, [this, dialog]() {
     const double newDpi = dialog->getResultDpi();
@@ -5759,7 +5771,8 @@ void MainWindow::onMeasureMtfRequested(bool checked) {
     }
 
     auto *dialog = new SlantedEdgeDialog(
-        defaults, !currentMtf.measurements.empty(), hasRgb, hasInfrared, this);
+        defaults, !currentMtf.measurements.empty(), hasRgb, hasInfrared,
+        inspectorDialogParent());
     dialog->setAttribute(Qt::WA_DeleteOnClose);
     connect(dialog, &QDialog::rejected, this, [this]() {
       if (m_sharpnessPanel)
@@ -5817,7 +5830,7 @@ void MainWindow::onMeasureMtfRequested(bool checked) {
                   QMessageBox::Warning, tr("MTF Measurement Failed"),
                   mtfMeasurementFailureMessage(
                       QString::fromStdString(*batchError)),
-                  QMessageBox::Ok, this);
+                  QMessageBox::Ok, inspectorDialogParent());
               box->setObjectName(QStringLiteral("MtfMeasurementFailureDialog"));
               box->setAttribute(Qt::WA_DeleteOnClose);
               box->open();
