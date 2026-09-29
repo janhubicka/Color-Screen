@@ -1189,6 +1189,41 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
                 "Profile visibility checkbox did not follow peer ordinary view"));
             return;
           }
+
+          // Forced visibility is an edit affordance, not a side effect of
+          // generic AddPointMode. With both view-local preferences hidden,
+          // only the ordinary view currently owning Profile Add spot may force
+          // the overlay visible; that edit presentation follows the inspector.
+          first->m_imageWidget->setShowProfileSpots(false);
+          view->imageWidget()->setShowProfileSpots(false);
+          workspace->activateDocument(first);
+          profileAddSpotButton->setChecked(true);
+          if (!first->m_imageWidget->profileSpotEditing() ||
+              view->imageWidget()->profileSpotEditing() ||
+              first->m_imageWidget->profileSpotsVisible() ||
+              view->imageWidget()->profileSpotsVisible()) {
+            fail(QStringLiteral(
+                "Profile Add spot did not isolate forced visibility to the active view"));
+            return;
+          }
+          workspace->activateView(view);
+          if (first->m_imageWidget->profileSpotEditing() ||
+              !view->imageWidget()->profileSpotEditing() ||
+              first->m_imageWidget->profileSpotsVisible() ||
+              view->imageWidget()->profileSpotsVisible()) {
+            fail(QStringLiteral(
+                "Profile Add spot edit visibility did not follow the inspector view"));
+            return;
+          }
+          profileAddSpotButton->setChecked(false);
+          if (first->m_imageWidget->profileSpotEditing() ||
+              view->imageWidget()->profileSpotEditing() ||
+              first->m_temporaryCanvas.instructionOwner) {
+            fail(QStringLiteral(
+                "Ending Profile Add spot left forced overlay presentation active"));
+            return;
+          }
+
           first->m_imageWidget->setShowProfileSpots(primaryProfileVisible);
           view->imageWidget()->setShowProfileSpots(peerProfileVisible);
           first->m_profilePanel->setShowProfileSpots(
