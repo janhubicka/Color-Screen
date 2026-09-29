@@ -87,14 +87,76 @@ bool saveParameterPayloadAtomically(
 bool saveRecoveryTextAtomically(const QString &path, const QString &text) {
   return qtgui_io::saveTextAtomically(path, text);
 }
+
+/** Parse one parameter payload into private default state.
+
+    LOAD_CSP merges into its outputs, so callers must never pass live document
+    members here. ERROR receives a copied open/parse diagnostic on failure. */
+bool loadParameterPayload(
+    const QString &path, ParameterState *state,
+    std::vector<colorscreen::color_match> *spotResults, QString *error) {
+  if (!state)
+    return false;
+
+  FILE *f = fopen(path.toUtf8().constData(), "r");
+  if (!f) {
+    if (error)
+      *error = QCoreApplication::translate(
+          "MainWindow", "Could not open %1.").arg(path);
+    return false;
+  }
+
+  ParameterState loadedState;
+  std::vector<colorscreen::color_match> loadedSpotResults;
+  const char *libraryError = nullptr;
+  const bool loaded = colorscreen::load_csp_with_profile_spots(
+      f, &loadedState.scrToImg, &loadedState.detect, &loadedState.rparams,
+      &loadedState.solver, &libraryError, &loadedState.profileSpots,
+      &loadedSpotResults);
+  const QString errorDetail =
+      libraryError ? QString::fromUtf8(libraryError) : QString();
+  fclose(f);
+
+  if (!loaded || !errorDetail.isEmpty()) {
+    if (error)
+      *error = errorDetail.isEmpty()
+                   ? QCoreApplication::translate(
+                         "MainWindow",
+                         "The file contains invalid or incomplete parameter data.")
+                   : errorDetail;
+    return false;
+  }
+
+  *state = std::move(loadedState);
+  if (spotResults)
+    *spotResults = std::move(loadedSpotResults);
+  if (error)
+    error->clear();
+  return true;
+}
+
+/** Present one nonblocking parameter-load failure without changing state. */
+void showParameterLoadFailure(QWidget *parent, const QString &detail) {
+  auto *box = new QMessageBox(
+      QMessageBox::Critical,
+      QCoreApplication::translate("MainWindow", "Parameter Load Failed"),
+      QCoreApplication::translate(
+          "MainWindow",
+          "The parameter file could not be loaded. The current document "
+          "parameters and calibration state were left unchanged.\n\n%1")
+          .arg(detail),
+      QMessageBox::Ok, parent);
+  box->setObjectName(QStringLiteral("ParameterLoadFailureDialog"));
+  box->setAttribute(Qt::WA_DeleteOnClose);
+  box->open();
+}
 } // namespace
 
 /** Open a .par parameter file chosen by the user.
-   Prompts for unsaved changes first, then resets all parameter structs to
-   defaults before loading (load_csp merges into existing values, so a reset
-   is needed for clean loading).  On success, re-initialises the image widget
-   and renderer with new parameters, clears undo history, and refreshes the
-   UI.  On error, restores the previous parameter values.  */
+   Prompts for unsaved changes first, then delegates to the transactional
+   parameter loader. On success, re-initialises the image widget and renderer,
+   clears undo history, and refreshes the UI. Failed parsing never mutates live
+   document parameters. */
 void MainWindow::onOpenParameters() {
   // Check for unsaved changes before loading new parameters
   if (!maybeSave()) {
@@ -517,9 +579,10 @@ void MainWindow::maybeOfferInitialSetupGuide(
 }
 
 /** Load an image file and optionally its associated .par parameter file.
-   If SUPPRESSPARAMPROMPT is false, checks for a .par file alongside the
-   image and offers to load it.  If the user declines or no .par file exists,
-   a weak (suggested) parameter filename is set for later Save.
+   If SUPPRESSPARAMPROMPT is false, checks for a .par file alongside the image
+   and offers to load it transactionally. If the user declines, the sidecar is
+   unreadable/invalid, or no .par file exists, a weak (suggested) parameter
+   filename is set for later Save.
    The actual image loading runs asynchronously via QtConcurrent::run; on
    completion, the scan is set on ImageWidget, stitch tile loading is launched
    in parallel for .csprj projects, and undo history is cleared.  */
@@ -564,41 +627,34 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
                                 "A parameter file was found for this image. Do "
                                 "you want to load it?") == QMessageBox::Yes) {
 
-        FILE *f = fopen(parFile.toUtf8().constData(), "r");
-        if (f) {
-          const char *error = nullptr;
-          // load_csp merges parameters in; reset first.
-          colorscreen::scr_to_img_parameters emptyScrToImg;
-          m_scrToImgParams = emptyScrToImg;
-          colorscreen::scr_detect_parameters emptyScrDetect;
-          m_detectParams = emptyScrDetect;
-          colorscreen::render_parameters emptyRparams;
-          m_rparams = emptyRparams;
-          colorscreen::solver_parameters emptySolver;
-          m_solverParams = emptySolver;
-          m_profileSpots.clear();
-          m_profileCalibration.spotResults.clear();
-          if (!colorscreen::load_csp_with_profile_spots(
-                  f, &m_scrToImgParams, &m_detectParams, &m_rparams,
-                  &m_solverParams, &error, &m_profileSpots,
-                  &m_profileCalibration.spotResults)) {
-            QMessageBox::warning(this, "Error Loading Parameters",
-                                 error ? QString::fromUtf8(error)
-                                       : "Unknown error loading parameters.");
-          } else {
-            parameterDataLoaded = true;
+        ParameterState sidecarState;
+        std::vector<colorscreen::color_match> sidecarSpotResults;
+        QString loadError;
+        if (!loadParameterPayload(parFile, &sidecarState, &sidecarSpotResults,
+                                  &loadError)) {
+          // The user selected this existing file, but it was not accepted as a
+          // document target. Keep it only as a Save-As suggestion so overwrite
+          // still requires confirmation.
+          m_parameterFile.setSuggested(parFile);
+          showParameterLoadFailure(this, loadError);
+        } else {
+          m_scrToImgParams = std::move(sidecarState.scrToImg);
+          m_detectParams = std::move(sidecarState.detect);
+          m_rparams = std::move(sidecarState.rparams);
+          m_solverParams = std::move(sidecarState.solver);
+          m_profileSpots = std::move(sidecarState.profileSpots);
+          m_profileCalibration.spotResults =
+              std::move(sidecarSpotResults);
+          parameterDataLoaded = true;
 
-            // Track the loaded parameter file
-            m_parameterFile.setLoaded(parFile);
-            addToRecentParams(parFile);
+          // Track the loaded parameter file only after complete parse success.
+          m_parameterFile.setLoaded(parFile);
+          addToRecentParams(parFile);
 
-            // If we have a valid screen type, default to formatted
-            // (interpolated) view
-            if (colorscreen::screen_geometry_configured_p(m_scrToImgParams)) {
-              m_renderTypeParams.type = colorscreen::render_type_interpolated;
-            }
-          }
-          fclose(f);
+          // If we have a valid screen type, default to formatted
+          // (interpolated) view.
+          if (colorscreen::screen_geometry_configured_p(m_scrToImgParams))
+            m_renderTypeParams.type = colorscreen::render_type_interpolated;
         }
       } else {
         // User declined to load parameters - suggest filename
@@ -1234,52 +1290,21 @@ void MainWindow::clearRecoveryFiles() {
 }
 
 /** Load parameters from a .par file and update all UI components.
-   Resets parameters to defaults before loading (as load_csp merges into
-   existing values).  Updates ImageWidget, NavigationView, gamut warning,
-   undo history, and all panels.  Returns true on success.  */
+   Parses into private default state because load_csp merges into its outputs;
+   only a complete payload is published. Updates ImageWidget, NavigationView,
+   gamut warning, undo history, and all panels. Returns true on success. */
 bool MainWindow::loadParameterFile(const QString &fileName) {
   // Loading external parameters invalidates every final-result state snapshot
   // and any one-shot confirmation waiting on the old parameters.
   dismissOneShotPrompts();
   m_oneShotOperations.cancelAll();
 
-  auto showLoadError = [this](const QString &detail) {
-    auto *box = new QMessageBox(
-        QMessageBox::Critical, tr("Parameter Load Failed"),
-        tr("The parameter file could not be loaded. The current document "
-           "parameters and calibration state were left unchanged.\n\n%1")
-            .arg(detail),
-        QMessageBox::Ok, this);
-    box->setObjectName(QStringLiteral("ParameterLoadFailureDialog"));
-    box->setAttribute(Qt::WA_DeleteOnClose);
-    box->open();
-  };
-
-  FILE *f = fopen(fileName.toUtf8().constData(), "r");
-  if (!f) {
-    showLoadError(tr("Could not open %1.").arg(fileName));
-    return false;
-  }
-
-  // load_csp merges into its outputs, so parse into a private default state.
-  // This prevents a late core/Qt-metadata failure from ever exposing partially
-  // loaded parameters to the live document or to a nested UI event loop.
   ParameterState loadedState;
   std::vector<colorscreen::color_match> loadedSpotResults;
-  const char *error = nullptr;
-  const bool loaded = colorscreen::load_csp_with_profile_spots(
-      f, &loadedState.scrToImg, &loadedState.detect, &loadedState.rparams,
-      &loadedState.solver, &error, &loadedState.profileSpots,
-      &loadedSpotResults);
-  const QString errorDetail =
-      error ? QString::fromUtf8(error) : QString();
-  fclose(f);
-
-  if (!loaded || !errorDetail.isEmpty()) {
-    showLoadError(
-        errorDetail.isEmpty()
-            ? tr("The file contains invalid or incomplete parameter data.")
-            : errorDetail);
+  QString loadError;
+  if (!loadParameterPayload(fileName, &loadedState, &loadedSpotResults,
+                            &loadError)) {
+    showParameterLoadFailure(this, loadError);
     return false;
   }
 
