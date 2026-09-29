@@ -936,7 +936,11 @@ minimum is:
    and modified/clean contract it had on entry. Otherwise noninteractive
    sanitizer teardown can block in the production Unsaved Changes dialog;
 7. save/load/recovery round trips for a representative parameter file.
-   `DocumentLifecycleSmoke` writes a real per-document recovery payload,
+   Workspace churn also performs a successful save/reload and then attempts a
+   deliberately truncated `.par` load, verifying that failed parsing leaves
+   document state, clean/dirty status and the current parameter target unchanged
+   while the asynchronous failure dialog is presented. `DocumentLifecycleSmoke`
+   writes a real per-document recovery payload,
    restores it into a fresh hidden document, waits for asynchronous image load,
    and verifies source image, saved scalar/profile-spot state, loaded parameter
    target metadata, and recovered dirty state. It then truncates a copy of the
