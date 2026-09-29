@@ -213,14 +213,18 @@ private:
   };
   WorkspacePresentationState m_workspacePresentation;
   bool m_slantedEdgeReference = false;
-  bool m_referenceLoadPending = false;
   QString m_referenceFile;
   int m_selectedMtfMeasurement = -1;
-  /** Mutex-published worker/result handoff for one asynchronous reference load.
-      GUI-thread request state remains separate in m_referenceLoadPending. */
+  /** One asynchronous reference replacement.
+
+      PENDING and REQUESTEDFILE are GUI-thread request state. Worker/result data
+      are published under MUTEX. The accepted m_referenceFile/m_scan are changed
+      only after a complete successful load. */
   struct ReferenceLoadState {
     std::mutex mutex;
     std::condition_variable condition;
+    bool pending = false;
+    QString requestedFile;
     bool workerActive = false;
     bool ok = false;
     QString error;
