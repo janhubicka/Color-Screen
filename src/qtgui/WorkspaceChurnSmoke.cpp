@@ -11,6 +11,7 @@
 #include "../libcolorscreen/include/screen-map.h"
 
 #include <QAction>
+#include <QByteArray>
 #include <QComboBox>
 #include <QCheckBox>
 #include <QCoreApplication>
@@ -18,6 +19,7 @@
 #include <QDoubleSpinBox>
 #include <QDialog>
 #include <QEvent>
+#include <QFile>
 #include <QFont>
 #include <QLabel>
 #include <QLineEdit>
