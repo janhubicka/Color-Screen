@@ -835,7 +835,15 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   now owns the current `.par` path together with whether that path is merely an
   auto-suggested Save-As default. Save/load paths use `setLoaded()` and
   `setSuggested()` transitions instead of assigning a filename and weak flag
-  independently. The user-visible `.par` writer now stages the existing
+  independently. Ordinary parameter *reads* are fully transactional too:
+  `loadParameterFile()` parses into a private default `ParameterState` and
+  only publishes after complete core + Qt metadata success. A corrupt/truncated
+  file therefore cannot expose partially loaded live members, change the current
+  parameter target, or dirty/clean transition while an error dialog is open.
+  Workspace churn truncates a saved copy at the Qt metadata end marker and
+  verifies exact state/target/cleanliness preservation plus the asynchronous
+  `ParameterLoadFailureDialog`.
+  The user-visible `.par` writer now stages the existing
   FILE*-based CSP serialization in a temporary stream and copies that complete
   payload into `QSaveFile`; direct-write fallback is disabled, so serialization,
   disk-write or commit failure leaves an older usable target untouched.
@@ -928,7 +936,11 @@ minimum is:
    and modified/clean contract it had on entry. Otherwise noninteractive
    sanitizer teardown can block in the production Unsaved Changes dialog;
 7. save/load/recovery round trips for a representative parameter file.
-   `DocumentLifecycleSmoke` writes a real per-document recovery payload,
+   Workspace churn also performs a successful save/reload and then attempts a
+   deliberately truncated `.par` load, verifying that failed parsing leaves
+   document state, clean/dirty status and the current parameter target unchanged
+   while the asynchronous failure dialog is presented. `DocumentLifecycleSmoke`
+   writes a real per-document recovery payload,
    restores it into a fresh hidden document, waits for asynchronous image load,
    and verifies source image, saved scalar/profile-spot state, loaded parameter
    target metadata, and recovered dirty state. It then truncates a copy of the

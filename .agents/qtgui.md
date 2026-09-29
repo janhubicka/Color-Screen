@@ -960,7 +960,7 @@ To maintain consistency across different UI actions, use the following standardi
     4. A `bool` success result from the numerical worker.
     5. Pushing an undoable parameter change only on success.
   Cancellation is not a numerical failure. Generic Image Layer/Color callers use the shared preserved-state failure guidance; callers with a more specific failure surface (currently slanted-edge MTF) may suppress that generic message while still returning `false`.
-- **`loadParameterFile()`**: Use this for all parameter loading operations (from dialogs, recent files, or drag-and-drop). It ensures consistent state reset, UI refresh, and undo history management.
+- **`loadParameterFile()`**: Use this for all parameter loading operations (from dialogs, recent files, or drag-and-drop). The loader is transactional: parse the complete core + Qt metadata payload into a private default `ParameterState`, then publish it only on success. Open/parse failure must leave the live document parameters, current parameter-file target, calibration provenance, Undo/dirty state, and existing source image untouched. Failure reporting is a parent-owned asynchronous `ParameterLoadFailureDialog`, not a nested static error box. On success the method adopts the loaded target, clears stale calibration/session provenance, resets Undo/dirty state, and refreshes the UI consistently.
 
 ### 7. Documentation
 - **Document function**: Add block comments to functions using Doxygen-style (`/** ... */`) to allow for automated documentation generation.

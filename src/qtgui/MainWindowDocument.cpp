@@ -1242,45 +1242,53 @@ bool MainWindow::loadParameterFile(const QString &fileName) {
   // and any one-shot confirmation waiting on the old parameters.
   dismissOneShotPrompts();
   m_oneShotOperations.cancelAll();
+
+  auto showLoadError = [this](const QString &detail) {
+    auto *box = new QMessageBox(
+        QMessageBox::Critical, tr("Parameter Load Failed"),
+        tr("The parameter file could not be loaded. The current document "
+           "parameters and calibration state were left unchanged.\n\n%1")
+            .arg(detail),
+        QMessageBox::Ok, this);
+    box->setObjectName(QStringLiteral("ParameterLoadFailureDialog"));
+    box->setAttribute(Qt::WA_DeleteOnClose);
+    box->open();
+  };
+
   FILE *f = fopen(fileName.toUtf8().constData(), "r");
   if (!f) {
-    QMessageBox::critical(this, "Error", "Could not open file.");
+    showLoadError(tr("Could not open %1.").arg(fileName));
     return false;
   }
 
+  // load_csp merges into its outputs, so parse into a private default state.
+  // This prevents a late core/Qt-metadata failure from ever exposing partially
+  // loaded parameters to the live document or to a nested UI event loop.
+  ParameterState loadedState;
+  std::vector<colorscreen::color_match> loadedSpotResults;
   const char *error = nullptr;
+  const bool loaded = colorscreen::load_csp_with_profile_spots(
+      f, &loadedState.scrToImg, &loadedState.detect, &loadedState.rparams,
+      &loadedState.solver, &error, &loadedState.profileSpots,
+      &loadedSpotResults);
+  const QString errorDetail =
+      error ? QString::fromUtf8(error) : QString();
+  fclose(f);
 
-  // Store previous state in case load fails.  Profile match results are
-  // derived UI state rather than part of ParameterState, but failed loads must
-  // preserve those too.
-  const ParameterState oldState = getCurrentState();
-  const std::vector<colorscreen::color_match> oldProfileSpotResults =
-      m_profileCalibration.spotResults;
-
-  // load_csp merges parameters in; reset first to ensure clean load.
-  m_scrToImgParams = colorscreen::scr_to_img_parameters();
-  m_detectParams = colorscreen::scr_detect_parameters();
-  m_rparams = colorscreen::render_parameters();
-  m_solverParams = colorscreen::solver_parameters();
-
-  if (!colorscreen::load_csp_with_profile_spots(
-          f, &m_scrToImgParams, &m_detectParams, &m_rparams, &m_solverParams,
-          &error, &m_profileSpots, &m_profileCalibration.spotResults)) {
-    fclose(f);
-    QString errStr =
-        error ? QString::fromUtf8(error) : "Unknown error loading parameters.";
-    QMessageBox::critical(this, "Error Loading Parameters", errStr);
-
-    // Restore previous state
-    m_scrToImgParams = oldState.scrToImg;
-    m_detectParams = oldState.detect;
-    m_rparams = oldState.rparams;
-    m_solverParams = oldState.solver;
-    m_profileSpots = oldState.profileSpots;
-    m_profileCalibration.spotResults = oldProfileSpotResults;
+  if (!loaded || !errorDetail.isEmpty()) {
+    showLoadError(
+        errorDetail.isEmpty()
+            ? tr("The file contains invalid or incomplete parameter data.")
+            : errorDetail);
     return false;
   }
-  fclose(f);
+
+  m_scrToImgParams = std::move(loadedState.scrToImg);
+  m_detectParams = std::move(loadedState.detect);
+  m_rparams = std::move(loadedState.rparams);
+  m_solverParams = std::move(loadedState.solver);
+  m_profileSpots = std::move(loadedState.profileSpots);
+  m_profileCalibration.spotResults = std::move(loadedSpotResults);
 
   // Successful external parameter load establishes a new calibration context.
   m_solverQueue.cancelAll();

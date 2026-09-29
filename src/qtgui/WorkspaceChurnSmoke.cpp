@@ -11,6 +11,7 @@
 #include "../libcolorscreen/include/screen-map.h"
 
 #include <QAction>
+#include <QByteArray>
 #include <QComboBox>
 #include <QCheckBox>
 #include <QCoreApplication>
@@ -18,6 +19,7 @@
 #include <QDoubleSpinBox>
 #include <QDialog>
 #include <QEvent>
+#include <QFile>
 #include <QFont>
 #include <QLabel>
 #include <QLineEdit>
@@ -2685,6 +2687,67 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
               "Workspace churn save/reload did not restore the complete clean document state"));
           return;
         }
+
+        // A late parse failure must never expose partially loaded members.
+        // Truncate only the Qt metadata terminator so core parsing has already
+        // consumed plausible data before the transaction is rejected.
+        QFile validParameterFile(persistenceFile);
+        if (!validParameterFile.open(QIODevice::ReadOnly)) {
+          fail(QStringLiteral(
+              "Workspace churn could not reopen the saved parameter fixture"));
+          return;
+        }
+        QByteArray corruptParameterPayload = validParameterFile.readAll();
+        validParameterFile.close();
+        const QByteArray parameterEndMarker("colorscreen_qt_metadata_end");
+        const qsizetype parameterEndOffset =
+            corruptParameterPayload.lastIndexOf(parameterEndMarker);
+        if (parameterEndOffset <= 0) {
+          fail(QStringLiteral(
+              "Workspace churn could not find Qt parameter metadata end marker"));
+          return;
+        }
+        corruptParameterPayload.truncate(parameterEndOffset);
+        const QString corruptParameterFile =
+            persistenceDir.filePath(QStringLiteral("workspace-corrupt.par"));
+        QFile corruptOutput(corruptParameterFile);
+        if (!corruptOutput.open(QIODevice::WriteOnly | QIODevice::Truncate) ||
+            corruptOutput.write(corruptParameterPayload) !=
+                corruptParameterPayload.size() ||
+            !corruptOutput.flush()) {
+          fail(QStringLiteral(
+              "Workspace churn could not write corrupt parameter fixture"));
+          return;
+        }
+        corruptOutput.close();
+
+        const ParameterState beforeFailedLoad =
+            second->documentStateSnapshot();
+        const QString beforeFailedLoadPath = second->m_parameterFile.path;
+        const bool beforeFailedLoadSuggested =
+            second->m_parameterFile.suggested;
+        if (second->loadParameterFile(corruptParameterFile)) {
+          fail(QStringLiteral(
+              "Workspace churn accepted a truncated parameter file"));
+          return;
+        }
+        QMessageBox *parameterLoadFailure =
+            second->findChild<QMessageBox *>(
+                QStringLiteral("ParameterLoadFailureDialog"));
+        if (second->documentStateSnapshot() != beforeFailedLoad ||
+            second->documentDisplayName().endsWith(QLatin1Char('*')) ||
+            second->m_parameterFile.path != beforeFailedLoadPath ||
+            second->m_parameterFile.suggested != beforeFailedLoadSuggested ||
+            !QFile::exists(corruptParameterFile) || !parameterLoadFailure ||
+            !parameterLoadFailure->text().contains(
+                QStringLiteral("left unchanged"))) {
+          if (parameterLoadFailure)
+            parameterLoadFailure->close();
+          fail(QStringLiteral(
+              "Failed parameter load mutated live state/target or lost its warning"));
+          return;
+        }
+        parameterLoadFailure->close();
 
         // The workspace lifecycle test itself should start from the same
         // processing state as before the persistence probe.  The second
