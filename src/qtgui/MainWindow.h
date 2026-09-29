@@ -568,6 +568,11 @@ private:
    */
   void restoreInteractionMode();
 
+  /** Return the status bar belonging to the ordinary view that currently owns
+      the document inspector. Attached views resolve to the shared workspace bar;
+      detached peer views resolve to their private top-level bar. */
+  QStatusBar *inspectorStatusBar() const;
+
   /** Show one persistent status instruction owned by a temporary canvas mode.
       It remains visible until completion/cancellation or a newer status owner. */
   void showTemporaryCanvasInstruction(ImageWidget::InteractionMode owner,
@@ -1036,6 +1041,7 @@ private:
     PointClickToolState pointClick;
     std::optional<ImageWidget::InteractionMode> instructionOwner;
     QString instructionText;
+    QPointer<QStatusBar> instructionStatusBar;
   };
   TemporaryCanvasToolState m_temporaryCanvas;
 

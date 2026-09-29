@@ -825,9 +825,15 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   and the temporary switching guard used while a document tool is transferred
   between compatible ordinary views. Closing a secondary view still rebinds the
   primary image through `WorkspaceWindow`; the grouping removes three parallel
-  MainWindow members without changing that lifecycle. Existing workspace churn
-  remains the regression for view activation, tool transfer, secondary close and
-  inspector rebinding.
+  MainWindow members without changing that lifecycle. Temporary canvas status
+  guidance follows the same presentation owner through `inspectorStatusBar()`.
+  `TemporaryCanvasToolState` retains the exact `QStatusBar` on which its
+  current instruction was published, allowing an attached peer to detach (or
+  reattach) without leaving the message in the source workspace. Exact-text
+  cleanup still prevents an older tool from erasing a newer unrelated message.
+  Workspace churn exercises view activation/tool transfer, secondary close and
+  inspector rebinding, plus a live Generic Area instruction moving from the
+  workspace bar to the detached peer's private bar.
 - Keep file-dialog history at application scope. Image Open uses
   `lastOpenDir`; parameter Open/Save As use `lastParameterDir` only when the
   document has no current/suggested `ParameterFileState::path`. Successful

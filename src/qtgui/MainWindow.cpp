@@ -20,6 +20,7 @@
 #include "GeometryPanel.h"
 #include "GeometrySolverWorker.h"
 #include "ImageWidget.h"
+#include "ImageViewWindow.h"
 #include "InitialSetupGuideDialog.h"
 #include "NavigationView.h"
 #include "RenderDialog.h"
@@ -294,6 +295,23 @@ QStatusBar *MainWindow::statusBar() const {
 /** Return this document's private status bar, regardless of attachment. */
 QStatusBar *MainWindow::standaloneStatusBar() const {
   return QMainWindow::statusBar();
+}
+
+/** Return the status bar belonging to the ordinary view using the inspector.
+
+    MainWindow remains the document owner even when a detached peer
+    ImageViewWindow presents the one shared inspector. Document-panel feedback
+    must therefore follow that presentation instead of leaking into the source
+    document's workspace/status bar. */
+QStatusBar *MainWindow::inspectorStatusBar() const {
+  ImageWidget *image = inspectorImageWidget();
+  for (QWidget *widget = image; widget; widget = widget->parentWidget()) {
+    if (auto *view = qobject_cast<ImageViewWindow *>(widget))
+      return view->statusBar();
+    if (widget == this)
+      break;
+  }
+  return statusBar();
 }
 
 /** Share STATUSBAR with every tab in the enclosing workspace window. */
@@ -2549,6 +2567,25 @@ void MainWindow::setInspectorImageWidget(ImageWidget *imageWidget) {
     disconnect(connection);
   m_inspectorImageRouting.connections.clear();
   m_inspectorImageRouting.image = target;
+
+  // The same ImageWidget can survive an attached <-> detached reparenting, so
+  // pointer identity alone does not reveal that the top-level status owner
+  // changed. Move an armed temporary instruction using the bar remembered when
+  // it was originally published.
+  if (m_temporaryCanvas.instructionOwner &&
+      !m_temporaryCanvas.instructionText.isEmpty()) {
+    QStatusBar *oldBar = m_temporaryCanvas.instructionStatusBar.data();
+    QStatusBar *newBar = inspectorStatusBar();
+    if (oldBar != newBar) {
+      if (oldBar &&
+          oldBar->currentMessage() == m_temporaryCanvas.instructionText)
+        oldBar->clearMessage();
+      if (newBar)
+        newBar->showMessage(m_temporaryCanvas.instructionText);
+      m_temporaryCanvas.instructionStatusBar = newBar;
+    }
+  }
+
   syncDetectedScreenDiagnostics(target);
   syncProfileSpotOverlay(target);
   if (m_profilePanel)
@@ -3818,7 +3855,10 @@ void MainWindow::showTemporaryCanvasInstruction(
     ImageWidget::InteractionMode owner, const QString &message) {
   m_temporaryCanvas.instructionOwner = owner;
   m_temporaryCanvas.instructionText = message;
-  statusBar()->showMessage(message);
+  QStatusBar *bar = inspectorStatusBar();
+  m_temporaryCanvas.instructionStatusBar = bar;
+  if (bar)
+    bar->showMessage(message);
 }
 
 /** Clear only the temporary instruction we still own.
@@ -3827,11 +3867,13 @@ void MainWindow::showTemporaryCanvasInstruction(
     tool remained active. In that case release ownership without erasing the
     newer message. */
 void MainWindow::clearTemporaryCanvasInstruction() {
-  if (!m_temporaryCanvas.instructionText.isEmpty() &&
-      statusBar()->currentMessage() == m_temporaryCanvas.instructionText)
-    statusBar()->clearMessage();
+  QStatusBar *bar = m_temporaryCanvas.instructionStatusBar.data();
+  if (bar && !m_temporaryCanvas.instructionText.isEmpty() &&
+      bar->currentMessage() == m_temporaryCanvas.instructionText)
+    bar->clearMessage();
   m_temporaryCanvas.instructionOwner.reset();
   m_temporaryCanvas.instructionText.clear();
+  m_temporaryCanvas.instructionStatusBar.clear();
 }
 
 /** Clear whichever temporary point-click tool currently owns AddPointMode.
