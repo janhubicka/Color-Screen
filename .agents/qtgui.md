@@ -128,7 +128,13 @@ dock. The workspace owns the one status bar for the whole top-level window.
 Every attached `MainWindow` and `ImageViewWindow` routes `statusBar()` directly
 to that same `QStatusBar`; tabs must not keep private status-message state or
 mirror messages when activation changes. Only detached top-level windows use
-their private status bars. Keep each window's embedding flag and shared
+their private status bars. When a document-owned inspector is borrowed by an
+ordinary peer view, panel/tool feedback that belongs to the inspected canvas
+must use `MainWindow::inspectorStatusBar()`: it resolves to the shared workspace
+bar while attached and to the borrowing view's private bar while detached.
+TemporaryCanvasToolState remembers the exact bar holding an owned instruction so
+an attached↔detached reparenting can migrate that message even when the
+ImageWidget pointer itself does not change. Keep each window's embedding flag and shared
 status-bar route together in `WorkspacePresentationState`; MainWindow also keeps
 the saved standalone splitter state there because that snapshot belongs to the
 same inspector-borrowing transition. Fullscreen splitter-size snapshots remain a
