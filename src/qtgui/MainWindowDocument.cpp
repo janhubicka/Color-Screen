@@ -626,41 +626,34 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
                                 "A parameter file was found for this image. Do "
                                 "you want to load it?") == QMessageBox::Yes) {
 
-        FILE *f = fopen(parFile.toUtf8().constData(), "r");
-        if (f) {
-          const char *error = nullptr;
-          // load_csp merges parameters in; reset first.
-          colorscreen::scr_to_img_parameters emptyScrToImg;
-          m_scrToImgParams = emptyScrToImg;
-          colorscreen::scr_detect_parameters emptyScrDetect;
-          m_detectParams = emptyScrDetect;
-          colorscreen::render_parameters emptyRparams;
-          m_rparams = emptyRparams;
-          colorscreen::solver_parameters emptySolver;
-          m_solverParams = emptySolver;
-          m_profileSpots.clear();
-          m_profileCalibration.spotResults.clear();
-          if (!colorscreen::load_csp_with_profile_spots(
-                  f, &m_scrToImgParams, &m_detectParams, &m_rparams,
-                  &m_solverParams, &error, &m_profileSpots,
-                  &m_profileCalibration.spotResults)) {
-            QMessageBox::warning(this, "Error Loading Parameters",
-                                 error ? QString::fromUtf8(error)
-                                       : "Unknown error loading parameters.");
-          } else {
-            parameterDataLoaded = true;
+        ParameterState sidecarState;
+        std::vector<colorscreen::color_match> sidecarSpotResults;
+        QString loadError;
+        if (!loadParameterPayload(parFile, &sidecarState, &sidecarSpotResults,
+                                  &loadError)) {
+          // The user selected this existing file, but it was not accepted as a
+          // document target. Keep it only as a Save-As suggestion so overwrite
+          // still requires confirmation.
+          m_parameterFile.setSuggested(parFile);
+          showParameterLoadFailure(this, loadError);
+        } else {
+          m_scrToImgParams = std::move(sidecarState.scrToImg);
+          m_detectParams = std::move(sidecarState.detect);
+          m_rparams = std::move(sidecarState.rparams);
+          m_solverParams = std::move(sidecarState.solver);
+          m_profileSpots = std::move(sidecarState.profileSpots);
+          m_profileCalibration.spotResults =
+              std::move(sidecarSpotResults);
+          parameterDataLoaded = true;
 
-            // Track the loaded parameter file
-            m_parameterFile.setLoaded(parFile);
-            addToRecentParams(parFile);
+          // Track the loaded parameter file only after complete parse success.
+          m_parameterFile.setLoaded(parFile);
+          addToRecentParams(parFile);
 
-            // If we have a valid screen type, default to formatted
-            // (interpolated) view
-            if (colorscreen::screen_geometry_configured_p(m_scrToImgParams)) {
-              m_renderTypeParams.type = colorscreen::render_type_interpolated;
-            }
-          }
-          fclose(f);
+          // If we have a valid screen type, default to formatted
+          // (interpolated) view.
+          if (colorscreen::screen_geometry_configured_p(m_scrToImgParams))
+            m_renderTypeParams.type = colorscreen::render_type_interpolated;
         }
       } else {
         // User declined to load parameters - suggest filename
