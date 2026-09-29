@@ -607,66 +607,44 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
       *m_imageLoad.screenAutodetectAfterGeneration != loadGeneration)
     m_imageLoad.screenAutodetectAfterGeneration.reset();
   m_imageLoad.pending = true;
+
+  // The requested image and optional sidecar remain pending until pixel loading
+  // succeeds. This keeps a failed initial open truly reusable and lets a failed
+  // reload continue displaying the previously accepted scan.
+  const QString requestedImageFile = QFileInfo(fileName).absoluteFilePath();
   bool parameterDataLoaded = false;
-  if (!suppressParamPrompt)
-    m_recoveryDirty = false;
-  m_currentImageFile = QFileInfo(fileName).absoluteFilePath();
-  updateWindowTitle();
+  std::shared_ptr<ParameterState> pendingParameterState;
+  std::vector<colorscreen::color_match> pendingSpotResults;
+  QString pendingParameterPath;
+  bool pendingParameterSuggested = false;
 
-  // Clear current image and stop rendering
-  m_imageWidget->setImage(nullptr, nullptr, nullptr, nullptr, nullptr, nullptr);
-
-  // Check for .par file (only if not suppressed, e.g., during recovery)
+  // Check for .par file (only if not suppressed, e.g., during recovery).
   if (!suppressParamPrompt) {
-    QFileInfo fileInfo(m_currentImageFile);
-    QString parFile =
+    const QFileInfo fileInfo(requestedImageFile);
+    const QString parFile =
         fileInfo.path() + "/" + fileInfo.completeBaseName() + ".par";
+    pendingParameterPath = parFile;
 
     if (QFile::exists(parFile)) {
       if (QMessageBox::question(this, "Load Parameters?",
                                 "A parameter file was found for this image. Do "
                                 "you want to load it?") == QMessageBox::Yes) {
-
         ParameterState sidecarState;
-        std::vector<colorscreen::color_match> sidecarSpotResults;
         QString loadError;
-        if (!loadParameterPayload(parFile, &sidecarState, &sidecarSpotResults,
+        if (!loadParameterPayload(parFile, &sidecarState, &pendingSpotResults,
                                   &loadError)) {
-          // The user selected this existing file, but it was not accepted as a
-          // document target. Keep it only as a Save-As suggestion so overwrite
-          // still requires confirmation.
-          m_parameterFile.setSuggested(parFile);
+          pendingParameterSuggested = true;
           showParameterLoadFailure(this, loadError);
         } else {
-          m_scrToImgParams = std::move(sidecarState.scrToImg);
-          m_detectParams = std::move(sidecarState.detect);
-          m_rparams = std::move(sidecarState.rparams);
-          m_solverParams = std::move(sidecarState.solver);
-          m_profileSpots = std::move(sidecarState.profileSpots);
-          m_profileCalibration.spotResults =
-              std::move(sidecarSpotResults);
+          pendingParameterState =
+              std::make_shared<ParameterState>(std::move(sidecarState));
           parameterDataLoaded = true;
-
-          // Track the loaded parameter file only after complete parse success.
-          m_parameterFile.setLoaded(parFile);
-          addToRecentParams(parFile);
-
-          // If we have a valid screen type, default to formatted
-          // (interpolated) view.
-          if (colorscreen::screen_geometry_configured_p(m_scrToImgParams))
-            m_renderTypeParams.type = colorscreen::render_type_interpolated;
         }
       } else {
-        // User declined to load parameters - suggest filename
-        QFileInfo fileInfo(fileName);
-        m_parameterFile.setSuggested(
-            fileInfo.path() + "/" + fileInfo.completeBaseName() + ".par");
+        pendingParameterSuggested = true;
       }
     } else {
-      // No parameter file exists - suggest filename
-      QFileInfo fileInfo(m_currentImageFile);
-      m_parameterFile.setSuggested(
-          fileInfo.path() + "/" + fileInfo.completeBaseName() + ".par");
+      pendingParameterSuggested = true;
     }
   }
 
@@ -683,18 +661,21 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
 
   std::shared_ptr<colorscreen::image_data> tempScan =
       std::make_shared<colorscreen::image_data>();
-  // Access m_rparams carefully. It's a member.
-  colorscreen::image_data::demosaicing_t demosaic = m_rparams.demosaic;
+  const colorscreen::image_data::demosaicing_t demosaic =
+      pendingParameterState ? pendingParameterState->rparams.demosaic
+                            : m_rparams.demosaic;
 
-  bool isCsprj =
-      fileName.endsWith(QLatin1String(".csprj"), Qt::CaseInsensitive);
+  const bool isCsprj =
+      requestedImageFile.endsWith(QLatin1String(".csprj"), Qt::CaseInsensitive);
 
   QFutureWatcher<std::pair<bool, QString>> *watcher =
       new QFutureWatcher<std::pair<bool, QString>>(this);
   connect(
       watcher, &QFutureWatcher<std::pair<bool, QString>>::finished, this,
-      [this, watcher, tempScan, progress, fileName, isCsprj,
-       allowInitialGuide, suggestDetectedMetadata, loadGeneration]() {
+      [this, watcher, tempScan, progress, requestedImageFile, isCsprj,
+       allowInitialGuide, suggestDetectedMetadata, loadGeneration,
+       suppressParamPrompt, pendingParameterState, pendingSpotResults,
+       pendingParameterPath, pendingParameterSuggested]() {
         if (m_closeLifecycle.closing()) {
           watcher->deleteLater();
           return;
@@ -719,6 +700,32 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
         m_imageLoad.pending = false;
 
         if (result.first) {
+          // Commit the requested image identity and optional sidecar only now,
+          // after image_data accepted the source pixels.
+          if (pendingParameterState) {
+            m_scrToImgParams = pendingParameterState->scrToImg;
+            m_detectParams = pendingParameterState->detect;
+            m_rparams = pendingParameterState->rparams;
+            m_solverParams = pendingParameterState->solver;
+            m_profileSpots = pendingParameterState->profileSpots;
+            m_profileCalibration.spotResults = pendingSpotResults;
+          }
+          if (!suppressParamPrompt && !pendingParameterPath.isEmpty()) {
+            if (pendingParameterSuggested) {
+              m_parameterFile.setSuggested(pendingParameterPath);
+            } else {
+              m_parameterFile.setLoaded(pendingParameterPath);
+              addToRecentParams(pendingParameterPath);
+              rememberFileDialogDirectory(
+                  QStringLiteral("lastParameterDir"), pendingParameterPath);
+            }
+            m_recoveryDirty = false;
+          }
+          m_currentImageFile = requestedImageFile;
+          if (pendingParameterState &&
+              colorscreen::screen_geometry_configured_p(m_scrToImgParams))
+            m_renderTypeParams.type = colorscreen::render_type_interpolated;
+
           clearDetectedScreenDiagnostics();
           // A new/reloaded image establishes new geometry and colour-sampling
           // contexts. Persisted parameter values remain available, but accepted
@@ -854,19 +861,29 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
             }
           }
 
-        } else {
+        } else if (!progress->cancelled()) {
+          const QString detail =
+              result.second.isEmpty() ? tr("The image decoder rejected the file.")
+                                      : result.second;
+          const QString retained =
+              m_scan
+                  ? tr("The previously loaded image remains active.")
+                  : tr("No image was accepted, so this document remains empty.");
+          auto *box = new QMessageBox(
+              QMessageBox::Critical, tr("Image Load Failed"),
+              tr("Could not load %1. %2\n\n%3\n\n"
+                 "Verify that the file is readable and uses a supported format. "
+                 "For a reload, also verify the selected demosaic/capture settings.")
+                  .arg(QFileInfo(requestedImageFile).fileName(), retained, detail),
+              QMessageBox::Ok, this);
+          box->setObjectName(QStringLiteral("ImageLoadFailureDialog"));
+          box->setAttribute(Qt::WA_DeleteOnClose);
+          box->open();
           updateWindowTitle();
-          if (progress->cancelled()) {
-          } else {
-            QMessageBox::critical(this, "Error Loading Image",
-                                  result.second.isEmpty()
-                                      ? "Failed to load image."
-                                      : result.second);
-          }
         }
       });
 
-  QString absolutePath = m_currentImageFile;
+  const QString absolutePath = requestedImageFile;
   QFuture<std::pair<bool, QString>> future = QtConcurrent::run(
       [tempScan, absolutePath, progress, demosaic, isCsprj]() {
         try {
