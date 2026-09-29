@@ -567,16 +567,27 @@ const ImageWidget::InteractionMode originalPointToolMode =
     pointToolImage->interactionMode();
 pointToolImage->setInteractionMode(ImageWidget::SelectMode);
 profileAddSpotButton->setChecked(true);
+const QString profileSpotInstruction = first->statusBar()->currentMessage();
 if (!first->m_temporaryCanvas.pointClick.profileSpot() ||
     pointToolImage->interactionMode() != ImageWidget::AddPointMode ||
-    !profileAddSpotButton->isChecked()) {
-  fail(QStringLiteral("Profile Add spot did not acquire the point-click tool"));
+    !profileAddSpotButton->isChecked() ||
+    profileSpotInstruction.isEmpty() ||
+    first->m_temporaryCanvas.instructionText != profileSpotInstruction ||
+    !first->m_temporaryCanvas.instructionOwner ||
+    *first->m_temporaryCanvas.instructionOwner != ImageWidget::AddPointMode) {
+  fail(QStringLiteral(
+      "Profile Add spot did not acquire persistent point-click guidance"));
   return;
 }
 pointFocusButton->setChecked(true);
+const QString focusInstruction = first->statusBar()->currentMessage();
 if (!first->m_temporaryCanvas.pointClick.focusAnalysis() ||
     profileAddSpotButton->isChecked() || !pointFocusButton->isChecked() ||
-    pointToolImage->interactionMode() != ImageWidget::AddPointMode) {
+    pointToolImage->interactionMode() != ImageWidget::AddPointMode ||
+    focusInstruction.isEmpty() || focusInstruction == profileSpotInstruction ||
+    first->m_temporaryCanvas.instructionText != focusInstruction ||
+    !first->m_temporaryCanvas.instructionOwner ||
+    *first->m_temporaryCanvas.instructionOwner != ImageWidget::AddPointMode) {
   fail(QStringLiteral(
       "Focus Analyze area did not exclusively take point-click ownership"));
   return;
@@ -635,8 +646,9 @@ if (pointToolImage->interactionMode() != ImageWidget::SelectMode) {
 }
 pointToolImage->setInteractionMode(originalPointToolMode);
 
-// Measure owns its temporary status instruction. Leaving the tool must clear
-// that instruction, but must not erase a newer message posted by another owner.
+// Measure owns a persistent temporary status instruction. Leaving the tool
+// must clear that instruction, but must not erase a newer message posted by
+// another owner.
 pointToolImage->setInteractionMode(ImageWidget::SelectMode);
 first->onMeasureRequested();
 const QString measureInstruction = first->statusBar()->currentMessage();
