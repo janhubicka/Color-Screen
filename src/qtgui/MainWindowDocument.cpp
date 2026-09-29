@@ -579,9 +579,10 @@ void MainWindow::maybeOfferInitialSetupGuide(
 }
 
 /** Load an image file and optionally its associated .par parameter file.
-   If SUPPRESSPARAMPROMPT is false, checks for a .par file alongside the
-   image and offers to load it.  If the user declines or no .par file exists,
-   a weak (suggested) parameter filename is set for later Save.
+   If SUPPRESSPARAMPROMPT is false, checks for a .par file alongside the image
+   and offers to load it transactionally. If the user declines, the sidecar is
+   unreadable/invalid, or no .par file exists, a weak (suggested) parameter
+   filename is set for later Save.
    The actual image loading runs asynchronously via QtConcurrent::run; on
    completion, the scan is set on ImageWidget, stitch tile loading is launched
    in parallel for .csprj projects, and undo history is cleared.  */
@@ -1289,9 +1290,9 @@ void MainWindow::clearRecoveryFiles() {
 }
 
 /** Load parameters from a .par file and update all UI components.
-   Resets parameters to defaults before loading (as load_csp merges into
-   existing values).  Updates ImageWidget, NavigationView, gamut warning,
-   undo history, and all panels.  Returns true on success.  */
+   Parses into private default state because load_csp merges into its outputs;
+   only a complete payload is published. Updates ImageWidget, NavigationView,
+   gamut warning, undo history, and all panels. Returns true on success. */
 bool MainWindow::loadParameterFile(const QString &fileName) {
   // Loading external parameters invalidates every final-result state snapshot
   // and any one-shot confirmation waiting on the old parameters.
