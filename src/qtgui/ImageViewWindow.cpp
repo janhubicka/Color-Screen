@@ -523,13 +523,15 @@ void ImageViewWindow::setupReferenceInspector() {
 /** Return any floating reference diagnostics to the Sharpness panel. */
 /** Load the reference scan asynchronously without touching document filenames. */
 void ImageViewWindow::loadReferenceImage(const QString &fileName) {
-  if (!m_slantedEdgeReference || fileName.isEmpty() || m_referenceLoadPending)
+  if (!m_slantedEdgeReference || fileName.isEmpty() || m_referenceLoad.pending)
     return;
 
-  // Invalidate immediately, even if the reload fails and leaves the old scan.
+  // Invalidate measurements immediately, but keep the accepted reference scan
+  // and filename until the replacement itself has loaded successfully.
   cancelReferenceMtfMeasurement();
-  m_referenceLoadPending = true;
-  m_referenceFile = QFileInfo(fileName).absoluteFilePath();
+  m_referenceLoad.pending = true;
+  const QString path = QFileInfo(fileName).absoluteFilePath();
+  m_referenceLoad.requestedFile = path;
   statusBar()->showMessage(tr("Opening slanted-edge reference…"));
 
   const colorscreen::image_data::demosaicing_t demosaic =
@@ -538,7 +540,6 @@ void ImageViewWindow::loadReferenceImage(const QString &fileName) {
   auto scan = std::make_shared<colorscreen::image_data>();
   auto progress = std::make_shared<colorscreen::progress_info>();
   progress->set_task("Opening slanted edge reference", 0);
-  const QString path = m_referenceFile;
 
   {
     std::lock_guard<std::mutex> locker(m_referenceLoad.mutex);
@@ -595,15 +596,46 @@ void ImageViewWindow::finishReferenceLoad() {
     scan = std::move(m_referenceLoad.pendingScan);
   }
 
-  m_referenceLoadPending = false;
+  const QString requestedFile = m_referenceLoad.requestedFile;
+  m_referenceLoad.pending = false;
+  m_referenceLoad.requestedFile.clear();
   if (!ok) {
-    QMessageBox::critical(this, tr("Error Loading Slanted Edge Reference"),
-                          error.isEmpty() ? tr("Failed to load image.")
-                                          : error);
-    close();
+    const bool retained = static_cast<bool>(m_scan);
+    auto *box = new QMessageBox(
+        QMessageBox::Critical, tr("Reference Image Load Failed"),
+        retained
+            ? tr("Could not reload %1. The previously accepted slanted-edge "
+                 "reference remains active.\n\n%2")
+                  .arg(QFileInfo(requestedFile).fileName(),
+                       error.isEmpty() ? tr("The image decoder rejected the file.")
+                                       : error)
+            : tr("Could not load %1. No reference image was accepted.\n\n%2")
+                  .arg(QFileInfo(requestedFile).fileName(),
+                       error.isEmpty() ? tr("The image decoder rejected the file.")
+                                       : error),
+        QMessageBox::Ok, this);
+    box->setObjectName(QStringLiteral("ReferenceImageLoadFailureDialog"));
+    box->setAttribute(Qt::WA_DeleteOnClose);
+    if (!retained) {
+      QPointer<ImageViewWindow> guarded(this);
+      connect(box, &QMessageBox::finished, this, [guarded](int) {
+        if (!guarded)
+          return;
+        if (auto *application = dynamic_cast<ColorScreenApplication *>(
+                QApplication::instance()))
+          application->closeView(guarded);
+        else
+          guarded->close();
+      });
+    } else {
+      statusBar()->showMessage(
+          tr("Reference reload failed — previous reference retained"), 5000);
+    }
+    box->open();
     return;
   }
 
+  m_referenceFile = requestedFile;
   m_scan = std::move(scan);
   rebuildModeList();
   updateViewControls();
@@ -908,7 +940,7 @@ void ImageViewWindow::onMeasureMtfRequested(bool checked) {
     return;
   }
   cancelReferenceMtfMeasurement();
-  if (!m_document || !m_scan || m_referenceLoadPending)
+  if (!m_document || !m_scan || m_referenceLoad.pending)
     return;
   m_sharpnessPanel->setMeasureMtfChecked(true);
 
@@ -945,7 +977,7 @@ void ImageViewWindow::onMeasureMtfRequested(bool checked) {
     if (m_referenceMtfMeasurement.dialog != dialog)
       return;
     m_referenceMtfMeasurement.dialog = nullptr;
-    if (!m_document || m_referenceLoadPending || m_scan != scan ||
+    if (!m_document || m_referenceLoad.pending || m_scan != scan ||
         m_document->documentStateSnapshot() != currentState) {
       cancelReferenceMtfMeasurement();
       return;
@@ -1062,7 +1094,7 @@ void ImageViewWindow::cancelReferenceMtfMeasurement() {
 /** Convert the selected rectangle, then start an atomic channel batch. */
 void ImageViewWindow::onReferenceAreaSelected(QRect widgetArea) {
   if (!m_slantedEdgeReference || m_referenceMtfMeasurement.pendingParameters.empty() ||
-      !m_document || !m_scan || m_referenceLoadPending)
+      !m_document || !m_scan || m_referenceLoad.pending)
     return;
   const QRect area = referenceImageArea(widgetArea);
   if (area.isEmpty())
@@ -1080,7 +1112,7 @@ void ImageViewWindow::startReferenceMtfMeasurement(
     std::vector<colorscreen::slanted_edge_parameters> parameters) {
   cancelReferenceMtfMeasurement();
   if (!m_slantedEdgeReference || !m_document || !m_scan ||
-      !m_sharpnessPanel || m_referenceLoadPending || parameters.empty() ||
+      !m_sharpnessPanel || m_referenceLoad.pending || parameters.empty() ||
       area.width <= 0 || area.height <= 0)
     return;
 
@@ -1102,7 +1134,7 @@ void ImageViewWindow::startReferenceMtfMeasurement(
   operation.progressTitle = tr("Reference MTF measurement");
   operation.resultValid = [view, document, scan, documentScan, baseline, result]() {
     return view && document && view->m_document == document &&
-           !view->m_referenceLoadPending && view->m_scan == scan &&
+           !view->m_referenceLoad.pending && view->m_scan == scan &&
            document->sharedImageData() == documentScan &&
            document->documentStateSnapshot() == baseline &&
            view->m_referenceMtfMeasurement.progress.lock() == result->progress;
