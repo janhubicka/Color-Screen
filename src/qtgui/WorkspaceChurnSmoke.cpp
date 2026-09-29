@@ -4278,6 +4278,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
             QStringLiteral("detached-inspector-status-routing-smoke");
         first->startAreaSelection(marker, [](QRect) {});
         if (first->inspectorImageWidget() != view->imageWidget() ||
+            first->inspectorDialogParent() != workspace ||
             !first->m_temporaryCanvas.areaSelectionCallback ||
             first->m_temporaryCanvas.instructionStatusBar.data() !=
                 workspace->statusBar() ||
@@ -4303,6 +4304,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
             !view->standaloneStatusBar()->isVisible() ||
             first->statusBar() != workspace->statusBar() ||
             first->inspectorImageWidget() != view->imageWidget() ||
+            first->inspectorDialogParent() != view ||
             first->m_temporaryCanvas.instructionStatusBar.data() !=
                 view->standaloneStatusBar() ||
             view->standaloneStatusBar()->currentMessage() != marker ||
@@ -4334,7 +4336,8 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
             view->statusBar() != workspace->statusBar() ||
             view->standaloneStatusBar()->isVisible() ||
             workspace->currentDocument() != first ||
-            first->inspectorImageWidget() != view->imageWidget()) {
+            first->inspectorImageWidget() != view->imageWidget() ||
+            first->inspectorDialogParent() != workspace) {
           fail(QStringLiteral(
               "Workspace churn did not reattach the ordinary view cleanly"));
           return;
