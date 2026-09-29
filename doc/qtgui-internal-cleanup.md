@@ -928,10 +928,13 @@ minimum is:
    and modified/clean contract it had on entry. Otherwise noninteractive
    sanitizer teardown can block in the production Unsaved Changes dialog;
 7. save/load/recovery round trips for a representative parameter file.
-   `DocumentLifecycleSmoke` now writes a real per-document recovery payload,
+   `DocumentLifecycleSmoke` writes a real per-document recovery payload,
    restores it into a fresh hidden document, waits for asynchronous image load,
    and verifies source image, saved scalar/profile-spot state, loaded parameter
-   target metadata, and recovered dirty state before continuing the close tests;
+   target metadata, and recovered dirty state. It then truncates a copy of the
+   recovered parameter metadata and verifies that the failed recovery leaves a
+   fresh document's `ParameterState` unchanged, retains the corrupt payload, and
+   presents the asynchronous recovery warning before continuing the close tests;
 8. a small fixture test for each nontrivial parameter-widget mapping.
    This is now covered by the lightweight/workspace smoke probes: saved enum and
    checkbox mappings (including default/Reset state), correlated RGB scaling and
