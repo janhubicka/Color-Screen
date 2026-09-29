@@ -840,14 +840,21 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   payload into `QSaveFile`; direct-write fallback is disabled, so serialization,
   disk-write or commit failure leaves an older usable target untouched.
   Recovery image, parameter and metadata payloads likewise replace each file
-  atomically instead of truncating it in place. The common
-  `AtomicFileSave` helper has a lightweight deterministic smoke: a staged writer
-  that emits bytes and then reports failure must leave the old target byte-for-
-  byte intact, while a successful writer must replace it. Recovery metadata
-  format remains unchanged: path, suggested flag and dirty flag still occupy
-  separate lines and restore through the grouped transition. Workspace churn
-  contains a small friend-level target transition probe, while
-  DocumentLifecycleSmoke continues to round-trip the real recovery payload.
+  atomically instead of truncating it in place. Recovery *reads* are
+  transactional as well: `restoreRecoveryState()` parses the recovered CSP and
+  Qt metadata into private temporary state and commits only after a complete
+  success. A truncated/corrupt payload therefore cannot leave half-loaded
+  geometry/render/profile state behind. Partial recovery warnings are
+  parent-owned/asynchronous and the original recovery files remain available for
+  inspection or retry. The common `AtomicFileSave` helper has a lightweight
+  deterministic smoke: a staged writer that emits bytes and then reports failure
+  must leave the old target byte-for-byte intact, while a successful writer must
+  replace it. Recovery metadata format remains unchanged: path, suggested flag
+  and dirty flag still occupy separate lines and restore through the grouped
+  transition. Workspace churn contains a small friend-level target transition
+  probe, while DocumentLifecycleSmoke round-trips the real recovery payload and
+  also truncates a copy at the Qt metadata end marker to verify fail-closed
+  recovery publication.
 - Keep diagnostic/presentation mapping fail-closed. A configured
   `scr_to_img_parameters` is still not proof that `scr_to_img::set_parameters()`
   can build its inverse/mesh/lens state. Sharpness screen-frequency display,
@@ -921,10 +928,13 @@ minimum is:
    and modified/clean contract it had on entry. Otherwise noninteractive
    sanitizer teardown can block in the production Unsaved Changes dialog;
 7. save/load/recovery round trips for a representative parameter file.
-   `DocumentLifecycleSmoke` now writes a real per-document recovery payload,
+   `DocumentLifecycleSmoke` writes a real per-document recovery payload,
    restores it into a fresh hidden document, waits for asynchronous image load,
    and verifies source image, saved scalar/profile-spot state, loaded parameter
-   target metadata, and recovered dirty state before continuing the close tests;
+   target metadata, and recovered dirty state. It then truncates a copy of the
+   recovered parameter metadata and verifies that the failed recovery leaves a
+   fresh document's `ParameterState` unchanged, retains the corrupt payload, and
+   presents the asynchronous recovery warning before continuing the close tests;
 8. a small fixture test for each nontrivial parameter-widget mapping.
    This is now covered by the lightweight/workspace smoke probes: saved enum and
    checkbox mappings (including default/Reset state), correlated RGB scaling and

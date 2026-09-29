@@ -316,11 +316,19 @@ application-wide help/about actions. Keep this order when adding new menus.
 Crash recovery is session-aware. `ColorScreenApplication` prompts once and
 restores one `MainWindow` per recovery directory. Each `MainWindow` writes and
 removes only its own payload, so closing one image cannot erase another image's
-recovery state. `DocumentLifecycleSmoke` includes a production recovery
-round-trip: it writes one dirty loaded document into an isolated recovery
-directory, restores a fresh hidden `MainWindow`, waits for the asynchronous
-source-image load, and checks recovered processing/profile-spot state, real
-parameter-file target metadata, and dirty state. Slanted-edge reference filenames
+recovery state. Parameter recovery is transactional too: parse
+`recovery_params.par` into private defaults and publish only after the complete
+core + Qt metadata payload succeeds. A corrupt/truncated payload must leave live
+parameters unchanged, retain the recovery files for inspection/retry, and report
+the partial recovery through one parent-owned asynchronous
+`RecoveryWarningDialog` rather than a nested static warning.
+`DocumentLifecycleSmoke` includes both a production recovery round-trip and a
+late-corruption probe: it writes one dirty loaded document into an isolated
+recovery directory, restores a fresh hidden `MainWindow`, waits for the
+asynchronous source-image load, checks recovered processing/profile-spot state,
+real parameter-file target metadata and dirty state, then truncates a copy of the
+Qt metadata and verifies that no partially parsed parameters publish.
+Slanted-edge reference filenames
 are stored in the owning document's recovery directory and recreated as attached
 specialized reference views after that document restores. Ordinary New Views,
 detached/attached presentation, zoom, pan, Color/IR selection, and view-local

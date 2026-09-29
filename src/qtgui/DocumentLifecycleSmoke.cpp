@@ -602,6 +602,72 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
 
         delete probe;
         state->recoveryProbe = nullptr;
+
+        // Corrupt the otherwise-valid payload late in its Qt metadata and make
+        // sure recovery fails transactionally. The old implementation parsed
+        // directly into live members, so a late failure could leave a partially
+        // recovered geometry/render state behind.
+        const QString corruptDirectory =
+            state->temporaryDirectory->filePath(
+                QStringLiteral("recovery-corrupt"));
+        if (!QDir().mkpath(corruptDirectory)) {
+          fail(QStringLiteral(
+              "Recovery corruption smoke could not create its payload directory"));
+          return;
+        }
+        const QString validParams =
+            QDir(state->recoveryProbeDirectory)
+                .filePath(QStringLiteral("recovery_params.par"));
+        QByteArray corruptPayload = readFile(validParams);
+        const QByteArray endMarker("colorscreen_qt_metadata_end");
+        const qsizetype markerOffset = corruptPayload.lastIndexOf(endMarker);
+        if (markerOffset <= 0) {
+          fail(QStringLiteral(
+              "Recovery corruption smoke could not find Qt metadata end marker"));
+          return;
+        }
+        corruptPayload.truncate(markerOffset);
+        const QString corruptParams =
+            QDir(corruptDirectory)
+                .filePath(QStringLiteral("recovery_params.par"));
+        QFile corruptFile(corruptParams);
+        if (!corruptFile.open(QIODevice::WriteOnly | QIODevice::Truncate) ||
+            corruptFile.write(corruptPayload) != corruptPayload.size() ||
+            !corruptFile.flush()) {
+          fail(QStringLiteral(
+              "Recovery corruption smoke could not write truncated payload"));
+          return;
+        }
+        corruptFile.close();
+
+        auto *corruptProbe = new MainWindow(corruptDirectory);
+        corruptProbe->hide();
+        const ParameterState corruptBaseline =
+            corruptProbe->documentStateSnapshot();
+        if (!corruptProbe->restoreRecoveryState()) {
+          delete corruptProbe;
+          fail(QStringLiteral(
+              "Recovery corruption smoke rejected the recovery directory"));
+          return;
+        }
+        QMessageBox *recoveryWarning =
+            corruptProbe->findChild<QMessageBox *>(
+                QStringLiteral("RecoveryWarningDialog"));
+        if (corruptProbe->documentStateSnapshot() != corruptBaseline ||
+            !QFile::exists(corruptParams) || !recoveryWarning ||
+            !recoveryWarning->text().contains(
+                QStringLiteral("No recovered parameters were applied"))) {
+          if (recoveryWarning)
+            recoveryWarning->close();
+          delete corruptProbe;
+          fail(QStringLiteral(
+              "Corrupt recovery payload partially mutated document state or "
+              "lost its warning/payload"));
+          return;
+        }
+        recoveryWarning->close();
+        delete corruptProbe;
+
         schedule(0, 0, 40);
         return;
       }
