@@ -83,6 +83,8 @@ struct WorkspaceChurnState {
   ParameterState beforeReference;
   ParameterState referenceInputs;
   int referenceUndoIndex = 0;
+  std::shared_ptr<colorscreen::image_data> referenceAcceptedScan;
+  QString referenceAcceptedFile;
   bool referenceReplacementDone = false;
   std::shared_ptr<colorscreen::progress_info> referenceReplacementProgress;
   std::vector<colorscreen::slanted_edge_parameters> referenceParameters;
@@ -3560,6 +3562,45 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
           fail(QStringLiteral("Reloaded reference published its old measurement"));
           return;
         }
+
+        // A failed replacement must retain the last accepted reference identity
+        // and pixels rather than closing a still-usable view.
+        state->referenceAcceptedScan = reference->sharedImageData();
+        state->referenceAcceptedFile = reference->referenceFile();
+        const QString invalidReference =
+            state->referenceDirectory->filePath(
+                QStringLiteral("invalid-reference.tif"));
+        QFile invalidReferenceFile(invalidReference);
+        if (!invalidReferenceFile.open(QIODevice::WriteOnly | QIODevice::Truncate) ||
+            invalidReferenceFile.write("not a TIFF\n") <= 0 ||
+            !invalidReferenceFile.flush()) {
+          fail(QStringLiteral("Could not write invalid reference reload fixture"));
+          return;
+        }
+        invalidReferenceFile.close();
+        reference->loadReferenceImage(invalidReference);
+        schedule(2041, 50, 200);
+        return;
+      }
+
+      case 2041: {
+        ImageViewWindow *reference = state->reference.data();
+        if (!reference || reference->m_referenceLoad.pending) {
+          retryOrFail(QStringLiteral("Failed reference reload did not settle"));
+          return;
+        }
+        QMessageBox *loadFailure =
+            reference->findChild<QMessageBox *>(
+                QStringLiteral("ReferenceImageLoadFailureDialog"));
+        if (!loadFailure ||
+            reference->sharedImageData() != state->referenceAcceptedScan ||
+            reference->referenceFile() != state->referenceAcceptedFile) {
+          fail(QStringLiteral(
+              "Failed reference reload replaced/closed the accepted reference"));
+          return;
+        }
+        loadFailure->close();
+
         const auto area = reference->sharedImageData()->get_area();
         reference->startReferenceMtfMeasurement(area, state->referenceParameters);
         auto oldProgress = reference->m_referenceMtfMeasurement.progress.lock();
