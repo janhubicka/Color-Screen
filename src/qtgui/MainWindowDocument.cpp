@@ -1134,27 +1134,52 @@ bool MainWindow::restoreRecoveryState() {
   if (!QFile::exists(imagePath) && !QFile::exists(paramsPath))
     return false;
 
+  QStringList recoveryWarnings;
   QString imageToLoad;
   QFile imageFile(imagePath);
   if (imageFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
     QTextStream in(&imageFile);
     imageToLoad = in.readLine().trimmed();
+  } else if (QFile::exists(imagePath)) {
+    recoveryWarnings.push_back(
+        tr("The recovered image reference could not be read."));
   }
 
   if (QFile::exists(paramsPath)) {
     FILE *f = fopen(paramsPath.toUtf8().constData(), "r");
-    if (f) {
+    if (!f) {
+      recoveryWarnings.push_back(
+          tr("The recovered parameter payload could not be opened. "
+             "No recovered parameters were applied."));
+    } else {
+      // load_csp merges into its outputs. Parse into private temporaries so a
+      // truncated/corrupt recovery file can never partially mutate live state.
+      ParameterState recoveredState;
+      std::vector<colorscreen::color_match> recoveredSpotResults;
       const char *error = nullptr;
       const bool loaded = colorscreen::load_csp_with_profile_spots(
-          f, &m_scrToImgParams, &m_detectParams, &m_rparams, &m_solverParams,
-          &error, &m_profileSpots, &m_profileCalibration.spotResults);
+          f, &recoveredState.scrToImg, &recoveredState.detect,
+          &recoveredState.rparams, &recoveredState.solver, &error,
+          &recoveredState.profileSpots, &recoveredSpotResults);
+      const QString errorDetail =
+          error ? QString::fromUtf8(error) : QString();
       fclose(f);
-      if (!loaded || error) {
-        QMessageBox::warning(
-            this, "Recovery Warning",
-            error ? QString("Error loading parameters: %1").arg(error)
-                  : QStringLiteral("Could not load recovered parameters."));
+
+      if (!loaded || !errorDetail.isEmpty()) {
+        recoveryWarnings.push_back(
+            errorDetail.isEmpty()
+                ? tr("The recovered parameter payload is invalid. "
+                     "No recovered parameters were applied.")
+                : tr("The recovered parameter payload is invalid: %1\n"
+                     "No recovered parameters were applied.")
+                      .arg(errorDetail));
       } else {
+        m_scrToImgParams = std::move(recoveredState.scrToImg);
+        m_detectParams = std::move(recoveredState.detect);
+        m_rparams = std::move(recoveredState.rparams);
+        m_solverParams = std::move(recoveredState.solver);
+        m_profileSpots = std::move(recoveredState.profileSpots);
+        m_profileCalibration.spotResults = std::move(recoveredSpotResults);
       }
     }
   }
@@ -1179,9 +1204,22 @@ bool MainWindow::restoreRecoveryState() {
   if (!imageToLoad.isEmpty() && QFile::exists(imageToLoad)) {
     loadFile(imageToLoad, true);
   } else if (!imageToLoad.isEmpty()) {
-    QMessageBox::warning(
-        this, "Recovery Warning",
-        QString("Could not find image file: %1").arg(imageToLoad));
+    recoveryWarnings.push_back(
+        tr("The recovered image file could not be found: %1")
+            .arg(imageToLoad));
+  }
+
+  if (!recoveryWarnings.isEmpty()) {
+    auto *box = new QMessageBox(
+        QMessageBox::Warning, tr("Crash Recovery"),
+        tr("Color-Screen could not restore all recovery data. "
+           "Usable recovered state was kept, and the recovery files were left "
+           "untouched so they can be inspected or retried.\n\n%1")
+            .arg(recoveryWarnings.join(QStringLiteral("\n\n"))),
+        QMessageBox::Ok, this);
+    box->setObjectName(QStringLiteral("RecoveryWarningDialog"));
+    box->setAttribute(Qt::WA_DeleteOnClose);
+    box->open();
   }
 
   updateUIFromState(getCurrentState());
