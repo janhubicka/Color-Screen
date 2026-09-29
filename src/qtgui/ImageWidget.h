@@ -151,6 +151,15 @@ public:
    * @param show True to show.
    */
   void setShowProfileSpots(bool show);
+  /** Force profile spots visible only while this view owns Profile Add spot.
+      This is independent of the view-local Show profile spots preference. */
+  void setProfileSpotEditing(bool active) {
+    if (m_profileSpotEditing == active)
+      return;
+    m_profileSpotEditing = active;
+    update();
+  }
+  bool profileSpotEditing() const { return m_profileSpotEditing; }
 
   /** Select the canvas coordinate space used for rendering this view.
       Interaction APIs continue to consume/return scan coordinates. */
@@ -494,6 +503,7 @@ private:
   bool m_showRegistrationPoints = false;
   bool m_showDetectedPatchCenters = false;
   bool m_showProfileSpots = true;
+  bool m_profileSpotEditing = false;
   colorscreen::render_coordinate_space m_coordinateSpace =
       colorscreen::render_scan_coordinates;
 
