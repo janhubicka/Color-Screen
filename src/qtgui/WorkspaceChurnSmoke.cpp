@@ -1215,7 +1215,16 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
               first->m_imageWidget->profileSpotsVisible() ||
               view->imageWidget()->profileSpotsVisible()) {
             fail(QStringLiteral(
-                "Profile Add spot edit visibility did not follow the inspector view"));
+                     "Profile Add spot edit visibility did not follow the inspector view "
+                     "(inspectorPeer=%1 peerMode=%2 owner=%3 primaryEdit=%4 "
+                     "peerEdit=%5 primaryVisible=%6 peerVisible=%7)")
+                     .arg(first->inspectorImageWidget() == view->imageWidget())
+                     .arg(static_cast<int>(view->imageWidget()->interactionMode()))
+                     .arg(first->m_temporaryCanvas.pointClick.profileSpot())
+                     .arg(first->m_imageWidget->profileSpotEditing())
+                     .arg(view->imageWidget()->profileSpotEditing())
+                     .arg(first->m_imageWidget->profileSpotsVisible())
+                     .arg(view->imageWidget()->profileSpotsVisible()));
             return;
           }
           profileAddSpotButton->setChecked(false);
