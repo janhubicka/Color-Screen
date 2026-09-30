@@ -4579,7 +4579,7 @@ void MainWindow::onPointAdded(colorscreen::point_t imgPos,
   if (m_temporaryCanvas.pointClick.profileSpot()) {
     colorscreen::scr_to_img map;
     if (!map.set_parameters(m_scrToImgParams, *m_scan)) {
-      statusBar()->showMessage(tr("Fit screen geometry before adding profile spots."), 3000);
+      inspectorStatusBar()->showMessage(tr("Fit screen geometry before adding profile spots."), 3000);
       return;
     }
     colorscreen::point_t screen = map.to_scr(imgPos);
@@ -4614,7 +4614,7 @@ void MainWindow::onPointAdded(colorscreen::point_t imgPos,
     operation.applyResult = [this, result]() {
       if (!result->success) {
         if (!result->cancelled)
-          statusBar()->showMessage(
+          inspectorStatusBar()->showMessage(
               pointFocusAnalysisFailureMessage(
                   QString::fromStdString(result->finetune.err)),
               9000);
@@ -4631,7 +4631,7 @@ void MainWindow::onPointAdded(colorscreen::point_t imgPos,
       changeParameters(newState, tr("Focus analysis"));
       if (m_sharpnessPanel)
         m_sharpnessPanel->updateFinetuneImages(result->finetune);
-      statusBar()->showMessage(tr("Focus analysis complete"), 3000);
+      inspectorStatusBar()->showMessage(tr("Focus analysis complete"), 3000);
     };
     operation.onDone = [this]() {
       if (m_sharpnessPanel)
@@ -4850,7 +4850,7 @@ void MainWindow::runAreaComputation(
         [this, result, succeeded, description, showGenericFailure]() {
       if (!*succeeded) {
         if (showGenericFailure)
-          statusBar()->showMessage(areaComputationFailureMessage(description),
+          inspectorStatusBar()->showMessage(areaComputationFailureMessage(description),
                                    9000);
         return;
       }
@@ -5174,7 +5174,7 @@ void MainWindow::updateMtfMeasurementOverlay(bool locate) {
     return;
   if (!overlay) {
     if (measurement && !measurement->source_filename.empty())
-      statusBar()->showMessage(
+      inspectorStatusBar()->showMessage(
           tr("MTF measurement belongs to %1; open that source/reference to locate it.")
               .arg(QFileInfo(QString::fromUtf8(
                        measurement->source_filename.c_str())).fileName()),
@@ -5286,7 +5286,7 @@ void MainWindow::onFindFocusAreasRequested() {
     if (!result->success) {
       const QString error = QString::fromStdString(result->error);
       *summary = focusAreaSearchFailureMessage(error);
-      statusBar()->showMessage(*summary, 9000);
+      inspectorStatusBar()->showMessage(*summary, 9000);
       return;
     }
     m_focusAreaAnalysis.candidates = std::move(result->candidates);
@@ -5296,7 +5296,7 @@ void MainWindow::onFindFocusAreasRequested() {
     updateFocusAreaOverlays();
     const int count = static_cast<int>(m_focusAreaAnalysis.candidates.size());
     *summary = tr("Found %1 candidate uniform area(s).").arg(count);
-    statusBar()->showMessage(
+    inspectorStatusBar()->showMessage(
         tr("Found %1 focus analysis area(s)").arg(count), 4000);
   };
   operation.onDone = [this, summary]() { finishFocusAreaOperation(*summary); };
@@ -5314,7 +5314,7 @@ void MainWindow::onAnalyzeFocusAreasRequested(uint64_t flags) {
   if (!m_scan || m_focusAreaAnalysis.running)
     return;
   if (m_focusAreaAnalysis.candidates.size() < 3) {
-    statusBar()->showMessage(
+    inspectorStatusBar()->showMessage(
         tr("Find at least three focus areas before analyzing them."), 4000);
     return;
   }
@@ -5325,7 +5325,7 @@ void MainWindow::onAnalyzeFocusAreasRequested(uint64_t flags) {
                             currentFocusInputs)) {
     clearFocusAreaAnalysis(
         tr("Focus-area inputs changed; find focus areas again."));
-    statusBar()->showMessage(
+    inspectorStatusBar()->showMessage(
         tr("Focus-area inputs changed; find focus areas again."), 4000);
     return;
   }
@@ -5334,7 +5334,7 @@ void MainWindow::onAnalyzeFocusAreasRequested(uint64_t flags) {
       | colorscreen::finetune_scanner_mtf_defocus;
   flags &= focusMask;
   if (!flags) {
-    statusBar()->showMessage(
+    inspectorStatusBar()->showMessage(
         tr("Enable at least one blur/focus parameter before analysis."), 4000);
     return;
   }
@@ -5375,7 +5375,8 @@ void MainWindow::onAnalyzeFocusAreasRequested(uint64_t flags) {
              "regions and retry.");
       auto *box = new QMessageBox(
           QMessageBox::Warning, tr("Focus analysis areas"),
-          focusAreaAnalysisFailureMessage(error), QMessageBox::Ok, this);
+          focusAreaAnalysisFailureMessage(error), QMessageBox::Ok,
+          inspectorDialogParent());
       box->setObjectName(QStringLiteral("FocusAreaAnalysisFailureDialog"));
       box->setAttribute(Qt::WA_DeleteOnClose);
       box->open();
@@ -5442,7 +5443,7 @@ QString MainWindow::presentFocusAreaAnalysisResult(
                           0, 'g', 5);
   }
   const QString summary = details.join(QStringLiteral("\n"));
-  auto *box = new QMessageBox(this);
+  auto *box = new QMessageBox(inspectorDialogParent());
   box->setAttribute(Qt::WA_DeleteOnClose);
   box->setWindowTitle(tr("Focus analysis areas"));
   box->setIcon(QMessageBox::Information);
