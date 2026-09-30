@@ -2599,13 +2599,6 @@ void MainWindow::setInspectorImageWidget(ImageWidget *imageWidget) {
   if (m_profilePanel)
     m_profilePanel->setShowProfileSpots(target->profileSpotsVisible());
 
-  // Profile Add spot is a document operation, but its forced overlay
-  // presentation belongs only to the ordinary view currently owning the
-  // inspector. Keep inactive peer views on their own visibility preference.
-  if (previous && previous != target)
-    previous->setProfileSpotEditing(false);
-  target->setProfileSpotEditing(m_temporaryCanvas.pointClick.profileSpot());
-
   // A selected document tool belongs to the document operation, not to the
   // canvas that happened to be active when it was armed. Move it to the newly
   // active compatible view and leave the old view harmlessly in Pan mode.
@@ -2615,6 +2608,16 @@ void MainWindow::setInspectorImageWidget(ImageWidget *imageWidget) {
     target->setInteractionMode(previousMode);
     m_inspectorImageRouting.switching = false;
   }
+
+  // Profile Add spot is a document operation, but its forced overlay
+  // presentation belongs only to the ordinary view currently owning the
+  // inspector. Synchronize it *after* the canvas-tool handoff so the target's
+  // interaction mode and edit affordance become one settled presentation.
+  if (previous && previous != target)
+    previous->setProfileSpotEditing(false);
+  target->setProfileSpotEditing(
+      m_temporaryCanvas.pointClick.profileSpot() &&
+      target->interactionMode() == ImageWidget::AddPointMode);
 
   if (m_navigationView) {
     m_navigationView->setCoordinateSpace(target->coordinateSpace());
