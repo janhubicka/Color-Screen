@@ -3887,11 +3887,28 @@ void MainWindow::clearTemporaryCanvasInstruction() {
     after AddPointMode has been transferred there. */
 void MainWindow::syncProfileSpotEditingPresentation() {
   const bool editing = m_temporaryCanvas.pointClick.profileSpot();
-  for (ImageWidget *view : ordinaryImageWidgets()) {
+  ImageWidget *inspectorImage = inspectorImageWidget();
+
+  if (m_imageWidget) {
+    m_imageWidget->setProfileSpotEditing(
+        editing && m_imageWidget == inspectorImage &&
+        m_imageWidget->interactionMode() == ImageWidget::AddPointMode);
+  }
+
+  ColorScreenApplication *application = documentApplication();
+  if (!application)
+    return;
+
+  for (ImageViewWindow *window : application->viewWindows()) {
+    if (!window || window->sourceDocument() != this ||
+        window->isSlantedEdgeReference())
+      continue;
+
+    ImageWidget *view = window->imageWidget();
     if (!view)
       continue;
     view->setProfileSpotEditing(
-        editing && view == inspectorImageWidget() &&
+        editing && view == inspectorImage &&
         view->interactionMode() == ImageWidget::AddPointMode);
   }
 }
