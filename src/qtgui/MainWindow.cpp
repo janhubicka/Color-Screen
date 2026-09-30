@@ -4138,7 +4138,8 @@ void MainWindow::onSolverFinished(int reqId,
     m_geometryFit.failureScan = completedScan;
     auto *box = new QMessageBox(
         QMessageBox::Warning, tr("Geometry fit failed"),
-        geometryFitFailureMessage(), QMessageBox::Ok, this);
+        geometryFitFailureMessage(), QMessageBox::Ok,
+        inspectorDialogParent());
     box->setObjectName(QStringLiteral("GeometryFitFailureDialog"));
     box->setAttribute(Qt::WA_DeleteOnClose);
     box->open();
@@ -5594,7 +5595,9 @@ void MainWindow::onColorOptimizeRequested(bool /*autoMode*/) {
     return;
   ParameterState state = getCurrentState();
   if (!colorscreen::screen_geometry_configured_p(state.scrToImg)) {
-    statusBar()->showMessage(tr("Fit screen geometry before optimizing the color profile."), 3000);
+    if (QStatusBar *bar = inspectorStatusBar())
+      bar->showMessage(
+          tr("Fit screen geometry before optimizing the color profile."), 3000);
     return;
   }
   if (state.profileSpots.size() < 4)
@@ -5730,7 +5733,8 @@ void MainWindow::onColorOptimizerFinished(
                         : std::shared_ptr<colorscreen::image_data>();
     if (m_profileCalibration.failureInputs)
       m_profileCalibration.failureInputs->scan.reset();
-    statusBar()->showMessage(profileOptimizationFailureMessage(), 9000);
+    if (QStatusBar *bar = inspectorStatusBar())
+      bar->showMessage(profileOptimizationFailureMessage(), 9000);
   }
   updateWorkflowSummary();
 }
