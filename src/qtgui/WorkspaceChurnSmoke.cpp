@@ -1207,7 +1207,9 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
             return;
           }
           workspace->activateView(view);
-          if (first->m_imageWidget->profileSpotEditing() ||
+          if (first->inspectorImageWidget() != view->imageWidget() ||
+              view->imageWidget()->interactionMode() != ImageWidget::AddPointMode ||
+              first->m_imageWidget->profileSpotEditing() ||
               !view->imageWidget()->profileSpotEditing() ||
               first->m_imageWidget->profileSpotsVisible() ||
               view->imageWidget()->profileSpotsVisible()) {
