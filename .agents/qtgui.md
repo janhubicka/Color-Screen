@@ -138,7 +138,8 @@ workspace, while detached peers parent them to their own top-level window.
 Current examples include DPI **Measure**, source-document **Measure MTF**,
 **Flat field → Set reference**, Screen/automatic-registration and coordinate
 detection/refinement feedback, Adaptive sharpening analysis, Geometry-fit
-failure, and Profile optimization prerequisite/failure feedback. Analysis
+failure, Profile optimization, Profile Add-spot/MTF Locate guidance, generic
+selected-area analysis, and one-/multi-area Focus analysis feedback. Analysis
 completion/cancellation/stale-result status is presentation feedback too: use
 `inspectorStatusBar()` rather than the source document's `statusBar()`.
 Document/File menu dialogs that are not tied to the borrowed inspector keep
