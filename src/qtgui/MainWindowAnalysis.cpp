@@ -393,7 +393,7 @@ void MainWindow::onAutomaticallyAddPointsInAreaRequested(
   if (!m_scan)
     return;
   if (!colorscreen::screen_geometry_configured_p(m_scrToImgParams)) {
-    statusBar()->showMessage(
+    inspectorStatusBar()->showMessage(
         tr("Detect screen coordinates before adding registration points."),
         3000);
     return;
@@ -479,7 +479,7 @@ void MainWindow::cancelStaleRegistrationDiscovery(
     m_screenAutodetection.clearProgress();
 
   if (!m_closeLifecycle.closing())
-    statusBar()->showMessage(
+    inspectorStatusBar()->showMessage(
         tr("Automatic point discovery stopped because its inputs changed."),
         3000);
 }
@@ -659,7 +659,7 @@ void MainWindow::startRegistrationDiscovery(
           auto *box = new QMessageBox(
               QMessageBox::Warning, tr("Automatic Registration"),
               registrationDiscoveryFailureMessage(screenAutodetection),
-              QMessageBox::Ok, this);
+              QMessageBox::Ok, inspectorDialogParent());
           box->setObjectName(
               QStringLiteral("RegistrationDiscoveryFailureDialog"));
           box->setAttribute(Qt::WA_DeleteOnClose);
@@ -681,7 +681,7 @@ void MainWindow::startAutomaticPointDiscovery(
   if (!m_scan)
     return;
   if (!colorscreen::screen_geometry_configured_p(m_scrToImgParams)) {
-    statusBar()->showMessage(
+    inspectorStatusBar()->showMessage(
         tr("Detect screen coordinates before adding registration points."),
         3000);
     return;
@@ -715,7 +715,7 @@ void MainWindow::onAutodetectScreen() {
       // Existing points are expressed in the current basis. Detect Screen may
       // refine/add points, but must never replace that basis underneath them.
       if (!colorscreen::screen_geometry_configured_p(m_scrToImgParams)) {
-        statusBar()->showMessage(
+        inspectorStatusBar()->showMessage(
             tr("Existing control points require their original screen "
                "coordinate system. Restore it or delete the points before "
                "detecting new coordinates."),
@@ -805,7 +805,7 @@ void MainWindow::presentScreenDetectionSuggestions(
 
   auto *dialog = new ScreenDetectionSuggestionDialog(
       screenName, renderScreenIcon(geometry.type), currentColor,
-      preferredColorName, suggestColor, dpi, suggestDpi, this);
+      preferredColorName, suggestColor, dpi, suggestDpi, inspectorDialogParent());
   dialog->setAttribute(Qt::WA_DeleteOnClose);
   m_screenAutodetection.prompt = dialog;
 
@@ -844,7 +844,7 @@ void MainWindow::presentDetectedScreenResult(
     auto *box = new QMessageBox(
         QMessageBox::Warning, tr("Screen Detection"),
         screenDetectionFailureMessage(baseline.scrToImg.type),
-        QMessageBox::Ok, this);
+        QMessageBox::Ok, inspectorDialogParent());
     box->setObjectName(QStringLiteral("ScreenDetectionFailureDialog"));
     box->setAttribute(Qt::WA_DeleteOnClose);
     box->open();
@@ -940,7 +940,7 @@ void MainWindow::cancelStaleAdaptiveSharpening(
     progress->cancel();
   restoreAdaptiveSharpeningChart();
   if (!m_closeLifecycle.closing())
-    statusBar()->showMessage(
+    inspectorStatusBar()->showMessage(
         tr("Adaptive sharpening analysis stopped because its inputs changed."),
         3000);
 }
@@ -955,7 +955,7 @@ void MainWindow::onAdaptiveSharpeningRequested(
   if (!m_scan)
     return;
   if (!colorscreen::screen_geometry_configured_p(m_scrToImgParams)) {
-    statusBar()->showMessage(
+    inspectorStatusBar()->showMessage(
         tr("Fit screen geometry before adaptive sharpening analysis."), 3000);
     return;
   }
@@ -1052,10 +1052,10 @@ void MainWindow::onAdaptiveSharpeningRequested(
               else {
                 restoreAdaptiveSharpeningChart();
                 if (cancelled)
-                  statusBar()->showMessage(
+                  inspectorStatusBar()->showMessage(
                       tr("Adaptive sharpening analysis cancelled"), 3000);
                 else
-                  statusBar()->showMessage(
+                  inspectorStatusBar()->showMessage(
                       tr("Displacement analysis result discarded because "
                          "its inputs changed."),
                       4000);
@@ -1079,7 +1079,7 @@ void MainWindow::onAdaptiveSharpeningFinished(
     restoreAdaptiveSharpeningChart();
     auto *box = new QMessageBox(
         QMessageBox::Warning, tr("Adaptive Sharpening"),
-        adaptiveSharpeningFailureMessage(error), QMessageBox::Ok, this);
+        adaptiveSharpeningFailureMessage(error), QMessageBox::Ok, inspectorDialogParent());
     box->setObjectName(QStringLiteral("AdaptiveSharpeningFailureDialog"));
     box->setAttribute(Qt::WA_DeleteOnClose);
     box->open();
@@ -1106,7 +1106,7 @@ void MainWindow::onAdaptiveSharpeningFinished(
   }
 
   updateWorkflowSummary();
-  statusBar()->showMessage(
+  inspectorStatusBar()->showMessage(
       tr("Adaptive sharpening analysis completed."), 4000);
 }
 
@@ -1139,7 +1139,7 @@ void MainWindow::startCoordinateAutodetection(bool addPointsAfterDetection) {
   if (!m_scan)
     return;
   if (m_solverParams.n_points() > 0) {
-    statusBar()->showMessage(
+    inspectorStatusBar()->showMessage(
         tr("Delete existing control points before detecting a new screen "
            "coordinate system."),
         5000);
@@ -1177,7 +1177,7 @@ void MainWindow::startCoordinateAutodetection(bool addPointsAfterDetection) {
           QMessageBox::Warning, tr("Detect Screen Coordinates"),
           coordinateDetectionFailureMessage(
               getCurrentState().scrToImg.type),
-          QMessageBox::Ok, this);
+          QMessageBox::Ok, inspectorDialogParent());
       box->setObjectName(
           QStringLiteral("CoordinateDetectionFailureDialog"));
       box->setAttribute(Qt::WA_DeleteOnClose);
@@ -1191,7 +1191,7 @@ void MainWindow::startCoordinateAutodetection(bool addPointsAfterDetection) {
     m_renderTypeParams.type = colorscreen::render_type_interpolated;
     changeParameters(newState, tr("Detect screen coordinates"));
     m_imageWidget->update();
-    statusBar()->showMessage(tr("Screen coordinates detected."), 3000);
+    inspectorStatusBar()->showMessage(tr("Screen coordinates detected."), 3000);
 
     if (addPointsAfterDetection && m_geometryPanel)
       startAutomaticPointDiscovery(m_geometryPanel->finetuneAreaParams(), true);
@@ -1221,7 +1221,7 @@ void MainWindow::onOptimizeCoordinates() {
   if (!m_scan)
     return;
   if (!colorscreen::screen_geometry_configured_p(m_scrToImgParams)) {
-    statusBar()->showMessage(tr("Detect screen coordinates before refining them."), 3000);
+    inspectorStatusBar()->showMessage(tr("Detect screen coordinates before refining them."), 3000);
     return;
   }
 
@@ -1243,7 +1243,7 @@ void MainWindow::onOptimizeCoordinates() {
           QMessageBox::Warning, tr("Coordinate refinement"),
           coordinateOptimizationFailureMessage(
               QString::fromStdString(result->finetune.err)),
-          QMessageBox::Ok, this);
+          QMessageBox::Ok, inspectorDialogParent());
       box->setObjectName(QStringLiteral("CoordinateOptimizationFailureDialog"));
       box->setAttribute(Qt::WA_DeleteOnClose);
       box->open();
@@ -1273,7 +1273,7 @@ void MainWindow::applyOptimizedCoordinates(
   if (m_geometryPanel)
     m_geometryPanel->updateFinetuneImages(result);
   updateWorkflowSummary();
-  statusBar()->showMessage(tr("Optimize coordinates finished"), 3000);
+  inspectorStatusBar()->showMessage(tr("Optimize coordinates finished"), 3000);
 }
 
 /** Propagate coordinate system parameter changes to the renderer.
