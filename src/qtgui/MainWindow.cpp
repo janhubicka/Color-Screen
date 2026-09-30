@@ -2609,15 +2609,8 @@ void MainWindow::setInspectorImageWidget(ImageWidget *imageWidget) {
     m_inspectorImageRouting.switching = false;
   }
 
-  // Profile Add spot is a document operation, but its forced overlay
-  // presentation belongs only to the ordinary view currently owning the
-  // inspector. Synchronize it *after* the canvas-tool handoff so the target's
-  // interaction mode and edit affordance become one settled presentation.
-  if (previous && previous != target)
-    previous->setProfileSpotEditing(false);
-  target->setProfileSpotEditing(
-      m_temporaryCanvas.pointClick.profileSpot() &&
-      target->interactionMode() == ImageWidget::AddPointMode);
+  // Settle the view-local Profile edit affordance after tool ownership moves.
+  syncProfileSpotEditingPresentation();
 
   if (m_navigationView) {
     m_navigationView->setCoordinateSpace(target->coordinateSpace());
@@ -3887,6 +3880,22 @@ void MainWindow::clearTemporaryCanvasInstruction() {
   m_temporaryCanvas.instructionStatusBar.clear();
 }
 
+/** Keep Profile Add-spot's forced overlay on exactly the inspector view.
+
+    The intent is document-owned, but the edit affordance is view-local. Clear
+    every inactive ordinary view first, then enable only the active inspector
+    after AddPointMode has been transferred there. */
+void MainWindow::syncProfileSpotEditingPresentation() {
+  const bool editing = m_temporaryCanvas.pointClick.profileSpot();
+  for (ImageWidget *view : ordinaryImageWidgets()) {
+    if (!view)
+      continue;
+    view->setProfileSpotEditing(
+        editing && view == inspectorImageWidget() &&
+        view->interactionMode() == ImageWidget::AddPointMode);
+  }
+}
+
 /** Clear whichever temporary point-click tool currently owns AddPointMode.
     This never changes the canvas mode; callers decide whether they are handing
     ownership to another temporary tool or honoring an explicit user tool. */
@@ -3903,6 +3912,7 @@ void MainWindow::clearPointClickToolPresentation() {
   if (hadPointClick)
     clearTemporaryCanvasInstruction();
   m_temporaryCanvas.pointClick.clear();
+  syncProfileSpotEditingPresentation();
 }
 
 
@@ -5534,7 +5544,7 @@ void MainWindow::onAddSpotModeRequested(bool active) {
       clearPointClickToolPresentation();
     m_temporaryCanvas.pointClick.armProfileSpot();
     image->setInteractionMode(ImageWidget::AddPointMode);
-    image->setProfileSpotEditing(true);
+    syncProfileSpotEditingPresentation();
     showTemporaryCanvasInstruction(
         ImageWidget::AddPointMode,
         tr("Click image to add profile spots; right-click a spot to remove it"));
