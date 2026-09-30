@@ -833,8 +833,10 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   driven dialogs created by MainWindow resolve `inspectorDialogParent()` from
   that same presentation: workspace while attached, borrowing ImageViewWindow
   while detached. DPI Measure, source-document slanted-edge MTF setup/failure,
-  and Flat-field reference prompts now follow this rule instead of parenting to
-  a potentially hidden source document. Exact-text cleanup still prevents an
+  Flat-field reference prompts, and Geometry-fit failure now follow this rule
+  instead of parenting to a potentially hidden source document. Profile
+  optimization prerequisite/failure text likewise uses `inspectorStatusBar()`.
+  Exact-text cleanup still prevents an
   older tool from erasing a newer unrelated message. Workspace churn exercises
   view activation/tool transfer, secondary close and inspector rebinding, a live
   Generic Area instruction moving from the workspace bar to the detached peer's
