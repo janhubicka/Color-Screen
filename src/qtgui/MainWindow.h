@@ -585,6 +585,8 @@ private:
   /** Clear the temporary Profile/Focus point-click owner without changing the
       canvas mode. Panel toggles are synchronized with signals blocked. */
   void clearPointClickToolPresentation();
+  /** Synchronize Profile Add-spot forced visibility with the active inspector. */
+  void syncProfileSpotEditingPresentation();
 
   /** Synchronize shared toolbar/menu tool state with the active ordinary view. */
   void syncInspectorInteractionActions(ImageWidget::InteractionMode mode);
