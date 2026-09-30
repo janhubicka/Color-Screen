@@ -2609,7 +2609,18 @@ void MainWindow::setInspectorImageWidget(ImageWidget *imageWidget) {
     m_inspectorImageRouting.switching = false;
   }
 
-  // Settle the view-local Profile edit affordance after tool ownership moves.
+  // The handoff itself owns the two canvases involved. Settle those directly
+  // before the broader peer cleanup below; application view enumeration can lag
+  // presentation churn by an event-loop turn, but the active inspector must be
+  // correct synchronously when setInspectorImageWidget() returns.
+  const bool profileEditing = m_temporaryCanvas.pointClick.profileSpot();
+  if (previous && previous != target)
+    previous->setProfileSpotEditing(false);
+  target->setProfileSpotEditing(
+      profileEditing &&
+      target->interactionMode() == ImageWidget::AddPointMode);
+
+  // Clear any stale edit affordance left on other ordinary peers.
   syncProfileSpotEditingPresentation();
 
   if (m_navigationView) {
