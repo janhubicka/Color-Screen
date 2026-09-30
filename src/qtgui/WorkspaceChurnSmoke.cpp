@@ -1,6 +1,7 @@
 #include "WorkspaceChurnSmoke.h"
 
 #include "ColorScreenApplication.h"
+#include "DetectScreenWorker.h"
 #include "GeometryPanel.h"
 #include "ImageViewWindow.h"
 #include "MainWindow.h"
@@ -4326,6 +4327,44 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
               "Detached inspector did not clear its temporary status guidance"));
           return;
         }
+
+        // MainWindowAnalysis feedback launched from the borrowed inspector must
+        // use this detached peer as well. Exercise both a cheap prerequisite
+        // status path and a parent-owned asynchronous failure dialog.
+        view->standaloneStatusBar()->clearMessage();
+        workspace->statusBar()->clearMessage();
+        const colorscreen::scr_to_img_parameters savedGeometry =
+            first->m_scrToImgParams;
+        first->m_scrToImgParams = colorscreen::scr_to_img_parameters();
+        first->onOptimizeCoordinatesRequested();
+        first->m_scrToImgParams = savedGeometry;
+        if (!view->standaloneStatusBar()->currentMessage().contains(
+                QStringLiteral("Detect screen coordinates")) ||
+            workspace->statusBar()->currentMessage().contains(
+                QStringLiteral("Detect screen coordinates"))) {
+          fail(QStringLiteral(
+              "Detached inspector analysis prerequisite used the source status bar"));
+          return;
+        }
+        view->standaloneStatusBar()->clearMessage();
+
+        DetectScreenAnalysisResult failedDetection;
+        first->presentDetectedScreenResult(
+            failedDetection, first->sharedImageData(),
+            first->documentStateSnapshot());
+        QMessageBox *screenDetectionFailure =
+            view->findChild<QMessageBox *>(
+                QStringLiteral("ScreenDetectionFailureDialog"));
+        if (!screenDetectionFailure ||
+            screenDetectionFailure->parentWidget() != view) {
+          fail(QStringLiteral(
+              "Detached inspector analysis failure used the source dialog parent"));
+          return;
+        }
+        screenDetectionFailure->close();
+        screenDetectionFailure->deleteLater();
+        QCoreApplication::sendPostedEvents(
+            screenDetectionFailure, QEvent::DeferredDelete);
 
         app.attachView(view);
         schedule(5, 50, 40);
