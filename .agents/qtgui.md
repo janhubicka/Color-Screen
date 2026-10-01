@@ -119,9 +119,11 @@ is also re-resolved at this outermost boundary: attach/detach can keep the same
 `ImageWidget` while changing its top-level status bar, so image-target changes
 alone are not a sufficient migration signal. During ordinary-view detach, make
 the peer top-level and give its canvas focus before restoring the borrowed
-document inspector. Workspace-side structural MDI activation must not steal an
-inspector physically hosted by that focused detached peer; a later deliberate
-workspace focus may reclaim it normally. When a secondary inspected
+document inspector. The document also records that detached peer explicitly in
+`InspectorImageRoutingState::detachedPresentation`; structural MDI activation
+must not infer a different owner merely because another subwindow became
+current. Reattachment/release clears the token, while a later deliberate
+workspace focus may reclaim the inspector normally. When a secondary inspected
 view closes, `WorkspaceWindow` explicitly rebinds the primary image; do not
 rely only on the `QPointer` becoming null, because the navigator/editing
 connections must be reinstalled as part of the same transition. A deleted MDI
