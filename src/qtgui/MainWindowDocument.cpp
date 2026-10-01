@@ -615,6 +615,15 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
       *m_imageLoad.screenAutodetectAfterGeneration != loadGeneration)
     m_imageLoad.screenAutodetectAfterGeneration.reset();
   m_imageLoad.pending = true;
+
+  // Progressive workers retain the outgoing m_scan until they unwind.  Marking
+  // image replacement pending is therefore part of their staleness contract:
+  // preserve batches/results already accepted before this user gesture, but
+  // reject/cancel every later point, geometry or adaptive-chart publication.
+  const ParameterState replacementState = getCurrentState();
+  cancelStaleAdaptiveSharpening(replacementState);
+  cancelStaleRegistrationDiscovery(replacementState);
+
   bool parameterDataLoaded = false;
   if (!suppressParamPrompt)
     m_recoveryDirty = false;
