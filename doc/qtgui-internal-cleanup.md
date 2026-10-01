@@ -842,8 +842,11 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   owned temporary status instruction to the final presentation bar; this is
   required for attached↔detached transitions where the inspector `ImageWidget`
   itself never changes. Closing a secondary view still rebinds the primary image
-  through `WorkspaceWindow`; the grouping keeps that lifecycle explicit.
-  Temporary canvas status
+  through `WorkspaceWindow`; the grouping keeps that lifecycle explicit. The
+  MDI wrapper-destruction callback also distinguishes a closed view from a live
+  detached view: only a gone or already-reattached view may trigger deferred
+  workspace activation. This prevents sanitizer-timing wrapper cleanup from
+  reclaiming the document inspector after detach. Temporary canvas status
   guidance follows the same presentation owner through `inspectorStatusBar()`.
   `TemporaryCanvasToolState` retains the exact `QStatusBar` on which its
   current instruction was published, allowing an attached peer to detach (or
