@@ -4390,6 +4390,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
             view->statusBar() != view->standaloneStatusBar() ||
             !view->standaloneStatusBar()->isVisible() ||
             first->statusBar() != workspace->statusBar() ||
+            first->detachedInspectorPresentation() != view ||
             first->inspectorImageWidget() != view->imageWidget() ||
             first->inspectorDialogParent() != view ||
             first->m_temporaryCanvas.instructionStatusBar.data() !=
@@ -4480,6 +4481,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
             view->statusBar() != workspace->statusBar() ||
             view->standaloneStatusBar()->isVisible() ||
             workspace->currentDocument() != first ||
+            first->detachedInspectorPresentation() ||
             first->inspectorImageWidget() != view->imageWidget() ||
             first->inspectorDialogParent() != workspace) {
           fail(QStringLiteral(
