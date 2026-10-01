@@ -831,10 +831,16 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
 - Group inspector-routing state that moves as one presentation unit.
   `InspectorImageRoutingState` owns the weak currently inspected
   `ImageWidget`, exactly the dynamic signal connections attached to that view,
-  and the temporary switching guard used while a document tool is transferred
-  between compatible ordinary views. Closing a secondary view still rebinds the
-  primary image through `WorkspaceWindow`; the grouping removes three parallel
-  MainWindow members without changing that lifecycle. Temporary canvas status
+  and a nestable presentation-handoff depth plus the pre-handoff canvas mode.
+  `WorkspaceWindow` opens that guard before moving shared chrome and closes it
+  only after the target presentation is installed. This prevents Qt's transient
+  toolbar/focus churn from turning Profile/Focus AddPoint, Generic Area,
+  Crop/Measure, or another selected canvas tool into Pan and then mistaking that
+  transient state for an explicit user cancellation. The outermost completion
+  reasserts the authoritative temporary intent (or remembered persistent mode)
+  on the final inspector canvas. Closing a secondary view still rebinds the
+  primary image through `WorkspaceWindow`; the grouping keeps that lifecycle
+  explicit. Temporary canvas status
   guidance follows the same presentation owner through `inspectorStatusBar()`.
   `TemporaryCanvasToolState` retains the exact `QStatusBar` on which its
   current instruction was published, allowing an attached peer to detach (or
