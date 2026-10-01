@@ -781,9 +781,11 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   loading. `m_scan` may retain the outgoing image until success, but
   `m_imageLoad.pending` is part of both request-current gates; existing
   progressive owners are cancelled/cleared synchronously and their launchers
-  refuse new work during that interval. The missing-image lifecycle smoke seeds
-  synthetic progressive owners and verifies this boundary before the loader
-  completes.
+  refuse new work during that interval. The shared OneShot entry point plus
+  geometry/profile optimization launchers reject the same outgoing scan while
+  replacement is pending. The missing-image lifecycle smoke seeds synthetic
+  progressive owners and verifies the immediate cancellation boundary before
+  the loader completes.
 - QuickMTF batch import is transactional at the GUI boundary too. Selected
   files are parsed into a private MTF collection without opening per-file modal
   warnings; valid files are published in one undoable edit that touches only
