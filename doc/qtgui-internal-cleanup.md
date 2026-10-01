@@ -770,6 +770,12 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   with all current GUI sources, headers and resources (including split
   `MainWindow` translation units) and with the static libcolorscreen image-I/O
   dependencies it must link explicitly.
+- Image-load completion no longer enters nested message-box loops. Main-image
+  failures publish a tracked `ImageLoadFailureDialog`; starting a newer load
+  dismisses that obsolete prompt with the old generation. Slanted-edge reference
+  failures use `ReferenceImageLoadFailureDialog`, keep the failed view alive
+  behind it, and close the view only while that exact warning still owns the
+  failed request. Both lifecycle smokes exercise retry/prompt supersession.
 - Give long-lived analysis state explicit structs rather than parallel member
   variables. Profile-calibration, geometry-fit, measured-MTF fit, flat-field
   calibration, automatic multi-area focus analysis, temporary canvas-tool
