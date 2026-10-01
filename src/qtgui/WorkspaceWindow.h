@@ -189,8 +189,11 @@ private:
   void updateWorkspaceProgressPresentation();
   void cycleWorkspaceProgress(int offset);
 
-  /** Put DOCUMENT's shared inspector in the workspace and target IMAGEWIDGET. */
-  void installDocumentInspector(MainWindow *document, ImageWidget *imageWidget);
+  /** Put DOCUMENT's shared inspector in the workspace and target IMAGEWIDGET.
+      ALLOWDETACHEDRECLAIM is reserved for a real top-level workspace
+      activation; structural MDI activation must respect a detached owner. */
+  void installDocumentInspector(MainWindow *document, ImageWidget *imageWidget,
+                                bool allowDetachedReclaim = false);
 
   /** Move TOOLBAR from OWNER into the permanent workspace toolbar slot. */
   void installWorkspaceToolBar(QMainWindow *owner, QToolBar *toolbar);
