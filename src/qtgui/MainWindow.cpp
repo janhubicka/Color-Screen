@@ -5087,14 +5087,11 @@ void MainWindow::onFlatFieldRequested() {
   if (m_closeLifecycle.closing())
     return;
 
-  // Supersede an older setup before opening another file chooser.  Clear
-  // ownership first because close() may emit rejected()/finished().
-  ++m_flatFieldCalibration.setupGeneration;
+  // Choosing references is already part of this final-result operation from
+  // the user's perspective. Supersede older approval/setup UI immediately,
+  // before opening another file chooser.
+  dismissOneShotPrompts();
   const uint64_t generation = m_flatFieldCalibration.setupGeneration;
-  if (QDialog *prompt = m_flatFieldCalibration.setupPrompt.data()) {
-    m_flatFieldCalibration.setupPrompt = nullptr;
-    prompt->close();
-  }
 
   const QString filters =
       "Images (*.tif *.tiff *.jpg *.jpeg *.raw *.dng *.iiq *.nef *.NEF *.cr2 "
