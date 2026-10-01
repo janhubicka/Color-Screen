@@ -5088,9 +5088,10 @@ void MainWindow::onFlatFieldRequested() {
     return;
 
   // Choosing references is already part of this final-result operation from
-  // the user's perspective. Supersede older approval/setup UI immediately,
-  // before opening another file chooser.
+  // the user's perspective. Supersede older approval/setup UI and computation
+  // immediately, before opening another file chooser.
   dismissOneShotPrompts();
+  m_oneShotOperations.cancelAll();
   const uint64_t generation = m_flatFieldCalibration.setupGeneration;
 
   const QString filters =
