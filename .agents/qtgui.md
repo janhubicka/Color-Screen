@@ -122,9 +122,11 @@ view closes, `WorkspaceWindow` explicitly rebinds the primary image; do not
 rely only on the `QPointer` becoming null, because the navigator/editing
 connections must be reinstalled as part of the same transition. A deleted MDI
 wrapper is not by itself evidence that the logical view closed: deliberate
-detach deletes the wrapper while keeping the view alive. Deferred wrapper
-cleanup must not run a fresh workspace activation in that case, or it can steal
-the one shared inspector back after the detached view has claimed it.
+detach deletes the wrapper while keeping the view alive. Mark that non-closing
+removal explicitly before wrapper deletion and consume the marker in deferred
+wrapper cleanup; do not infer detach from reparent/visibility timing. A marked
+detach must not run a fresh workspace activation, or it can steal the one shared
+inspector back after the detached view has claimed it.
 
 `WorkspaceWindow` must use `QMdiArea`, rather than maintaining a parallel custom
 tab implementation. The default view is `QMdiArea::TabbedView`; its internal
