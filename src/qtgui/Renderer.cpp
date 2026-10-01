@@ -279,6 +279,15 @@ RendererThreadOwner::start(
 
     m_receiver = receiver;
     m_thread = new QThread(receiver);
+#if defined(Q_OS_MAC)
+    // macOS gives secondary threads a much smaller default stack than the main
+    // thread.  The renderer can enter FFT/MTF precomputation with sanitizer-
+    // instrumented library frames, which can exhaust that default before any
+    // large image allocation occurs.  Give render workers the same 8 MiB stack
+    // budget as the macOS main thread; QThread reserves virtual address space
+    // and commits pages only as the stack grows.
+    m_thread->setStackSize(8u * 1024u * 1024u);
+#endif
     m_renderer = new Renderer(std::move(scan));
     Renderer *renderer = m_renderer.data();
     renderer->moveToThread(m_thread);
