@@ -187,7 +187,8 @@ public:
   /** Add the document-owned canvas actions to an ordinary secondary toolbar.
       These actions route through inspectorImageWidget(), so only the active
       ordinary presentation executes them. */
-  void appendOrdinaryViewToolActions(QToolBar *toolbar);
+  void appendOrdinaryViewToolActions(QToolBar *toolbar,
+                                     ImageWidget *imageWidget);
 
   /** Synchronize document-owned detected-patch diagnostics to one ordinary view. */
   void syncDetectedScreenDiagnostics(ImageWidget *image) const;
