@@ -1053,7 +1053,8 @@ bool WorkspaceWindow::restoreFocusFromTaskControl(QWidget *control) {
 
 /** Present DOCUMENT's one inspector in the workspace for IMAGEWIDGET. */
 void WorkspaceWindow::installDocumentInspector(MainWindow *document,
-                                               ImageWidget *imageWidget) {
+                                               ImageWidget *imageWidget,
+                                               bool allowDetachedReclaim) {
   if (!document) {
     m_inspectorDock->hide();
     return;
@@ -1072,9 +1073,7 @@ void WorkspaceWindow::installDocumentInspector(MainWindow *document,
   // this top-level window and may reclaim the inspector.
   if (auto *detachedView = qobject_cast<ImageViewWindow *>(
           document->detachedInspectorPresentation())) {
-    QWidget *focus = QApplication::focusWidget();
-    const bool workspaceFocused = focus && focus->window() == this;
-    if (!detachedView->isWorkspaceEmbedded() && !workspaceFocused) {
+    if (!detachedView->isWorkspaceEmbedded() && !allowDetachedReclaim) {
       m_inspectorDock->hide();
       return;
     }
@@ -1449,10 +1448,10 @@ void WorkspaceWindow::changeEvent(QEvent *event) {
 
   if (m_chromeDocument)
     installDocumentInspector(m_chromeDocument,
-                             m_chromeDocument->primaryImageWidget());
+                             m_chromeDocument->primaryImageWidget(), true);
   else if (m_chromeView && !m_chromeView->isSlantedEdgeReference())
     installDocumentInspector(m_chromeView->sourceDocument(),
-                             m_chromeView->imageWidget());
+                             m_chromeView->imageWidget(), true);
 }
 
 /** Close only the presentations hosted by this workspace shell. */
