@@ -2082,6 +2082,22 @@ void ImageWidget::keyPressEvent(QKeyEvent *event) {
     return;
   }
 
+  const Qt::KeyboardModifiers commandModifiers =
+      event->modifiers() &
+      (Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier);
+  if (m_interactionMode != ExploreMode && commandModifiers == Qt::NoModifier) {
+    if (event->key() == Qt::Key_Plus || event->key() == Qt::Key_Equal) {
+      smoothZoomBy(1.25);
+      event->accept();
+      return;
+    }
+    if (event->key() == Qt::Key_Minus) {
+      smoothZoomBy(1.0 / 1.1);
+      event->accept();
+      return;
+    }
+  }
+
   if (m_interactionMode == ExploreMode) {
       if (event->key() == Qt::Key_Plus || event->key() == Qt::Key_Equal || 
          (event->modifiers() & Qt::ControlModifier && event->key() == Qt::Key_Plus)) {
