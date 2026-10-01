@@ -350,10 +350,21 @@ void WorkspaceWindow::addView(ImageViewWindow *view) {
             configureTabBar();
           });
   QPointer<MainWindow> guardedSource(view->sourceDocument());
-  connect(subWindow, &QObject::destroyed, this, [this, guardedSource]() {
-    QTimer::singleShot(0, this, [this, guardedSource]() {
+  connect(subWindow, &QObject::destroyed, this,
+          [this, guardedSource, guardedView]() {
+    QTimer::singleShot(0, this, [this, guardedSource, guardedView]() {
       detachDocumentProgressIfUnused(guardedSource);
-      onSubWindowActivated(m_mdiArea->currentSubWindow());
+
+      // ViewSubWindow is destroyed both when a view closes and when a live view
+      // is deliberately detached. In the latter case removeView() has already
+      // settled the workspace chrome, then the detached view claimed the one
+      // shared document inspector. A deferred activation refresh here would
+      // steal that inspector back to the workspace current tab. Refresh only
+      // when the logical view is gone, or when it has meanwhile been attached
+      // again and therefore belongs to this MDI area.
+      if (!guardedView || containsView(guardedView))
+        onSubWindowActivated(m_mdiArea->currentSubWindow());
+
       configureTabBar();
       scheduleCloseIfEmpty();
     });
