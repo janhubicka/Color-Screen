@@ -1002,12 +1002,12 @@ void MainWindow::setupUi() {
             if (m_capturePanel) {
               m_capturePanel->setCropChecked(mode == ImageWidget::CropMode);
             }
-            if (!m_inspectorImageRouting.switching &&
+            if (!m_inspectorImageRouting.switching() &&
                 sender() == inspectorImageWidget() &&
                 mode != ImageWidget::AddPointMode &&
                 m_temporaryCanvas.pointClick.active())
               clearPointClickToolPresentation();
-            if (!m_inspectorImageRouting.switching &&
+            if (!m_inspectorImageRouting.switching() &&
                 sender() == inspectorImageWidget() &&
                 mode != ImageWidget::GenericAreaMode &&
                 m_temporaryCanvas.areaSelectionCallback) {
@@ -1016,7 +1016,7 @@ void MainWindow::setupUi() {
               // must not cancel the operation.
               cancelAreaSelectionPresentation();
             }
-            if (!m_inspectorImageRouting.switching &&
+            if (!m_inspectorImageRouting.switching() &&
                 sender() == inspectorImageWidget() &&
                 m_temporaryCanvas.instructionOwner &&
                 mode != *m_temporaryCanvas.instructionOwner)
@@ -2561,6 +2561,49 @@ void MainWindow::syncInspectorViewActions() {
   }
 }
 
+/** Suppress tool cancellation while Qt moves one document's presentation.
+
+    The first nesting level captures the currently selected canvas tool before
+    toolbar/inspector reparenting can generate transient focus/action updates. */
+void MainWindow::beginInspectorPresentationHandoff() {
+  if (m_inspectorImageRouting.switchDepth++ != 0)
+    return;
+  if (ImageWidget *image = inspectorImageWidget())
+    m_inspectorImageRouting.handoffMode = image->interactionMode();
+  else
+    m_inspectorImageRouting.handoffMode.reset();
+}
+
+/** Finish a presentation handoff and restore the authoritative tool intent. */
+void MainWindow::endInspectorPresentationHandoff() {
+  if (m_inspectorImageRouting.switchDepth <= 0)
+    return;
+  if (m_inspectorImageRouting.switchDepth > 1) {
+    --m_inspectorImageRouting.switchDepth;
+    return;
+  }
+
+  ImageWidget *image = inspectorImageWidget();
+  std::optional<ImageWidget::InteractionMode> desired =
+      m_inspectorImageRouting.handoffMode;
+
+  // Temporary document-owned intents are stronger than whichever persistent
+  // mode happened to be captured before the handoff.
+  if (m_temporaryCanvas.pointClick.active())
+    desired = ImageWidget::AddPointMode;
+  else if (m_temporaryCanvas.areaSelectionCallback)
+    desired = ImageWidget::GenericAreaMode;
+  else if (m_temporaryCanvas.instructionOwner)
+    desired = *m_temporaryCanvas.instructionOwner;
+
+  if (image && desired && image->interactionMode() != *desired)
+    image->setInteractionMode(*desired);
+
+  m_inspectorImageRouting.handoffMode.reset();
+  --m_inspectorImageRouting.switchDepth;
+  syncProfileSpotEditingPresentation();
+}
+
 /** Route the shared inspector's navigation and editing gestures to IMAGEWIDGET.
     Pending document tools follow between ordinary views of the same loaded scan.
     A view presenting a different image (for example a slanted-edge reference)
@@ -2569,6 +2612,10 @@ void MainWindow::setInspectorImageWidget(ImageWidget *imageWidget) {
   ImageWidget *target = imageWidget ? imageWidget : m_imageWidget;
   if (!acceptsInspectorImageWidget(target))
     return;
+
+  const bool ownsHandoff = !m_inspectorImageRouting.switching();
+  if (ownsHandoff)
+    beginInspectorPresentationHandoff();
 
   ImageWidget *previous = inspectorImageWidget();
   const ImageWidget::InteractionMode previousMode =
@@ -2610,10 +2657,8 @@ void MainWindow::setInspectorImageWidget(ImageWidget *imageWidget) {
   // canvas that happened to be active when it was armed. Move it to the newly
   // active compatible view and leave the old view harmlessly in Pan mode.
   if (transferTool) {
-    m_inspectorImageRouting.switching = true;
     previous->setInteractionMode(ImageWidget::PanMode);
     target->setInteractionMode(previousMode);
-    m_inspectorImageRouting.switching = false;
   }
 
   // The handoff itself owns the two canvases involved. Settle those directly
@@ -2717,13 +2762,13 @@ void MainWindow::setInspectorImageWidget(ImageWidget *imageWidget) {
         target, &ImageWidget::interactionModeChanged, this,
         [this](ImageWidget::InteractionMode mode) {
           syncInspectorInteractionActions(mode);
-          if (!m_inspectorImageRouting.switching && sender() == inspectorImageWidget() &&
+          if (!m_inspectorImageRouting.switching() && sender() == inspectorImageWidget() &&
               mode != ImageWidget::AddPointMode && m_temporaryCanvas.pointClick.active())
             clearPointClickToolPresentation();
-          if (!m_inspectorImageRouting.switching && sender() == inspectorImageWidget() &&
+          if (!m_inspectorImageRouting.switching() && sender() == inspectorImageWidget() &&
               mode != ImageWidget::GenericAreaMode && m_temporaryCanvas.areaSelectionCallback)
             cancelAreaSelectionPresentation();
-          if (!m_inspectorImageRouting.switching && sender() == inspectorImageWidget() &&
+          if (!m_inspectorImageRouting.switching() && sender() == inspectorImageWidget() &&
               m_temporaryCanvas.instructionOwner &&
               mode != *m_temporaryCanvas.instructionOwner)
             clearTemporaryCanvasInstruction();
@@ -2748,6 +2793,9 @@ void MainWindow::setInspectorImageWidget(ImageWidget *imageWidget) {
   updateRegistrationActions();
   syncFocusAreaOverlays(target);
   syncMtfMeasurementOverlay(target);
+
+  if (ownsHandoff)
+    endInspectorPresentationHandoff();
 }
 
 /** Reclaim the inspector when a detached primary document becomes active. */
