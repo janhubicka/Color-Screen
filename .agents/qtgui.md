@@ -275,6 +275,9 @@ the workspace owns their floating docks; after detaching a presentation, that
 presentation window becomes the dock host. This avoids nested `QMainWindow` dock
 ownership without reintroducing panel-specific wiring. **Reload and demosaic** reloads both the source scan and every associated
 slanted-edge reference from its own filename using the current demosaic mode.
+Reference loading itself follows the asynchronous image-loading failure contract
+above; a failed reference remains alive behind its owned warning until dismissal
+unless a newer reload supersedes that warning first.
 
 Reference-image slanted-edge measurements use the source document's public
 `runOneShotOperation()` lifecycle. The reference supplies guarded GUI callbacks
@@ -1004,6 +1007,17 @@ To maintain consistency across different UI actions, use the following standardi
     4. A `bool` success result from the numerical worker.
     5. Pushing an undoable parameter change only on success.
   Cancellation is not a numerical failure. Generic Image Layer/Color callers use the shared preserved-state failure guidance; callers with a more specific failure surface (currently slanted-edge MTF) may suppress that generic message while still returning `false`.
+- **Image loading**: Main-image and slanted-edge-reference bytes are loaded
+  asynchronously. Numerical/load failure must therefore return to the ordinary
+  Qt event loop before presenting UI. Main documents use the parent-owned
+  `ImageLoadFailureDialog`; reference views use
+  `ReferenceImageLoadFailureDialog`. Both are delete-on-close asynchronous
+  warnings. A newer main-image request dismisses an obsolete load-failure
+  warning together with superseding the old generation. Reference views track
+  their warning as request presentation state too: starting another reference
+  load revokes ownership and closes the obsolete warning first, so dismissing an
+  old box cannot close a successfully retried view. Never call static
+  `QMessageBox::critical()` from an image-load completion callback.
 - **Parameter loading**: Every `.par` ingress path uses the same transactional `loadParameterPayload()` parser. `loadParameterFile()` (dialogs, Recent, drag/drop) and the optional image-sidecar loader both parse the complete core + Qt metadata payload into a private default `ParameterState`, then publish only on success. Open/parse failure must leave live document parameters and calibration provenance untouched. Explicit parameter loading must also preserve the current parameter-file target and Undo/dirty state. A failed sidecar is never adopted as loaded; keep it only as a suggested Save-As target so any overwrite still requires confirmation. Failure reporting is a parent-owned asynchronous `ParameterLoadFailureDialog`, not a nested static error box. On successful explicit load, adopt the target, clear stale calibration/session provenance, reset Undo/dirty state, and refresh the UI consistently.
 
 ### 7. Documentation

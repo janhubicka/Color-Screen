@@ -27,6 +27,7 @@ class QCloseEvent;
 class QComboBox;
 class QDockWidget;
 class QDialog;
+class QMessageBox;
 class QStatusBar;
 class QToolBar;
 
@@ -216,6 +217,7 @@ private:
   WorkspacePresentationState m_workspacePresentation;
   bool m_slantedEdgeReference = false;
   bool m_referenceLoadPending = false;
+  QPointer<QMessageBox> m_referenceLoadFailurePrompt;
   QString m_referenceFile;
   int m_selectedMtfMeasurement = -1;
   /** Mutex-published worker/result handoff for one asynchronous reference load.

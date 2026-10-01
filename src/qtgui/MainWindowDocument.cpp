@@ -590,6 +590,14 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
   if (fileName.isEmpty())
     return;
 
+  // A failed older load may still have a non-blocking warning open. Starting a
+  // new image request supersedes that presentation just like it supersedes the
+  // old worker/result generation.
+  if (m_imageLoad.failurePrompt) {
+    m_imageLoad.failurePrompt->close();
+    m_imageLoad.failurePrompt.clear();
+  }
+
   // Final-result work and any pending one-shot confirmation belong to the
   // current image snapshot. Invalidate both before starting replacement I/O.
   dismissOneShotPrompts();
@@ -856,12 +864,21 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
 
         } else {
           updateWindowTitle();
-          if (progress->cancelled()) {
-          } else {
-            QMessageBox::critical(this, "Error Loading Image",
-                                  result.second.isEmpty()
-                                      ? "Failed to load image."
-                                      : result.second);
+          if (!progress->cancelled()) {
+            auto *message = new QMessageBox(
+                QMessageBox::Critical, tr("Error Loading Image"),
+                result.second.isEmpty() ? tr("Failed to load image.")
+                                        : result.second,
+                QMessageBox::Ok, this);
+            message->setObjectName(QStringLiteral("ImageLoadFailureDialog"));
+            message->setAttribute(Qt::WA_DeleteOnClose);
+            m_imageLoad.failurePrompt = message;
+            connect(message, &QMessageBox::finished, this,
+                    [this, message](int) {
+                      if (m_imageLoad.failurePrompt == message)
+                        m_imageLoad.failurePrompt.clear();
+                    });
+            message->open();
           }
         }
       });

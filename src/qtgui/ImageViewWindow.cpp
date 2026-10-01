@@ -551,6 +551,12 @@ void ImageViewWindow::loadReferenceImage(const QString &fileName) {
   if (!m_slantedEdgeReference || fileName.isEmpty() || m_referenceLoadPending)
     return;
 
+  if (m_referenceLoadFailurePrompt) {
+    QPointer<QMessageBox> obsolete = m_referenceLoadFailurePrompt;
+    m_referenceLoadFailurePrompt.clear();
+    obsolete->close();
+  }
+
   // Invalidate immediately, even if the reload fails and leaves the old scan.
   cancelReferenceMtfMeasurement();
   m_referenceLoadPending = true;
@@ -622,10 +628,28 @@ void ImageViewWindow::finishReferenceLoad() {
 
   m_referenceLoadPending = false;
   if (!ok) {
-    QMessageBox::critical(this, tr("Error Loading Slanted Edge Reference"),
-                          error.isEmpty() ? tr("Failed to load image.")
-                                          : error);
-    close();
+    auto *message = new QMessageBox(
+        QMessageBox::Critical, tr("Error Loading Slanted Edge Reference"),
+        error.isEmpty() ? tr("Failed to load image.") : error,
+        QMessageBox::Ok, this);
+    message->setObjectName(
+        QStringLiteral("ReferenceImageLoadFailureDialog"));
+    message->setAttribute(Qt::WA_DeleteOnClose);
+    m_referenceLoadFailurePrompt = message;
+
+    // Reference loading completes asynchronously. Do not enter a nested modal
+    // event loop from that completion callback. Keep the failed view alive
+    // behind its warning, and close it only while that exact warning still owns
+    // the failed request. A reload revokes ownership before closing an obsolete
+    // warning, so dismissing it cannot kill a successfully retried view.
+    QPointer<ImageViewWindow> view(this);
+    connect(message, &QMessageBox::finished, this, [view, message](int) {
+      if (!view || view->m_referenceLoadFailurePrompt != message)
+        return;
+      view->m_referenceLoadFailurePrompt.clear();
+      view->close();
+    });
+    message->open();
     return;
   }
 

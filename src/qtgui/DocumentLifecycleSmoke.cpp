@@ -45,6 +45,7 @@ struct DocumentLifecycleState {
   QPointer<MainWindow> second;
   QPointer<ImageViewWindow> view;
   QPointer<MainWindow> recoveryProbe;
+  QPointer<QMessageBox> obsoleteImageLoadFailure;
   std::unique_ptr<QTemporaryDir> temporaryDirectory;
   QString recoveryProbeDirectory;
   QString recoveryExpectedImage;
@@ -667,6 +668,98 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
         }
         recoveryWarning->close();
         delete corruptProbe;
+
+        // Main image loading is asynchronous too. A missing file must leave the
+        // hidden probe empty and publish a parent-owned warning without entering
+        // a nested static QMessageBox event loop.
+        const QString loadProbeDirectory =
+            state->temporaryDirectory->filePath(
+                QStringLiteral("image-load-failure"));
+        if (!QDir().mkpath(loadProbeDirectory)) {
+          fail(QStringLiteral(
+              "Image-load failure smoke could not create its probe directory"));
+          return;
+        }
+        auto *loadProbe = new MainWindow(loadProbeDirectory);
+        loadProbe->hide();
+        state->recoveryProbe = loadProbe;
+        loadProbe->loadFile(
+            state->temporaryDirectory->filePath(
+                QStringLiteral("missing-image-load.tif")),
+            true);
+        if (!loadProbe->m_imageLoad.pending) {
+          delete loadProbe;
+          state->recoveryProbe = nullptr;
+          fail(QStringLiteral(
+              "Image-load failure smoke did not start asynchronous loading"));
+          return;
+        }
+        schedule(-2, 50, 120);
+        return;
+      }
+
+      case -2: {
+        MainWindow *probe = state->recoveryProbe.data();
+        if (!probe) {
+          fail(QStringLiteral(
+              "Image-load failure smoke lost its hidden document"));
+          return;
+        }
+        if (probe->m_imageLoad.pending) {
+          retryOrFail(QStringLiteral("Missing image load did not finish"));
+          return;
+        }
+        QMessageBox *loadFailure = probe->findChild<QMessageBox *>(
+            QStringLiteral("ImageLoadFailureDialog"));
+        if (!loadFailure || probe->sharedImageData() ||
+            probe->m_imageLoad.failurePrompt != loadFailure) {
+          fail(QStringLiteral(
+              "Missing image load did not retain empty state with its asynchronous warning"));
+          return;
+        }
+
+        // A newer load supersedes both worker generation and failure
+        // presentation. Closing the obsolete warning must not clear ownership
+        // of the newer request.
+        state->obsoleteImageLoadFailure = loadFailure;
+        probe->loadFile(
+            state->temporaryDirectory->filePath(
+                QStringLiteral("missing-image-load-retry.tif")),
+            true);
+        if (!probe->m_imageLoad.pending || probe->m_imageLoad.failurePrompt) {
+          fail(QStringLiteral(
+              "Retrying a failed image load did not supersede its old warning"));
+          return;
+        }
+        schedule(-3, 50, 120);
+        return;
+      }
+
+      case -3: {
+        MainWindow *probe = state->recoveryProbe.data();
+        if (!probe) {
+          fail(QStringLiteral(
+              "Retried image-load failure smoke lost its document"));
+          return;
+        }
+        if (probe->m_imageLoad.pending) {
+          retryOrFail(QStringLiteral(
+              "Retried missing image load did not finish"));
+          return;
+        }
+        QMessageBox *loadFailure = probe->m_imageLoad.failurePrompt.data();
+        if (!loadFailure || probe->sharedImageData() ||
+            loadFailure->objectName() != QStringLiteral("ImageLoadFailureDialog") ||
+            (state->obsoleteImageLoadFailure &&
+             loadFailure == state->obsoleteImageLoadFailure)) {
+          fail(QStringLiteral(
+              "Retried missing image load did not replace its obsolete warning"));
+          return;
+        }
+        loadFailure->accept();
+        state->obsoleteImageLoadFailure.clear();
+        delete probe;
+        state->recoveryProbe = nullptr;
 
         schedule(0, 0, 40);
         return;
