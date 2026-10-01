@@ -842,10 +842,11 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   owned temporary status instruction to the final presentation bar; this is
   required for attached↔detached transitions where the inspector `ImageWidget`
   itself never changes. Ordinary-view detach establishes the new top-level
-  canvas focus before restoring the document inspector. Structural MDI
-  activation may refresh the remaining workspace chrome but must not reparent a
-  shared inspector away from a focused detached peer; explicit later workspace
-  focus remains the ownership-transfer boundary. Closing a secondary view still rebinds the primary image
+  canvas focus before restoring the document inspector and records that peer as
+  the document's explicit `detachedPresentation`. Structural MDI activation may
+  refresh remaining workspace chrome but must not infer a new inspector owner
+  from the incidental current-subwindow change. Reattachment/release clears the
+  token; explicit later workspace focus remains the ownership-transfer boundary. Closing a secondary view still rebinds the primary image
   through `WorkspaceWindow`; the grouping keeps that lifecycle explicit. The
   MDI wrapper-destruction callback also distinguishes close from deliberate
   detach without consulting transient widget state. `takeViewFromWorkspace()`
