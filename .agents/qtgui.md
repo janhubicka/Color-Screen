@@ -726,6 +726,13 @@ Mouse interaction logic is delegated based on `InteractionMode`. This ensures th
 - Keep mouse tracking enabled in normal canvas modes when hover feedback is
   implemented; entering and leaving a special navigation mode must not silently
   disable later hover behavior.
+- Keep canvas-only keyboard shortcuts scoped to the canvas. Single-letter
+  Pan/Select/Add Point/Screen-coordinate tools, registration selection/deletion,
+  render-mode digits, and bare +/=/- zoom must not consume text or numeric input
+  from inspector editors. Use `Qt::WidgetWithChildrenShortcut` on actions
+  explicitly associated with each ordinary `ImageWidget`; bare zoom belongs in
+  `ImageWidget::keyPressEvent()`. Ordinary New Views reuse the document-owned
+  tool actions rather than creating competing shortcut owners.
 
 #### Screen-coordinate bootstrap and ownership
 
