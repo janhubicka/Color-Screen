@@ -1018,7 +1018,8 @@ To maintain consistency across different UI actions, use the following standardi
   `ImageLoadFailureDialog`; reference views use
   `ReferenceImageLoadFailureDialog`. Both are delete-on-close asynchronous
   warnings. A newer request revokes/closes the obsolete warning before starting,
-  so an old `finished` callback cannot affect the replacement request.
+  so an old `finished` callback cannot affect the replacement request. Treat
+  these dialogs as request presentation state, not as synchronous control flow.
 - **Parameter loading**: Every `.par` ingress path uses the same transactional `loadParameterPayload()` parser. `loadParameterFile()` (dialogs, Recent, drag/drop) and the optional image-sidecar loader both parse the complete core + Qt metadata payload into a private default `ParameterState`, then publish only on success. Open/parse failure must leave live document parameters and calibration provenance untouched. Explicit parameter loading must also preserve the current parameter-file target and Undo/dirty state. A failed sidecar is never adopted as loaded; keep it only as a suggested Save-As target so any overwrite still requires confirmation. Failure reporting is a parent-owned asynchronous `ParameterLoadFailureDialog`, not a nested static error box. On successful explicit load, adopt the target, clear stale calibration/session provenance, reset Undo/dirty state, and refresh the UI consistently.
 
 ### 7. Documentation
