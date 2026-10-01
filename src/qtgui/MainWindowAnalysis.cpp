@@ -952,7 +952,7 @@ void MainWindow::cancelStaleAdaptiveSharpening(
     publish into a newer document state. */
 void MainWindow::onAdaptiveSharpeningRequested(
     const AdaptiveSharpeningParameters &parameters) {
-  if (!m_scan)
+  if (!m_scan || m_imageLoad.pending)
     return;
   if (!colorscreen::screen_geometry_configured_p(m_scrToImgParams)) {
     inspectorStatusBar()->showMessage(
