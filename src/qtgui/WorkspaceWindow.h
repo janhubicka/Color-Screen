@@ -5,6 +5,7 @@
 #include <QPoint>
 #include <QPointer>
 #include <QShowEvent>
+#include <QSet>
 #include <QStatusBar>
 
 class MainWindow;
@@ -244,6 +245,10 @@ private:
   QDockWidget *m_userVisibleProgressDock = nullptr;
   QPointer<MainWindow> m_chromeDocument;
   QPointer<ImageViewWindow> m_chromeView;
+  // ViewSubWindow wrappers are deleted for both close and detach. Record the
+  // deliberate-detach path explicitly until that old wrapper's deferred
+  // destruction callback has been consumed.
+  QSet<ImageViewWindow *> m_detachingViews;
   QPointer<QObject> m_tabBar;
   QPointer<QWidget> m_dragWindow;
   QPoint m_dragStartGlobal;
