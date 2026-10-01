@@ -683,15 +683,43 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
         auto *loadProbe = new MainWindow(loadProbeDirectory);
         loadProbe->hide();
         state->recoveryProbe = loadProbe;
+
+        // Image replacement itself must invalidate progressive publication,
+        // before the asynchronous loader can finish and change m_scan. Seed
+        // synthetic current owners so this missing-file probe exercises the
+        // synchronous replacement boundary without running expensive workers.
+        const ParameterState outgoingState = loadProbe->getCurrentState();
+        auto adaptiveProgress =
+            std::make_shared<colorscreen::progress_info>();
+        ++loadProbe->m_adaptiveSharpening.generation;
+        loadProbe->m_adaptiveSharpening.baseline = outgoingState;
+        loadProbe->m_adaptiveSharpening.scan = loadProbe->m_scan;
+        loadProbe->m_adaptiveSharpening.progress = adaptiveProgress;
+
+        auto registrationProgress =
+            std::make_shared<colorscreen::progress_info>();
+        ++loadProbe->m_registrationDiscovery.generation;
+        loadProbe->m_registrationDiscovery.expectedState = outgoingState;
+        loadProbe->m_registrationDiscovery.scan = loadProbe->m_scan;
+        loadProbe->m_registrationDiscovery.progress = registrationProgress;
+
         loadProbe->loadFile(
             state->temporaryDirectory->filePath(
                 QStringLiteral("missing-image-load.tif")),
             true);
-        if (!loadProbe->m_imageLoad.pending) {
+        if (!loadProbe->m_imageLoad.pending ||
+            !adaptiveProgress->pool_cancel() ||
+            loadProbe->m_adaptiveSharpening.baseline ||
+            loadProbe->m_adaptiveSharpening.scan ||
+            !loadProbe->m_adaptiveSharpening.progress.expired() ||
+            !registrationProgress->pool_cancel() ||
+            loadProbe->m_registrationDiscovery.expectedState ||
+            loadProbe->m_registrationDiscovery.scan ||
+            !loadProbe->m_registrationDiscovery.progress.expired()) {
           delete loadProbe;
           state->recoveryProbe = nullptr;
           fail(QStringLiteral(
-              "Image-load failure smoke did not start asynchronous loading"));
+              "Image replacement did not synchronously invalidate progressive analysis"));
           return;
         }
         schedule(-2, 50, 120);
