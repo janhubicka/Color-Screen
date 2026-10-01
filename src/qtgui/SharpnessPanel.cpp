@@ -1019,46 +1019,74 @@ void SharpnessPanel::fitMeasuredMtf() {
 }
 
 void SharpnessPanel::loadMTF() {
-  QStringList fileNames = QFileDialog::getOpenFileNames(
+  const QStringList fileNames = QFileDialog::getOpenFileNames(
       this, tr("Load QuickMTF measurements"), "",
       tr("QuickMTF files (*.csv *.txt);;All Files (*)"));
 
   if (fileNames.isEmpty())
     return;
 
-  ParameterState state = m_stateGetter();
-  bool anySuccess = false;
+  // Parse every selected file before publishing anything.  In particular, do
+  // not enter a nested warning event loop halfway through the batch while
+  // holding a whole ParameterState snapshot: another GUI action or completion
+  // could then make that snapshot stale before it was written back.
+  colorscreen::mtf_parameters loadedMtf =
+      m_stateGetter().rparams.sharpen.scanner_mtf;
+  QStringList errors;
+  int loadedFiles = 0;
 
   for (const QString &fileName : fileNames) {
     FILE *f = fopen(fileName.toLocal8Bit().constData(), "r");
     if (!f) {
-      QMessageBox::warning(this, tr("Warning"),
-                            tr("Could not open file %1").arg(fileName));
+      errors.push_back(tr("%1: could not open file").arg(fileName));
       continue;
     }
 
     const char *error = nullptr;
-    std::string baseName = QFileInfo(fileName).completeBaseName().toStdString();
-    if (state.rparams.sharpen.scanner_mtf.load_csv(
-            f, baseName, &error) < 0) {
-      QMessageBox::warning(
-          this, tr("Warning"),
-          tr("Error loading MTF measurement from %1: %2")
-              .arg(fileName)
-              .arg(error ? QString::fromUtf8(error) : tr("Unknown error")));
-      fclose(f);
+    const std::string baseName =
+        QFileInfo(fileName).completeBaseName().toStdString();
+    const int loaded =
+        loadedMtf.load_csv(f, baseName, &error);
+    fclose(f);
+    if (loaded < 0) {
+      errors.push_back(
+          tr("%1: %2")
+              .arg(fileName,
+                   error ? QString::fromUtf8(error) : tr("Unknown error")));
       continue;
     }
-    fclose(f);
-    anySuccess = true;
+    ++loadedFiles;
   }
 
-  if (anySuccess) {
-    // Now apply the change
-    applyChange([state](ParameterState &s) {
-      s = state;
-    }, tr("Load MTF measurements"));
+  if (loadedFiles > 0) {
+    // QuickMTF import changes only the measured-MTF collection.  Keep any
+    // unrelated live ParameterState fields authoritative.
+    applyChange(
+        [loadedMtf](ParameterState &s) {
+          s.rparams.sharpen.scanner_mtf = loadedMtf;
+        },
+        tr("Load MTF measurements"));
     updateMeasurementList();
+  }
+
+  if (!errors.isEmpty()) {
+    auto *box = new QMessageBox(
+        QMessageBox::Warning,
+        loadedFiles > 0 ? tr("Some MTF Measurements Were Skipped")
+                        : tr("MTF Measurement Load Failed"),
+        loadedFiles > 0
+            ? tr("Valid QuickMTF files were loaded. %1 selected file%2 could "
+                 "not be loaded and %3 skipped.")
+                  .arg(errors.size())
+                  .arg(errors.size() == 1 ? QString() : QStringLiteral("s"))
+                  .arg(errors.size() == 1 ? tr("was") : tr("were"))
+            : tr("No selected QuickMTF file could be loaded. Existing "
+                 "measurements were left unchanged."),
+        QMessageBox::Ok, this);
+    box->setObjectName(QStringLiteral("MtfMeasurementLoadFailureDialog"));
+    box->setDetailedText(errors.join(QLatin1Char('\n')));
+    box->setAttribute(Qt::WA_DeleteOnClose);
+    box->open();
   }
 }
 
