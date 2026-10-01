@@ -2601,6 +2601,7 @@ void MainWindow::endInspectorPresentationHandoff() {
 
   m_inspectorImageRouting.handoffMode.reset();
   --m_inspectorImageRouting.switchDepth;
+  syncTemporaryCanvasInstructionPresentation();
   syncProfileSpotEditingPresentation();
 }
 
@@ -2632,21 +2633,8 @@ void MainWindow::setInspectorImageWidget(ImageWidget *imageWidget) {
 
   // The same ImageWidget can survive an attached <-> detached reparenting, so
   // pointer identity alone does not reveal that the top-level status owner
-  // changed. Move an armed temporary instruction using the bar remembered when
-  // it was originally published.
-  if (m_temporaryCanvas.instructionOwner &&
-      !m_temporaryCanvas.instructionText.isEmpty()) {
-    QStatusBar *oldBar = m_temporaryCanvas.instructionStatusBar.data();
-    QStatusBar *newBar = inspectorStatusBar();
-    if (oldBar != newBar) {
-      if (oldBar &&
-          oldBar->currentMessage() == m_temporaryCanvas.instructionText)
-        oldBar->clearMessage();
-      if (newBar)
-        newBar->showMessage(m_temporaryCanvas.instructionText);
-      m_temporaryCanvas.instructionStatusBar = newBar;
-    }
-  }
+  // changed.
+  syncTemporaryCanvasInstructionPresentation();
 
   syncDetectedScreenDiagnostics(target);
   syncProfileSpotOverlay(target);
@@ -3929,6 +3917,29 @@ void MainWindow::showTemporaryCanvasInstruction(
   m_temporaryCanvas.instructionStatusBar = bar;
   if (bar)
     bar->showMessage(message);
+}
+
+/** Move an owned temporary instruction to the current presentation.
+
+    The inspected ImageWidget can remain identical while its top-level owner
+    changes between WorkspaceWindow and a detached ImageViewWindow. Resolve the
+    final status bar explicitly instead of relying on image-target changes to
+    notice that presentation transition. */
+void MainWindow::syncTemporaryCanvasInstructionPresentation() {
+  if (!m_temporaryCanvas.instructionOwner ||
+      m_temporaryCanvas.instructionText.isEmpty())
+    return;
+
+  QStatusBar *oldBar = m_temporaryCanvas.instructionStatusBar.data();
+  QStatusBar *newBar = inspectorStatusBar();
+  if (oldBar == newBar)
+    return;
+
+  if (oldBar && oldBar->currentMessage() == m_temporaryCanvas.instructionText)
+    oldBar->clearMessage();
+  if (newBar)
+    newBar->showMessage(m_temporaryCanvas.instructionText);
+  m_temporaryCanvas.instructionStatusBar = newBar;
 }
 
 /** Clear only the temporary instruction we still own.
