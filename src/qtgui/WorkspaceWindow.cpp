@@ -1065,19 +1065,20 @@ void WorkspaceWindow::installDocumentInspector(MainWindow *document,
     return;
   }
 
-  // A detached ordinary view may currently present this one shared document
-  // inspector. Structural QMdiArea activation while that view is being detached
-  // must not steal it back merely because another subwindow became current.
-  // Once the operator actually focuses the workspace, focus belongs to this
-  // top-level window and ordinary installation proceeds.
-  if (auto *detachedView =
-          qobject_cast<ImageViewWindow *>(inspector->window())) {
+  // Detached ordinary views explicitly own the one shared inspector. A
+  // structural QMdiArea activation (for example the remaining tab becoming
+  // current while its peer is detached) must not infer ownership from that
+  // incidental activation. A genuine workspace interaction has focus inside
+  // this top-level window and may reclaim the inspector.
+  if (ImageViewWindow *detachedView =
+          document->detachedInspectorPresentation()) {
     QWidget *focus = QApplication::focusWidget();
-    if (!detachedView->isWorkspaceEmbedded() && focus &&
-        focus->window() == detachedView) {
+    const bool workspaceFocused = focus && focus->window() == this;
+    if (!detachedView->isWorkspaceEmbedded() && !workspaceFocused) {
       m_inspectorDock->hide();
       return;
     }
+    document->clearDetachedInspectorPresentation(detachedView);
   }
 
   if (m_inspectorStack->indexOf(inspector) < 0) {
