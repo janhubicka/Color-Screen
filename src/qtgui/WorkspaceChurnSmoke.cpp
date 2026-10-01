@@ -1272,7 +1272,9 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
           view->imageWidget()->setShowProfileSpots(false);
           workspace->activateDocument(first);
           profileAddSpotButton->setChecked(true);
-          if (!first->m_imageWidget->profileSpotEditing() ||
+          if (!first->m_temporaryCanvas.pointClick.profileSpot() ||
+              first->m_imageWidget->interactionMode() != ImageWidget::AddPointMode ||
+              !first->m_imageWidget->profileSpotEditing() ||
               view->imageWidget()->profileSpotEditing() ||
               first->m_imageWidget->profileSpotsVisible() ||
               view->imageWidget()->profileSpotsVisible()) {
