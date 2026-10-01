@@ -680,6 +680,15 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   Geometry/color optimizer queues and workers that intentionally publish
   intermediate results retain their separate lifecycle contracts; do not force
   them through `OneShotOperation` merely to remove another queue.
+- Canvas keyboard shortcuts now respect editor focus. P/S/A/C and registration
+  selection/deletion actions use `Qt::WidgetWithChildrenShortcut` and are
+  associated with every ordinary image canvas, so typing in inspector fields
+  cannot change tools or document registration state. Render-mode digits are
+  likewise primary-canvas shortcuts. Bare +/=/- zoom moved into
+  `ImageWidget::keyPressEvent()`, while standard Ctrl/Cmd zoom remains
+  window-wide. Ordinary New Views no longer retain private Pan/Zoom/Rotate
+  shortcuts that compete with the document-owned actions they already present.
+  Workspace churn checks both shortcut scope and peer-canvas association.
 - Workflow guidance now has a conservative navigation affordance: when
   `Next:` points to one specific inspector stage, **Open stage** resolves that
   destination through the stable semantic tab key and records the click as the
@@ -822,10 +831,30 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
 - Group inspector-routing state that moves as one presentation unit.
   `InspectorImageRoutingState` owns the weak currently inspected
   `ImageWidget`, exactly the dynamic signal connections attached to that view,
-  and the temporary switching guard used while a document tool is transferred
-  between compatible ordinary views. Closing a secondary view still rebinds the
-  primary image through `WorkspaceWindow`; the grouping removes three parallel
-  MainWindow members without changing that lifecycle. Temporary canvas status
+  and a nestable presentation-handoff depth plus the pre-handoff canvas mode.
+  `WorkspaceWindow` opens that guard before moving shared chrome and closes it
+  only after the target presentation is installed. This prevents Qt's transient
+  toolbar/focus churn from turning Profile/Focus AddPoint, Generic Area,
+  Crop/Measure, or another selected canvas tool into Pan and then mistaking that
+  transient state for an explicit user cancellation. The outermost completion
+  reasserts the authoritative temporary intent (or remembered persistent mode)
+  on the final inspector canvas. The outermost completion also migrates any
+  owned temporary status instruction to the final presentation bar; this is
+  required for attached↔detached transitions where the inspector `ImageWidget`
+  itself never changes. Ordinary-view detach establishes the new top-level
+  canvas focus before restoring the document inspector and records that peer as
+  the document's explicit `detachedPresentation`. Structural MDI activation may
+  refresh remaining workspace chrome but must not infer a new inspector owner
+  from the incidental current-subwindow change. Reattachment/release clears the
+  token; explicit later workspace focus remains the ownership-transfer boundary. Closing a secondary view still rebinds the primary image
+  through `WorkspaceWindow`; the grouping keeps that lifecycle explicit. The
+  MDI wrapper-destruction callback also distinguishes close from deliberate
+  detach without consulting transient widget state. `takeViewFromWorkspace()`
+  records the non-closing removal in `m_detachingViews` before deleting the old
+  wrapper; the deferred destroyed callback consumes that marker and skips only
+  that workspace activation. Actual close is unmarked and still refreshes
+  normally. This prevents sanitizer-timing wrapper cleanup from reclaiming the
+  document inspector after detach. Temporary canvas status
   guidance follows the same presentation owner through `inspectorStatusBar()`.
   `TemporaryCanvasToolState` retains the exact `QStatusBar` on which its
   current instruction was published, allowing an attached peer to detach (or

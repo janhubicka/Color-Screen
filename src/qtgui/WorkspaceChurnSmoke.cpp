@@ -297,6 +297,79 @@ void startWorkspaceChurnSmoke(ColorScreenApplication &app,
           return;
         }
 
+        // Canvas-edit shortcuts must not consume text typed into the borrowed
+        // inspector. The shared actions are scoped to ImageWidget descendants
+        // and installed on both the primary and ordinary peer canvases.
+        const QList<QAction *> canvasShortcutActions = {
+            first->m_panAction,            first->m_selectAction,
+            first->m_addPointAction,       first->m_setCenterAction,
+            first->m_selectAllAction,      first->m_deselectAllAction,
+            first->m_deleteSelectedAction, first->m_pruneMisplacedAction,
+            first->m_rotateLeftAction,     first->m_rotateRightAction};
+        for (QAction *action : canvasShortcutActions) {
+          if (!action ||
+              action->shortcutContext() != Qt::WidgetWithChildrenShortcut ||
+              !first->m_imageWidget->actions().contains(action) ||
+              !view->imageWidget()->actions().contains(action)) {
+            fail(QStringLiteral(
+                "Canvas editing shortcut escaped its ordinary-view scope"));
+            return;
+          }
+        }
+
+        for (QAction *action : first->m_modeActions) {
+          if (!action ||
+              action->shortcutContext() != Qt::WidgetWithChildrenShortcut ||
+              !first->m_imageWidget->actions().contains(action) ||
+              first->actions().contains(action)) {
+            fail(QStringLiteral(
+                "Render-mode digit shortcut escaped the primary canvas"));
+            return;
+          }
+        }
+        if (first->m_zoomInAction->shortcuts().contains(
+                QKeySequence(Qt::Key_Plus)) ||
+            first->m_zoomInAction->shortcuts().contains(
+                QKeySequence(Qt::Key_Equal)) ||
+            first->m_zoomOutAction->shortcuts().contains(
+                QKeySequence(Qt::Key_Minus))) {
+          fail(QStringLiteral(
+              "Bare zoom shortcut remained window-scoped"));
+          return;
+        }
+
+        if (view->m_modeActions.size() != 10) {
+          fail(QStringLiteral(
+              "Ordinary peer lost its view-local render-mode shortcuts"));
+          return;
+        }
+        for (QAction *action : view->m_modeActions) {
+          if (!action ||
+              action->shortcutContext() != Qt::WidgetWithChildrenShortcut ||
+              !view->imageWidget()->actions().contains(action)) {
+            fail(QStringLiteral(
+                "Ordinary peer render-mode shortcut escaped its canvas"));
+            return;
+          }
+        }
+
+        // Ordinary peers use the document-owned navigation/tool shortcuts.
+        // Their private View-menu actions must not retain competing shortcuts.
+        const QStringList localViewActionNames = {
+            QStringLiteral("Pan"), QStringLiteral("Zoom In"),
+            QStringLiteral("Zoom Out"), QStringLiteral("Zoom 1:1"),
+            QStringLiteral("Fit"), QStringLiteral("Rotate Left"),
+            QStringLiteral("Rotate Right")};
+        for (QAction *action :
+             view->findChildren<QAction *>(QString(), Qt::FindDirectChildrenOnly)) {
+          if (action && localViewActionNames.contains(action->text()) &&
+              !action->shortcuts().isEmpty()) {
+            fail(QStringLiteral(
+                "Ordinary peer retained a duplicate private canvas shortcut"));
+            return;
+          }
+        }
+
         // Attached documents deliberately reparent their inspector column into
         // WorkspaceWindow's shared inspector stack.  Follow the document-owned
         // inspector handle rather than relying on QObject parentage.
@@ -1199,7 +1272,9 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
           view->imageWidget()->setShowProfileSpots(false);
           workspace->activateDocument(first);
           profileAddSpotButton->setChecked(true);
-          if (!first->m_imageWidget->profileSpotEditing() ||
+          if (!first->m_temporaryCanvas.pointClick.profileSpot() ||
+              first->m_imageWidget->interactionMode() != ImageWidget::AddPointMode ||
+              !first->m_imageWidget->profileSpotEditing() ||
               view->imageWidget()->profileSpotEditing() ||
               first->m_imageWidget->profileSpotsVisible() ||
               view->imageWidget()->profileSpotsVisible()) {
@@ -4315,6 +4390,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
             view->statusBar() != view->standaloneStatusBar() ||
             !view->standaloneStatusBar()->isVisible() ||
             first->statusBar() != workspace->statusBar() ||
+            first->detachedInspectorPresentation() != view ||
             first->inspectorImageWidget() != view->imageWidget() ||
             first->inspectorDialogParent() != view ||
             first->m_temporaryCanvas.instructionStatusBar.data() !=
@@ -4322,7 +4398,26 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
             view->standaloneStatusBar()->currentMessage() != marker ||
             workspace->statusBar()->currentMessage() == marker) {
           fail(QStringLiteral(
-              "Workspace churn did not route inspector status to detached view"));
+                   "Workspace churn did not route inspector status to detached view "
+                   "(isWindow=%1 embedded=%2 contained=%3 tabs=%4 localBar=%5 "
+                   "localVisible=%6 docBarWorkspace=%7 inspectorPeer=%8 "
+                   "dialogPeer=%9 instructionLocal=%10 localMarker=%11 "
+                   "workspaceMarker=%12 focusPeer=%13)")
+                   .arg(view->isWindow())
+                   .arg(view->isWorkspaceEmbedded())
+                   .arg(workspace->containsView(view))
+                   .arg(app.tabCount())
+                   .arg(view->statusBar() == view->standaloneStatusBar())
+                   .arg(view->standaloneStatusBar()->isVisible())
+                   .arg(first->statusBar() == workspace->statusBar())
+                   .arg(first->inspectorImageWidget() == view->imageWidget())
+                   .arg(first->inspectorDialogParent() == view)
+                   .arg(first->m_temporaryCanvas.instructionStatusBar.data() ==
+                        view->standaloneStatusBar())
+                   .arg(view->standaloneStatusBar()->currentMessage() == marker)
+                   .arg(workspace->statusBar()->currentMessage() == marker)
+                   .arg(QApplication::focusWidget() &&
+                        QApplication::focusWidget()->window() == view));
           return;
         }
 
@@ -4386,6 +4481,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
             view->statusBar() != workspace->statusBar() ||
             view->standaloneStatusBar()->isVisible() ||
             workspace->currentDocument() != first ||
+            first->detachedInspectorPresentation() ||
             first->inspectorImageWidget() != view->imageWidget() ||
             first->inspectorDialogParent() != workspace) {
           fail(QStringLiteral(

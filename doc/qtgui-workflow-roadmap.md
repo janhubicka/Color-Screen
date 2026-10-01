@@ -373,6 +373,13 @@ A specialist tool benefits disproportionately from keyboard consistency:
 - discoverable shortcuts for pan/zoom/fit and registration tools;
 - no shortcut that changes document parameters while focus is in a text field.
 
+The beta implementation scopes canvas tools, saved scan rotation and
+registration editing shortcuts to ordinary `ImageWidget` descendants instead
+of the whole top-level window. Render-mode digits and bare +/=/- zoom are
+canvas-only too; standard modified application/view shortcuts remain
+window-wide. Ordinary New Views reuse document-owned shared tool/navigation
+actions, while each view keeps its own canvas-scoped 1–0 render-mode actions.
+
 The multi-document work already treats focus as an invariant; preserve that.
 
 ## Standard grammar for every panel/module

@@ -226,6 +226,8 @@ void WorkspaceWindow::addDocument(MainWindow *document) {
     return;
   }
 
+  document->beginInspectorPresentationHandoff();
+
   document->hide();
   document->prepareForWorkspaceEmbedding();
   document->setWorkspaceStatusBar(statusBar());
@@ -283,12 +285,15 @@ void WorkspaceWindow::addDocument(MainWindow *document) {
   --m_chromeActivationBlockDepth;
   onSubWindowActivated(subWindow);
   configureTabBar();
+  document->endInspectorPresentationHandoff();
 }
 
 /** Remove DOCUMENT from the MDI area and restore standalone presentation. */
 void WorkspaceWindow::removeDocument(MainWindow *document) {
   if (!document || !containsDocument(document))
     return;
+
+  document->beginInspectorPresentationHandoff();
 
   takeDocumentFromWorkspace(document);
   document->restoreFromWorkspaceEmbedding();
@@ -297,6 +302,7 @@ void WorkspaceWindow::removeDocument(MainWindow *document) {
   onSubWindowActivated(m_mdiArea->currentSubWindow());
   configureTabBar();
   scheduleCloseIfEmpty();
+  document->endInspectorPresentationHandoff();
 }
 /** Embed secondary VIEW in the same MDI area as ordinary documents. */
 void WorkspaceWindow::addView(ImageViewWindow *view) {
@@ -306,6 +312,10 @@ void WorkspaceWindow::addView(ImageViewWindow *view) {
     activateView(view);
     return;
   }
+
+  MainWindow *sourceDocument = view->sourceDocument();
+  if (sourceDocument)
+    sourceDocument->beginInspectorPresentationHandoff();
 
   view->hide();
   view->prepareForWorkspaceEmbedding();
@@ -340,10 +350,22 @@ void WorkspaceWindow::addView(ImageViewWindow *view) {
             configureTabBar();
           });
   QPointer<MainWindow> guardedSource(view->sourceDocument());
-  connect(subWindow, &QObject::destroyed, this, [this, guardedSource]() {
-    QTimer::singleShot(0, this, [this, guardedSource]() {
+  ImageViewWindow *const viewIdentity = view;
+  connect(subWindow, &QObject::destroyed, this,
+          [this, guardedSource, viewIdentity]() {
+    QTimer::singleShot(0, this, [this, guardedSource, viewIdentity]() {
       detachDocumentProgressIfUnused(guardedSource);
-      onSubWindowActivated(m_mdiArea->currentSubWindow());
+
+      // ViewSubWindow is destroyed both when a view closes and when a live view
+      // is deliberately detached. takeViewFromWorkspace() records the latter
+      // before wrapper removal, so this callback does not depend on whether Qt
+      // has already delivered hide/reparent events or flipped the view's
+      // embedded presentation flag.
+      const bool deliberateDetach =
+          m_detachingViews.remove(viewIdentity) > 0;
+      if (!deliberateDetach)
+        onSubWindowActivated(m_mdiArea->currentSubWindow());
+
       configureTabBar();
       scheduleCloseIfEmpty();
     });
@@ -366,6 +388,8 @@ void WorkspaceWindow::addView(ImageViewWindow *view) {
   --m_chromeActivationBlockDepth;
   onSubWindowActivated(subWindow);
   configureTabBar();
+  if (sourceDocument)
+    sourceDocument->endInspectorPresentationHandoff();
 }
 
 /** Remove secondary VIEW from the MDI area and show it standalone. */
@@ -373,15 +397,30 @@ void WorkspaceWindow::removeView(ImageViewWindow *view) {
   if (!view || !containsView(view))
     return;
 
+  MainWindow *sourceDocument = view->sourceDocument();
+  if (sourceDocument)
+    sourceDocument->beginInspectorPresentationHandoff();
+
   takeViewFromWorkspace(view);
   onSubWindowActivated(m_mdiArea->currentSubWindow());
   configureTabBar();
   scheduleCloseIfEmpty();
 
-  view->restoreFromWorkspaceEmbedding();
+  // Establish the detached top-level/focus owner before restoring the borrowed
+  // document inspector. Otherwise the structural MDI activation caused by
+  // removing this tab can reclaim the inspector after the peer has already
+  // moved it.
   view->show();
   view->raise();
   view->activateWindow();
+  if (view->imageWidget())
+    view->imageWidget()->setFocus(Qt::OtherFocusReason);
+  view->restoreFromWorkspaceEmbedding();
+  if (view->imageWidget())
+    view->imageWidget()->setFocus(Qt::OtherFocusReason);
+
+  if (sourceDocument)
+    sourceDocument->endInspectorPresentationHandoff();
 }
 
 /** Return the active document, resolving secondary views to their owner. */
@@ -1014,7 +1053,8 @@ bool WorkspaceWindow::restoreFocusFromTaskControl(QWidget *control) {
 
 /** Present DOCUMENT's one inspector in the workspace for IMAGEWIDGET. */
 void WorkspaceWindow::installDocumentInspector(MainWindow *document,
-                                               ImageWidget *imageWidget) {
+                                               ImageWidget *imageWidget,
+                                               bool allowDetachedReclaim) {
   if (!document) {
     m_inspectorDock->hide();
     return;
@@ -1024,6 +1064,20 @@ void WorkspaceWindow::installDocumentInspector(MainWindow *document,
   if (!inspector) {
     m_inspectorDock->hide();
     return;
+  }
+
+  // Detached ordinary views explicitly own the one shared inspector. A
+  // structural QMdiArea activation (for example the remaining tab becoming
+  // current while its peer is detached) must not infer ownership from that
+  // incidental activation. A genuine workspace interaction has focus inside
+  // this top-level window and may reclaim the inspector.
+  if (auto *detachedView = qobject_cast<ImageViewWindow *>(
+          document->detachedInspectorPresentation())) {
+    if (!detachedView->isWorkspaceEmbedded() && !allowDetachedReclaim) {
+      m_inspectorDock->hide();
+      return;
+    }
+    document->clearDetachedInspectorPresentation(detachedView);
   }
 
   if (m_inspectorStack->indexOf(inspector) < 0) {
@@ -1218,6 +1272,18 @@ void WorkspaceWindow::onSubWindowActivated(QMdiSubWindow *window) {
     return;
   }
 
+  MainWindow *previousDocument =
+      m_chromeDocument
+          ? m_chromeDocument.data()
+          : (m_chromeView ? m_chromeView->sourceDocument() : nullptr);
+  MainWindow *nextDocument =
+      document ? document : (view ? view->sourceDocument() : nullptr);
+
+  if (previousDocument)
+    previousDocument->beginInspectorPresentationHandoff();
+  if (nextDocument && nextDocument != previousDocument)
+    nextDocument->beginInspectorPresentationHandoff();
+
   if (m_chromeDocument)
     releaseDocumentChrome(m_chromeDocument);
   if (m_chromeView)
@@ -1237,6 +1303,11 @@ void WorkspaceWindow::onSubWindowActivated(QMdiSubWindow *window) {
     statusBar()->clearMessage();
     setWindowTitle(tr("Color-Screen"));
   }
+
+  if (nextDocument && nextDocument != previousDocument)
+    nextDocument->endInspectorPresentationHandoff();
+  if (previousDocument)
+    previousDocument->endInspectorPresentationHandoff();
 }
 
 /** Remove DOCUMENT's wrapper and inspector while keeping DOCUMENT alive. */
@@ -1276,6 +1347,11 @@ void WorkspaceWindow::takeViewFromWorkspace(ImageViewWindow *view) {
   QMdiSubWindow *subWindow = subWindowForView(view);
   if (!subWindow)
     return;
+
+  // This helper is the non-closing removal path used by removeView(). Mark the
+  // logical view before deleting its old wrapper so deferred QObject
+  // destruction cannot later be misread as a real view close.
+  m_detachingViews.insert(view);
 
   releaseViewChrome(view);
   if (view->ownsWorkspaceInspector()) {
@@ -1366,15 +1442,27 @@ bool WorkspaceWindow::eventFilter(QObject *watched, QEvent *event) {
 /** Reclaim the active inspector after focus returns from a detached view. */
 void WorkspaceWindow::changeEvent(QEvent *event) {
   QMainWindow::changeEvent(event);
-  if (!event || event->type() != QEvent::WindowActivate)
+  if (!event || event->type() != QEvent::WindowActivate ||
+      QApplication::activeWindow() != this)
+    return;
+
+  QWidget *focus = QApplication::focusWidget();
+  if (!focus || focus->window() != this)
+    return;
+
+  MainWindow *document =
+      m_chromeDocument
+          ? m_chromeDocument.data()
+          : (m_chromeView && !m_chromeView->isSlantedEdgeReference()
+                 ? m_chromeView->sourceDocument()
+                 : nullptr);
+  if (!document || document->inspectorPresentationHandoffActive())
     return;
 
   if (m_chromeDocument)
-    installDocumentInspector(m_chromeDocument,
-                             m_chromeDocument->primaryImageWidget());
-  else if (m_chromeView && !m_chromeView->isSlantedEdgeReference())
-    installDocumentInspector(m_chromeView->sourceDocument(),
-                             m_chromeView->imageWidget());
+    installDocumentInspector(document, document->primaryImageWidget(), true);
+  else
+    installDocumentInspector(document, m_chromeView->imageWidget(), true);
 }
 
 /** Close only the presentations hosted by this workspace shell. */

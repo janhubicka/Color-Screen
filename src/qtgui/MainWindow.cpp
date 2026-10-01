@@ -1002,12 +1002,12 @@ void MainWindow::setupUi() {
             if (m_capturePanel) {
               m_capturePanel->setCropChecked(mode == ImageWidget::CropMode);
             }
-            if (!m_inspectorImageRouting.switching &&
+            if (!m_inspectorImageRouting.switching() &&
                 sender() == inspectorImageWidget() &&
                 mode != ImageWidget::AddPointMode &&
                 m_temporaryCanvas.pointClick.active())
               clearPointClickToolPresentation();
-            if (!m_inspectorImageRouting.switching &&
+            if (!m_inspectorImageRouting.switching() &&
                 sender() == inspectorImageWidget() &&
                 mode != ImageWidget::GenericAreaMode &&
                 m_temporaryCanvas.areaSelectionCallback) {
@@ -1016,7 +1016,7 @@ void MainWindow::setupUi() {
               // must not cancel the operation.
               cancelAreaSelectionPresentation();
             }
-            if (!m_inspectorImageRouting.switching &&
+            if (!m_inspectorImageRouting.switching() &&
                 sender() == inspectorImageWidget() &&
                 m_temporaryCanvas.instructionOwner &&
                 mode != *m_temporaryCanvas.instructionOwner)
@@ -1505,7 +1505,7 @@ void MainWindow::createToolbar() {
   m_panAction->setChecked(true);
   m_panAction->setToolTip("Pan Tool (P)");
   m_panAction->setShortcut(QKeySequence("P"));
-  m_panAction->setShortcutContext(Qt::WindowShortcut);
+  m_panAction->setShortcutContext(Qt::WidgetWithChildrenShortcut);
   m_toolbar->addAction(m_panAction);
 
   // Zoom controls
@@ -1537,7 +1537,7 @@ void MainWindow::createToolbar() {
   m_selectAction->setCheckable(true);
   m_selectAction->setToolTip("Select Tool (S)");
   m_selectAction->setShortcut(QKeySequence("S"));
-  m_selectAction->setShortcutContext(Qt::WindowShortcut);
+  m_selectAction->setShortcutContext(Qt::WidgetWithChildrenShortcut);
   m_toolbar->addAction(m_selectAction);
   m_registrationActions.append(m_selectAction);
 
@@ -1547,7 +1547,7 @@ void MainWindow::createToolbar() {
   m_addPointAction->setCheckable(true);
   m_addPointAction->setToolTip("Add Registration Point (A)");
   m_addPointAction->setShortcut(QKeySequence("A"));
-  m_addPointAction->setShortcutContext(Qt::WindowShortcut);
+  m_addPointAction->setShortcutContext(Qt::WidgetWithChildrenShortcut);
   m_toolbar->addAction(m_addPointAction);
   m_registrationActions.append(m_addPointAction);
 
@@ -1557,7 +1557,7 @@ void MainWindow::createToolbar() {
   m_setCenterAction->setCheckable(true);
   m_setCenterAction->setToolTip("Set Screen Coordinates (C)");
   m_setCenterAction->setShortcut(QKeySequence("C"));
-  m_setCenterAction->setShortcutContext(Qt::WindowShortcut);
+  m_setCenterAction->setShortcutContext(Qt::WidgetWithChildrenShortcut);
   m_toolbar->addAction(m_setCenterAction);
   m_registrationActions.append(m_setCenterAction);
 
@@ -1652,8 +1652,9 @@ void MainWindow::createToolbar() {
 }
 
 /** Add the shared document canvas actions to an ordinary New View toolbar. */
-void MainWindow::appendOrdinaryViewToolActions(QToolBar *toolbar) {
-  if (!toolbar)
+void MainWindow::appendOrdinaryViewToolActions(
+    QToolBar *toolbar, ImageWidget *imageWidget) {
+  if (!toolbar || !imageWidget)
     return;
 
   if (m_panAction)
@@ -1675,6 +1676,18 @@ void MainWindow::appendOrdinaryViewToolActions(QToolBar *toolbar) {
   for (QAction *action : m_registrationActions)
     if (action)
       toolbar->addAction(action);
+
+  // Canvas editing shortcuts must not consume ordinary text-entry keys in the
+  // shared inspector. Associate them with every ordinary ImageWidget and use
+  // WidgetWithChildrenShortcut rather than a top-level window scope.
+  const QList<QAction *> canvasActions = {
+      m_panAction,            m_selectAction,       m_addPointAction,
+      m_setCenterAction,      m_selectAllAction,    m_deselectAllAction,
+      m_deleteSelectedAction, m_pruneMisplacedAction,
+      m_rotateLeftAction,     m_rotateRightAction};
+  for (QAction *action : canvasActions)
+    if (action && !imageWidget->actions().contains(action))
+      imageWidget->addAction(action);
 }
 
 /** Return the document-owned Edit menu action shared by ordinary views. */
@@ -1746,15 +1759,15 @@ void MainWindow::createModeShortcuts() {
     int key = (i + 1) % 10;
     QAction *action = new QAction(this);
     action->setShortcut(QKeySequence(QString::number(key)));
-    action->setShortcutContext(Qt::WindowShortcut);
+    action->setShortcutContext(Qt::WidgetWithChildrenShortcut);
     action->setEnabled(false); // Initially disabled
     connect(action, &QAction::triggered, this, [this, i]() {
       if (i < m_modeComboBox->count()) {
         m_modeComboBox->setCurrentIndex(i);
       }
     });
-    addAction(action);
-    if (m_imageWidget) m_imageWidget->addAction(action); // Add to ImageWidget for fullscreen
+    if (m_imageWidget)
+      m_imageWidget->addAction(action);
     m_modeActions.append(action);
   }
 }
@@ -2161,17 +2174,14 @@ void MainWindow::createMenus() {
 
   m_zoomInAction = m_viewMenu->addAction("Zoom &In");
   m_zoomInAction->setIcon(getSymbolicIcon(":/icons/zoom-in.svg"));
-  m_zoomInAction->setShortcuts({QKeySequence::ZoomIn,
-                                QKeySequence(Qt::Key_Plus),
-                                QKeySequence(Qt::Key_Equal)}); // Ctrl++, +, =
+  m_zoomInAction->setShortcuts({QKeySequence::ZoomIn});
   m_zoomInAction->setShortcutContext(Qt::WindowShortcut);
   m_zoomInAction->setToolTip("Increase view magnification.");
   connect(m_zoomInAction, &QAction::triggered, this, &MainWindow::onZoomIn);
 
   m_zoomOutAction = new QAction(tr("Zoom &Out"), this);
   m_zoomOutAction->setIcon(getSymbolicIcon(":/icons/zoom-out.svg"));
-  m_zoomOutAction->setShortcuts(
-      {QKeySequence::ZoomOut, QKeySequence(Qt::Key_Minus)}); // Ctrl+-, -
+  m_zoomOutAction->setShortcuts({QKeySequence::ZoomOut});
   m_zoomOutAction->setShortcutContext(Qt::WindowShortcut);
   m_zoomOutAction->setStatusTip(tr("Zoom out"));
   m_zoomOutAction->setToolTip("Decrease view magnification.");
@@ -2217,7 +2227,7 @@ void MainWindow::createMenus() {
   // (which might pan). But navigation pan is usually just arrows. Let's use
   // Ctrl+L and Ctrl+R.
   m_rotateLeftAction->setShortcut(Qt::CTRL | Qt::Key_L);
-  m_rotateLeftAction->setShortcutContext(Qt::WindowShortcut);
+  m_rotateLeftAction->setShortcutContext(Qt::WidgetWithChildrenShortcut);
   m_rotateLeftAction->setToolTip(
       "Rotate the digital scan 90 degrees counter-clockwise.");
   connect(m_rotateLeftAction, &QAction::triggered, this,
@@ -2225,7 +2235,7 @@ void MainWindow::createMenus() {
 
   m_rotateRightAction = m_viewMenu->addAction("Rotate &Right");
   m_rotateRightAction->setShortcut(Qt::CTRL | Qt::Key_R);
-  m_rotateRightAction->setShortcutContext(Qt::WindowShortcut);
+  m_rotateRightAction->setShortcutContext(Qt::WidgetWithChildrenShortcut);
   m_rotateRightAction->setToolTip(
       "Rotate the digital scan 90 degrees clockwise.");
   connect(m_rotateRightAction, &QAction::triggered, this,
@@ -2300,14 +2310,14 @@ void MainWindow::createMenus() {
 
   m_selectAllAction = m_registrationMenu->addAction("Select &All");
   m_selectAllAction->setShortcut(QKeySequence::SelectAll); // Ctrl+A
-  m_selectAllAction->setShortcutContext(Qt::WindowShortcut);
+  m_selectAllAction->setShortcutContext(Qt::WidgetWithChildrenShortcut);
   m_selectAllAction->setToolTip("Select all registration points.");
   connect(m_selectAllAction, &QAction::triggered, this,
           &MainWindow::onSelectAll);
 
   m_deselectAllAction = m_registrationMenu->addAction("&Deselect All");
   m_deselectAllAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_D));
-  m_deselectAllAction->setShortcutContext(Qt::WindowShortcut);
+  m_deselectAllAction->setShortcutContext(Qt::WidgetWithChildrenShortcut);
   m_deselectAllAction->setToolTip("Clear current point selection.");
   connect(m_deselectAllAction, &QAction::triggered, this,
           &MainWindow::onDeselectAll);
@@ -2316,7 +2326,7 @@ void MainWindow::createMenus() {
       m_registrationMenu->addAction("&Remove Selected Points");
   m_deleteSelectedAction->setShortcuts(
       {QKeySequence::Delete, QKeySequence(Qt::Key_Backspace)});
-  m_deleteSelectedAction->setShortcutContext(Qt::WindowShortcut);
+  m_deleteSelectedAction->setShortcutContext(Qt::WidgetWithChildrenShortcut);
   m_deleteSelectedAction->setToolTip(
       "Delete the currently selected registration points.");
   connect(m_deleteSelectedAction, &QAction::triggered, this,
@@ -2326,7 +2336,7 @@ void MainWindow::createMenus() {
       m_registrationMenu->addAction("&Prune Misplaced Points");
   m_pruneMisplacedAction->setShortcuts(
       {QKeySequence("Ctrl+Delete"), QKeySequence("Ctrl+Backspace")});
-  m_pruneMisplacedAction->setShortcutContext(Qt::WindowShortcut);
+  m_pruneMisplacedAction->setShortcutContext(Qt::WidgetWithChildrenShortcut);
   m_pruneMisplacedAction->setToolTip(
       "Automatically delete points with high registration error scores.");
   connect(m_pruneMisplacedAction, &QAction::triggered, this,
@@ -2394,11 +2404,8 @@ void MainWindow::createMenus() {
               m_zoomInAction->setShortcuts({});
               m_zoomOutAction->setShortcuts({});
             } else {
-              m_zoomInAction->setShortcuts({QKeySequence::ZoomIn,
-                                            QKeySequence(Qt::Key_Plus),
-                                            QKeySequence(Qt::Key_Equal)});
-              m_zoomOutAction->setShortcuts(
-                  {QKeySequence::ZoomOut, QKeySequence(Qt::Key_Minus)});
+              m_zoomInAction->setShortcuts({QKeySequence::ZoomIn});
+              m_zoomOutAction->setShortcuts({QKeySequence::ZoomOut});
             }
           });
 }
@@ -2488,6 +2495,8 @@ void MainWindow::restoreWorkspaceInspector() {
   if (!m_rightColumn || !m_mainSplitter)
     return;
 
+  m_inspectorImageRouting.detachedPresentation.clear();
+
   if (m_rightColumn->parentWidget() != m_mainSplitter) {
     takeWorkspaceInspector();
     m_mainSplitter->addWidget(m_rightColumn);
@@ -2554,6 +2563,61 @@ void MainWindow::syncInspectorViewActions() {
   }
 }
 
+/** Suppress tool cancellation while Qt moves one document's presentation.
+
+    The first nesting level captures the currently selected canvas tool before
+    toolbar/inspector reparenting can generate transient focus/action updates. */
+void MainWindow::beginInspectorPresentationHandoff() {
+  if (m_inspectorImageRouting.switchDepth++ != 0)
+    return;
+  if (ImageWidget *image = inspectorImageWidget())
+    m_inspectorImageRouting.handoffMode = image->interactionMode();
+  else
+    m_inspectorImageRouting.handoffMode.reset();
+}
+
+/** Finish a presentation handoff and restore the authoritative tool intent. */
+void MainWindow::endInspectorPresentationHandoff() {
+  if (m_inspectorImageRouting.switchDepth <= 0)
+    return;
+  if (m_inspectorImageRouting.switchDepth > 1) {
+    --m_inspectorImageRouting.switchDepth;
+    return;
+  }
+
+  ImageWidget *image = inspectorImageWidget();
+  std::optional<ImageWidget::InteractionMode> desired =
+      m_inspectorImageRouting.handoffMode;
+
+  // Temporary document-owned intents are stronger than whichever persistent
+  // mode happened to be captured before the handoff.
+  if (m_temporaryCanvas.pointClick.active())
+    desired = ImageWidget::AddPointMode;
+  else if (m_temporaryCanvas.areaSelectionCallback)
+    desired = ImageWidget::GenericAreaMode;
+  else if (m_temporaryCanvas.instructionOwner)
+    desired = *m_temporaryCanvas.instructionOwner;
+
+  if (image && desired && image->interactionMode() != *desired)
+    image->setInteractionMode(*desired);
+
+  m_inspectorImageRouting.handoffMode.reset();
+  --m_inspectorImageRouting.switchDepth;
+  syncTemporaryCanvasInstructionPresentation();
+  syncProfileSpotEditingPresentation();
+}
+
+/** Record the detached ordinary view that currently presents this inspector. */
+void MainWindow::setDetachedInspectorPresentation(ImageViewWindow *view) {
+  m_inspectorImageRouting.detachedPresentation = view;
+}
+
+/** Release detached-inspector ownership only when VIEW still owns it. */
+void MainWindow::clearDetachedInspectorPresentation(ImageViewWindow *view) {
+  if (m_inspectorImageRouting.detachedPresentation == view)
+    m_inspectorImageRouting.detachedPresentation.clear();
+}
+
 /** Route the shared inspector's navigation and editing gestures to IMAGEWIDGET.
     Pending document tools follow between ordinary views of the same loaded scan.
     A view presenting a different image (for example a slanted-edge reference)
@@ -2562,6 +2626,10 @@ void MainWindow::setInspectorImageWidget(ImageWidget *imageWidget) {
   ImageWidget *target = imageWidget ? imageWidget : m_imageWidget;
   if (!acceptsInspectorImageWidget(target))
     return;
+
+  const bool ownsHandoff = !m_inspectorImageRouting.switching();
+  if (ownsHandoff)
+    beginInspectorPresentationHandoff();
 
   ImageWidget *previous = inspectorImageWidget();
   const ImageWidget::InteractionMode previousMode =
@@ -2578,21 +2646,8 @@ void MainWindow::setInspectorImageWidget(ImageWidget *imageWidget) {
 
   // The same ImageWidget can survive an attached <-> detached reparenting, so
   // pointer identity alone does not reveal that the top-level status owner
-  // changed. Move an armed temporary instruction using the bar remembered when
-  // it was originally published.
-  if (m_temporaryCanvas.instructionOwner &&
-      !m_temporaryCanvas.instructionText.isEmpty()) {
-    QStatusBar *oldBar = m_temporaryCanvas.instructionStatusBar.data();
-    QStatusBar *newBar = inspectorStatusBar();
-    if (oldBar != newBar) {
-      if (oldBar &&
-          oldBar->currentMessage() == m_temporaryCanvas.instructionText)
-        oldBar->clearMessage();
-      if (newBar)
-        newBar->showMessage(m_temporaryCanvas.instructionText);
-      m_temporaryCanvas.instructionStatusBar = newBar;
-    }
-  }
+  // changed.
+  syncTemporaryCanvasInstructionPresentation();
 
   syncDetectedScreenDiagnostics(target);
   syncProfileSpotOverlay(target);
@@ -2603,10 +2658,8 @@ void MainWindow::setInspectorImageWidget(ImageWidget *imageWidget) {
   // canvas that happened to be active when it was armed. Move it to the newly
   // active compatible view and leave the old view harmlessly in Pan mode.
   if (transferTool) {
-    m_inspectorImageRouting.switching = true;
     previous->setInteractionMode(ImageWidget::PanMode);
     target->setInteractionMode(previousMode);
-    m_inspectorImageRouting.switching = false;
   }
 
   // The handoff itself owns the two canvases involved. Settle those directly
@@ -2710,13 +2763,13 @@ void MainWindow::setInspectorImageWidget(ImageWidget *imageWidget) {
         target, &ImageWidget::interactionModeChanged, this,
         [this](ImageWidget::InteractionMode mode) {
           syncInspectorInteractionActions(mode);
-          if (!m_inspectorImageRouting.switching && sender() == inspectorImageWidget() &&
+          if (!m_inspectorImageRouting.switching() && sender() == inspectorImageWidget() &&
               mode != ImageWidget::AddPointMode && m_temporaryCanvas.pointClick.active())
             clearPointClickToolPresentation();
-          if (!m_inspectorImageRouting.switching && sender() == inspectorImageWidget() &&
+          if (!m_inspectorImageRouting.switching() && sender() == inspectorImageWidget() &&
               mode != ImageWidget::GenericAreaMode && m_temporaryCanvas.areaSelectionCallback)
             cancelAreaSelectionPresentation();
-          if (!m_inspectorImageRouting.switching && sender() == inspectorImageWidget() &&
+          if (!m_inspectorImageRouting.switching() && sender() == inspectorImageWidget() &&
               m_temporaryCanvas.instructionOwner &&
               mode != *m_temporaryCanvas.instructionOwner)
             clearTemporaryCanvasInstruction();
@@ -2741,12 +2794,17 @@ void MainWindow::setInspectorImageWidget(ImageWidget *imageWidget) {
   updateRegistrationActions();
   syncFocusAreaOverlays(target);
   syncMtfMeasurementOverlay(target);
+
+  if (ownsHandoff)
+    endInspectorPresentationHandoff();
 }
 
 /** Reclaim the inspector when a detached primary document becomes active. */
 void MainWindow::changeEvent(QEvent *event) {
   QMainWindow::changeEvent(event);
-  if (event && event->type() == QEvent::WindowActivate && !m_workspacePresentation.embedded)
+  if (event && event->type() == QEvent::WindowActivate &&
+      QApplication::activeWindow() == this &&
+      !m_workspacePresentation.embedded)
     restoreWorkspaceInspector();
 }
 
@@ -3874,6 +3932,29 @@ void MainWindow::showTemporaryCanvasInstruction(
   m_temporaryCanvas.instructionStatusBar = bar;
   if (bar)
     bar->showMessage(message);
+}
+
+/** Move an owned temporary instruction to the current presentation.
+
+    The inspected ImageWidget can remain identical while its top-level owner
+    changes between WorkspaceWindow and a detached ImageViewWindow. Resolve the
+    final status bar explicitly instead of relying on image-target changes to
+    notice that presentation transition. */
+void MainWindow::syncTemporaryCanvasInstructionPresentation() {
+  if (!m_temporaryCanvas.instructionOwner ||
+      m_temporaryCanvas.instructionText.isEmpty())
+    return;
+
+  QStatusBar *oldBar = m_temporaryCanvas.instructionStatusBar.data();
+  QStatusBar *newBar = inspectorStatusBar();
+  if (oldBar == newBar)
+    return;
+
+  if (oldBar && oldBar->currentMessage() == m_temporaryCanvas.instructionText)
+    oldBar->clearMessage();
+  if (newBar)
+    newBar->showMessage(m_temporaryCanvas.instructionText);
+  m_temporaryCanvas.instructionStatusBar = newBar;
 }
 
 /** Clear only the temporary instruction we still own.

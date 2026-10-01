@@ -5,6 +5,7 @@
 #include "../libcolorscreen/include/render-type-parameters.h"
 
 #include <QMainWindow>
+#include <QList>
 #include <QPointer>
 #include <QRect>
 #include <QString>
@@ -189,6 +190,7 @@ private:
   ImageWidget *m_imageWidget = nullptr;
   QToolBar *m_toolbar = nullptr;
   QComboBox *m_modeComboBox = nullptr;
+  QList<QAction *> m_modeActions;
   QComboBox *m_coordinateComboBox = nullptr;
   QDoubleSpinBox *m_finalRotationSpinBox = nullptr;
   QAction *m_finalRotationLabelAction = nullptr;

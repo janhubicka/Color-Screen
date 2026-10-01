@@ -5,6 +5,7 @@
 #include <QPoint>
 #include <QPointer>
 #include <QShowEvent>
+#include <QSet>
 #include <QStatusBar>
 
 class MainWindow;
@@ -188,8 +189,11 @@ private:
   void updateWorkspaceProgressPresentation();
   void cycleWorkspaceProgress(int offset);
 
-  /** Put DOCUMENT's shared inspector in the workspace and target IMAGEWIDGET. */
-  void installDocumentInspector(MainWindow *document, ImageWidget *imageWidget);
+  /** Put DOCUMENT's shared inspector in the workspace and target IMAGEWIDGET.
+      ALLOWDETACHEDRECLAIM is reserved for a real top-level workspace
+      activation; structural MDI activation must respect a detached owner. */
+  void installDocumentInspector(MainWindow *document, ImageWidget *imageWidget,
+                                bool allowDetachedReclaim = false);
 
   /** Move TOOLBAR from OWNER into the permanent workspace toolbar slot. */
   void installWorkspaceToolBar(QMainWindow *owner, QToolBar *toolbar);
@@ -244,6 +248,10 @@ private:
   QDockWidget *m_userVisibleProgressDock = nullptr;
   QPointer<MainWindow> m_chromeDocument;
   QPointer<ImageViewWindow> m_chromeView;
+  // ViewSubWindow wrappers are deleted for both close and detach. Record the
+  // deliberate-detach path explicitly until that old wrapper's deferred
+  // destruction callback has been consumed.
+  QSet<ImageViewWindow *> m_detachingViews;
   QPointer<QObject> m_tabBar;
   QPointer<QWidget> m_dragWindow;
   QPoint m_dragStartGlobal;
