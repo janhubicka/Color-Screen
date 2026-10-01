@@ -523,8 +523,9 @@ image until asynchronous loading succeeds. `loadFile()` marks
 `m_imageLoad.pending` first, cancels/clears both progressive owners, and their
 publication gates reject every queued result while replacement remains pending.
 The progressive launchers also refuse new registration/adaptive requests during
-that interval, so no worker can start against the outgoing scan after the user
-has committed to replacement.
+that interval. The shared OneShot entry point and the dedicated geometry/profile
+launchers use the same pending-image gate, so no document-mutating analysis can
+start against the outgoing scan after the user has committed to replacement.
 
 ### Initial screen setup
 
