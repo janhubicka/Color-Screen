@@ -1271,7 +1271,9 @@ void ImageViewWindow::closeEvent(QCloseEvent *event) {
 /** Reclaim panels when this detached ordinary view becomes active. */
 void ImageViewWindow::changeEvent(QEvent *event) {
   QMainWindow::changeEvent(event);
-  if (event && event->type() == QEvent::WindowActivate && !m_workspacePresentation.embedded)
+  if (event && event->type() == QEvent::WindowActivate &&
+      QApplication::activeWindow() == this &&
+      !m_workspacePresentation.embedded)
     claimDocumentInspector();
 }
 
