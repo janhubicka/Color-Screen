@@ -117,7 +117,11 @@ On exit, Profile/Focus, Generic Area, Crop/Measure, or the remembered persistent
 mode is reasserted on the final inspector canvas. Owned temporary status guidance
 is also re-resolved at this outermost boundary: attach/detach can keep the same
 `ImageWidget` while changing its top-level status bar, so image-target changes
-alone are not a sufficient migration signal. When a secondary inspected
+alone are not a sufficient migration signal. During ordinary-view detach, make
+the peer top-level and give its canvas focus before restoring the borrowed
+document inspector. Workspace-side structural MDI activation must not steal an
+inspector physically hosted by that focused detached peer; a later deliberate
+workspace focus may reclaim it normally. When a secondary inspected
 view closes, `WorkspaceWindow` explicitly rebinds the primary image; do not
 rely only on the `QPointer` becoming null, because the navigator/editing
 connections must be reinstalled as part of the same transition. A deleted MDI
