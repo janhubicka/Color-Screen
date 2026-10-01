@@ -3206,6 +3206,85 @@ make_measured_mtf (const std::vector<std::pair<double, double>> &points)
   return parameters;
 }
 
+/* Feed one in-memory QuickMTF table through the public FILE* parser.  */
+static int
+load_quickmtf_text (mtf_parameters &parameters, const char *name,
+                    const char *text, const char **error)
+{
+  FILE *file = tmpfile ();
+  if (!file)
+    return -2;
+  const size_t len = strlen (text);
+  int result = -2;
+  if (fwrite (text, 1, len, file) == len && !fseek (file, 0, SEEK_SET))
+    result = parameters.load_csv (file, name, error);
+  fclose (file);
+  return result;
+}
+
+/* Verify the QuickMTF append/result contract used by GUI batch import.  A
+   rejected file must not append a partial measurement because callers can
+   safely keep already accepted files while skipping malformed ones.  */
+static bool
+test_quickmtf_load_contract ()
+{
+  bool ok = true;
+  mtf_parameters parameters;
+  const char *error = nullptr;
+
+  const char monochrome[]
+      = "0 100 100 100 100\n"
+        "0.25 50 50 50 50\n"
+        "0.5 10 10 10 10\n";
+  const int mono_loaded
+      = load_quickmtf_text (parameters, "mono", monochrome, &error);
+  if (mono_loaded != 1 || parameters.measurements.size () != 1
+      || parameters.measurements[0].name != "mono")
+    {
+      fprintf (stderr, "QuickMTF monochrome import contract failed%s%s\n",
+               error ? ": " : "", error ? error : "");
+      ok = false;
+    }
+
+  error = nullptr;
+  const char rgb[]
+      = "0 90 80 70 60\n"
+        "0.25 70 60 50 40\n"
+        "0.5 30 20 10 5\n";
+  const int rgb_loaded
+      = load_quickmtf_text (parameters, "rgb", rgb, &error);
+  if (rgb_loaded != 3 || parameters.measurements.size () != 4
+      || parameters.measurements[1].name != "rgb blue"
+      || parameters.measurements[1].channel != 2
+      || parameters.measurements[2].name != "rgb green"
+      || parameters.measurements[2].channel != 1
+      || parameters.measurements[3].name != "rgb red"
+      || parameters.measurements[3].channel != 0)
+    {
+      fprintf (stderr, "QuickMTF RGB import contract failed%s%s\n",
+               error ? ": " : "", error ? error : "");
+      ok = false;
+    }
+
+  const size_t accepted = parameters.measurements.size ();
+  error = nullptr;
+  const char malformed[]
+      = "0 100 100 100 100\n"
+        "0 90 90 90 90\n";
+  const int malformed_loaded
+      = load_quickmtf_text (parameters, "bad", malformed, &error);
+  if (malformed_loaded != -1 || !error
+      || parameters.measurements.size () != accepted)
+    {
+      fprintf (stderr,
+               "QuickMTF malformed-file atomicity contract failed%s%s\n",
+               error ? ": " : "", error ? error : "");
+      ok = false;
+    }
+
+  return ok;
+}
+
 /* Verify the physical diffraction model, its unit conversions and the
    optional broad-scatter residual on the Hurley capture geometry.  */
 static bool
@@ -9371,6 +9450,8 @@ main (int argc, char **argv)
     { "sharpening", "screen sharpening tests", [] () { return test_screen_sharpening (); } },
     { "screen_simulation", "screen simulation tests",
       [] () { return test_screen_simulation (); } },
+    { "mtf_quickmtf_load", "QuickMTF import contract tests",
+      [] () { return test_quickmtf_load_contract (); } },
     { "mtf_model", "physical MTF model tests",
       [] () { return test_mtf_physical_model (); } },
     { "mtf_deconvolution", "measured MTF deconvolution tests",
