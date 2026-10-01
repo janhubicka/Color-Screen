@@ -783,6 +783,14 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   parent-owned asynchronous warning. A bad file therefore cannot re-enter the
   event loop while a whole stale `ParameterState` snapshot is waiting to be
   written back.
+- Flat-field reference selection no longer chains static/native modal calls on
+  the MainWindow stack. White-file selection, the optional-black question and
+  black-file selection are parent-owned asynchronous dialogs under one setup
+  generation. A repeated setup, image replacement, competing final-result
+  request or document close clears ownership before closing the prompt, so an
+  old accepted/finished callback cannot launch analysis later. Workspace churn
+  exercises prompt parentage and supersession without automating the native file
+  chooser.
 - Give long-lived analysis state explicit structs rather than parallel member
   variables. Profile-calibration, geometry-fit, measured-MTF fit, flat-field
   calibration, automatic multi-area focus analysis, temporary canvas-tool
