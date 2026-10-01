@@ -586,6 +586,8 @@ private:
       It remains visible until completion/cancellation or a newer status owner. */
   void showTemporaryCanvasInstruction(ImageWidget::InteractionMode owner,
                                       const QString &message);
+  /** Move the owned temporary instruction to the current inspector presentation. */
+  void syncTemporaryCanvasInstructionPresentation();
   /** Drop the owned temporary instruction without clearing newer status text. */
   void clearTemporaryCanvasInstruction();
 
