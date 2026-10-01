@@ -350,22 +350,20 @@ void WorkspaceWindow::addView(ImageViewWindow *view) {
             configureTabBar();
           });
   QPointer<MainWindow> guardedSource(view->sourceDocument());
+  ImageViewWindow *const viewIdentity = view;
   connect(subWindow, &QObject::destroyed, this,
-          [this, guardedSource, guardedView]() {
-    QTimer::singleShot(0, this, [this, guardedSource, guardedView]() {
+          [this, guardedSource, viewIdentity]() {
+    QTimer::singleShot(0, this, [this, guardedSource, viewIdentity]() {
       detachDocumentProgressIfUnused(guardedSource);
 
       // ViewSubWindow is destroyed both when a view closes and when a live view
-      // is deliberately detached. In the latter case removeView() has already
-      // settled the workspace chrome, then the detached view claimed the one
-      // shared document inspector. A deferred activation refresh here would
-      // steal that inspector back to the workspace current tab. Refresh only
-      // when the logical view is gone, or when it has meanwhile been attached
-      // again and therefore belongs to this MDI area.
-      const bool liveDetached =
-          guardedView && !guardedView->isWorkspaceEmbedded() &&
-          !containsView(guardedView);
-      if (!liveDetached)
+      // is deliberately detached. takeViewFromWorkspace() records the latter
+      // before wrapper removal, so this callback does not depend on whether Qt
+      // has already delivered hide/reparent events or flipped the view's
+      // embedded presentation flag.
+      const bool deliberateDetach =
+          m_detachingViews.remove(viewIdentity) > 0;
+      if (!deliberateDetach)
         onSubWindowActivated(m_mdiArea->currentSubWindow());
 
       configureTabBar();
@@ -1326,6 +1324,11 @@ void WorkspaceWindow::takeViewFromWorkspace(ImageViewWindow *view) {
   QMdiSubWindow *subWindow = subWindowForView(view);
   if (!subWindow)
     return;
+
+  // This helper is the non-closing removal path used by removeView(). Mark the
+  // logical view before deleting its old wrapper so deferred QObject
+  // destruction cannot later be misread as a real view close.
+  m_detachingViews.insert(view);
 
   releaseViewChrome(view);
   if (view->ownsWorkspaceInspector()) {
