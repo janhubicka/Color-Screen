@@ -4093,7 +4093,7 @@ void MainWindow::onOptimizeGeometry(bool /*autoChecked*/) {
 
 /** Submit one geometry fit with independent mesh recomputation and UI-mode gates. */
 void MainWindow::requestGeometryOptimization(bool computeMesh) {
-  if (!m_scan || !m_solverWorker || !m_geometryPanel)
+  if (!m_scan || m_imageLoad.pending || !m_solverWorker || !m_geometryPanel)
     return;
 
   SolverRequestData data;
@@ -4888,6 +4888,11 @@ void MainWindow::dismissOneShotPrompts() {
 void MainWindow::runOneShotOperation(
     OneShotOperation operation,
     std::function<void(colorscreen::progress_info *)> worker) {
+  // m_scan intentionally keeps the outgoing image alive until asynchronous
+  // replacement succeeds. It is not a valid analysis source once replacement
+  // has started, even though pointer/snapshot equality can still hold.
+  if (m_imageLoad.pending)
+    return;
   m_oneShotOperations.run(std::move(operation), std::move(worker));
 }
 
@@ -5673,7 +5678,7 @@ void MainWindow::onAddSpotModeRequested(bool active) {
    into a request and submits it to m_colorOptimizerQueue.  If an
    optimisation is already running, the queue cancels it first.  */
 void MainWindow::onColorOptimizeRequested(bool /*autoMode*/) {
-  if (!m_scan || !m_colorOptimizerWorker)
+  if (!m_scan || m_imageLoad.pending || !m_colorOptimizerWorker)
     return;
   ParameterState state = getCurrentState();
   if (!colorscreen::screen_geometry_configured_p(state.scrToImg)) {
