@@ -275,7 +275,7 @@ public:
       shared document inspector. */
   void setDetachedInspectorPresentation(ImageViewWindow *view);
   void clearDetachedInspectorPresentation(ImageViewWindow *view);
-  ImageViewWindow *detachedInspectorPresentation() const {
+  QWidget *detachedInspectorPresentation() const {
     return m_inspectorImageRouting.detachedPresentation.data();
   }
 
@@ -747,7 +747,7 @@ private:
       that must survive transient Qt reparent/focus churn. */
   struct InspectorImageRoutingState {
     QPointer<ImageWidget> image;
-    QPointer<ImageViewWindow> detachedPresentation;
+    QPointer<QWidget> detachedPresentation;
     std::vector<QMetaObject::Connection> connections;
     int switchDepth = 0;
     std::optional<ImageWidget::InteractionMode> handoffMode;
