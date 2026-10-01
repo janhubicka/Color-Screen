@@ -1189,6 +1189,13 @@ void WorkspaceWindow::releaseViewChrome(ImageViewWindow *view) {
 
 /** Switch the shared shell to WINDOW's document or secondary view. */
 void WorkspaceWindow::onSubWindowActivated(QMdiSubWindow *window) {
+  // QMdiArea may deliver an older activation notification after a newer
+  // explicit setActiveSubWindow()/manual chrome refresh has already won. Never
+  // let that stale callback move the shared inspector/tool state back to a
+  // presentation that is no longer current.
+  if (window != m_mdiArea->currentSubWindow())
+    return;
+
   // QMdiArea emits this signal from addSubWindow()/setActiveSubWindow(). During
   // insertion the child QMainWindow has not necessarily completed show/layout,
   // so moving its QToolBar yet can leave Qt's toolbar-area bookkeeping stale.
