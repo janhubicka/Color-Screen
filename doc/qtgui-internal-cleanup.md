@@ -680,6 +680,15 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   Geometry/color optimizer queues and workers that intentionally publish
   intermediate results retain their separate lifecycle contracts; do not force
   them through `OneShotOperation` merely to remove another queue.
+- Canvas keyboard shortcuts now respect editor focus. P/S/A/C and registration
+  selection/deletion actions use `Qt::WidgetWithChildrenShortcut` and are
+  associated with every ordinary image canvas, so typing in inspector fields
+  cannot change tools or document registration state. Render-mode digits are
+  likewise primary-canvas shortcuts. Bare +/=/- zoom moved into
+  `ImageWidget::keyPressEvent()`, while standard Ctrl/Cmd zoom remains
+  window-wide. Ordinary New Views no longer retain private Pan/Zoom/Rotate
+  shortcuts that compete with the document-owned actions they already present.
+  Workspace churn checks both shortcut scope and peer-canvas association.
 - Workflow guidance now has a conservative navigation affordance: when
   `Next:` points to one specific inspector stage, **Open stage** resolves that
   destination through the stable semantic tab key and records the click as the
