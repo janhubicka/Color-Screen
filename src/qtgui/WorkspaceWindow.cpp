@@ -1419,7 +1419,8 @@ bool WorkspaceWindow::eventFilter(QObject *watched, QEvent *event) {
 /** Reclaim the active inspector after focus returns from a detached view. */
 void WorkspaceWindow::changeEvent(QEvent *event) {
   QMainWindow::changeEvent(event);
-  if (!event || event->type() != QEvent::WindowActivate)
+  if (!event || event->type() != QEvent::WindowActivate ||
+      QApplication::activeWindow() != this)
     return;
 
   if (m_chromeDocument)
