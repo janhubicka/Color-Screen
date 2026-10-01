@@ -406,10 +406,18 @@ void WorkspaceWindow::removeView(ImageViewWindow *view) {
   configureTabBar();
   scheduleCloseIfEmpty();
 
-  view->restoreFromWorkspaceEmbedding();
+  // Establish the detached top-level/focus owner before restoring the borrowed
+  // document inspector. Otherwise the structural MDI activation caused by
+  // removing this tab can reclaim the inspector after the peer has already
+  // moved it.
   view->show();
   view->raise();
   view->activateWindow();
+  if (view->imageWidget())
+    view->imageWidget()->setFocus(Qt::OtherFocusReason);
+  view->restoreFromWorkspaceEmbedding();
+  if (view->imageWidget())
+    view->imageWidget()->setFocus(Qt::OtherFocusReason);
 
   if (sourceDocument)
     sourceDocument->endInspectorPresentationHandoff();
@@ -1055,6 +1063,21 @@ void WorkspaceWindow::installDocumentInspector(MainWindow *document,
   if (!inspector) {
     m_inspectorDock->hide();
     return;
+  }
+
+  // A detached ordinary view may currently present this one shared document
+  // inspector. Structural QMdiArea activation while that view is being detached
+  // must not steal it back merely because another subwindow became current.
+  // Once the operator actually focuses the workspace, focus belongs to this
+  // top-level window and ordinary installation proceeds.
+  if (auto *detachedView =
+          qobject_cast<ImageViewWindow *>(inspector->window())) {
+    QWidget *focus = QApplication::focusWidget();
+    if (!detachedView->isWorkspaceEmbedded() && focus &&
+        focus->window() == detachedView) {
+      m_inspectorDock->hide();
+      return;
+    }
   }
 
   if (m_inspectorStack->indexOf(inspector) < 0) {
