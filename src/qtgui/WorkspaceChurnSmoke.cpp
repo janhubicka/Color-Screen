@@ -297,6 +297,79 @@ void startWorkspaceChurnSmoke(ColorScreenApplication &app,
           return;
         }
 
+        // Canvas-edit shortcuts must not consume text typed into the borrowed
+        // inspector. The shared actions are scoped to ImageWidget descendants
+        // and installed on both the primary and ordinary peer canvases.
+        const QList<QAction *> canvasShortcutActions = {
+            first->m_panAction,            first->m_selectAction,
+            first->m_addPointAction,       first->m_setCenterAction,
+            first->m_selectAllAction,      first->m_deselectAllAction,
+            first->m_deleteSelectedAction, first->m_pruneMisplacedAction,
+            first->m_rotateLeftAction,     first->m_rotateRightAction};
+        for (QAction *action : canvasShortcutActions) {
+          if (!action ||
+              action->shortcutContext() != Qt::WidgetWithChildrenShortcut ||
+              !first->m_imageWidget->actions().contains(action) ||
+              !view->imageWidget()->actions().contains(action)) {
+            fail(QStringLiteral(
+                "Canvas editing shortcut escaped its ordinary-view scope"));
+            return;
+          }
+        }
+
+        for (QAction *action : first->m_modeActions) {
+          if (!action ||
+              action->shortcutContext() != Qt::WidgetWithChildrenShortcut ||
+              !first->m_imageWidget->actions().contains(action) ||
+              first->actions().contains(action)) {
+            fail(QStringLiteral(
+                "Render-mode digit shortcut escaped the primary canvas"));
+            return;
+          }
+        }
+        if (first->m_zoomInAction->shortcuts().contains(
+                QKeySequence(Qt::Key_Plus)) ||
+            first->m_zoomInAction->shortcuts().contains(
+                QKeySequence(Qt::Key_Equal)) ||
+            first->m_zoomOutAction->shortcuts().contains(
+                QKeySequence(Qt::Key_Minus))) {
+          fail(QStringLiteral(
+              "Bare zoom shortcut remained window-scoped"));
+          return;
+        }
+
+        if (view->m_modeActions.size() != 10) {
+          fail(QStringLiteral(
+              "Ordinary peer lost its view-local render-mode shortcuts"));
+          return;
+        }
+        for (QAction *action : view->m_modeActions) {
+          if (!action ||
+              action->shortcutContext() != Qt::WidgetWithChildrenShortcut ||
+              !view->imageWidget()->actions().contains(action)) {
+            fail(QStringLiteral(
+                "Ordinary peer render-mode shortcut escaped its canvas"));
+            return;
+          }
+        }
+
+        // Ordinary peers use the document-owned navigation/tool shortcuts.
+        // Their private View-menu actions must not retain competing shortcuts.
+        const QStringList localViewActionNames = {
+            QStringLiteral("Pan"), QStringLiteral("Zoom In"),
+            QStringLiteral("Zoom Out"), QStringLiteral("Zoom 1:1"),
+            QStringLiteral("Fit"), QStringLiteral("Rotate Left"),
+            QStringLiteral("Rotate Right")};
+        for (QAction *action :
+             view->findChildren<QAction *>(QString(), Qt::FindDirectChildrenOnly)) {
+          if (action && localViewActionNames.contains(action->text()) &&
+              !action->shortcuts().isEmpty()) {
+            fail(QStringLiteral(
+                "Ordinary peer retained a duplicate private canvas shortcut"));
+            return;
+          }
+        }
+
         // Attached documents deliberately reparent their inspector column into
         // WorkspaceWindow's shared inspector stack.  Follow the document-owned
         // inspector handle rather than relying on QObject parentage.
