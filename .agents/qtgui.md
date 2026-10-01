@@ -107,12 +107,17 @@ newer entries. Rebuild menu actions from the captured path itself; do not depend
 on a sender QAction surviving a nested save/load prompt.
 
 The one shared document inspector may follow any compatible ordinary
-`ImageWidget`. Keep its weak target pointer, the dynamic signal connections
-bound to that target, and the temporary tool-transfer guard together in
-`InspectorImageRoutingState`. When a secondary inspected view closes,
-`WorkspaceWindow` explicitly rebinds the primary image; do not rely only on the
-`QPointer` becoming null, because the navigator/editing connections must be
-reinstalled as part of the same transition.
+`ImageWidget`. Keep its weak target pointer, dynamic signal connections, and
+the nestable presentation/tool-transfer guard together in
+`InspectorImageRoutingState`. A workspace chrome handoff begins the guard
+*before* toolbar/inspector reparenting, remembers the current canvas mode, and
+ends it only after the new presentation is installed. Transient Pan/focus/action
+changes during that interval must not cancel a document-owned temporary tool.
+On exit, Profile/Focus, Generic Area, Crop/Measure, or the remembered persistent
+mode is reasserted on the final inspector canvas. When a secondary inspected
+view closes, `WorkspaceWindow` explicitly rebinds the primary image; do not
+rely only on the `QPointer` becoming null, because the navigator/editing
+connections must be reinstalled as part of the same transition.
 
 `WorkspaceWindow` must use `QMdiArea`, rather than maintaining a parallel custom
 tab implementation. The default view is `QMdiArea::TabbedView`; its internal
