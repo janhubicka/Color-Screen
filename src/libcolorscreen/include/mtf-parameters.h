@@ -498,7 +498,8 @@ struct mtf_parameters
   DLL_PUBLIC computed_mtf compute_curves (int steps) const;
 
   /* Load a QuickMTF-style curve from IN, label it NAME, and report failures
-     through ERROR.  Return the newly appended measurement index or -1.  */
+     through ERROR.  Return the number of appended measurements (one for a
+     monochrome table, three for RGB) or -1.  */
   DLL_PUBLIC int load_csv (FILE *in, std::string name, const char **error);
 
   /* Return configured wavelength for channel C, falling back to the global
