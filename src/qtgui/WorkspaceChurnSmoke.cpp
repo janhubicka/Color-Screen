@@ -4401,7 +4401,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
                    "(isWindow=%1 embedded=%2 contained=%3 tabs=%4 localBar=%5 "
                    "localVisible=%6 docBarWorkspace=%7 inspectorPeer=%8 "
                    "dialogPeer=%9 instructionLocal=%10 localMarker=%11 "
-                   "workspaceMarker=%12)")
+                   "workspaceMarker=%12 focusPeer=%13)")
                    .arg(view->isWindow())
                    .arg(view->isWorkspaceEmbedded())
                    .arg(workspace->containsView(view))
@@ -4414,7 +4414,9 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
                    .arg(first->m_temporaryCanvas.instructionStatusBar.data() ==
                         view->standaloneStatusBar())
                    .arg(view->standaloneStatusBar()->currentMessage() == marker)
-                   .arg(workspace->statusBar()->currentMessage() == marker));
+                   .arg(workspace->statusBar()->currentMessage() == marker)
+                   .arg(QApplication::focusWidget() &&
+                        QApplication::focusWidget()->window() == view));
           return;
         }
 
