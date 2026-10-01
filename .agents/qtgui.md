@@ -122,8 +122,10 @@ the peer top-level and give its canvas focus before restoring the borrowed
 document inspector. The document also records that detached peer explicitly in
 `InspectorImageRoutingState::detachedPresentation`; structural MDI activation
 must not infer a different owner merely because another subwindow became
-current. Reattachment/release clears the token, while a later deliberate
-workspace focus may reclaim the inspector normally. When a secondary inspected
+current. Reattachment/release clears the token. A later workspace
+`WindowActivate` may reclaim it only after the handoff is finished and focus
+actually belongs to the workspace, so activation emitted as part of reparenting
+is not mistaken for a user ownership request. When a secondary inspected
 view closes, `WorkspaceWindow` explicitly rebinds the primary image; do not
 rely only on the `QPointer` becoming null, because the navigator/editing
 connections must be reinstalled as part of the same transition. A deleted MDI
