@@ -4397,7 +4397,24 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
             view->standaloneStatusBar()->currentMessage() != marker ||
             workspace->statusBar()->currentMessage() == marker) {
           fail(QStringLiteral(
-              "Workspace churn did not route inspector status to detached view"));
+                   "Workspace churn did not route inspector status to detached view "
+                   "(isWindow=%1 embedded=%2 contained=%3 tabs=%4 localBar=%5 "
+                   "localVisible=%6 docBarWorkspace=%7 inspectorPeer=%8 "
+                   "dialogPeer=%9 instructionLocal=%10 localMarker=%11 "
+                   "workspaceMarker=%12)")
+                   .arg(view->isWindow())
+                   .arg(view->isWorkspaceEmbedded())
+                   .arg(workspace->containsView(view))
+                   .arg(app.tabCount())
+                   .arg(view->statusBar() == view->standaloneStatusBar())
+                   .arg(view->standaloneStatusBar()->isVisible())
+                   .arg(first->statusBar() == workspace->statusBar())
+                   .arg(first->inspectorImageWidget() == view->imageWidget())
+                   .arg(first->inspectorDialogParent() == view)
+                   .arg(first->m_temporaryCanvas.instructionStatusBar.data() ==
+                        view->standaloneStatusBar())
+                   .arg(view->standaloneStatusBar()->currentMessage() == marker)
+                   .arg(workspace->statusBar()->currentMessage() == marker));
           return;
         }
 
