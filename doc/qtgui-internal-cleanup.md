@@ -838,9 +838,12 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   Crop/Measure, or another selected canvas tool into Pan and then mistaking that
   transient state for an explicit user cancellation. The outermost completion
   reasserts the authoritative temporary intent (or remembered persistent mode)
-  on the final inspector canvas. Closing a secondary view still rebinds the
-  primary image through `WorkspaceWindow`; the grouping keeps that lifecycle
-  explicit. Temporary canvas status
+  on the final inspector canvas. The outermost completion also migrates any
+  owned temporary status instruction to the final presentation bar; this is
+  required for attached↔detached transitions where the inspector `ImageWidget`
+  itself never changes. Closing a secondary view still rebinds the primary image
+  through `WorkspaceWindow`; the grouping keeps that lifecycle explicit.
+  Temporary canvas status
   guidance follows the same presentation owner through `inspectorStatusBar()`.
   `TemporaryCanvasToolState` retains the exact `QStatusBar` on which its
   current instruction was published, allowing an attached peer to detach (or
