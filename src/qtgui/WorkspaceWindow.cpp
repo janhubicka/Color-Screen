@@ -1218,6 +1218,18 @@ void WorkspaceWindow::onSubWindowActivated(QMdiSubWindow *window) {
     return;
   }
 
+  MainWindow *previousDocument =
+      m_chromeDocument
+          ? m_chromeDocument.data()
+          : (m_chromeView ? m_chromeView->sourceDocument() : nullptr);
+  MainWindow *nextDocument =
+      document ? document : (view ? view->sourceDocument() : nullptr);
+
+  if (previousDocument)
+    previousDocument->beginInspectorPresentationHandoff();
+  if (nextDocument && nextDocument != previousDocument)
+    nextDocument->beginInspectorPresentationHandoff();
+
   if (m_chromeDocument)
     releaseDocumentChrome(m_chromeDocument);
   if (m_chromeView)
@@ -1237,6 +1249,11 @@ void WorkspaceWindow::onSubWindowActivated(QMdiSubWindow *window) {
     statusBar()->clearMessage();
     setWindowTitle(tr("Color-Screen"));
   }
+
+  if (nextDocument && nextDocument != previousDocument)
+    nextDocument->endInspectorPresentationHandoff();
+  if (previousDocument)
+    previousDocument->endInspectorPresentationHandoff();
 }
 
 /** Remove DOCUMENT's wrapper and inspector while keeping DOCUMENT alive. */
