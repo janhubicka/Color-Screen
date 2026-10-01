@@ -1070,8 +1070,8 @@ void WorkspaceWindow::installDocumentInspector(MainWindow *document,
   // current while its peer is detached) must not infer ownership from that
   // incidental activation. A genuine workspace interaction has focus inside
   // this top-level window and may reclaim the inspector.
-  if (ImageViewWindow *detachedView =
-          document->detachedInspectorPresentation()) {
+  if (auto *detachedView = qobject_cast<ImageViewWindow *>(
+          document->detachedInspectorPresentation())) {
     QWidget *focus = QApplication::focusWidget();
     const bool workspaceFocused = focus && focus->window() == this;
     if (!detachedView->isWorkspaceEmbedded() && !workspaceFocused) {
