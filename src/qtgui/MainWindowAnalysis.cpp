@@ -678,7 +678,7 @@ void MainWindow::startRegistrationDiscovery(
 void MainWindow::startAutomaticPointDiscovery(
     const colorscreen::finetune_area_parameters &params,
     bool screenAutodetection) {
-  if (!m_scan)
+  if (!m_scan || m_imageLoad.pending)
     return;
   if (!colorscreen::screen_geometry_configured_p(m_scrToImgParams)) {
     inspectorStatusBar()->showMessage(
