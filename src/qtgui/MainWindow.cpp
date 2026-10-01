@@ -2789,7 +2789,9 @@ void MainWindow::setInspectorImageWidget(ImageWidget *imageWidget) {
 /** Reclaim the inspector when a detached primary document becomes active. */
 void MainWindow::changeEvent(QEvent *event) {
   QMainWindow::changeEvent(event);
-  if (event && event->type() == QEvent::WindowActivate && !m_workspacePresentation.embedded)
+  if (event && event->type() == QEvent::WindowActivate &&
+      QApplication::activeWindow() == this &&
+      !m_workspacePresentation.embedded)
     restoreWorkspaceInspector();
 }
 
