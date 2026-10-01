@@ -362,7 +362,10 @@ void WorkspaceWindow::addView(ImageViewWindow *view) {
       // steal that inspector back to the workspace current tab. Refresh only
       // when the logical view is gone, or when it has meanwhile been attached
       // again and therefore belongs to this MDI area.
-      if (!guardedView || containsView(guardedView))
+      const bool liveDetached =
+          guardedView && !guardedView->isWorkspaceEmbedded() &&
+          !containsView(guardedView);
+      if (!liveDetached)
         onSubWindowActivated(m_mdiArea->currentSubWindow());
 
       configureTabBar();
