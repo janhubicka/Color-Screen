@@ -1446,12 +1446,23 @@ void WorkspaceWindow::changeEvent(QEvent *event) {
       QApplication::activeWindow() != this)
     return;
 
+  QWidget *focus = QApplication::focusWidget();
+  if (!focus || focus->window() != this)
+    return;
+
+  MainWindow *document =
+      m_chromeDocument
+          ? m_chromeDocument.data()
+          : (m_chromeView && !m_chromeView->isSlantedEdgeReference()
+                 ? m_chromeView->sourceDocument()
+                 : nullptr);
+  if (!document || document->inspectorPresentationHandoffActive())
+    return;
+
   if (m_chromeDocument)
-    installDocumentInspector(m_chromeDocument,
-                             m_chromeDocument->primaryImageWidget(), true);
-  else if (m_chromeView && !m_chromeView->isSlantedEdgeReference())
-    installDocumentInspector(m_chromeView->sourceDocument(),
-                             m_chromeView->imageWidget(), true);
+    installDocumentInspector(document, document->primaryImageWidget(), true);
+  else
+    installDocumentInspector(document, m_chromeView->imageWidget(), true);
 }
 
 /** Close only the presentations hosted by this workspace shell. */
