@@ -776,6 +776,13 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   failures use `ReferenceImageLoadFailureDialog`, keep the failed view alive
   behind it, and close the view only while that exact warning still owns the
   failed request. Both lifecycle smokes exercise retry/prompt supersession.
+- QuickMTF batch import is transactional at the GUI boundary too. Selected
+  files are parsed into a private MTF collection without opening per-file modal
+  warnings; valid files are published in one undoable edit that touches only
+  `scanner_mtf`, while malformed/unreadable files are summarized once in a
+  parent-owned asynchronous warning. A bad file therefore cannot re-enter the
+  event loop while a whole stale `ParameterState` snapshot is waiting to be
+  written back.
 - Give long-lived analysis state explicit structs rather than parallel member
   variables. Profile-calibration, geometry-fit, measured-MTF fit, flat-field
   calibration, automatic multi-area focus analysis, temporary canvas-tool
