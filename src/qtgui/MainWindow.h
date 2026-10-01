@@ -43,6 +43,7 @@ class QWidget;
 #include "ImageWidget.h"
 
 class NavigationView;
+class ImageViewWindow;
 class QTimer;
 class QThread;
 #include "../libcolorscreen/include/colorscreen.h"
@@ -269,6 +270,14 @@ public:
 
   /** Route inspector navigation and interactive panel tools to IMAGEWIDGET. */
   void setInspectorImageWidget(ImageWidget *imageWidget);
+
+  /** Record/clear the detached ordinary view that currently owns the one
+      shared document inspector. */
+  void setDetachedInspectorPresentation(ImageViewWindow *view);
+  void clearDetachedInspectorPresentation(ImageViewWindow *view);
+  ImageViewWindow *detachedInspectorPresentation() const {
+    return m_inspectorImageRouting.detachedPresentation.data();
+  }
 
   /** Return the image view currently controlled by the document inspector. */
   ImageWidget *inspectorImageWidget() const {
@@ -738,6 +747,7 @@ private:
       that must survive transient Qt reparent/focus churn. */
   struct InspectorImageRoutingState {
     QPointer<ImageWidget> image;
+    QPointer<ImageViewWindow> detachedPresentation;
     std::vector<QMetaObject::Connection> connections;
     int switchDepth = 0;
     std::optional<ImageWidget::InteractionMode> handoffMode;
