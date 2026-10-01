@@ -210,6 +210,22 @@ void ImageViewWindow::setupUi() {
   connect(m_modeComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged),
           this, &ImageViewWindow::onModeChanged);
 
+  // Render modes are view-local, so each secondary/reference canvas owns its
+  // own 1-0 shortcuts rather than borrowing the source document's mode actions.
+  for (int i = 0; i < 10; ++i) {
+    const int key = (i + 1) % 10;
+    auto *action = new QAction(this);
+    action->setShortcut(QKeySequence(QString::number(key)));
+    action->setShortcutContext(Qt::WidgetWithChildrenShortcut);
+    action->setEnabled(false);
+    connect(action, &QAction::triggered, this, [this, i]() {
+      if (i < m_modeComboBox->count())
+        m_modeComboBox->setCurrentIndex(i);
+    });
+    m_imageWidget->addAction(action);
+    m_modeActions.append(action);
+  }
+
   m_colorCheckBox = new QCheckBox(tr("Color"), m_toolbar);
   m_colorCheckBoxAction = m_toolbar->addWidget(m_colorCheckBox);
   connect(m_colorCheckBox, &QCheckBox::toggled, this,
@@ -250,7 +266,11 @@ void ImageViewWindow::setupUi() {
     m_toolbar->addAction(pan);
   pan->setCheckable(true);
   pan->setChecked(true);
-  pan->setShortcut(QKeySequence(QStringLiteral("P")));
+  if (m_slantedEdgeReference || !m_document) {
+    pan->setShortcut(QKeySequence(QStringLiteral("P")));
+    pan->setShortcutContext(Qt::WidgetWithChildrenShortcut);
+    m_imageWidget->addAction(pan);
+  }
   connect(pan, &QAction::triggered, m_imageWidget,
           [this]() { m_imageWidget->setInteractionMode(ImageWidget::PanMode); });
   connect(m_imageWidget, &ImageWidget::interactionModeChanged, this,
@@ -259,45 +279,50 @@ void ImageViewWindow::setupUi() {
             pan->setChecked(mode == ImageWidget::PanMode);
           });
 
+  const bool ownsLocalCanvasActions = m_slantedEdgeReference || !m_document;
   QAction *zoomIn =
       new QAction(viewIcon(":/icons/zoom-in.svg"), tr("Zoom In"), this);
-  if (m_slantedEdgeReference || !m_document)
+  if (ownsLocalCanvasActions) {
     m_toolbar->addAction(zoomIn);
-  zoomIn->setShortcut(QKeySequence::ZoomIn);
+    zoomIn->setShortcut(QKeySequence::ZoomIn);
+  }
   connect(zoomIn, &QAction::triggered, m_imageWidget,
           [this]() { m_imageWidget->smoothZoomBy(1.25); });
   QAction *zoomOut =
       new QAction(viewIcon(":/icons/zoom-out.svg"), tr("Zoom Out"), this);
-  if (m_slantedEdgeReference || !m_document)
+  if (ownsLocalCanvasActions) {
     m_toolbar->addAction(zoomOut);
-  zoomOut->setShortcut(QKeySequence::ZoomOut);
+    zoomOut->setShortcut(QKeySequence::ZoomOut);
+  }
   connect(zoomOut, &QAction::triggered, m_imageWidget,
           [this]() { m_imageWidget->smoothZoomBy(0.8); });
   QAction *zoom100 =
       new QAction(viewIcon(":/icons/zoom-100.svg"), tr("Zoom 1:1"), this);
-  if (m_slantedEdgeReference || !m_document)
+  if (ownsLocalCanvasActions) {
     m_toolbar->addAction(zoom100);
-  zoom100->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_1));
+    zoom100->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_1));
+  }
   connect(zoom100, &QAction::triggered, m_imageWidget,
           [this]() { m_imageWidget->smoothZoomTo(1.0); });
   QAction *fit =
       new QAction(viewIcon(":/icons/zoom-fit.svg"), tr("Fit"), this);
-  if (m_slantedEdgeReference || !m_document)
+  if (ownsLocalCanvasActions) {
     m_toolbar->addAction(fit);
-  fit->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_0));
+    fit->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_0));
+  }
   connect(fit, &QAction::triggered, m_imageWidget, &ImageWidget::smoothFitToView);
 
   if (!m_slantedEdgeReference) {
     m_rotateLeftAction = new QAction(viewIcon(":/icons/rotate-left.svg"),
                                      tr("Rotate Left"), this);
-    m_rotateLeftAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_L));
+
     connect(m_rotateLeftAction, &QAction::triggered, this, [this]() {
       if (m_document)
         m_document->rotateDocumentLeft();
     });
     m_rotateRightAction = new QAction(viewIcon(":/icons/rotate-right.svg"),
                                       tr("Rotate Right"), this);
-    m_rotateRightAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_R));
+
     connect(m_rotateRightAction, &QAction::triggered, this, [this]() {
       if (m_document)
         m_document->rotateDocumentRight();
@@ -317,7 +342,7 @@ void ImageViewWindow::setupUi() {
   }
 
   if (!m_slantedEdgeReference && m_document)
-    m_document->appendOrdinaryViewToolActions(m_toolbar);
+    m_document->appendOrdinaryViewToolActions(m_toolbar, m_imageWidget);
 
   QMenu *fileMenu = menuBar()->addMenu(tr("&File"));
   QAction *closeView = new QAction(tr("&Close View"), this);
@@ -720,6 +745,8 @@ void ImageViewWindow::rebuildModeList() {
   }
   if (index >= 0)
     m_modeComboBox->setCurrentIndex(index);
+  for (int i = 0; i < m_modeActions.size(); ++i)
+    m_modeActions[i]->setEnabled(i < m_modeComboBox->count());
   modeSignalBlocker.unblock();
 }
 
