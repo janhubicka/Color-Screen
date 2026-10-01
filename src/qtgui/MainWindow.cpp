@@ -2495,6 +2495,8 @@ void MainWindow::restoreWorkspaceInspector() {
   if (!m_rightColumn || !m_mainSplitter)
     return;
 
+  m_inspectorImageRouting.detachedPresentation.clear();
+
   if (m_rightColumn->parentWidget() != m_mainSplitter) {
     takeWorkspaceInspector();
     m_mainSplitter->addWidget(m_rightColumn);
@@ -2603,6 +2605,17 @@ void MainWindow::endInspectorPresentationHandoff() {
   --m_inspectorImageRouting.switchDepth;
   syncTemporaryCanvasInstructionPresentation();
   syncProfileSpotEditingPresentation();
+}
+
+/** Record the detached ordinary view that currently presents this inspector. */
+void MainWindow::setDetachedInspectorPresentation(ImageViewWindow *view) {
+  m_inspectorImageRouting.detachedPresentation = view;
+}
+
+/** Release detached-inspector ownership only when VIEW still owns it. */
+void MainWindow::clearDetachedInspectorPresentation(ImageViewWindow *view) {
+  if (m_inspectorImageRouting.detachedPresentation == view)
+    m_inspectorImageRouting.detachedPresentation.clear();
 }
 
 /** Route the shared inspector's navigation and editing gestures to IMAGEWIDGET.
