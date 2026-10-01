@@ -1229,9 +1229,12 @@ void ImageViewWindow::claimDocumentInspector() {
                             m_document->sharedImageData())
     return;
 
+  m_document->setDetachedInspectorPresentation(this);
   QWidget *inspector = m_document->takeWorkspaceInspector();
-  if (!inspector)
+  if (!inspector) {
+    m_document->clearDetachedInspectorPresentation(this);
     return;
+  }
 
   QLayout *layout = m_documentInspectorHost->layout();
   if (layout && inspector->parentWidget() != m_documentInspectorHost) {
@@ -1248,6 +1251,7 @@ void ImageViewWindow::releaseDocumentInspector() {
   if (m_slantedEdgeReference || !m_document || !m_documentInspectorHost)
     return;
 
+  m_document->clearDetachedInspectorPresentation(this);
   QWidget *inspector = m_document->workspaceInspectorWidget();
   if (inspector && m_documentInspectorHost->isAncestorOf(inspector))
     m_document->takeWorkspaceInspector();
