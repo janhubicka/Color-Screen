@@ -517,7 +517,14 @@ sharpening** in a parent-owned asynchronous warning.
 `FinetuneMisregisteredWorker` instead publishes undoable point/geometry edits;
 its expected snapshot evolves with those accepted batches. Both still require
 one generation/progress/scan identity, stale-input cancellation and
-request-owned final cleanup.
+request-owned final cleanup. Starting image replacement is itself an immediate
+staleness boundary even though `m_scan` intentionally retains the outgoing
+image until asynchronous loading succeeds. `loadFile()` marks
+`m_imageLoad.pending` first, cancels/clears both progressive owners, and their
+publication gates reject every queued result while replacement remains pending.
+The progressive launchers also refuse new registration/adaptive requests during
+that interval, so no worker can start against the outgoing scan after the user
+has committed to replacement.
 
 ### Initial screen setup
 
