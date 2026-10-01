@@ -843,12 +843,13 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   required for attached↔detached transitions where the inspector `ImageWidget`
   itself never changes. Closing a secondary view still rebinds the primary image
   through `WorkspaceWindow`; the grouping keeps that lifecycle explicit. The
-  MDI wrapper-destruction callback also distinguishes an attached close from a
-  live detached view. Deferred workspace activation is skipped only while the
-  logical view is live, non-embedded and not reattached; an attached close still
-  refreshes even if its child QPointer has not cleared yet. This prevents
-  sanitizer-timing wrapper cleanup from reclaiming the document inspector after
-  detach without weakening normal close cleanup. Temporary canvas status
+  MDI wrapper-destruction callback also distinguishes close from deliberate
+  detach without consulting transient widget state. `takeViewFromWorkspace()`
+  records the non-closing removal in `m_detachingViews` before deleting the old
+  wrapper; the deferred destroyed callback consumes that marker and skips only
+  that workspace activation. Actual close is unmarked and still refreshes
+  normally. This prevents sanitizer-timing wrapper cleanup from reclaiming the
+  document inspector after detach. Temporary canvas status
   guidance follows the same presentation owner through `inspectorStatusBar()`.
   `TemporaryCanvasToolState` retains the exact `QStatusBar` on which its
   current instruction was published, allowing an attached peer to detach (or
