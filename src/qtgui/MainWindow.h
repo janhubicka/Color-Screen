@@ -267,6 +267,9 @@ public:
       menus/toolbars/inspector widgets between presentations. */
   void beginInspectorPresentationHandoff();
   void endInspectorPresentationHandoff();
+  bool inspectorPresentationHandoffActive() const {
+    return m_inspectorImageRouting.switching();
+  }
 
   /** Route inspector navigation and interactive panel tools to IMAGEWIDGET. */
   void setInspectorImageWidget(ImageWidget *imageWidget);
