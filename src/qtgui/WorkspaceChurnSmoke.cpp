@@ -80,6 +80,7 @@ struct WorkspaceChurnState {
   std::atomic_bool oneShotSawCancellation{false};
   std::optional<ParameterState> focusProbeOriginalState;
   QPointer<ImageViewWindow> reference;
+  QPointer<QMessageBox> obsoleteReferenceLoadFailure;
   std::unique_ptr<QTemporaryDir> referenceDirectory;
   ParameterState beforeReference;
   ParameterState referenceInputs;
@@ -4015,6 +4016,92 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
           }
 
         first->applyState(state->beforeReference);
+
+        if (!state->referenceDirectory || !state->referenceDirectory->isValid()) {
+          fail(QStringLiteral(
+              "Reference-load failure smoke lost its temporary directory"));
+          return;
+        }
+        const QString missingReference = state->referenceDirectory->filePath(
+            QStringLiteral("missing-reference-load.tif"));
+        state->reference =
+            app.createSlantedEdgeReference(first, missingReference, true);
+        if (!state->reference) {
+          fail(QStringLiteral(
+              "Could not create failed reference-load smoke view"));
+          return;
+        }
+        schedule(214, 50, 100);
+        return;
+      }
+
+      case 214: {
+        ImageViewWindow *reference = state->reference.data();
+        if (!reference) {
+          fail(QStringLiteral(
+              "Failed reference view closed before presenting its load error"));
+          return;
+        }
+        auto *errorDialog = reference->findChild<QMessageBox *>(
+            QStringLiteral("ReferenceImageLoadFailureDialog"));
+        if (!errorDialog || reference->m_referenceLoadPending ||
+            reference->m_referenceLoadFailurePrompt != errorDialog) {
+          retryOrFail(QStringLiteral(
+              "Failed reference load did not present/own its asynchronous warning"));
+          return;
+        }
+        if (reference->sharedImageData()) {
+          fail(QStringLiteral(
+              "Failed reference load published an image before its warning"));
+          return;
+        }
+
+        state->obsoleteReferenceLoadFailure = errorDialog;
+        reference->reloadReferenceImage();
+        if (!state->reference || !reference->m_referenceLoadPending) {
+          fail(QStringLiteral(
+              "Retrying a failed reference load let the obsolete warning close the view"));
+          return;
+        }
+        schedule(216, 50, 100);
+        return;
+      }
+
+      case 216: {
+        ImageViewWindow *reference = state->reference.data();
+        if (!reference) {
+          fail(QStringLiteral(
+              "Obsolete reference-load warning closed the retried view"));
+          return;
+        }
+        if (reference->m_referenceLoadPending) {
+          retryOrFail(QStringLiteral(
+              "Retried missing reference load did not finish"));
+          return;
+        }
+        QMessageBox *currentFailure =
+            reference->m_referenceLoadFailurePrompt.data();
+        if (!currentFailure ||
+            currentFailure->objectName() !=
+                QStringLiteral("ReferenceImageLoadFailureDialog") ||
+            (state->obsoleteReferenceLoadFailure &&
+             currentFailure == state->obsoleteReferenceLoadFailure)) {
+          retryOrFail(QStringLiteral(
+              "Retried reference load did not replace the obsolete warning"));
+          return;
+        }
+        currentFailure->accept();
+        state->obsoleteReferenceLoadFailure.clear();
+        schedule(215, 50, 100);
+        return;
+      }
+
+      case 215: {
+        if (state->reference) {
+          retryOrFail(QStringLiteral(
+              "Failed reference view did not close after dismissing its warning"));
+          return;
+        }
         state->referenceDirectory.reset();
         schedule(212, 0, 40);
         return;
