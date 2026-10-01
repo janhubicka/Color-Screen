@@ -120,7 +120,11 @@ is also re-resolved at this outermost boundary: attach/detach can keep the same
 alone are not a sufficient migration signal. When a secondary inspected
 view closes, `WorkspaceWindow` explicitly rebinds the primary image; do not
 rely only on the `QPointer` becoming null, because the navigator/editing
-connections must be reinstalled as part of the same transition.
+connections must be reinstalled as part of the same transition. A deleted MDI
+wrapper is not by itself evidence that the logical view closed: deliberate
+detach deletes the wrapper while keeping the view alive. Deferred wrapper
+cleanup must not run a fresh workspace activation in that case, or it can steal
+the one shared inspector back after the detached view has claimed it.
 
 `WorkspaceWindow` must use `QMdiArea`, rather than maintaining a parallel custom
 tab implementation. The default view is `QMdiArea::TabbedView`; its internal
