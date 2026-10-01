@@ -261,6 +261,12 @@ public:
   /** Restore the document-owned inspector beside the primary image view. */
   void restoreWorkspaceInspector();
 
+  /** Begin/end one workspace presentation handoff for this inspector.
+      The outer guard preserves the current canvas tool while Qt moves shared
+      menus/toolbars/inspector widgets between presentations. */
+  void beginInspectorPresentationHandoff();
+  void endInspectorPresentationHandoff();
+
   /** Route inspector navigation and interactive panel tools to IMAGEWIDGET. */
   void setInspectorImageWidget(ImageWidget *imageWidget);
 
@@ -725,12 +731,16 @@ private:
 
   /** Dynamic routing for the one shared document inspector.
       IMAGE is weak because secondary views are independently closable;
-      CONNECTIONS belong exactly to that image; SWITCHING suppresses temporary
-      tool cancellation while ownership moves between compatible ordinary views. */
+      CONNECTIONS belong exactly to that image. SWITCHDEPTH covers nested
+      workspace/chrome and image-target handoffs; HANDOFFMODE remembers the tool
+      that must survive transient Qt reparent/focus churn. */
   struct InspectorImageRoutingState {
     QPointer<ImageWidget> image;
     std::vector<QMetaObject::Connection> connections;
-    bool switching = false;
+    int switchDepth = 0;
+    std::optional<ImageWidget::InteractionMode> handoffMode;
+
+    bool switching() const { return switchDepth > 0; }
   };
   InspectorImageRoutingState m_inspectorImageRouting;
 
