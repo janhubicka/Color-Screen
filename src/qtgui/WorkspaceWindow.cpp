@@ -226,6 +226,8 @@ void WorkspaceWindow::addDocument(MainWindow *document) {
     return;
   }
 
+  document->beginInspectorPresentationHandoff();
+
   document->hide();
   document->prepareForWorkspaceEmbedding();
   document->setWorkspaceStatusBar(statusBar());
@@ -283,12 +285,15 @@ void WorkspaceWindow::addDocument(MainWindow *document) {
   --m_chromeActivationBlockDepth;
   onSubWindowActivated(subWindow);
   configureTabBar();
+  document->endInspectorPresentationHandoff();
 }
 
 /** Remove DOCUMENT from the MDI area and restore standalone presentation. */
 void WorkspaceWindow::removeDocument(MainWindow *document) {
   if (!document || !containsDocument(document))
     return;
+
+  document->beginInspectorPresentationHandoff();
 
   takeDocumentFromWorkspace(document);
   document->restoreFromWorkspaceEmbedding();
@@ -297,6 +302,7 @@ void WorkspaceWindow::removeDocument(MainWindow *document) {
   onSubWindowActivated(m_mdiArea->currentSubWindow());
   configureTabBar();
   scheduleCloseIfEmpty();
+  document->endInspectorPresentationHandoff();
 }
 /** Embed secondary VIEW in the same MDI area as ordinary documents. */
 void WorkspaceWindow::addView(ImageViewWindow *view) {
@@ -306,6 +312,10 @@ void WorkspaceWindow::addView(ImageViewWindow *view) {
     activateView(view);
     return;
   }
+
+  MainWindow *sourceDocument = view->sourceDocument();
+  if (sourceDocument)
+    sourceDocument->beginInspectorPresentationHandoff();
 
   view->hide();
   view->prepareForWorkspaceEmbedding();
@@ -366,12 +376,18 @@ void WorkspaceWindow::addView(ImageViewWindow *view) {
   --m_chromeActivationBlockDepth;
   onSubWindowActivated(subWindow);
   configureTabBar();
+  if (sourceDocument)
+    sourceDocument->endInspectorPresentationHandoff();
 }
 
 /** Remove secondary VIEW from the MDI area and show it standalone. */
 void WorkspaceWindow::removeView(ImageViewWindow *view) {
   if (!view || !containsView(view))
     return;
+
+  MainWindow *sourceDocument = view->sourceDocument();
+  if (sourceDocument)
+    sourceDocument->beginInspectorPresentationHandoff();
 
   takeViewFromWorkspace(view);
   onSubWindowActivated(m_mdiArea->currentSubWindow());
@@ -382,6 +398,9 @@ void WorkspaceWindow::removeView(ImageViewWindow *view) {
   view->show();
   view->raise();
   view->activateWindow();
+
+  if (sourceDocument)
+    sourceDocument->endInspectorPresentationHandoff();
 }
 
 /** Return the active document, resolving secondary views to their owner. */
