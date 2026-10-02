@@ -5705,8 +5705,8 @@ QString MainWindow::presentFocusAreaAnalysisResult(
    progress identity, cancellation, incomplete-file cleanup, and completion. */
 void MainWindow::onRender() {
   if (!m_scan) {
-    QMessageBox::warning(this, tr("Render"),
-                         tr("No image loaded. Please open an image first."));
+    statusBar()->showMessage(
+        tr("No image loaded. Open an image before rendering."), 4000);
     return;
   }
 
