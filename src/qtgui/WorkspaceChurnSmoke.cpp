@@ -4386,6 +4386,42 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
       }
 
       case 213: {
+        // While replacement is pending, the outgoing m_scan remains alive for
+        // load/failure lifetime but must not seed fresh document analysis.
+        if (!first->m_scan || first->m_oneShotOperations.hasActiveTasks()) {
+          fail(QStringLiteral(
+              "Pending-image analysis smoke did not start from an idle loaded document"));
+          return;
+        }
+        first->m_geometryFit.clearRequest();
+        first->m_solverQueue.cancelAll();
+        first->m_imageLoad.pending = true;
+
+        bool oneShotStarted = false;
+        bool oneShotWorkerRan = false;
+        MainWindow::OneShotOperation blockedOperation;
+        blockedOperation.description =
+            QStringLiteral("Pending image one-shot smoke");
+        blockedOperation.onStart =
+            [&oneShotStarted](std::shared_ptr<colorscreen::progress_info>) {
+              oneShotStarted = true;
+            };
+        first->runOneShotOperation(
+            std::move(blockedOperation),
+            [&oneShotWorkerRan](colorscreen::progress_info *) {
+              oneShotWorkerRan = true;
+            });
+        first->requestGeometryOptimization(false);
+        if (oneShotStarted || oneShotWorkerRan ||
+            first->m_oneShotOperations.hasActiveTasks() ||
+            first->m_geometryFit.pendingInputs) {
+          first->m_imageLoad.pending = false;
+          fail(QStringLiteral(
+              "Image replacement allowed new one-shot/geometry analysis against outgoing scan"));
+          return;
+        }
+        first->m_imageLoad.pending = false;
+
         // Registration discovery differs from immutable progressive analysis:
         // its own accepted point/geometry batches advance the document state.
         // Verify that advancing EXPECTEDSTATE keeps the request current, while

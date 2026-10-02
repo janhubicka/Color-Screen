@@ -46,6 +46,7 @@ struct DocumentLifecycleState {
   QPointer<ImageViewWindow> view;
   QPointer<MainWindow> recoveryProbe;
   QPointer<QMessageBox> obsoleteImageLoadFailure;
+  std::shared_ptr<colorscreen::image_data> reloadOutgoingScan;
   std::unique_ptr<QTemporaryDir> temporaryDirectory;
   QString recoveryProbeDirectory;
   QString recoveryExpectedImage;
@@ -683,15 +684,43 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
         auto *loadProbe = new MainWindow(loadProbeDirectory);
         loadProbe->hide();
         state->recoveryProbe = loadProbe;
+
+        // Image replacement itself must invalidate progressive publication,
+        // before the asynchronous loader can finish and change m_scan. Seed
+        // synthetic current owners so this missing-file probe exercises the
+        // synchronous replacement boundary without running expensive workers.
+        const ParameterState outgoingState = loadProbe->getCurrentState();
+        auto adaptiveProgress =
+            std::make_shared<colorscreen::progress_info>();
+        ++loadProbe->m_adaptiveSharpening.generation;
+        loadProbe->m_adaptiveSharpening.baseline = outgoingState;
+        loadProbe->m_adaptiveSharpening.scan = loadProbe->m_scan;
+        loadProbe->m_adaptiveSharpening.progress = adaptiveProgress;
+
+        auto registrationProgress =
+            std::make_shared<colorscreen::progress_info>();
+        ++loadProbe->m_registrationDiscovery.generation;
+        loadProbe->m_registrationDiscovery.expectedState = outgoingState;
+        loadProbe->m_registrationDiscovery.scan = loadProbe->m_scan;
+        loadProbe->m_registrationDiscovery.progress = registrationProgress;
+
         loadProbe->loadFile(
             state->temporaryDirectory->filePath(
                 QStringLiteral("missing-image-load.tif")),
             true);
-        if (!loadProbe->m_imageLoad.pending) {
+        if (!loadProbe->m_imageLoad.pending ||
+            !adaptiveProgress->pool_cancel() ||
+            loadProbe->m_adaptiveSharpening.baseline ||
+            loadProbe->m_adaptiveSharpening.scan ||
+            !loadProbe->m_adaptiveSharpening.progress.expired() ||
+            !registrationProgress->pool_cancel() ||
+            loadProbe->m_registrationDiscovery.expectedState ||
+            loadProbe->m_registrationDiscovery.scan ||
+            !loadProbe->m_registrationDiscovery.progress.expired()) {
           delete loadProbe;
           state->recoveryProbe = nullptr;
           fail(QStringLiteral(
-              "Image-load failure smoke did not start asynchronous loading"));
+              "Image replacement did not synchronously invalidate progressive analysis"));
           return;
         }
         schedule(-2, 50, 120);
@@ -756,6 +785,84 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
         state->obsoleteImageLoadFailure.clear();
         delete probe;
         state->recoveryProbe = nullptr;
+
+        // A failed current-image reload must restore the outgoing scan to the
+        // primary ImageWidget. This is distinct from an ordinary missing-file
+        // open above, which correctly leaves a fresh document empty.
+        const QString reloadProbeDirectory =
+            state->temporaryDirectory->filePath(
+                QStringLiteral("image-reload-failure"));
+        if (!QDir().mkpath(reloadProbeDirectory)) {
+          fail(QStringLiteral(
+              "Image-reload failure smoke could not create its probe directory"));
+          return;
+        }
+        auto *reloadProbe = new MainWindow(reloadProbeDirectory);
+        reloadProbe->hide();
+        const QString missingReloadPath =
+            state->temporaryDirectory->filePath(
+                QStringLiteral("missing-current-image-reload.tif"));
+        auto outgoingScan = std::make_shared<colorscreen::image_data>();
+        if (!outgoingScan->set_dimensions(8, 8, false, true)) {
+          delete reloadProbe;
+          fail(QStringLiteral(
+              "Image-reload failure smoke could not create its outgoing scan"));
+          return;
+        }
+        reloadProbe->m_scan = outgoingScan;
+        reloadProbe->m_currentImageFile =
+            QFileInfo(missingReloadPath).absoluteFilePath();
+        reloadProbe->m_imageWidget->setImage(
+            outgoingScan, &reloadProbe->m_rparams, &reloadProbe->m_scrToImgParams,
+            &reloadProbe->m_detectParams, &reloadProbe->m_renderTypeParams,
+            &reloadProbe->m_solverParams);
+        if (reloadProbe->m_imageWidget->sharedImageData() != outgoingScan) {
+          delete reloadProbe;
+          fail(QStringLiteral(
+              "Image-reload failure smoke did not establish outgoing presentation"));
+          return;
+        }
+
+        state->reloadOutgoingScan = outgoingScan;
+        state->recoveryProbe = reloadProbe;
+        reloadProbe->loadFile(missingReloadPath, true);
+        if (!reloadProbe->m_imageLoad.pending ||
+            reloadProbe->m_imageWidget->sharedImageData()) {
+          fail(QStringLiteral(
+              "Image-reload failure smoke did not enter replacement presentation"));
+          return;
+        }
+        schedule(-4, 50, 120);
+        return;
+      }
+
+      case -4: {
+        MainWindow *probe = state->recoveryProbe.data();
+        if (!probe || !state->reloadOutgoingScan) {
+          fail(QStringLiteral(
+              "Image-reload failure smoke lost its document or outgoing scan"));
+          return;
+        }
+        if (probe->m_imageLoad.pending) {
+          retryOrFail(QStringLiteral("Failed current-image reload did not finish"));
+          return;
+        }
+        QMessageBox *loadFailure = probe->m_imageLoad.failurePrompt.data();
+        if (!loadFailure ||
+            probe->sharedImageData() != state->reloadOutgoingScan ||
+            probe->m_imageWidget->sharedImageData() !=
+                state->reloadOutgoingScan ||
+            !loadFailure->text().contains(
+                QStringLiteral("previous image remains open"),
+                Qt::CaseInsensitive)) {
+          fail(QStringLiteral(
+              "Failed current-image reload did not restore outgoing presentation"));
+          return;
+        }
+        loadFailure->accept();
+        delete probe;
+        state->recoveryProbe = nullptr;
+        state->reloadOutgoingScan.reset();
 
         schedule(0, 0, 40);
         return;

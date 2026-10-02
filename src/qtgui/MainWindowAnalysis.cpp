@@ -390,7 +390,7 @@ private:
    Results arrive incrementally via pointsReady and geometryReady signals.  */
 void MainWindow::onAutomaticallyAddPointsInAreaRequested(
     const colorscreen::finetune_area_parameters &params) {
-  if (!m_scan)
+  if (!m_scan || m_imageLoad.pending)
     return;
   if (!colorscreen::screen_geometry_configured_p(m_scrToImgParams)) {
     inspectorStatusBar()->showMessage(
@@ -444,8 +444,8 @@ void MainWindow::onAutomaticallyAddPointsRequested(
 bool MainWindow::registrationDiscoveryRequestCurrent(
     uint64_t generation,
     const std::shared_ptr<colorscreen::progress_info> &progress) const {
-  if (m_closeLifecycle.closing() || !progress || progress->pool_cancel() ||
-      progress->cancelled() ||
+  if (m_closeLifecycle.closing() || m_imageLoad.pending || !progress ||
+      progress->pool_cancel() || progress->cancelled() ||
       generation != m_registrationDiscovery.generation)
     return false;
   if (m_registrationDiscovery.progress.lock() != progress ||
@@ -464,7 +464,7 @@ void MainWindow::cancelStaleRegistrationDiscovery(
     const ParameterState &currentState) {
   if (!m_registrationDiscovery.expectedState)
     return;
-  if (m_registrationDiscovery.scan == m_scan &&
+  if (!m_imageLoad.pending && m_registrationDiscovery.scan == m_scan &&
       *m_registrationDiscovery.expectedState == currentState)
     return;
 
@@ -495,7 +495,7 @@ void MainWindow::startRegistrationDiscovery(
     const colorscreen::finetune_area_parameters &params,
     bool screenAutodetection, bool allowRegistrationBootstrap,
     bool selectedArea) {
-  if (!m_scan ||
+  if (!m_scan || m_imageLoad.pending ||
       !colorscreen::screen_geometry_configured_p(m_scrToImgParams))
     return;
 
@@ -678,7 +678,7 @@ void MainWindow::startRegistrationDiscovery(
 void MainWindow::startAutomaticPointDiscovery(
     const colorscreen::finetune_area_parameters &params,
     bool screenAutodetection) {
-  if (!m_scan)
+  if (!m_scan || m_imageLoad.pending)
     return;
   if (!colorscreen::screen_geometry_configured_p(m_scrToImgParams)) {
     inspectorStatusBar()->showMessage(
@@ -899,8 +899,8 @@ void MainWindow::presentDetectedScreenResult(
 bool MainWindow::adaptiveSharpeningRequestCurrent(
     uint64_t generation,
     const std::shared_ptr<colorscreen::progress_info> &progress) const {
-  if (m_closeLifecycle.closing() || !progress || progress->pool_cancel() ||
-      progress->cancelled() ||
+  if (m_closeLifecycle.closing() || m_imageLoad.pending || !progress ||
+      progress->pool_cancel() || progress->cancelled() ||
       generation != m_adaptiveSharpening.generation)
     return false;
   if (m_adaptiveSharpening.progress.lock() != progress ||
@@ -929,7 +929,7 @@ void MainWindow::cancelStaleAdaptiveSharpening(
     const ParameterState &currentState) {
   if (!m_adaptiveSharpening.baseline)
     return;
-  if (m_adaptiveSharpening.scan == m_scan &&
+  if (!m_imageLoad.pending && m_adaptiveSharpening.scan == m_scan &&
       *m_adaptiveSharpening.baseline == currentState)
     return;
 
@@ -952,7 +952,7 @@ void MainWindow::cancelStaleAdaptiveSharpening(
     publish into a newer document state. */
 void MainWindow::onAdaptiveSharpeningRequested(
     const AdaptiveSharpeningParameters &parameters) {
-  if (!m_scan)
+  if (!m_scan || m_imageLoad.pending)
     return;
   if (!colorscreen::screen_geometry_configured_p(m_scrToImgParams)) {
     inspectorStatusBar()->showMessage(
