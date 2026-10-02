@@ -4127,6 +4127,35 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
           fail(QStringLiteral("Workspace churn lost flat-field status"));
           return;
         }
+
+        // Flat-field reference selection is window-modal but asynchronous.  Its
+        // prompt belongs to one setup generation so a document close, image
+        // replacement, or newer one-shot request can revoke it without letting
+        // finished()/accepted() continue the obsolete chain.
+        const uint64_t flatSetupGeneration =
+            ++first->m_flatFieldCalibration.setupGeneration;
+        first->continueFlatFieldSetup(
+            flatSetupGeneration,
+            QStringLiteral("/tmp/colorscreen-flat-white-prompt-smoke.tif"));
+        QDialog *flatSetupPrompt =
+            first->m_flatFieldCalibration.setupPrompt.data();
+        if (!flatSetupPrompt ||
+            flatSetupPrompt->objectName() !=
+                QStringLiteral("FlatFieldBlackReferenceQuestion") ||
+            flatSetupPrompt->parentWidget() != first->inspectorDialogParent()) {
+          fail(QStringLiteral(
+              "Flat-field setup did not create its inspector-owned asynchronous prompt"));
+          return;
+        }
+        first->dismissOneShotPrompts();
+        if (first->m_flatFieldCalibration.setupPrompt ||
+            first->m_flatFieldCalibration.setupGeneration !=
+                flatSetupGeneration + 1) {
+          fail(QStringLiteral(
+              "Flat-field setup prompt was not revoked by one-shot dismissal"));
+          return;
+        }
+
         {
           const ParameterState flatOriginal = first->getCurrentState();
           const auto savedFlatCalibration = first->m_flatFieldCalibration;

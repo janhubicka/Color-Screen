@@ -4870,7 +4870,7 @@ void MainWindow::cancelAreaSelectionPresentation() {
   clearTemporaryCanvasInstruction();
 }
 
-/** Close stale final-result confirmations without applying their results. */
+/** Close stale final-result confirmations/setup prompts without publishing. */
 void MainWindow::dismissOneShotPrompts() {
   if (QDialog *prompt = m_screenAutodetection.prompt.data()) {
     // Clear first: close() emits finished, whose callback must recognize that
@@ -4880,6 +4880,11 @@ void MainWindow::dismissOneShotPrompts() {
   }
   if (QMessageBox *prompt = m_focusAreaAnalysis.prompt.data()) {
     m_focusAreaAnalysis.prompt = nullptr;
+    prompt->close();
+  }
+  ++m_flatFieldCalibration.setupGeneration;
+  if (QDialog *prompt = m_flatFieldCalibration.setupPrompt.data()) {
+    m_flatFieldCalibration.setupPrompt = nullptr;
     prompt->close();
   }
 }
@@ -5074,93 +5079,192 @@ void MainWindow::onAlternateColorsRequested() {
 }
 
 /** Open white/optional black references and launch one flat-field analysis.
-   The computation uses the shared final-result OneShotOperation lifecycle, so
-   document edits, replacement requests, cancellation and close all veto stale
-   publication without a dedicated QThread or generation counter. */
+   Reference selection is an asynchronous, generation-owned dialog chain; the
+   numerical computation then uses the shared final-result OneShotOperation
+   lifecycle.  Repeated setup, image replacement and close revoke the old chain
+   before any later callback can start work. */
 void MainWindow::onFlatFieldRequested() {
+  if (m_closeLifecycle.closing())
+    return;
+
+  // Choosing references is already part of this final-result operation from
+  // the user's perspective. Supersede older approval/setup UI and computation
+  // immediately, before opening another file chooser.
+  dismissOneShotPrompts();
+  m_oneShotOperations.cancelAll();
+  const uint64_t generation = m_flatFieldCalibration.setupGeneration;
+
   const QString filters =
       "Images (*.tif *.tiff *.jpg *.jpeg *.raw *.dng *.iiq *.nef *.NEF *.cr2 "
       "*.CR2 *.eip *.arw *.ARW *.raf *.RAF *.arq *.ARQ *.csprj);;All Files "
       "(*)";
-  const QString whiteFile = QFileDialog::getOpenFileName(
-      inspectorDialogParent(), "Choose White Reference", m_currentImageFile,
+  auto *dialog = new QFileDialog(
+      inspectorDialogParent(), tr("Choose White Reference"), m_currentImageFile,
       filters);
-  if (whiteFile.isEmpty())
+  dialog->setObjectName(QStringLiteral("FlatFieldWhiteReferenceDialog"));
+  dialog->setFileMode(QFileDialog::ExistingFile);
+  dialog->setAcceptMode(QFileDialog::AcceptOpen);
+  dialog->setAttribute(Qt::WA_DeleteOnClose);
+  m_flatFieldCalibration.setupPrompt = dialog;
+
+  connect(dialog, &QDialog::accepted, this, [this, dialog, generation]() {
+    if (m_closeLifecycle.closing() ||
+        m_flatFieldCalibration.setupGeneration != generation ||
+        m_flatFieldCalibration.setupPrompt != dialog)
+      return;
+    const QStringList selected = dialog->selectedFiles();
+    m_flatFieldCalibration.setupPrompt = nullptr;
+    if (!selected.isEmpty())
+      continueFlatFieldSetup(generation, selected.front());
+  });
+  connect(dialog, &QDialog::rejected, this, [this, dialog, generation]() {
+    if (m_flatFieldCalibration.setupGeneration == generation &&
+        m_flatFieldCalibration.setupPrompt == dialog)
+      m_flatFieldCalibration.setupPrompt = nullptr;
+  });
+  dialog->open();
+}
+
+/** Ask whether GENERATION should use a black reference after WHITEFILE. */
+void MainWindow::continueFlatFieldSetup(uint64_t generation,
+                                        const QString &whiteFile) {
+  if (m_closeLifecycle.closing() ||
+      m_flatFieldCalibration.setupGeneration != generation ||
+      whiteFile.isEmpty())
     return;
 
-  QTimer::singleShot(0, this, [this, filters, whiteFile]() {
-    QString blackFile;
-    QWidget *dialogParent = inspectorDialogParent();
-    if (QMessageBox::question(
-            dialogParent, "Flat Field",
-            "Do you want to provide a black reference image (optional)?",
-            QMessageBox::Yes | QMessageBox::No) == QMessageBox::Yes) {
-      blackFile = QFileDialog::getOpenFileName(
-          dialogParent, "Choose Black Reference", m_currentImageFile, filters);
+  auto *question = new QMessageBox(
+      QMessageBox::Question, tr("Flat Field"),
+      tr("Do you want to provide a black reference image (optional)?"),
+      QMessageBox::Yes | QMessageBox::No, inspectorDialogParent());
+  question->setObjectName(QStringLiteral("FlatFieldBlackReferenceQuestion"));
+  question->setAttribute(Qt::WA_DeleteOnClose);
+  m_flatFieldCalibration.setupPrompt = question;
+
+  connect(question, &QMessageBox::finished, this,
+          [this, question, generation, whiteFile](int result) {
+    if (m_closeLifecycle.closing() ||
+        m_flatFieldCalibration.setupGeneration != generation ||
+        m_flatFieldCalibration.setupPrompt != question)
+      return;
+    m_flatFieldCalibration.setupPrompt = nullptr;
+
+    if (result != QMessageBox::Yes) {
+      startFlatFieldAnalysis(generation, whiteFile, QString());
+      return;
     }
 
-    const colorscreen::luminosity_t gamma = m_rparams.gamma;
-    const colorscreen::image_data::demosaicing_t demosaic = m_rparams.demosaic;
-    auto result = std::make_shared<FlatFieldAnalysisResult>();
+    const QString filters =
+        "Images (*.tif *.tiff *.jpg *.jpeg *.raw *.dng *.iiq *.nef *.NEF *.cr2 "
+        "*.CR2 *.eip *.arw *.ARW *.raf *.RAF *.arq *.ARQ *.csprj);;All Files "
+        "(*)";
+    auto *dialog = new QFileDialog(
+        inspectorDialogParent(), tr("Choose Black Reference"),
+        m_currentImageFile, filters);
+    dialog->setObjectName(QStringLiteral("FlatFieldBlackReferenceDialog"));
+    dialog->setFileMode(QFileDialog::ExistingFile);
+    dialog->setAcceptMode(QFileDialog::AcceptOpen);
+    dialog->setAttribute(Qt::WA_DeleteOnClose);
+    m_flatFieldCalibration.setupPrompt = dialog;
 
-    auto requestProgress =
-        std::make_shared<std::shared_ptr<colorscreen::progress_info>>();
-
-    OneShotOperation operation;
-    operation.description = tr("Flat field analysis");
-    operation.onStart =
-        [this, requestProgress](
-            std::shared_ptr<colorscreen::progress_info> progress) {
-      *requestProgress = progress;
-      m_flatFieldCalibration.progress = progress;
-      updateWorkflowSummary();
-    };
-    operation.resultValid = [this, gamma, demosaic]() {
-      return m_rparams.gamma == gamma && m_rparams.demosaic == demosaic;
-    };
-    operation.applyResult =
-        [this, result, gamma, demosaic, whiteFile, blackFile]() {
-      if (!result->success || !result->correction) {
-        if (!result->cancelled) {
-          auto *box = new QMessageBox(
-              QMessageBox::Warning, tr("Flat Field"),
-              flatFieldFailureMessage(result->error), QMessageBox::Ok,
-              inspectorDialogParent());
-          box->setObjectName(QStringLiteral("FlatFieldFailureDialog"));
-          box->setAttribute(Qt::WA_DeleteOnClose);
-          box->open();
-        }
+    connect(dialog, &QDialog::accepted, this,
+            [this, dialog, generation, whiteFile]() {
+      if (m_closeLifecycle.closing() ||
+          m_flatFieldCalibration.setupGeneration != generation ||
+          m_flatFieldCalibration.setupPrompt != dialog)
         return;
-      }
-
-      ParameterState newState = getCurrentState();
-      newState.rparams.backlight_correction = result->correction;
-      changeParameters(newState, tr("Flat field"));
-
-      m_flatFieldCalibration.gamma = gamma;
-      m_flatFieldCalibration.demosaic = demosaic;
-      m_flatFieldCalibration.correction = result->correction;
-      m_flatFieldCalibration.whiteReference = whiteFile;
-      m_flatFieldCalibration.blackReference = blackFile;
-      updateWorkflowSummary();
-      inspectorStatusBar()->showMessage(
-          tr("Flat-field correction applied."), 4000);
-    };
-    operation.onDone = [this, requestProgress]() {
-      if (*requestProgress &&
-          m_flatFieldCalibration.progress.lock() == *requestProgress)
-        m_flatFieldCalibration.progress.reset();
-      updateWorkflowSummary();
-    };
-
-    runOneShotOperation(
-        std::move(operation),
-        [whiteFile, blackFile, gamma, demosaic, result](
-            colorscreen::progress_info *progress) {
-          *result = FlatFieldWorker::analyze(whiteFile, blackFile, gamma,
-                                             demosaic, progress);
-        });
+      const QStringList selected = dialog->selectedFiles();
+      m_flatFieldCalibration.setupPrompt = nullptr;
+      startFlatFieldAnalysis(
+          generation, whiteFile,
+          selected.isEmpty() ? QString() : selected.front());
+    });
+    connect(dialog, &QDialog::rejected, this,
+            [this, dialog, generation, whiteFile]() {
+      if (m_closeLifecycle.closing() ||
+          m_flatFieldCalibration.setupGeneration != generation ||
+          m_flatFieldCalibration.setupPrompt != dialog)
+        return;
+      m_flatFieldCalibration.setupPrompt = nullptr;
+      // Preserve the old synchronous behaviour: cancelling the optional black
+      // chooser means continue using only the already selected white reference.
+      startFlatFieldAnalysis(generation, whiteFile, QString());
+    });
+    dialog->open();
   });
+  question->open();
+}
+
+/** Launch one current flat-field setup GENERATION using selected references. */
+void MainWindow::startFlatFieldAnalysis(uint64_t generation,
+                                        const QString &whiteFile,
+                                        const QString &blackFile) {
+  if (m_closeLifecycle.closing() ||
+      m_flatFieldCalibration.setupGeneration != generation ||
+      whiteFile.isEmpty())
+    return;
+
+  m_flatFieldCalibration.setupPrompt = nullptr;
+  const colorscreen::luminosity_t gamma = m_rparams.gamma;
+  const colorscreen::image_data::demosaicing_t demosaic = m_rparams.demosaic;
+  auto result = std::make_shared<FlatFieldAnalysisResult>();
+  auto requestProgress =
+      std::make_shared<std::shared_ptr<colorscreen::progress_info>>();
+
+  OneShotOperation operation;
+  operation.description = tr("Flat field analysis");
+  operation.onStart =
+      [this, requestProgress](
+          std::shared_ptr<colorscreen::progress_info> progress) {
+    *requestProgress = progress;
+    m_flatFieldCalibration.progress = progress;
+    updateWorkflowSummary();
+  };
+  operation.resultValid = [this, gamma, demosaic]() {
+    return m_rparams.gamma == gamma && m_rparams.demosaic == demosaic;
+  };
+  operation.applyResult =
+      [this, result, gamma, demosaic, whiteFile, blackFile]() {
+    if (!result->success || !result->correction) {
+      if (!result->cancelled) {
+        auto *box = new QMessageBox(
+            QMessageBox::Warning, tr("Flat Field"),
+            flatFieldFailureMessage(result->error), QMessageBox::Ok,
+            inspectorDialogParent());
+        box->setObjectName(QStringLiteral("FlatFieldFailureDialog"));
+        box->setAttribute(Qt::WA_DeleteOnClose);
+        box->open();
+      }
+      return;
+    }
+
+    ParameterState newState = getCurrentState();
+    newState.rparams.backlight_correction = result->correction;
+    changeParameters(newState, tr("Flat field"));
+
+    m_flatFieldCalibration.gamma = gamma;
+    m_flatFieldCalibration.demosaic = demosaic;
+    m_flatFieldCalibration.correction = result->correction;
+    m_flatFieldCalibration.whiteReference = whiteFile;
+    m_flatFieldCalibration.blackReference = blackFile;
+    updateWorkflowSummary();
+    inspectorStatusBar()->showMessage(
+        tr("Flat-field correction applied."), 4000);
+  };
+  operation.onDone = [this, requestProgress]() {
+    if (*requestProgress &&
+        m_flatFieldCalibration.progress.lock() == *requestProgress)
+      m_flatFieldCalibration.progress.reset();
+    updateWorkflowSummary();
+  };
+
+  runOneShotOperation(
+      std::move(operation),
+      [whiteFile, blackFile, gamma, demosaic, result](
+          colorscreen::progress_info *progress) {
+        *result = FlatFieldWorker::analyze(whiteFile, blackFile, gamma,
+                                           demosaic, progress);
+      });
 }
 
 /** Toggle the one-area Focus point-click tool.

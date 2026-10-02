@@ -546,8 +546,15 @@ private:
   /** Clear an obsolete automatic-detection patch map from every presentation. */
   void clearDetectedScreenDiagnostics();
 
-  /** Dismiss obsolete one-shot confirmations without publishing their results. */
+  /** Dismiss obsolete one-shot confirmations/setup prompts without publishing. */
   void dismissOneShotPrompts();
+
+  /** Continue Flat-field setup after WHITEFILE was chosen by GENERATION. */
+  void continueFlatFieldSetup(uint64_t generation, const QString &whiteFile);
+
+  /** Launch Flat-field analysis for one still-current setup GENERATION. */
+  void startFlatFieldAnalysis(uint64_t generation, const QString &whiteFile,
+                              const QString &blackFile);
 
   /** Reset focus-area busy state after success, failure, cancellation or staleness. */
   void finishFocusAreaOperation(const QString &summary);
@@ -1093,10 +1100,14 @@ private:
   FocusAreaAnalysisState m_focusAreaAnalysis;
   int m_selectedMtfMeasurement = -1;
 
-  /** Session-only provenance for an accepted flat-field calibration.
+  /** Session-only provenance for flat-field setup and accepted calibration.
       The correction itself is saved in ParameterState; freshness depends only
-      on the capture gamma/demosaic inputs used to decode the reference files. */
+      on the capture gamma/demosaic inputs used to decode the reference files.
+      SETUPPROMPT/SETUPGENERATION keep the asynchronous reference-selection
+      chain single-owner and make superseded callbacks harmless. */
   struct FlatFieldCalibrationState {
+    QPointer<QDialog> setupPrompt;
+    uint64_t setupGeneration = 0;
     std::optional<colorscreen::luminosity_t> gamma;
     std::optional<colorscreen::image_data::demosaicing_t> demosaic;
     std::weak_ptr<colorscreen::backlight_correction_parameters> correction;
