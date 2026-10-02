@@ -1018,6 +1018,7 @@ private:
     bool pending = false;
     uint64_t generation = 0;
     std::optional<uint64_t> screenAutodetectAfterGeneration;
+    QPointer<QMessageBox> sidecarPrompt;
     QPointer<QMessageBox> failurePrompt;
   };
   ImageLoadState m_imageLoad;
