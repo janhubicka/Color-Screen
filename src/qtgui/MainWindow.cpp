@@ -5717,20 +5717,27 @@ void MainWindow::onRender() {
     defaultPath = fi.dir().filePath(fi.completeBaseName() + "-rendered.tif");
   }
 
-  QString outputPath = QFileDialog::getSaveFileName(
+  auto *fileDialog = new QFileDialog(
       this, tr("Render to File"), defaultPath,
       tr("TIFF images (*.tif *.tiff);;DNG images (*.dng);;All files (*.*)"));
-  if (outputPath.isEmpty())
-    return;
+  fileDialog->setObjectName(QStringLiteral("RenderOutputFileDialog"));
+  fileDialog->setAcceptMode(QFileDialog::AcceptSave);
+  fileDialog->setFileMode(QFileDialog::AnyFile);
+  fileDialog->setAttribute(Qt::WA_DeleteOnClose);
 
-  QTimer::singleShot(0, this, [this, outputPath]() {
-    bool isDng = outputPath.endsWith(".dng", Qt::CaseInsensitive);
+  connect(fileDialog, &QDialog::accepted, this, [this, fileDialog]() {
+    const QStringList selected = fileDialog->selectedFiles();
+    if (selected.isEmpty())
+      return;
+    const QString outputPath = selected.constFirst();
+    const bool isDng = outputPath.endsWith(".dng", Qt::CaseInsensitive);
 
-    // Keep the dialog parent-owned and asynchronous: a nested event loop can
-    // otherwise let this document be destroyed while a stack child still exists.
+    // Keep the settings dialog parent-owned and asynchronous too. The render
+    // request snapshots document + dialog state only after explicit acceptance.
     auto *dialog = new RenderDialog(
         m_renderTypeParams, m_rparams, m_scrToImgParams, m_scan.get(),
         outputPath, isDng, this);
+    dialog->setObjectName(QStringLiteral("RenderSettingsDialog"));
     dialog->setAttribute(Qt::WA_DeleteOnClose);
     connect(dialog, &QDialog::accepted, this,
             [this, dialog, outputPath, isDng]() {
@@ -5764,6 +5771,7 @@ void MainWindow::onRender() {
     });
     dialog->open();
   });
+  fileDialog->open();
 }
 
 /** Enter or exit the Profile spot point-click tool.
