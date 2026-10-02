@@ -785,7 +785,11 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   geometry/profile optimization launchers reject the same outgoing scan while
   replacement is pending. The missing-image lifecycle smoke seeds synthetic
   progressive owners and verifies the immediate cancellation boundary before
-  the loader completes.
+  the loader completes. Failed current-image/demosaic reloads restore the
+  retained outgoing scan to the primary ImageWidget and state explicitly that
+  the previous image remains open, rather than leaving a non-null document scan
+  behind a blank canvas. Ordinary failed opens into a fresh document remain
+  empty; DocumentLifecycleSmoke covers both cases.
 - QuickMTF batch import is transactional at the GUI boundary too. Selected
   files are parsed into a private MTF collection without opening per-file modal
   warnings; valid files are published in one undoable edit that touches only
