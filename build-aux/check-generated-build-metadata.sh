@@ -139,6 +139,21 @@ if test -n "$static_notifications"; then
   exit 1
 fi
 
+# Document Open commands do not need a synchronous return value. Keep their
+# native QFileDialog objects parent-owned/asynchronous so document destruction
+# cannot resume a static getOpenFileName(s) call on a dead MainWindow. Save As
+# remains intentionally synchronous because maybeSave()/closeEvent() consumes
+# its boolean result.
+blocking_document_open_dialogs=$(
+  grep -nHE 'QFileDialog::getOpenFileName(s)?[[:space:]]*[(]'     src/qtgui/MainWindowDocument.cpp || true
+)
+if test -n "$blocking_document_open_dialogs"; then
+  echo "error: blocking document-open QFileDialog convenience call:" >&2
+  echo "$blocking_document_open_dialogs" >&2
+  echo "Use a parent-owned QFileDialog with open()/accepted continuation." >&2
+  exit 1
+fi
+
 # Contact Copy is a complete stable-parameter-key migration. Its H&D curve is
 # a compound saved value, but each direct editing surface/coordinate is a
 # separate user gesture and therefore has its own merge identity. Keep this
