@@ -238,6 +238,12 @@ lifecycle. Each phase verifies live wrapper counts, document/view ownership,
 inspector routing, status-bar routing, and workspace visibility. Keep this probe
 in its own process: it intentionally stresses queued Qt presentation teardown,
 while the existing focused smoke tests isolate their own lifetime assumptions.
+Structured smoke completion must also destroy the persistent WorkspaceWindow
+while QApplication's event loop is still running: close document presentations,
+drain their deferred deletion, deleteLater() the workspace, give the platform
+plugin one more event-loop turn, and only then quit. Do not move this final
+top-level QWidget destruction back after QApplication::exec(); macOS offscreen
+QPA teardown has crashed there under ASan after heavy reparenting.
 The full probe also contains image-backed analysis lifecycle phases 100-213.
 Windows clang64 ASan runs with
 `COLORSCREEN_WORKSPACE_CHURN_SKIP_ANALYSIS=1` and skips only those phases after
