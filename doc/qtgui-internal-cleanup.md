@@ -802,6 +802,9 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   invalid, or absent sidecars likewise stage only a Save-As suggestion. If the
   user changes parameters while the image is loading, those live edits win and
   the staged sidecar remains a suggested target instead of overwriting them.
+  Image publication still resets the previous Undo history, but the surviving
+  live edits keep the new document dirty so a later close/save cannot silently
+  treat them as persisted.
   Failed image opens restore the prior image filename and leave parameter state,
   target, dirty state, and blank-window reuse untouched; lifecycle smoke pairs
   a valid sidecar with a deliberately missing image to enforce this contract.
