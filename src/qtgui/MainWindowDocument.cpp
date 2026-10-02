@@ -197,6 +197,12 @@ void MainWindow::onSaveParametersAs() { saveParametersAs(); }
 
 /** Atomically write the current document parameters and mark them saved. */
 bool MainWindow::saveParametersToFile(const QString &fileName) {
+  if (m_parameterSaveFailurePrompt) {
+    QPointer<QMessageBox> obsolete = m_parameterSaveFailurePrompt;
+    m_parameterSaveFailurePrompt.clear();
+    obsolete->close();
+  }
+
   const QString absoluteFileName = QFileInfo(fileName).absoluteFilePath();
   const bool hasRgb = m_scan && m_scan->has_rgb();
   QString error;
@@ -204,12 +210,25 @@ bool MainWindow::saveParametersToFile(const QString &fileName) {
           absoluteFileName, m_scrToImgParams,
           hasRgb ? &m_detectParams : nullptr, m_rparams, m_solverParams,
           m_profileSpots, &error)) {
-    QMessageBox::critical(
-        this, "Error",
+    // The write result is synchronous because closeEvent needs it immediately,
+    // but its explanation must not enter a nested event loop while close/save
+    // policy is still on the stack. Veto the close first and let Qt present the
+    // warning through the ordinary event loop.
+    auto *message = new QMessageBox(
+        QMessageBox::Critical, tr("Parameter Save Failed"),
         tr("Failed to save parameters to %1. The previous file was left "
            "unchanged.\n\n%2")
             .arg(absoluteFileName,
-                 error.isEmpty() ? tr("Unknown write error.") : error));
+                 error.isEmpty() ? tr("Unknown write error.") : error),
+        QMessageBox::Ok, this);
+    message->setObjectName(QStringLiteral("ParameterSaveFailureDialog"));
+    message->setAttribute(Qt::WA_DeleteOnClose);
+    m_parameterSaveFailurePrompt = message;
+    connect(message, &QMessageBox::finished, this, [this, message](int) {
+      if (m_parameterSaveFailurePrompt == message)
+        m_parameterSaveFailurePrompt.clear();
+    });
+    message->open();
     return false;
   }
 
