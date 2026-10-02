@@ -956,6 +956,10 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   while a stale persisted directory is ignored. The old per-document
   `m_lastOpenDir` disappears along with the completely unused `m_lastSaveDir`.
   This keeps document file targets distinct from application dialog history.
+  Image Open and Parameter Open now use delete-on-close asynchronous
+  `QFileDialog` instances and preserve their existing zero-delay handoff before
+  dispatch/parsing. Save Parameters As deliberately stays synchronous for now:
+  its return value is part of the Save/Discard/Cancel close transaction.
 - Keep application-wide recent-item plumbing shared and stateless with respect to
   document processing. Image and parameter MRUs now use two `RecentItemsState`
   instances plus one menu/QSettings implementation. The old cached QAction
