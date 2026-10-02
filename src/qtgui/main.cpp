@@ -4056,16 +4056,41 @@ int main(int argc, char *argv[]) {
       !parser.isSet(userVisibleProgressOption) &&
       !parser.isSet(windowLifetimeOption) &&
       !parser.isSet(closeToEmptyTabOption);
+  // Keep the deliberately persistent workspace alive during all structured
+  // checks, but tear it down while Qt's event loop is still dispatching events.
+  // In particular, macOS' offscreen QPA backing store is not robust against a
+  // heavily reparented top-level QWidget first being destroyed after
+  // QApplication::exec() has already returned.
+  QPointer<WorkspaceWindow> workspaceOwner(app.workspaceWindow());
+  const auto smokeTeardownStarted = std::make_shared<bool>(false);
   const auto maybeFinishStructuredSmoke =
       std::make_shared<std::function<void()>>();
   *maybeFinishStructuredSmoke =
-      [&app, newViewSmokeDone, slantedReferenceSmokeDone,
-       workspaceChurnSmokeDone, documentLifecycleSmokeDone,
-       completionManagedSmoke]() {
-        if (completionManagedSmoke && *newViewSmokeDone &&
-            *slantedReferenceSmokeDone && *workspaceChurnSmokeDone &&
-            *documentLifecycleSmokeDone)
-          QTimer::singleShot(0, &app, [&app]() { app.quit(); });
+      [&app, workspaceOwner, smokeTeardownStarted, newViewSmokeDone,
+       slantedReferenceSmokeDone, workspaceChurnSmokeDone,
+       documentLifecycleSmokeDone, completionManagedSmoke]() {
+        if (!completionManagedSmoke || *smokeTeardownStarted ||
+            !*newViewSmokeDone || !*slantedReferenceSmokeDone ||
+            !*workspaceChurnSmokeDone || !*documentLifecycleSmokeDone)
+          return;
+
+        *smokeTeardownStarted = true;
+        app.closeAllDocumentWindows();
+        QTimer::singleShot(0, &app, [&app, workspaceOwner]() {
+          // Documents and views use deleteLater(). Drain those first so the
+          // workspace no longer owns MDI wrappers/borrowed inspector widgets.
+          QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+          if (workspaceOwner)
+            workspaceOwner->deleteLater();
+
+          // Give the platform plugin one ordinary event-loop turn to destroy
+          // the top-level backing store before QApplication::exec() returns.
+          QTimer::singleShot(0, &app, [&app]() {
+            QCoreApplication::sendPostedEvents(nullptr,
+                                               QEvent::DeferredDelete);
+            app.quit();
+          });
+        });
       };
 
   if (parser.isSet(newViewOption)) {
@@ -5235,9 +5260,9 @@ int main(int argc, char *argv[]) {
   }
 
   // WorkspaceWindow deliberately survives Close while detached peer windows
-  // exist. Keep an explicit owner in main() so the hidden workspace cannot
-  // outlive QApplication teardown.
-  QPointer<WorkspaceWindow> workspaceOwner(app.workspaceWindow());
+  // exist. WORKSPACEOWNER is also used by structured smoke teardown above; for
+  // ordinary execution it remains the final fallback preventing the hidden
+  // workspace from outliving QApplication.
   const int exitCode = app.exec();
 
   if (parser.isSet(smokeTestOption)) {
