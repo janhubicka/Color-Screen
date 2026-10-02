@@ -590,6 +590,13 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
   if (fileName.isEmpty())
     return;
 
+  const QString requestedImageFile = QFileInfo(fileName).absoluteFilePath();
+  const auto outgoingScan = m_scan;
+  const bool reloadExistingImage =
+      suppressParamPrompt && outgoingScan && !m_currentImageFile.isEmpty() &&
+      requestedImageFile ==
+          QFileInfo(m_currentImageFile).absoluteFilePath();
+
   // A failed older load may still have a non-blocking warning open. Starting a
   // new image request supersedes that presentation just like it supersedes the
   // old worker/result generation.
@@ -627,7 +634,7 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
   bool parameterDataLoaded = false;
   if (!suppressParamPrompt)
     m_recoveryDirty = false;
-  m_currentImageFile = QFileInfo(fileName).absoluteFilePath();
+  m_currentImageFile = requestedImageFile;
   updateWindowTitle();
 
   // Clear current image and stop rendering
@@ -711,7 +718,8 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
   connect(
       watcher, &QFutureWatcher<std::pair<bool, QString>>::finished, this,
       [this, watcher, tempScan, progress, fileName, isCsprj,
-       allowInitialGuide, suggestDetectedMetadata, loadGeneration]() {
+       allowInitialGuide, suggestDetectedMetadata, loadGeneration, outgoingScan,
+       reloadExistingImage]() {
         if (m_closeLifecycle.closing()) {
           watcher->deleteLater();
           return;
@@ -872,13 +880,29 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
           }
 
         } else {
+          // A demosaic/current-image reload is transactional with respect to
+          // presentation. The old scan was deliberately retained in m_scan
+          // while loading, so put it back on the primary canvas when this
+          // still-current reload fails instead of leaving a logically loaded
+          // document with a blank ImageWidget.
+          if (reloadExistingImage && outgoingScan && m_scan == outgoingScan) {
+            m_imageWidget->setImage(
+                outgoingScan, &m_rparams, &m_scrToImgParams, &m_detectParams,
+                &m_renderTypeParams, &m_solverParams);
+            m_imageWidget->update();
+          }
+
           updateWindowTitle();
           if (!progress->cancelled()) {
+            QString messageText =
+                result.second.isEmpty() ? tr("Failed to load image.")
+                                        : result.second;
+            if (reloadExistingImage && outgoingScan && m_scan == outgoingScan)
+              messageText +=
+                  tr("\n\nThe previous image remains open.");
             auto *message = new QMessageBox(
                 QMessageBox::Critical, tr("Error Loading Image"),
-                result.second.isEmpty() ? tr("Failed to load image.")
-                                        : result.second,
-                QMessageBox::Ok, this);
+                messageText, QMessageBox::Ok, this);
             message->setObjectName(QStringLiteral("ImageLoadFailureDialog"));
             message->setAttribute(Qt::WA_DeleteOnClose);
             m_imageLoad.failurePrompt = message;
