@@ -167,17 +167,31 @@ void MainWindow::onOpenParameters() {
   if (initialPath.isEmpty())
     initialPath =
         fileDialogDirectoryPreference(QStringLiteral("lastParameterDir"));
-  QString fileName = QFileDialog::getOpenFileName(
-      this, "Open Parameters", initialPath, "Parameters (*.par);;All Files (*)");
-  if (fileName.isEmpty())
-    return;
 
-  QTimer::singleShot(0, this, [this, fileName]() {
-    if (loadParameterFile(fileName)) {
-      statusBar()->showMessage(QString("Parameters loaded from %1").arg(fileName),
-                               3000);
-    }
+  auto *dialog = new QFileDialog(
+      this, tr("Open Parameters"), initialPath,
+      tr("Parameters (*.par);;All Files (*)"));
+  dialog->setObjectName(QStringLiteral("ParameterOpenFileDialog"));
+  dialog->setFileMode(QFileDialog::ExistingFile);
+  dialog->setAcceptMode(QFileDialog::AcceptOpen);
+  dialog->setAttribute(Qt::WA_DeleteOnClose);
+
+  connect(dialog, &QDialog::accepted, this, [this, dialog]() {
+    const QStringList selected = dialog->selectedFiles();
+    if (selected.isEmpty())
+      return;
+    const QString fileName = selected.constFirst();
+
+    // Preserve the existing one-turn handoff so native file-dialog teardown is
+    // complete before parameter parsing can present its own warning.
+    QTimer::singleShot(0, this, [this, fileName]() {
+      if (loadParameterFile(fileName)) {
+        statusBar()->showMessage(
+            QString("Parameters loaded from %1").arg(fileName), 3000);
+      }
+    });
   });
+  dialog->open();
 }
 
 /** Save parameters to the current .par file.
@@ -273,25 +287,36 @@ void MainWindow::onOpenImage() {
   const QString startDirectory =
       fileDialogDirectoryPreference(QStringLiteral("lastOpenDir"));
 
-  const QStringList fileNames = QFileDialog::getOpenFileNames(
-      this, "Open Images", startDirectory,
-      "Images (*.tif *.tiff *.jpg *.jpeg *.jp2 *.j2k *.jpc *.jpf *.jpx *.png "
-      "*.raw *.dng *.iiq *.nef *.cr2 *.eip *.arw *.raf *.arq *.csprj);;All "
-      "Files (*)");
-  if (fileNames.isEmpty())
-    return;
+  auto *dialog = new QFileDialog(
+      this, tr("Open Images"), startDirectory,
+      tr("Images (*.tif *.tiff *.jpg *.jpeg *.jp2 *.j2k *.jpc *.jpf *.jpx "
+         "*.png *.raw *.dng *.iiq *.nef *.cr2 *.eip *.arw *.raf *.arq "
+         "*.csprj);;All Files (*)"));
+  dialog->setObjectName(QStringLiteral("ImageOpenFileDialog"));
+  dialog->setFileMode(QFileDialog::ExistingFiles);
+  dialog->setAcceptMode(QFileDialog::AcceptOpen);
+  dialog->setAttribute(Qt::WA_DeleteOnClose);
 
-  rememberFileDialogDirectory(QStringLiteral("lastOpenDir"),
-                              fileNames.constFirst());
-  const QPointer<MainWindow> guardedWindow(this);
-  QTimer::singleShot(0, qApp, [guardedWindow, fileNames]() {
-    if (!guardedWindow)
+  connect(dialog, &QDialog::accepted, this, [this, dialog]() {
+    const QStringList fileNames = dialog->selectedFiles();
+    if (fileNames.isEmpty())
       return;
-    if (ColorScreenApplication *application = documentApplication())
-      application->openFiles(fileNames, guardedWindow);
-    else
-      guardedWindow->loadFile(fileNames.constFirst());
+
+    rememberFileDialogDirectory(QStringLiteral("lastOpenDir"),
+                                fileNames.constFirst());
+    const QPointer<MainWindow> guardedWindow(this);
+    // Keep the KDE/KIO compatibility handoff: let the native chooser finish
+    // teardown before any image-sidecar prompt is allowed to appear.
+    QTimer::singleShot(0, qApp, [guardedWindow, fileNames]() {
+      if (!guardedWindow)
+        return;
+      if (ColorScreenApplication *application = documentApplication())
+        application->openFiles(fileNames, guardedWindow);
+      else
+        guardedWindow->loadFile(fileNames.constFirst());
+    });
   });
+  dialog->open();
 }
 
 /** Post-load initialisation after a new image has been opened.
