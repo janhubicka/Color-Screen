@@ -808,6 +808,11 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   Failed image opens restore the prior image filename and leave parameter state,
   target, dirty state, and blank-window reuse untouched; lifecycle smoke pairs
   a valid sidecar with a deliberately missing image to enforce this contract.
+  The optional sidecar decision is non-blocking too: `ImageLoadState` owns one
+  `ImageSidecarLoadPrompt` for the current load generation. Repeated
+  Open/Reload revokes an obsolete question before closing it, and its old
+  `finished` callback cannot parse parameters or launch image decoding. This
+  removes the last nested question loop from the image-replacement transaction.
 - QuickMTF batch import is transactional at the GUI boundary too. Selected
   files are parsed into a private MTF collection without opening per-file modal
   warnings; valid files are published in one undoable edit that touches only
