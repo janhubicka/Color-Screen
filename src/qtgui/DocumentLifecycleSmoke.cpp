@@ -47,6 +47,11 @@ struct DocumentLifecycleState {
   QPointer<MainWindow> recoveryProbe;
   QPointer<QMessageBox> obsoleteImageLoadFailure;
   std::shared_ptr<colorscreen::image_data> reloadOutgoingScan;
+  ParameterState failedOpenBaseline;
+  QString failedOpenParameterPath;
+  QString failedOpenImagePath;
+  bool failedOpenParameterSuggested = false;
+  bool failedOpenRecoveryDirty = false;
   std::unique_ptr<QTemporaryDir> temporaryDirectory;
   QString recoveryProbeDirectory;
   QString recoveryExpectedImage;
@@ -685,6 +690,30 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
         loadProbe->hide();
         state->recoveryProbe = loadProbe;
 
+        // Pair the missing image with a valid sidecar. The sidecar may guide
+        // decoding (notably demosaic selection), but it belongs to the image
+        // transaction and must not publish if the image itself fails.
+        const QString missingImagePath =
+            state->temporaryDirectory->filePath(
+                QStringLiteral("missing-image-load.tif"));
+        const QString missingSidecarPath =
+            state->temporaryDirectory->filePath(
+                QStringLiteral("missing-image-load.par"));
+        QFile::remove(missingSidecarPath);
+        if (!QFile::copy(state->firstParameters, missingSidecarPath)) {
+          delete loadProbe;
+          state->recoveryProbe = nullptr;
+          fail(QStringLiteral(
+              "Image-load failure smoke could not create a valid sidecar"));
+          return;
+        }
+        state->failedOpenBaseline = loadProbe->getCurrentState();
+        state->failedOpenParameterPath = loadProbe->m_parameterFile.path;
+        state->failedOpenParameterSuggested =
+            loadProbe->m_parameterFile.suggested;
+        state->failedOpenRecoveryDirty = loadProbe->m_recoveryDirty;
+        state->failedOpenImagePath = loadProbe->m_currentImageFile;
+
         // Image replacement itself must invalidate progressive publication,
         // before the asynchronous loader can finish and change m_scan. Seed
         // synthetic current owners so this missing-file probe exercises the
@@ -704,10 +733,9 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
         loadProbe->m_registrationDiscovery.scan = loadProbe->m_scan;
         loadProbe->m_registrationDiscovery.progress = registrationProgress;
 
-        loadProbe->loadFile(
-            state->temporaryDirectory->filePath(
-                QStringLiteral("missing-image-load.tif")),
-            true);
+        queueDialogResponses(
+            app, {{QStringLiteral("Load Parameters?"), QMessageBox::Yes}});
+        loadProbe->loadFile(missingImagePath, false);
         if (!loadProbe->m_imageLoad.pending ||
             !adaptiveProgress->pool_cancel() ||
             loadProbe->m_adaptiveSharpening.baseline ||
@@ -741,9 +769,16 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
         QMessageBox *loadFailure = probe->findChild<QMessageBox *>(
             QStringLiteral("ImageLoadFailureDialog"));
         if (!loadFailure || probe->sharedImageData() ||
-            probe->m_imageLoad.failurePrompt != loadFailure) {
+            probe->m_imageLoad.failurePrompt != loadFailure ||
+            probe->getCurrentState() != state->failedOpenBaseline ||
+            probe->m_parameterFile.path != state->failedOpenParameterPath ||
+            probe->m_parameterFile.suggested !=
+                state->failedOpenParameterSuggested ||
+            probe->m_recoveryDirty != state->failedOpenRecoveryDirty ||
+            probe->m_currentImageFile != state->failedOpenImagePath ||
+            !probe->canReuseForOpen()) {
           fail(QStringLiteral(
-              "Missing image load did not retain empty state with its asynchronous warning"));
+              "Failed image open leaked staged sidecar/target state or lost blank-window reuse"));
           return;
         }
 
