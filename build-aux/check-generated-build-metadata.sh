@@ -124,6 +124,21 @@ if test -n "$secondary_loops"; then
   exit 1
 fi
 
+# Notification-only QMessageBox convenience functions also run a hidden
+# secondary event loop. Keep them asynchronous with new QMessageBox(...)->open().
+# The one intentional static warning is the Unsaved Changes decision: it returns
+# Save/Discard/Cancel synchronously to close policy and is therefore control flow,
+# not notification-only presentation.
+static_notifications=$(
+  grep -nHE 'QMessageBox::(warning|critical|information)[[:space:]]*[(]'     src/qtgui/*.cpp     | grep -Ev 'MainWindowDocument[.]cpp:.*const QMessageBox::StandardButton result = QMessageBox::warning'     || true
+)
+if test -n "$static_notifications"; then
+  echo "error: blocking notification-only QMessageBox convenience call:" >&2
+  echo "$static_notifications" >&2
+  echo "Use a parent-owned delete-on-close QMessageBox and open()." >&2
+  exit 1
+fi
+
 # Contact Copy is a complete stable-parameter-key migration. Its H&D curve is
 # a compound saved value, but each direct editing surface/coordinate is a
 # separate user gesture and therefore has its own merge identity. Keep this
