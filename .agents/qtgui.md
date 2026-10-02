@@ -525,7 +525,12 @@ publication gates reject every queued result while replacement remains pending.
 The progressive launchers also refuse new registration/adaptive requests during
 that interval. The shared OneShot entry point and the dedicated geometry/profile
 launchers use the same pending-image gate, so no document-mutating analysis can
-start against the outgoing scan after the user has committed to replacement.
+start against the outgoing scan after the user has committed to replacement. A failed current-image/demosaic reload is
+transactional at the presentation boundary too: because the outgoing scan is
+retained until replacement succeeds, the still-current failure callback rebinds
+that scan to the primary ImageWidget instead of leaving the document logically
+loaded but visually blank. Ordinary failed opens into a fresh empty document
+remain empty.
 
 ### Initial screen setup
 
