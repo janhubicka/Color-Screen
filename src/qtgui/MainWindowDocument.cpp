@@ -598,11 +598,13 @@ void MainWindow::maybeOfferInitialSetupGuide(
 }
 
 /** Load an image file and optionally its associated .par parameter file.
-   If SUPPRESSPARAMPROMPT is false, an accepted sidecar is parsed into private
-   staging state and may guide image decoding, but is published only after the
-   image itself loads successfully. Declined/invalid/missing sidecars likewise
-   stage only a later Save-As suggestion. A failed image therefore adopts
-   neither the requested image target nor sidecar state/target.
+   If SUPPRESSPARAMPROMPT is false, the optional sidecar decision is presented
+   asynchronously and owned by this image-load generation. An accepted sidecar
+   is parsed into private staging state and may guide image decoding, but is
+   published only after the image itself loads successfully.
+   Declined/invalid/missing sidecars likewise stage only a later Save-As
+   suggestion. A failed image therefore adopts neither the requested image
+   target nor sidecar state/target.
    The actual image loading runs asynchronously via QtConcurrent::run; on
    completion, the scan is set on ImageWidget, stitch tile loading is launched
    in parallel for .csprj projects, and undo history is cleared.  */
