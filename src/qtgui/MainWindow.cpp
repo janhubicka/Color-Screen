@@ -314,6 +314,24 @@ QStatusBar *MainWindow::inspectorStatusBar() const {
   return statusBar();
 }
 
+/** Return the source scan currently usable by processing panels. */
+std::shared_ptr<colorscreen::image_data> MainWindow::panelImageData() const {
+  return m_imageLoad.pending ? nullptr : m_scan;
+}
+
+/** Refresh image-dependent panel/action availability without emitting a
+    document-state change. */
+void MainWindow::refreshImageAvailabilityPresentation() {
+  for (ParameterPanel *panel : m_panels)
+    if (panel)
+      panel->updateUI();
+
+  updateRegistrationActions();
+  updateRegistrationGroupVisibility();
+  if (m_renderAction)
+    m_renderAction->setEnabled(panelImageData() != nullptr);
+}
+
 /** Return the top-level presentation that currently owns the inspector. */
 QWidget *MainWindow::inspectorDialogParent() const {
   if (QStatusBar *bar = inspectorStatusBar())
@@ -827,7 +845,7 @@ void MainWindow::setupUi() {
                              const QString &parameterKey) {
                          changeParameters(s, desc, parameterKey);
                        },
-                         [this]() { return m_scan; }, std::move(mtfCalibration),
+                         [this]() { return panelImageData(); }, std::move(mtfCalibration),
                          this);
 
   // Create Screen Panel
@@ -837,7 +855,7 @@ void MainWindow::setupUi() {
                              const QString &parameterKey) {
                          changeParameters(s, desc, parameterKey);
                        },
-                      [this]() { return m_scan; }, this);
+                      [this]() { return panelImageData(); }, this);
 
   // Create Color Panel (after Sharpness)
   m_contactCopyPanel = new ContactCopyPanel(
@@ -846,7 +864,7 @@ void MainWindow::setupUi() {
                              const QString &parameterKey) {
                          changeParameters(s, desc, parameterKey);
                        },
-      [this]() { return m_scan; }, this);
+      [this]() { return panelImageData(); }, this);
 
   m_colorPanel =
       new ColorPanel([this]() { return getCurrentState(); },
@@ -854,7 +872,7 @@ void MainWindow::setupUi() {
                              const QString &parameterKey) {
                          changeParameters(s, desc, parameterKey);
                        },
-                     [this]() { return m_scan; }, this);
+                     [this]() { return panelImageData(); }, this);
 
   // Create Profile Panel
   m_profilePanel =
@@ -863,7 +881,7 @@ void MainWindow::setupUi() {
                              const QString &parameterKey) {
                          changeParameters(s, desc, parameterKey);
                        },
-                       [this]() { return m_scan; }, this);
+                       [this]() { return panelImageData(); }, this);
 
   // Create Tiles Panel
   m_tilesPanel =
@@ -872,7 +890,7 @@ void MainWindow::setupUi() {
                              const QString &parameterKey) {
                          changeParameters(s, desc, parameterKey);
                        },
-                     [this]() { return m_scan; }, this);
+                     [this]() { return panelImageData(); }, this);
 
   // Create Image Layer Panel
   m_imageLayerPanel =
@@ -881,7 +899,7 @@ void MainWindow::setupUi() {
                              const QString &parameterKey) {
                          changeParameters(s, desc, parameterKey);
                        },
-                          [this]() { return m_scan; }, this);
+                          [this]() { return panelImageData(); }, this);
 
   // Connect Progress Signals from Panels
   connect(m_sharpnessPanel, &SharpnessPanel::progressStarted, this,
@@ -948,7 +966,7 @@ void MainWindow::setupUi() {
                              const QString &parameterKey) {
                          changeParameters(s, desc, parameterKey);
                        },
-                       [this]() { return m_scan; },
+                       [this]() { return panelImageData(); },
                        [this]() { reloadCurrentImageWithDemosaic(); },
                        this);
 
@@ -959,7 +977,7 @@ void MainWindow::setupUi() {
                              const QString &parameterKey) {
                          changeParameters(s, desc, parameterKey);
                        },
-                        [this]() { return m_scan; }, this);
+                        [this]() { return panelImageData(); }, this);
 
 
 

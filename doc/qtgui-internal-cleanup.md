@@ -789,7 +789,12 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   retained outgoing scan to the primary ImageWidget and state explicitly that
   the previous image remains open, rather than leaving a non-null document scan
   behind a blank canvas. Ordinary failed opens into a fresh document remain
-  empty; DocumentLifecycleSmoke covers both cases.
+  empty; DocumentLifecycleSmoke covers both cases. Processing panels now obtain
+  their operational source through one pending-aware `panelImageData()` helper,
+  so the retained outgoing scan cannot keep Capture/Sharpness/Geometry/Profile
+  actions enabled while replacement is in flight. Replacement start/failure
+  explicitly refresh this presentation; workspace churn verifies disable +
+  restoration without emitting a fake document-state edit.
 - QuickMTF batch import is transactional at the GUI boundary too. Selected
   files are parsed into a private MTF collection without opening per-file modal
   warnings; valid files are published in one undoable edit that touches only

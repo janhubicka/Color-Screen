@@ -955,6 +955,16 @@ private:
   ParameterState getCurrentState() const;
   void updateUIFromState(const ParameterState &state);
 
+  /** Return the source scan that processing panels may currently act on.
+      The outgoing scan stays retained internally during asynchronous image
+      replacement so a failed reload can restore it, but it is not a valid
+      source for new panel operations while replacement is pending. */
+  std::shared_ptr<colorscreen::image_data> panelImageData() const;
+
+  /** Refresh controls whose availability depends on a usable source image
+      without pretending that document ParameterState itself changed. */
+  void refreshImageAvailabilityPresentation();
+
   // Digital Capture Panel
   CapturePanel *m_capturePanel;
   SharpnessPanel *m_sharpnessPanel;

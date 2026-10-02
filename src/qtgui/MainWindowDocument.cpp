@@ -637,8 +637,11 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
   m_currentImageFile = requestedImageFile;
   updateWindowTitle();
 
-  // Clear current image and stop rendering
+  // Clear current image and stop rendering. Processing panels deliberately
+  // see no usable source while replacement is pending even though m_scan keeps
+  // the outgoing image alive for transactional reload failure recovery.
   m_imageWidget->setImage(nullptr, nullptr, nullptr, nullptr, nullptr, nullptr);
+  refreshImageAvailabilityPresentation();
 
   // Check for .par file (only if not suppressed, e.g., during recovery)
   if (!suppressParamPrompt) {
@@ -892,6 +895,9 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
             m_imageWidget->update();
           }
 
+          // Re-enable image-backed controls after either restoring the outgoing
+          // reload scan or completing an ordinary failed open with no source.
+          refreshImageAvailabilityPresentation();
           updateWindowTitle();
           if (!progress->cancelled()) {
             QString messageText =

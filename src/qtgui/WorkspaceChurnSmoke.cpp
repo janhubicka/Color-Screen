@@ -4395,7 +4395,39 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         }
         first->m_geometryFit.clearRequest();
         first->m_solverQueue.cancelAll();
+
+        QPushButton *captureMeasure =
+            first->m_capturePanel
+                ? first->m_capturePanel->findChild<QPushButton *>(
+                      QStringLiteral("CaptureMeasureResolutionButton"))
+                : nullptr;
+        QPushButton *captureCrop =
+            first->m_capturePanel
+                ? first->m_capturePanel->findChild<QPushButton *>(
+                      QStringLiteral("CaptureCropButton"))
+                : nullptr;
+        QPushButton *measureMtf =
+            first->m_sharpnessPanel
+                ? first->m_sharpnessPanel->findChild<QPushButton *>(
+                      QStringLiteral("MtfMeasureButton"))
+                : nullptr;
+        if (!captureMeasure || !captureCrop || !measureMtf ||
+            !captureMeasure->isEnabled() || !captureCrop->isEnabled() ||
+            !measureMtf->isEnabled() || !first->m_renderAction->isEnabled()) {
+          fail(QStringLiteral(
+              "Pending-image availability smoke did not start with usable image actions"));
+          return;
+        }
+
         first->m_imageLoad.pending = true;
+        first->refreshImageAvailabilityPresentation();
+        if (captureMeasure->isEnabled() || captureCrop->isEnabled() ||
+            measureMtf->isEnabled() || first->m_renderAction->isEnabled()) {
+          first->m_imageLoad.pending = false;
+          fail(QStringLiteral(
+              "Image-backed actions stayed enabled during image replacement"));
+          return;
+        }
 
         bool oneShotStarted = false;
         bool oneShotWorkerRan = false;
@@ -4421,6 +4453,13 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
           return;
         }
         first->m_imageLoad.pending = false;
+        first->refreshImageAvailabilityPresentation();
+        if (!captureMeasure->isEnabled() || !captureCrop->isEnabled() ||
+            !measureMtf->isEnabled() || !first->m_renderAction->isEnabled()) {
+          fail(QStringLiteral(
+              "Image-backed actions did not recover after replacement ended"));
+          return;
+        }
 
         // Registration discovery differs from immutable progressive analysis:
         // its own accepted point/geometry batches advance the document state.
