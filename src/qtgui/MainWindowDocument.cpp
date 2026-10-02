@@ -593,10 +593,7 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
   const QString requestedImageFile = QFileInfo(fileName).absoluteFilePath();
   const QString outgoingImageFile = m_currentImageFile;
   const auto outgoingScan = m_scan;
-  const bool reloadExistingImage =
-      suppressParamPrompt && outgoingScan && !m_currentImageFile.isEmpty() &&
-      requestedImageFile ==
-          QFileInfo(m_currentImageFile).absoluteFilePath();
+  const bool restoreOutgoingImage = static_cast<bool>(outgoingScan);
 
   struct SidecarLoadStaging {
     std::optional<ParameterState> state;
@@ -721,7 +718,7 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
       watcher, &QFutureWatcher<std::pair<bool, QString>>::finished, this,
       [this, watcher, tempScan, progress, fileName, isCsprj,
        allowInitialGuide, suggestDetectedMetadata, loadGeneration, outgoingScan,
-       outgoingImageFile, reloadExistingImage, sidecarStaging,
+       outgoingImageFile, restoreOutgoingImage, sidecarStaging,
        suppressParamPrompt]() {
         if (m_closeLifecycle.closing()) {
           watcher->deleteLater();
@@ -932,7 +929,7 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
           // while loading, so put it back on the primary canvas when this
           // still-current reload fails instead of leaving a logically loaded
           // document with a blank ImageWidget.
-          if (reloadExistingImage && outgoingScan && m_scan == outgoingScan) {
+          if (restoreOutgoingImage && outgoingScan && m_scan == outgoingScan) {
             m_imageWidget->setImage(
                 outgoingScan, &m_rparams, &m_scrToImgParams, &m_detectParams,
                 &m_renderTypeParams, &m_solverParams);
@@ -947,7 +944,7 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
             QString messageText =
                 result.second.isEmpty() ? tr("Failed to load image.")
                                         : result.second;
-            if (reloadExistingImage && outgoingScan && m_scan == outgoingScan)
+            if (restoreOutgoingImage && outgoingScan && m_scan == outgoingScan)
               messageText +=
                   tr("\n\nThe previous image remains open.");
             auto *message = new QMessageBox(
