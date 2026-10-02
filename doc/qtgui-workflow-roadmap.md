@@ -660,8 +660,10 @@ specialist stages.
   defensive handler guards as a second line of protection. Geometry follows
   the same rule for every compute verb: Detect/Optimize coordinates, automatic
   point discovery and Fit geometry require a live source scan in addition to
-  their point/geometry prerequisites, so saved state cannot expose an enabled
-  no-op while an image is absent or being replaced;
+  their point/geometry prerequisites. All processing panels now receive a
+  pending-aware source getter, so the retained outgoing scan is presented as
+  unavailable while asynchronous replacement is active; saved state therefore
+  cannot expose an enabled no-op while an image is absent or being replaced;
 - add explicit stale/result states where analyses depend on changing inputs.
   Geometry-fit current/failed provenance is tied to the exact source scan as
   well as points/settings/nonlinear mode. Queued fits own that immutable scan;
