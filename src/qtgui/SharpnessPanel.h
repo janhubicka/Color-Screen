@@ -5,6 +5,7 @@
 #include "AdaptiveSharpeningParameters.h"
 #include "AdaptiveSharpeningChart.h"
 #include <QPointer>
+#include <QStringList>
 #include <functional>
 
 class MTFChartWidget;
@@ -103,6 +104,7 @@ private:
                    const QString &description = QString(),
                    const QString &parameterKey = QString()) override;
   void loadMTF();
+  void loadMtfFiles(const QStringList &fileNames);
   /** Open the explicit fit dialog and run the selected MTF fit off the GUI
       thread.  */
   void fitMeasuredMtf();
