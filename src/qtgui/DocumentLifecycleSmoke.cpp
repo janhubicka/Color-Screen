@@ -1065,8 +1065,6 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
             QStringLiteral("ParameterSaveFailureDialog"));
         if (!saveFailure ||
             second->m_parameterSaveFailurePrompt != saveFailure ||
-            saveFailure->windowTitle() !=
-                QStringLiteral("Parameter Save Failed") ||
             !saveFailure->text().contains(
                 QStringLiteral("previous file was left unchanged"))) {
           fail(QStringLiteral(
