@@ -830,6 +830,13 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   the previous target bytes and dirty document state, then presents one
   parent-owned asynchronous `ParameterSaveFailureDialog`; a newer save attempt
   supersedes an older warning.
+- Render-to-file setup no longer starts with static
+  `QFileDialog::getSaveFileName()`. The native destination chooser is a
+  delete-on-close `RenderOutputFileDialog` opened asynchronously; only its
+  accepted continuation creates the already asynchronous `RenderSettingsDialog`
+  and later snapshots the request into `FileRenderController`. Closing the
+  document therefore invalidates both setup surfaces without unwinding through a
+  nested native-dialog loop.
 - Flat-field reference selection no longer chains static/native modal calls on
   the MainWindow stack. White-file selection, the optional-black question and
   black-file selection are parent-owned asynchronous dialogs under one setup
