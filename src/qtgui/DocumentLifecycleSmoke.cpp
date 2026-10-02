@@ -736,7 +736,11 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
         queueDialogResponses(
             app, {{QStringLiteral("Load Parameters?"), QMessageBox::Yes}});
         loadProbe->loadFile(missingImagePath, false);
-        if (!loadProbe->m_imageLoad.pending ||
+        QMessageBox *sidecarPrompt =
+            loadProbe->m_imageLoad.sidecarPrompt.data();
+        if (!loadProbe->m_imageLoad.pending || !sidecarPrompt ||
+            sidecarPrompt->objectName() !=
+                QStringLiteral("ImageSidecarLoadPrompt") ||
             !adaptiveProgress->pool_cancel() ||
             loadProbe->m_adaptiveSharpening.baseline ||
             loadProbe->m_adaptiveSharpening.scan ||
@@ -768,7 +772,8 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
         }
         QMessageBox *loadFailure = probe->findChild<QMessageBox *>(
             QStringLiteral("ImageLoadFailureDialog"));
-        if (!loadFailure || probe->sharedImageData() ||
+        if (!loadFailure || probe->m_imageLoad.sidecarPrompt ||
+            probe->sharedImageData() ||
             probe->m_imageLoad.failurePrompt != loadFailure ||
             probe->getCurrentState() != state->failedOpenBaseline ||
             probe->m_parameterFile.path != state->failedOpenParameterPath ||
