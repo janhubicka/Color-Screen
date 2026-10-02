@@ -97,7 +97,12 @@ Workspace geometry, image/parameter file-dialog directory history, and
 recent-file lists remain application preferences in `QSettings`; they are not
 document state. Detached-document geometry is also presentation state. Do not
 add per-document "last open/save directory" members for application file-dialog
-history. Parameter dialogs still prefer the document's current/suggested
+history. Image Open and Parameter Open use parent-owned asynchronous
+`ImageOpenFileDialog` / `ParameterOpenFileDialog` objects and preserve the
+one-event-turn handoff before image/parameter processing; do not replace them
+with static `QFileDialog::getOpenFileName(s)` helpers. Parameter Save As remains
+synchronous because `maybeSave()` / `closeEvent()` consume its boolean result.
+Parameter dialogs still prefer the document's current/suggested
 `ParameterFileState::path`; only when that target is empty do they fall back to
 the application-wide `lastParameterDir`. Successful parameter loads/saves
 refresh that preference. Image and parameter MRUs use the same `RecentItemsState`
