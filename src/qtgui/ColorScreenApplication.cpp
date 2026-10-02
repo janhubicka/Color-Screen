@@ -218,21 +218,43 @@ ImageViewWindow *ColorScreenApplication::createSlantedEdgeReference(
   return view;
 }
 
-/** Ask the user for another scan to use as a slanted-edge MTF reference. */
-ImageViewWindow *ColorScreenApplication::openSlantedEdgeReference(
+/** Ask asynchronously for another scan to use as a slanted-edge MTF
+    reference. The lower-level createSlantedEdgeReference() remains synchronous
+    for recovery/tests; this user-facing chooser owns no immediate return value. */
+void ColorScreenApplication::openSlantedEdgeReference(
     MainWindow *source, QWidget *dialogParent) {
   if (!source)
-    return nullptr;
+    return;
 
-  const QString fileName = QFileDialog::getOpenFileName(
+  auto *dialog = new QFileDialog(
       dialogParent ? dialogParent : source,
       tr("Open slanted edge reference"), QString(),
       tr("Images (*.tif *.tiff *.jpg *.jpeg *.jp2 *.j2k *.jpc *.jpf *.jpx "
          "*.png *.raw *.dng *.iiq *.nef *.cr2 *.eip *.arw *.raf *.arq);;"
          "All Files (*)"));
-  if (fileName.isEmpty())
-    return nullptr;
-  return createSlantedEdgeReference(source, fileName);
+  dialog->setObjectName(QStringLiteral("SlantedEdgeReferenceOpenFileDialog"));
+  dialog->setFileMode(QFileDialog::ExistingFile);
+  dialog->setAcceptMode(QFileDialog::AcceptOpen);
+  dialog->setAttribute(Qt::WA_DeleteOnClose);
+
+  const QPointer<MainWindow> guardedSource(source);
+  connect(dialog, &QDialog::accepted, this,
+          [this, dialog, guardedSource]() {
+    if (!guardedSource)
+      return;
+    const QStringList selected = dialog->selectedFiles();
+    if (selected.isEmpty())
+      return;
+    const QString fileName = selected.constFirst();
+
+    // Let native chooser teardown finish before the reference view starts its
+    // asynchronous image load and can publish its own failure warning.
+    QTimer::singleShot(0, this, [this, guardedSource, fileName]() {
+      if (guardedSource)
+        createSlantedEdgeReference(guardedSource, fileName);
+    });
+  });
+  dialog->open();
 }
 
 /** Detach VIEW from the primary workspace without recreating it. */
