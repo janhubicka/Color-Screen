@@ -604,8 +604,6 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
     std::optional<ParameterState> baseline;
   };
   auto sidecarStaging = std::make_shared<SidecarLoadStaging>();
-  if (!suppressParamPrompt)
-    sidecarStaging->baseline = getCurrentState();
 
   // A failed older load may still have a non-blocking warning open. Starting a
   // new image request supersedes that presentation just like it supersedes the
@@ -615,42 +613,11 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
     m_imageLoad.failurePrompt.clear();
   }
 
-  // Final-result work and any pending one-shot confirmation belong to the
-  // current image snapshot. Invalidate both before starting replacement I/O.
-  dismissOneShotPrompts();
-  m_oneShotOperations.cancelAll();
-  // Geometry/profile optimization are image-backed TaskQueue jobs. Disown
-  // pending publication immediately; each worker keeps its captured source scan
-  // alive until it unwinds.
-  m_solverQueue.cancelAll();
-  m_geometryFit.clearRequest();
-  m_colorOptimizerQueue.cancelAll();
-  m_profileCalibration.pendingInputs.reset();
-  m_profileCalibration.pendingRequestId.reset();
-  const uint64_t loadGeneration = ++m_imageLoad.generation;
-  if (m_imageLoad.screenAutodetectAfterGeneration &&
-      *m_imageLoad.screenAutodetectAfterGeneration != loadGeneration)
-    m_imageLoad.screenAutodetectAfterGeneration.reset();
-  m_imageLoad.pending = true;
-
-  // Progressive workers retain the outgoing m_scan until they unwind.  Marking
-  // image replacement pending is therefore part of their staleness contract:
-  // preserve batches/results already accepted before this user gesture, but
-  // reject/cancel every later point, geometry or adaptive-chart publication.
-  const ParameterState replacementState = getCurrentState();
-  cancelStaleAdaptiveSharpening(replacementState);
-  cancelStaleRegistrationDiscovery(replacementState);
-
+  // Decide and parse an optional image sidecar before replacement begins.
+  // The existing image and its workers remain authoritative while this
+  // synchronous user decision is open; only after it returns do we snapshot
+  // the state that must stay unchanged for staged sidecar publication.
   bool parameterDataLoaded = false;
-  m_currentImageFile = requestedImageFile;
-  updateWindowTitle();
-
-  // Clear current image and stop rendering. Processing panels deliberately
-  // see no usable source while replacement is pending even though m_scan keeps
-  // the outgoing image alive for transactional reload failure recovery.
-  m_imageWidget->setImage(nullptr, nullptr, nullptr, nullptr, nullptr, nullptr);
-  refreshImageAvailabilityPresentation();
-
   // Check for .par file (only if not suppressed, e.g., during recovery).
   // Parse into private staging state: a successful sidecar belongs to the
   // image-open transaction and must not mutate the live document or parameter
@@ -690,6 +657,45 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
       sidecarStaging->suggestedPath = parFile;
     }
   }
+
+
+  if (!suppressParamPrompt)
+    sidecarStaging->baseline = getCurrentState();
+
+  // Final-result work and any pending one-shot confirmation belong to the
+  // current image snapshot. Invalidate both before starting replacement I/O.
+  dismissOneShotPrompts();
+  m_oneShotOperations.cancelAll();
+  // Geometry/profile optimization are image-backed TaskQueue jobs. Disown
+  // pending publication immediately; each worker keeps its captured source scan
+  // alive until it unwinds.
+  m_solverQueue.cancelAll();
+  m_geometryFit.clearRequest();
+  m_colorOptimizerQueue.cancelAll();
+  m_profileCalibration.pendingInputs.reset();
+  m_profileCalibration.pendingRequestId.reset();
+  const uint64_t loadGeneration = ++m_imageLoad.generation;
+  if (m_imageLoad.screenAutodetectAfterGeneration &&
+      *m_imageLoad.screenAutodetectAfterGeneration != loadGeneration)
+    m_imageLoad.screenAutodetectAfterGeneration.reset();
+  m_imageLoad.pending = true;
+
+  // Progressive workers retain the outgoing m_scan until they unwind.  Marking
+  // image replacement pending is therefore part of their staleness contract:
+  // preserve batches/results already accepted before this user gesture, but
+  // reject/cancel every later point, geometry or adaptive-chart publication.
+  const ParameterState replacementState = getCurrentState();
+  cancelStaleAdaptiveSharpening(replacementState);
+  cancelStaleRegistrationDiscovery(replacementState);
+
+  m_currentImageFile = requestedImageFile;
+  updateWindowTitle();
+
+  // Clear current image and stop rendering. Processing panels deliberately
+  // see no usable source while replacement is pending even though m_scan keeps
+  // the outgoing image alive for transactional reload failure recovery.
+  m_imageWidget->setImage(nullptr, nullptr, nullptr, nullptr, nullptr, nullptr);
+  refreshImageAvailabilityPresentation();
 
   const bool suggestDetectedMetadata =
       !suppressParamPrompt && !parameterDataLoaded;
