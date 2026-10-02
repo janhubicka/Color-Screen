@@ -745,6 +745,10 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
         m_imageLoad.pending = false;
 
         if (result.first) {
+          const bool liveEditsWhileLoading =
+              !suppressParamPrompt && sidecarStaging->baseline &&
+              getCurrentState() != *sidecarStaging->baseline;
+
           if (!suppressParamPrompt) {
             if (sidecarStaging->state) {
               // Do not let a delayed image completion overwrite edits the user
@@ -781,7 +785,6 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
             } else if (!sidecarStaging->suggestedPath.isEmpty()) {
               m_parameterFile.setSuggested(sidecarStaging->suggestedPath);
             }
-            m_recoveryDirty = false;
           }
 
           clearDetectedScreenDiagnostics();
@@ -802,6 +805,8 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
             m_rparams.gamma = -1;
 
           m_undoStack->clear();
+          if (!suppressParamPrompt)
+            m_recoveryDirty = liveEditsWhileLoading;
 
           // If this is a stitched project, disable all tiles initially so
           // the UI is responsive while tiles load in the background.
