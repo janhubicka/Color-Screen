@@ -48,9 +48,11 @@ public:
                                               const QString &referenceFile,
                                               bool detached = false);
 
-  /** Prompt for a slanted-edge reference image and open it for SOURCE. */
-  ImageViewWindow *openSlantedEdgeReference(MainWindow *source,
-                                            QWidget *dialogParent = nullptr);
+  /** Prompt asynchronously for a slanted-edge reference image and open it for
+      SOURCE. The created view is owned by the application; callers do not wait
+      for a synchronous result. */
+  void openSlantedEdgeReference(MainWindow *source,
+                                QWidget *dialogParent = nullptr);
 
   /** Move VIEW from the workspace into a standalone top-level window. */
   void detachView(ImageViewWindow *view);
