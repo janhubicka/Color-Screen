@@ -579,10 +579,11 @@ void MainWindow::maybeOfferInitialSetupGuide(
 }
 
 /** Load an image file and optionally its associated .par parameter file.
-   If SUPPRESSPARAMPROMPT is false, checks for a .par file alongside the image
-   and offers to load it transactionally. If the user declines, the sidecar is
-   unreadable/invalid, or no .par file exists, a weak (suggested) parameter
-   filename is set for later Save.
+   If SUPPRESSPARAMPROMPT is false, an accepted sidecar is parsed into private
+   staging state and may guide image decoding, but is published only after the
+   image itself loads successfully. Declined/invalid/missing sidecars likewise
+   stage only a later Save-As suggestion. A failed image therefore adopts
+   neither the requested image target nor sidecar state/target.
    The actual image loading runs asynchronously via QtConcurrent::run; on
    completion, the scan is set on ImageWidget, stitch tile loading is launched
    in parallel for .csprj projects, and undo history is cleared.  */
@@ -591,11 +592,20 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
     return;
 
   const QString requestedImageFile = QFileInfo(fileName).absoluteFilePath();
+  const QString outgoingImageFile = m_currentImageFile;
   const auto outgoingScan = m_scan;
-  const bool reloadExistingImage =
-      suppressParamPrompt && outgoingScan && !m_currentImageFile.isEmpty() &&
-      requestedImageFile ==
-          QFileInfo(m_currentImageFile).absoluteFilePath();
+  const bool restoreOutgoingImage = static_cast<bool>(outgoingScan);
+
+  struct SidecarLoadStaging {
+    std::optional<ParameterState> state;
+    std::vector<colorscreen::color_match> spotResults;
+    QString loadedPath;
+    QString suggestedPath;
+    std::optional<ParameterState> baseline;
+  };
+  auto sidecarStaging = std::make_shared<SidecarLoadStaging>();
+  if (!suppressParamPrompt)
+    sidecarStaging->baseline = getCurrentState();
 
   // A failed older load may still have a non-blocking warning open. Starting a
   // new image request supersedes that presentation just like it supersedes the
@@ -632,8 +642,6 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
   cancelStaleRegistrationDiscovery(replacementState);
 
   bool parameterDataLoaded = false;
-  if (!suppressParamPrompt)
-    m_recoveryDirty = false;
   m_currentImageFile = requestedImageFile;
   updateWindowTitle();
 
@@ -643,10 +651,13 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
   m_imageWidget->setImage(nullptr, nullptr, nullptr, nullptr, nullptr, nullptr);
   refreshImageAvailabilityPresentation();
 
-  // Check for .par file (only if not suppressed, e.g., during recovery)
+  // Check for .par file (only if not suppressed, e.g., during recovery).
+  // Parse into private staging state: a successful sidecar belongs to the
+  // image-open transaction and must not mutate the live document or parameter
+  // target until the corresponding image bytes have also loaded successfully.
   if (!suppressParamPrompt) {
-    QFileInfo fileInfo(m_currentImageFile);
-    QString parFile =
+    QFileInfo fileInfo(requestedImageFile);
+    const QString parFile =
         fileInfo.path() + "/" + fileInfo.completeBaseName() + ".par";
 
     if (QFile::exists(parFile)) {
@@ -659,41 +670,24 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
         QString loadError;
         if (!loadParameterPayload(parFile, &sidecarState, &sidecarSpotResults,
                                   &loadError)) {
-          // The user selected this existing file, but it was not accepted as a
-          // document target. Keep it only as a Save-As suggestion so overwrite
-          // still requires confirmation.
-          m_parameterFile.setSuggested(parFile);
+          // Parsing failed, so the file is at most a later Save-As suggestion.
+          // Publish that suggestion only if the image itself opens.
+          sidecarStaging->suggestedPath = parFile;
           showParameterLoadFailure(this, loadError);
         } else {
-          m_scrToImgParams = std::move(sidecarState.scrToImg);
-          m_detectParams = std::move(sidecarState.detect);
-          m_rparams = std::move(sidecarState.rparams);
-          m_solverParams = std::move(sidecarState.solver);
-          m_profileSpots = std::move(sidecarState.profileSpots);
-          m_profileCalibration.spotResults =
-              std::move(sidecarSpotResults);
+          sidecarStaging->state = std::move(sidecarState);
+          sidecarStaging->spotResults = std::move(sidecarSpotResults);
+          sidecarStaging->loadedPath = parFile;
           parameterDataLoaded = true;
-
-          // Track the loaded parameter file only after complete parse success.
-          m_parameterFile.setLoaded(parFile);
-          addToRecentParams(parFile);
-
-          // If we have a valid screen type, default to formatted
-          // (interpolated) view.
-          if (colorscreen::screen_geometry_configured_p(m_scrToImgParams))
-            m_renderTypeParams.type = colorscreen::render_type_interpolated;
         }
       } else {
-        // User declined to load parameters - suggest filename
-        QFileInfo fileInfo(fileName);
-        m_parameterFile.setSuggested(
-            fileInfo.path() + "/" + fileInfo.completeBaseName() + ".par");
+        // User declined to load parameters - stage the filename as a later
+        // Save-As suggestion, conditional on successful image loading.
+        sidecarStaging->suggestedPath = parFile;
       }
     } else {
-      // No parameter file exists - suggest filename
-      QFileInfo fileInfo(m_currentImageFile);
-      m_parameterFile.setSuggested(
-          fileInfo.path() + "/" + fileInfo.completeBaseName() + ".par");
+      // No parameter file exists - stage the natural Save-As filename.
+      sidecarStaging->suggestedPath = parFile;
     }
   }
 
@@ -710,8 +704,11 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
 
   std::shared_ptr<colorscreen::image_data> tempScan =
       std::make_shared<colorscreen::image_data>();
-  // Access m_rparams carefully. It's a member.
-  colorscreen::image_data::demosaicing_t demosaic = m_rparams.demosaic;
+  // A staged sidecar may select the demosaic algorithm needed to decode the
+  // image, even though the rest of its state remains private until success.
+  const colorscreen::image_data::demosaicing_t demosaic =
+      sidecarStaging->state ? sidecarStaging->state->rparams.demosaic
+                            : m_rparams.demosaic;
 
   bool isCsprj =
       fileName.endsWith(QLatin1String(".csprj"), Qt::CaseInsensitive);
@@ -722,7 +719,8 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
       watcher, &QFutureWatcher<std::pair<bool, QString>>::finished, this,
       [this, watcher, tempScan, progress, fileName, isCsprj,
        allowInitialGuide, suggestDetectedMetadata, loadGeneration, outgoingScan,
-       reloadExistingImage]() {
+       outgoingImageFile, restoreOutgoingImage, sidecarStaging,
+       suppressParamPrompt]() {
         if (m_closeLifecycle.closing()) {
           watcher->deleteLater();
           return;
@@ -747,6 +745,48 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
         m_imageLoad.pending = false;
 
         if (result.first) {
+          const bool liveEditsWhileLoading =
+              !suppressParamPrompt && sidecarStaging->baseline &&
+              getCurrentState() != *sidecarStaging->baseline;
+
+          if (!suppressParamPrompt) {
+            if (sidecarStaging->state) {
+              // Do not let a delayed image completion overwrite edits the user
+              // made while loading. In that uncommon case the image still opens
+              // using the staged demosaic, but the sidecar remains only a safe
+              // suggested parameter target.
+              const bool unchanged =
+                  sidecarStaging->baseline &&
+                  getCurrentState() == *sidecarStaging->baseline;
+              if (unchanged) {
+                ParameterState sidecarState =
+                    std::move(*sidecarStaging->state);
+                m_scrToImgParams = std::move(sidecarState.scrToImg);
+                m_detectParams = std::move(sidecarState.detect);
+                m_rparams = std::move(sidecarState.rparams);
+                m_solverParams = std::move(sidecarState.solver);
+                m_profileSpots = std::move(sidecarState.profileSpots);
+                m_profileCalibration.spotResults =
+                    std::move(sidecarStaging->spotResults);
+                m_parameterFile.setLoaded(sidecarStaging->loadedPath);
+                addToRecentParams(sidecarStaging->loadedPath);
+
+                if (colorscreen::screen_geometry_configured_p(
+                        m_scrToImgParams))
+                  m_renderTypeParams.type =
+                      colorscreen::render_type_interpolated;
+              } else {
+                m_parameterFile.setSuggested(sidecarStaging->loadedPath);
+                inspectorStatusBar()->showMessage(
+                    tr("Image loaded; sidecar parameters were not applied "
+                       "because settings changed while the image was loading."),
+                    6000);
+              }
+            } else if (!sidecarStaging->suggestedPath.isEmpty()) {
+              m_parameterFile.setSuggested(sidecarStaging->suggestedPath);
+            }
+          }
+
           clearDetectedScreenDiagnostics();
           // A new/reloaded image establishes new geometry and colour-sampling
           // contexts. Persisted parameter values remain available, but accepted
@@ -765,6 +805,8 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
             m_rparams.gamma = -1;
 
           m_undoStack->clear();
+          if (!suppressParamPrompt)
+            m_recoveryDirty = liveEditsWhileLoading;
 
           // If this is a stitched project, disable all tiles initially so
           // the UI is responsive while tiles load in the background.
@@ -883,12 +925,16 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
           }
 
         } else {
-          // A demosaic/current-image reload is transactional with respect to
-          // presentation. The old scan was deliberately retained in m_scan
-          // while loading, so put it back on the primary canvas when this
-          // still-current reload fails instead of leaving a logically loaded
-          // document with a blank ImageWidget.
-          if (reloadExistingImage && outgoingScan && m_scan == outgoingScan) {
+          // A failed open never adopts its requested image target. In
+          // particular, a fresh blank document remains reusable instead of
+          // becoming permanently named after an image that never opened.
+          m_currentImageFile = outgoingImageFile;
+
+          // Image replacement is transactional with respect to presentation.
+          // The old scan was deliberately retained in m_scan while loading, so
+          // put it back on the primary canvas when this still-current request
+          // fails instead of leaving a logically loaded document blank.
+          if (restoreOutgoingImage && outgoingScan && m_scan == outgoingScan) {
             m_imageWidget->setImage(
                 outgoingScan, &m_rparams, &m_scrToImgParams, &m_detectParams,
                 &m_renderTypeParams, &m_solverParams);
@@ -896,14 +942,14 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
           }
 
           // Re-enable image-backed controls after either restoring the outgoing
-          // reload scan or completing an ordinary failed open with no source.
+          // scan or completing an ordinary failed open with no source.
           refreshImageAvailabilityPresentation();
           updateWindowTitle();
           if (!progress->cancelled()) {
             QString messageText =
                 result.second.isEmpty() ? tr("Failed to load image.")
                                         : result.second;
-            if (reloadExistingImage && outgoingScan && m_scan == outgoingScan)
+            if (restoreOutgoingImage && outgoingScan && m_scan == outgoingScan)
               messageText +=
                   tr("\n\nThe previous image remains open.");
             auto *message = new QMessageBox(
@@ -922,7 +968,7 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
         }
       });
 
-  QString absolutePath = m_currentImageFile;
+  const QString absolutePath = requestedImageFile;
   QFuture<std::pair<bool, QString>> future = QtConcurrent::run(
       [tempScan, absolutePath, progress, demosaic, isCsprj]() {
         try {

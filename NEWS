@@ -125,6 +125,13 @@ Changes in version 1.1
      checking.
    - `colorscreen --verbose-tasks` print all tasks performed.
  - Bugs fixed:
+   - Qt GUI image replacement is now transactional: stale analyses cannot publish
+     into the outgoing scan, image-backed controls disable while replacement is
+     pending, and a failed replacement restores the previous image instead of
+     leaving a blank canvas.
+   - Optional image-sidecar parameter files are staged until the associated
+     image opens successfully, so a failed image open does not adopt the failed
+     filename, parameter target, or sidecar state.
    - Fixed text-mode progress info on Windows.
    - Fixed problem with nested parallelism in finetune solver.
    - Stack size for Windows build was increased to avoid finetune solver crash
