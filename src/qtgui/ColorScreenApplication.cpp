@@ -538,10 +538,15 @@ bool ColorScreenApplication::restoreRecoverySession() {
     if (!migrated.isEmpty()) {
       directories.prepend(migrated);
     } else {
-      QMessageBox::warning(
-          nullptr, tr("Crash Recovery"),
+      auto *warning = new QMessageBox(
+          QMessageBox::Warning, tr("Crash Recovery"),
           tr("The legacy recovery document could not be migrated. Its "
-             "original recovery files were left untouched."));
+             "original recovery files were left untouched."),
+          QMessageBox::Ok, workspaceWindow());
+      warning->setObjectName(
+          QStringLiteral("LegacyRecoveryMigrationWarning"));
+      warning->setAttribute(Qt::WA_DeleteOnClose);
+      warning->open();
     }
   }
 

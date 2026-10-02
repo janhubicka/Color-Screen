@@ -406,8 +406,12 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   explicit dialog/message-box/context-menu `exec()` sites have been converted
   to `open()`/`popup()` with receiver-bound continuations, and the deterministic
   Qt GUI source/build-metadata audit rejects new secondary event loops in CI.
-  The top-level `QApplication::exec()` and `QDrag::exec()` remain intentional
-  exceptions.
+  Notification-only static `QMessageBox::warning/critical/information` helpers
+  are rejected too because they hide the same nested loop; construct a
+  delete-on-close box and call `open()` instead. Synchronous decision dialogs
+  remain allowed where their return value is the close/cancel policy itself
+  (for example Unsaved Changes). The top-level `QApplication::exec()` and
+  `QDrag::exec()` remain intentional exceptions.
 
 ### P1 — early beta
 
