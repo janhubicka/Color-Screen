@@ -579,10 +579,11 @@ void MainWindow::maybeOfferInitialSetupGuide(
 }
 
 /** Load an image file and optionally its associated .par parameter file.
-   If SUPPRESSPARAMPROMPT is false, checks for a .par file alongside the image
-   and offers to load it transactionally. If the user declines, the sidecar is
-   unreadable/invalid, or no .par file exists, a weak (suggested) parameter
-   filename is set for later Save.
+   If SUPPRESSPARAMPROMPT is false, an accepted sidecar is parsed into private
+   staging state and may guide image decoding, but is published only after the
+   image itself loads successfully. Declined/invalid/missing sidecars likewise
+   stage only a later Save-As suggestion. A failed image therefore adopts
+   neither the requested image target nor sidecar state/target.
    The actual image loading runs asynchronously via QtConcurrent::run; on
    completion, the scan is set on ImageWidget, stitch tile loading is launched
    in parallel for .csprj projects, and undo history is cleared.  */
@@ -924,11 +925,10 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
           // becoming permanently named after an image that never opened.
           m_currentImageFile = outgoingImageFile;
 
-          // A demosaic/current-image reload is transactional with respect to
-          // presentation. The old scan was deliberately retained in m_scan
-          // while loading, so put it back on the primary canvas when this
-          // still-current reload fails instead of leaving a logically loaded
-          // document with a blank ImageWidget.
+          // Image replacement is transactional with respect to presentation.
+          // The old scan was deliberately retained in m_scan while loading, so
+          // put it back on the primary canvas when this still-current request
+          // fails instead of leaving a logically loaded document blank.
           if (restoreOutgoingImage && outgoingScan && m_scan == outgoingScan) {
             m_imageWidget->setImage(
                 outgoingScan, &m_rparams, &m_scrToImgParams, &m_detectParams,
@@ -937,7 +937,7 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
           }
 
           // Re-enable image-backed controls after either restoring the outgoing
-          // reload scan or completing an ordinary failed open with no source.
+          // scan or completing an ordinary failed open with no source.
           refreshImageAvailabilityPresentation();
           updateWindowTitle();
           if (!progress->cancelled()) {
