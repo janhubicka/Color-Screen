@@ -633,6 +633,11 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
     m_imageLoad.failurePrompt->close();
     m_imageLoad.failurePrompt.clear();
   }
+  if (m_imageLoad.sidecarPrompt) {
+    QPointer<QMessageBox> obsolete = m_imageLoad.sidecarPrompt;
+    m_imageLoad.sidecarPrompt.clear();
+    obsolete->close();
+  }
 
   // Final-result work and any pending one-shot confirmation belong to the
   // current image snapshot. Invalidate both before starting replacement I/O.
@@ -660,7 +665,6 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
   cancelStaleAdaptiveSharpening(replacementState);
   cancelStaleRegistrationDiscovery(replacementState);
 
-  bool parameterDataLoaded = false;
   m_currentImageFile = requestedImageFile;
   updateWindowTitle();
 
@@ -670,346 +674,387 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
   m_imageWidget->setImage(nullptr, nullptr, nullptr, nullptr, nullptr, nullptr);
   refreshImageAvailabilityPresentation();
 
+  // Continue into the actual image worker only after the optional sidecar
+  // decision has settled. The continuation is generation-gated because the
+  // non-blocking question may remain open while another image load supersedes
+  // this request.
+  const auto startImageRead =
+      [this, requestedImageFile, outgoingImageFile, outgoingScan,
+       restoreOutgoingImage, sidecarStaging, suppressParamPrompt,
+       loadGeneration]() {
+        if (m_closeLifecycle.closing() ||
+            loadGeneration != m_imageLoad.generation)
+          return;
+
+        const bool parameterDataLoaded = sidecarStaging->state.has_value();
+    const bool suggestDetectedMetadata =
+        !suppressParamPrompt && !parameterDataLoaded;
+    // Capture-type compatibility can only be checked after image_data has
+    // been loaded. Keep this as permission to offer the guide; the actual
+    // decision is made in the successful-load callback below.
+    const bool allowInitialGuide = !suppressParamPrompt;
+
+    auto progress = std::make_shared<colorscreen::progress_info>();
+    progress->set_task("Opening image", 0);
+    addProgress(progress);
+
+    std::shared_ptr<colorscreen::image_data> tempScan =
+        std::make_shared<colorscreen::image_data>();
+    // A staged sidecar may select the demosaic algorithm needed to decode the
+    // image, even though the rest of its state remains private until success.
+    const colorscreen::image_data::demosaicing_t demosaic =
+        sidecarStaging->state ? sidecarStaging->state->rparams.demosaic
+                              : m_rparams.demosaic;
+
+    bool isCsprj =
+        requestedImageFile.endsWith(QLatin1String(".csprj"), Qt::CaseInsensitive);
+
+    QFutureWatcher<std::pair<bool, QString>> *watcher =
+        new QFutureWatcher<std::pair<bool, QString>>(this);
+    connect(
+        watcher, &QFutureWatcher<std::pair<bool, QString>>::finished, this,
+        [this, watcher, tempScan, progress, isCsprj,
+         allowInitialGuide, suggestDetectedMetadata, loadGeneration, outgoingScan,
+         outgoingImageFile, restoreOutgoingImage, sidecarStaging,
+         suppressParamPrompt]() {
+          if (m_closeLifecycle.closing()) {
+            watcher->deleteLater();
+            return;
+          }
+
+          const std::pair<bool, QString> result = watcher->result();
+          removeProgress(progress);
+          watcher->deleteLater();
+
+          // Reloading (notably after changing demosaic mode) can start another
+          // asynchronous image load before this one finishes. Only the newest
+          // generation may clear the pending state or replace the document scan.
+          if (loadGeneration != m_imageLoad.generation)
+            return;
+
+          const bool autodetectScreenAfterLoad =
+              m_imageLoad.screenAutodetectAfterGeneration &&
+              *m_imageLoad.screenAutodetectAfterGeneration == loadGeneration;
+          if (autodetectScreenAfterLoad)
+            m_imageLoad.screenAutodetectAfterGeneration.reset();
+
+          m_imageLoad.pending = false;
+
+          if (result.first) {
+            const bool liveEditsWhileLoading =
+                !suppressParamPrompt && sidecarStaging->baseline &&
+                getCurrentState() != *sidecarStaging->baseline;
+
+            if (!suppressParamPrompt) {
+              if (sidecarStaging->state) {
+                // Do not let a delayed image completion overwrite edits the user
+                // made while loading. In that uncommon case the image still opens
+                // using the staged demosaic, but the sidecar remains only a safe
+                // suggested parameter target.
+                const bool unchanged =
+                    sidecarStaging->baseline &&
+                    getCurrentState() == *sidecarStaging->baseline;
+                if (unchanged) {
+                  ParameterState sidecarState =
+                      std::move(*sidecarStaging->state);
+                  m_scrToImgParams = std::move(sidecarState.scrToImg);
+                  m_detectParams = std::move(sidecarState.detect);
+                  m_rparams = std::move(sidecarState.rparams);
+                  m_solverParams = std::move(sidecarState.solver);
+                  m_profileSpots = std::move(sidecarState.profileSpots);
+                  m_profileCalibration.spotResults =
+                      std::move(sidecarStaging->spotResults);
+                  m_parameterFile.setLoaded(sidecarStaging->loadedPath);
+                  addToRecentParams(sidecarStaging->loadedPath);
+
+                  if (colorscreen::screen_geometry_configured_p(
+                          m_scrToImgParams))
+                    m_renderTypeParams.type =
+                        colorscreen::render_type_interpolated;
+                } else {
+                  m_parameterFile.setSuggested(sidecarStaging->loadedPath);
+                  inspectorStatusBar()->showMessage(
+                      tr("Image loaded; sidecar parameters were not applied "
+                         "because settings changed while the image was loading."),
+                      6000);
+                }
+              } else if (!sidecarStaging->suggestedPath.isEmpty()) {
+                m_parameterFile.setSuggested(sidecarStaging->suggestedPath);
+              }
+            }
+
+            clearDetectedScreenDiagnostics();
+            // A new/reloaded image establishes new geometry and colour-sampling
+            // contexts. Persisted parameter values remain available, but accepted
+            // session provenance from the replaced scan cannot carry across the
+            // source-image boundary.
+            m_geometryFit.clearAccepted();
+            m_profileCalibration.clear();
+            if (m_profilePanel)
+              m_profilePanel->setSpotResults(m_profileCalibration.spotResults);
+            m_scan = tempScan;
+
+            if ((int)m_scan->gamma != -2 && m_scan->gamma > 0 &&
+                m_rparams.gamma == -1) // Update only if unknown
+              m_rparams.gamma = m_scan->gamma;
+            else if (m_rparams.gamma == -1)
+              m_rparams.gamma = -1;
+
+            m_undoStack->clear();
+            if (!suppressParamPrompt)
+              m_recoveryDirty = liveEditsWhileLoading;
+
+            // If this is a stitched project, disable all tiles initially so
+            // the UI is responsive while tiles load in the background.
+            if (isCsprj && m_scan->stitch) {
+              colorscreen::stitch_project *stitch = m_scan->stitch;
+              int w = stitch->params.width;
+              int h = stitch->params.height;
+              m_rparams.set_tile_adjustments_dimensions(w, h);
+              for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
+                  m_rparams.get_tile_adjustment(x, y).enabled = false;
+            }
+
+            m_imageWidget->setImage(m_scan, &m_rparams, &m_scrToImgParams,
+                                    &m_detectParams, &m_renderTypeParams,
+                                    &m_solverParams);
+            onImageLoaded();
+
+            if (autodetectScreenAfterLoad) {
+              QTimer::singleShot(0, this, &MainWindow::onAutodetectScreen);
+            }
+
+            // Add to recent files and immediately establish this document's
+            // independent crash-recovery payload.
+            addToRecentFiles(m_currentImageFile);
+            saveRecoveryState();
+            updateWindowTitle();
+
+            const bool offerInitialGuide =
+                allowInitialGuide &&
+                (suggestDetectedMetadata ||
+                 m_rparams.get_capture_type(m_scan.get()) ==
+                     colorscreen::render_parameters::capture_unknown);
+            if (offerInitialGuide) {
+              const colorscreen::monochrome_bayer_analysis analysis =
+                  m_scan->analyze_monochrome_bayer();
+              QTimer::singleShot(
+                  0, this,
+                  [this, analysis, suggestDetectedMetadata, loadGeneration,
+                   tempScan]() {
+                    if (m_closeLifecycle.closing() || loadGeneration != m_imageLoad.generation ||
+                        m_scan != tempScan)
+                      return;
+                    maybeOfferInitialSetupGuide(analysis,
+                                                suggestDetectedMetadata);
+                  });
+            }
+
+            // Launch background tile loading for stitch projects.
+            if (isCsprj && m_scan->stitch) {
+              colorscreen::stitch_project *stitch = m_scan->stitch;
+              int w = stitch->params.width;
+              int h = stitch->params.height;
+
+              for (int ty = 0; ty < h; ty++) {
+                for (int tx = 0; tx < w; tx++) {
+                  auto tileProgress =
+                      std::make_shared<colorscreen::progress_info>();
+                  tileProgress->set_task(
+                      qPrintable(tr("Loading tile %1,%2").arg(tx).arg(ty)), 1);
+                  addProgress(tileProgress);
+
+                  auto scanRef = m_scan; // keep scan alive
+                  int capturedX = tx;
+                  int capturedY = ty;
+
+                  auto *tileWatcher = new QFutureWatcher<bool>(this);
+                  connect(tileWatcher, &QFutureWatcher<bool>::finished, this,
+                          [this, tileWatcher, tileProgress, scanRef, capturedX,
+                           capturedY]() {
+                            if (m_closeLifecycle.closing()) {
+                              tileWatcher->deleteLater();
+                              return;
+                            }
+                            const bool ok = tileWatcher->result();
+                            removeProgress(tileProgress);
+                            tileWatcher->deleteLater();
+
+                            // A demosaic/project reload replaces m_scan while
+                            // workers for the previous image_data may still
+                            // finish. Their tile bytes belong to scanRef only;
+                            // never publish an enable edit into the replacement
+                            // document state.
+                            if (m_scan != scanRef)
+                              return;
+
+                            if (ok) {
+                              // Enable the tile and trigger a re-render.
+                              ParameterState state = getCurrentState();
+                              state.rparams
+                                  .get_tile_adjustment(capturedX, capturedY)
+                                  .enabled = true;
+                              changeParameters(state, tr("Tile loaded %1,%2")
+                                                          .arg(capturedX)
+                                                          .arg(capturedY));
+                            }
+                          });
+
+                  QFuture<bool> tileFuture = QtConcurrent::run(
+                      [scanRef, capturedX, capturedY, tileProgress]() -> bool {
+                        try {
+                          if (!scanRef || !scanRef->stitch)
+                            return false;
+                          const char *err = nullptr;
+                          return scanRef->stitch->images[capturedY][capturedX]
+                              .load_img(&err, tileProgress.get());
+                        } catch (...) {
+                          // A failed tile remains disabled. Never let a worker
+                          // exception escape through QFutureWatcher::result().
+                          return false;
+                        }
+                      });
+                  tileWatcher->setFuture(tileFuture);
+                }
+              }
+            }
+
+          } else {
+            // A failed open never adopts its requested image target. In
+            // particular, a fresh blank document remains reusable instead of
+            // becoming permanently named after an image that never opened.
+            m_currentImageFile = outgoingImageFile;
+
+            // Image replacement is transactional with respect to presentation.
+            // The old scan was deliberately retained in m_scan while loading, so
+            // put it back on the primary canvas when this still-current request
+            // fails instead of leaving a logically loaded document blank.
+            if (restoreOutgoingImage && outgoingScan && m_scan == outgoingScan) {
+              m_imageWidget->setImage(
+                  outgoingScan, &m_rparams, &m_scrToImgParams, &m_detectParams,
+                  &m_renderTypeParams, &m_solverParams);
+              m_imageWidget->update();
+            }
+
+            // Re-enable image-backed controls after either restoring the outgoing
+            // scan or completing an ordinary failed open with no source.
+            refreshImageAvailabilityPresentation();
+            updateWindowTitle();
+            if (!progress->cancelled()) {
+              QString messageText =
+                  result.second.isEmpty() ? tr("Failed to load image.")
+                                          : result.second;
+              if (restoreOutgoingImage && outgoingScan && m_scan == outgoingScan)
+                messageText +=
+                    tr("\n\nThe previous image remains open.");
+              auto *message = new QMessageBox(
+                  QMessageBox::Critical, tr("Error Loading Image"),
+                  messageText, QMessageBox::Ok, this);
+              message->setObjectName(QStringLiteral("ImageLoadFailureDialog"));
+              message->setAttribute(Qt::WA_DeleteOnClose);
+              m_imageLoad.failurePrompt = message;
+              connect(message, &QMessageBox::finished, this,
+                      [this, message](int) {
+                        if (m_imageLoad.failurePrompt == message)
+                          m_imageLoad.failurePrompt.clear();
+                      });
+              message->open();
+            }
+          }
+        });
+
+    const QString absolutePath = requestedImageFile;
+    QFuture<std::pair<bool, QString>> future = QtConcurrent::run(
+        [tempScan, absolutePath, progress, demosaic, isCsprj]() {
+          try {
+            const char *error = nullptr;
+            colorscreen::sub_task task(progress.get());
+            const bool res =
+                tempScan->load(absolutePath.toUtf8().constData(),
+                               /*preload_all=*/!isCsprj, &error,
+                               progress.get(), demosaic);
+            QString errStr;
+            if (!res && error)
+              errStr = QString::fromUtf8(error);
+            return std::make_pair(res, errStr);
+          } catch (const std::exception &exception) {
+            return std::make_pair(false, QString::fromUtf8(exception.what()));
+          } catch (...) {
+            return std::make_pair(
+                false, QStringLiteral("Unexpected exception while loading image."));
+          }
+        });
+
+    watcher->setFuture(future);
+      };
+
   // Check for .par file (only if not suppressed, e.g., during recovery).
-  // Parse into private staging state: a successful sidecar belongs to the
-  // image-open transaction and must not mutate the live document or parameter
-  // target until the corresponding image bytes have also loaded successfully.
+  // The question is presentation state of this exact image-load generation:
+  // never enter a nested event loop, and never let an obsolete prompt launch
+  // decoding after a newer Open/Reload request has taken ownership.
   if (!suppressParamPrompt) {
     QFileInfo fileInfo(requestedImageFile);
     const QString parFile =
         fileInfo.path() + "/" + fileInfo.completeBaseName() + ".par";
 
     if (QFile::exists(parFile)) {
-      if (QMessageBox::question(this, "Load Parameters?",
-                                "A parameter file was found for this image. Do "
-                                "you want to load it?") == QMessageBox::Yes) {
+      auto *question = new QMessageBox(
+          QMessageBox::Question, tr("Load Parameters?"),
+          tr("A parameter file was found for this image. Do you want to load it?"),
+          QMessageBox::Yes | QMessageBox::No, this);
+      question->setObjectName(QStringLiteral("ImageSidecarLoadPrompt"));
+      question->setDefaultButton(QMessageBox::Yes);
+      question->setEscapeButton(QMessageBox::No);
+      question->setAttribute(Qt::WA_DeleteOnClose);
+      m_imageLoad.sidecarPrompt = question;
 
-        ParameterState sidecarState;
-        std::vector<colorscreen::color_match> sidecarSpotResults;
-        QString loadError;
-        if (!loadParameterPayload(parFile, &sidecarState, &sidecarSpotResults,
-                                  &loadError)) {
-          // Parsing failed, so the file is at most a later Save-As suggestion.
-          // Publish that suggestion only if the image itself opens.
-          sidecarStaging->suggestedPath = parFile;
-          showParameterLoadFailure(this, loadError);
-        } else {
-          sidecarStaging->state = std::move(sidecarState);
-          sidecarStaging->spotResults = std::move(sidecarSpotResults);
-          sidecarStaging->loadedPath = parFile;
-          parameterDataLoaded = true;
-        }
-      } else {
-        // User declined to load parameters - stage the filename as a later
-        // Save-As suggestion, conditional on successful image loading.
-        sidecarStaging->suggestedPath = parFile;
-      }
+      connect(
+          question, &QMessageBox::finished, this,
+          [this, question, parFile, sidecarStaging, loadGeneration,
+           startImageRead](int result) {
+            const bool ownsPrompt =
+                m_imageLoad.sidecarPrompt == question;
+            if (ownsPrompt)
+              m_imageLoad.sidecarPrompt.clear();
+            if (!ownsPrompt || m_closeLifecycle.closing() ||
+                loadGeneration != m_imageLoad.generation)
+              return;
+
+            if (result == QMessageBox::Yes) {
+              ParameterState sidecarState;
+              std::vector<colorscreen::color_match> sidecarSpotResults;
+              QString loadError;
+              if (!loadParameterPayload(parFile, &sidecarState,
+                                        &sidecarSpotResults, &loadError)) {
+                // Parsing failed, so the file is at most a later Save-As
+                // suggestion. Publish that suggestion only if the image opens.
+                sidecarStaging->suggestedPath = parFile;
+                showParameterLoadFailure(this, loadError);
+              } else {
+                sidecarStaging->state = std::move(sidecarState);
+                sidecarStaging->spotResults =
+                    std::move(sidecarSpotResults);
+                sidecarStaging->loadedPath = parFile;
+              }
+            } else {
+              // Declining (or closing) the optional question keeps the natural
+              // sidecar name only as a later Save-As suggestion.
+              sidecarStaging->suggestedPath = parFile;
+            }
+
+            startImageRead();
+          });
+      question->open();
     } else {
       // No parameter file exists - stage the natural Save-As filename.
       sidecarStaging->suggestedPath = parFile;
+      startImageRead();
     }
+  } else {
+    startImageRead();
   }
 
-  const bool suggestDetectedMetadata =
-      !suppressParamPrompt && !parameterDataLoaded;
-  // Capture-type compatibility can only be checked after image_data has
-  // been loaded. Keep this as permission to offer the guide; the actual
-  // decision is made in the successful-load callback below.
-  const bool allowInitialGuide = !suppressParamPrompt;
-
-  auto progress = std::make_shared<colorscreen::progress_info>();
-  progress->set_task("Opening image", 0);
-  addProgress(progress);
-
-  std::shared_ptr<colorscreen::image_data> tempScan =
-      std::make_shared<colorscreen::image_data>();
-  // A staged sidecar may select the demosaic algorithm needed to decode the
-  // image, even though the rest of its state remains private until success.
-  const colorscreen::image_data::demosaicing_t demosaic =
-      sidecarStaging->state ? sidecarStaging->state->rparams.demosaic
-                            : m_rparams.demosaic;
-
-  bool isCsprj =
-      fileName.endsWith(QLatin1String(".csprj"), Qt::CaseInsensitive);
-
-  QFutureWatcher<std::pair<bool, QString>> *watcher =
-      new QFutureWatcher<std::pair<bool, QString>>(this);
-  connect(
-      watcher, &QFutureWatcher<std::pair<bool, QString>>::finished, this,
-      [this, watcher, tempScan, progress, fileName, isCsprj,
-       allowInitialGuide, suggestDetectedMetadata, loadGeneration, outgoingScan,
-       outgoingImageFile, restoreOutgoingImage, sidecarStaging,
-       suppressParamPrompt]() {
-        if (m_closeLifecycle.closing()) {
-          watcher->deleteLater();
-          return;
-        }
-
-        const std::pair<bool, QString> result = watcher->result();
-        removeProgress(progress);
-        watcher->deleteLater();
-
-        // Reloading (notably after changing demosaic mode) can start another
-        // asynchronous image load before this one finishes. Only the newest
-        // generation may clear the pending state or replace the document scan.
-        if (loadGeneration != m_imageLoad.generation)
-          return;
-
-        const bool autodetectScreenAfterLoad =
-            m_imageLoad.screenAutodetectAfterGeneration &&
-            *m_imageLoad.screenAutodetectAfterGeneration == loadGeneration;
-        if (autodetectScreenAfterLoad)
-          m_imageLoad.screenAutodetectAfterGeneration.reset();
-
-        m_imageLoad.pending = false;
-
-        if (result.first) {
-          const bool liveEditsWhileLoading =
-              !suppressParamPrompt && sidecarStaging->baseline &&
-              getCurrentState() != *sidecarStaging->baseline;
-
-          if (!suppressParamPrompt) {
-            if (sidecarStaging->state) {
-              // Do not let a delayed image completion overwrite edits the user
-              // made while loading. In that uncommon case the image still opens
-              // using the staged demosaic, but the sidecar remains only a safe
-              // suggested parameter target.
-              const bool unchanged =
-                  sidecarStaging->baseline &&
-                  getCurrentState() == *sidecarStaging->baseline;
-              if (unchanged) {
-                ParameterState sidecarState =
-                    std::move(*sidecarStaging->state);
-                m_scrToImgParams = std::move(sidecarState.scrToImg);
-                m_detectParams = std::move(sidecarState.detect);
-                m_rparams = std::move(sidecarState.rparams);
-                m_solverParams = std::move(sidecarState.solver);
-                m_profileSpots = std::move(sidecarState.profileSpots);
-                m_profileCalibration.spotResults =
-                    std::move(sidecarStaging->spotResults);
-                m_parameterFile.setLoaded(sidecarStaging->loadedPath);
-                addToRecentParams(sidecarStaging->loadedPath);
-
-                if (colorscreen::screen_geometry_configured_p(
-                        m_scrToImgParams))
-                  m_renderTypeParams.type =
-                      colorscreen::render_type_interpolated;
-              } else {
-                m_parameterFile.setSuggested(sidecarStaging->loadedPath);
-                inspectorStatusBar()->showMessage(
-                    tr("Image loaded; sidecar parameters were not applied "
-                       "because settings changed while the image was loading."),
-                    6000);
-              }
-            } else if (!sidecarStaging->suggestedPath.isEmpty()) {
-              m_parameterFile.setSuggested(sidecarStaging->suggestedPath);
-            }
-          }
-
-          clearDetectedScreenDiagnostics();
-          // A new/reloaded image establishes new geometry and colour-sampling
-          // contexts. Persisted parameter values remain available, but accepted
-          // session provenance from the replaced scan cannot carry across the
-          // source-image boundary.
-          m_geometryFit.clearAccepted();
-          m_profileCalibration.clear();
-          if (m_profilePanel)
-            m_profilePanel->setSpotResults(m_profileCalibration.spotResults);
-          m_scan = tempScan;
-
-          if ((int)m_scan->gamma != -2 && m_scan->gamma > 0 &&
-              m_rparams.gamma == -1) // Update only if unknown
-            m_rparams.gamma = m_scan->gamma;
-          else if (m_rparams.gamma == -1)
-            m_rparams.gamma = -1;
-
-          m_undoStack->clear();
-          if (!suppressParamPrompt)
-            m_recoveryDirty = liveEditsWhileLoading;
-
-          // If this is a stitched project, disable all tiles initially so
-          // the UI is responsive while tiles load in the background.
-          if (isCsprj && m_scan->stitch) {
-            colorscreen::stitch_project *stitch = m_scan->stitch;
-            int w = stitch->params.width;
-            int h = stitch->params.height;
-            m_rparams.set_tile_adjustments_dimensions(w, h);
-            for (int y = 0; y < h; y++)
-              for (int x = 0; x < w; x++)
-                m_rparams.get_tile_adjustment(x, y).enabled = false;
-          }
-
-          m_imageWidget->setImage(m_scan, &m_rparams, &m_scrToImgParams,
-                                  &m_detectParams, &m_renderTypeParams,
-                                  &m_solverParams);
-          onImageLoaded();
-
-          if (autodetectScreenAfterLoad) {
-            QTimer::singleShot(0, this, &MainWindow::onAutodetectScreen);
-          }
-
-          // Add to recent files and immediately establish this document's
-          // independent crash-recovery payload.
-          addToRecentFiles(m_currentImageFile);
-          saveRecoveryState();
-          updateWindowTitle();
-
-          const bool offerInitialGuide =
-              allowInitialGuide &&
-              (suggestDetectedMetadata ||
-               m_rparams.get_capture_type(m_scan.get()) ==
-                   colorscreen::render_parameters::capture_unknown);
-          if (offerInitialGuide) {
-            const colorscreen::monochrome_bayer_analysis analysis =
-                m_scan->analyze_monochrome_bayer();
-            QTimer::singleShot(
-                0, this,
-                [this, analysis, suggestDetectedMetadata, loadGeneration,
-                 tempScan]() {
-                  if (m_closeLifecycle.closing() || loadGeneration != m_imageLoad.generation ||
-                      m_scan != tempScan)
-                    return;
-                  maybeOfferInitialSetupGuide(analysis,
-                                              suggestDetectedMetadata);
-                });
-          }
-
-          // Launch background tile loading for stitch projects.
-          if (isCsprj && m_scan->stitch) {
-            colorscreen::stitch_project *stitch = m_scan->stitch;
-            int w = stitch->params.width;
-            int h = stitch->params.height;
-
-            for (int ty = 0; ty < h; ty++) {
-              for (int tx = 0; tx < w; tx++) {
-                auto tileProgress =
-                    std::make_shared<colorscreen::progress_info>();
-                tileProgress->set_task(
-                    qPrintable(tr("Loading tile %1,%2").arg(tx).arg(ty)), 1);
-                addProgress(tileProgress);
-
-                auto scanRef = m_scan; // keep scan alive
-                int capturedX = tx;
-                int capturedY = ty;
-
-                auto *tileWatcher = new QFutureWatcher<bool>(this);
-                connect(tileWatcher, &QFutureWatcher<bool>::finished, this,
-                        [this, tileWatcher, tileProgress, scanRef, capturedX,
-                         capturedY]() {
-                          if (m_closeLifecycle.closing()) {
-                            tileWatcher->deleteLater();
-                            return;
-                          }
-                          const bool ok = tileWatcher->result();
-                          removeProgress(tileProgress);
-                          tileWatcher->deleteLater();
-
-                          // A demosaic/project reload replaces m_scan while
-                          // workers for the previous image_data may still
-                          // finish. Their tile bytes belong to scanRef only;
-                          // never publish an enable edit into the replacement
-                          // document state.
-                          if (m_scan != scanRef)
-                            return;
-
-                          if (ok) {
-                            // Enable the tile and trigger a re-render.
-                            ParameterState state = getCurrentState();
-                            state.rparams
-                                .get_tile_adjustment(capturedX, capturedY)
-                                .enabled = true;
-                            changeParameters(state, tr("Tile loaded %1,%2")
-                                                        .arg(capturedX)
-                                                        .arg(capturedY));
-                          }
-                        });
-
-                QFuture<bool> tileFuture = QtConcurrent::run(
-                    [scanRef, capturedX, capturedY, tileProgress]() -> bool {
-                      try {
-                        if (!scanRef || !scanRef->stitch)
-                          return false;
-                        const char *err = nullptr;
-                        return scanRef->stitch->images[capturedY][capturedX]
-                            .load_img(&err, tileProgress.get());
-                      } catch (...) {
-                        // A failed tile remains disabled. Never let a worker
-                        // exception escape through QFutureWatcher::result().
-                        return false;
-                      }
-                    });
-                tileWatcher->setFuture(tileFuture);
-              }
-            }
-          }
-
-        } else {
-          // A failed open never adopts its requested image target. In
-          // particular, a fresh blank document remains reusable instead of
-          // becoming permanently named after an image that never opened.
-          m_currentImageFile = outgoingImageFile;
-
-          // Image replacement is transactional with respect to presentation.
-          // The old scan was deliberately retained in m_scan while loading, so
-          // put it back on the primary canvas when this still-current request
-          // fails instead of leaving a logically loaded document blank.
-          if (restoreOutgoingImage && outgoingScan && m_scan == outgoingScan) {
-            m_imageWidget->setImage(
-                outgoingScan, &m_rparams, &m_scrToImgParams, &m_detectParams,
-                &m_renderTypeParams, &m_solverParams);
-            m_imageWidget->update();
-          }
-
-          // Re-enable image-backed controls after either restoring the outgoing
-          // scan or completing an ordinary failed open with no source.
-          refreshImageAvailabilityPresentation();
-          updateWindowTitle();
-          if (!progress->cancelled()) {
-            QString messageText =
-                result.second.isEmpty() ? tr("Failed to load image.")
-                                        : result.second;
-            if (restoreOutgoingImage && outgoingScan && m_scan == outgoingScan)
-              messageText +=
-                  tr("\n\nThe previous image remains open.");
-            auto *message = new QMessageBox(
-                QMessageBox::Critical, tr("Error Loading Image"),
-                messageText, QMessageBox::Ok, this);
-            message->setObjectName(QStringLiteral("ImageLoadFailureDialog"));
-            message->setAttribute(Qt::WA_DeleteOnClose);
-            m_imageLoad.failurePrompt = message;
-            connect(message, &QMessageBox::finished, this,
-                    [this, message](int) {
-                      if (m_imageLoad.failurePrompt == message)
-                        m_imageLoad.failurePrompt.clear();
-                    });
-            message->open();
-          }
-        }
-      });
-
-  const QString absolutePath = requestedImageFile;
-  QFuture<std::pair<bool, QString>> future = QtConcurrent::run(
-      [tempScan, absolutePath, progress, demosaic, isCsprj]() {
-        try {
-          const char *error = nullptr;
-          colorscreen::sub_task task(progress.get());
-          const bool res =
-              tempScan->load(absolutePath.toUtf8().constData(),
-                             /*preload_all=*/!isCsprj, &error,
-                             progress.get(), demosaic);
-          QString errStr;
-          if (!res && error)
-            errStr = QString::fromUtf8(error);
-          return std::make_pair(res, errStr);
-        } catch (const std::exception &exception) {
-          return std::make_pair(false, QString::fromUtf8(exception.what()));
-        } catch (...) {
-          return std::make_pair(
-              false, QStringLiteral("Unexpected exception while loading image."));
-        }
-      });
-
-  watcher->setFuture(future);
 }
 
 /** Load the recent image files list from QSettings. */
