@@ -4370,7 +4370,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
 
         bool oneShotStarted = false;
         bool oneShotWorkerRan = false;
-        OneShotOperation blockedOperation;
+        MainWindow::OneShotOperation blockedOperation;
         blockedOperation.description =
             QStringLiteral("Pending image one-shot smoke");
         blockedOperation.onStart =
