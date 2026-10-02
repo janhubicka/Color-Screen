@@ -1019,10 +1019,28 @@ void SharpnessPanel::fitMeasuredMtf() {
 }
 
 void SharpnessPanel::loadMTF() {
-  const QStringList fileNames = QFileDialog::getOpenFileNames(
-      this, tr("Load QuickMTF measurements"), "",
+  auto *dialog = new QFileDialog(
+      this, tr("Load QuickMTF measurements"), QString(),
       tr("QuickMTF files (*.csv *.txt);;All Files (*)"));
+  dialog->setObjectName(QStringLiteral("QuickMtfOpenFileDialog"));
+  dialog->setFileMode(QFileDialog::ExistingFiles);
+  dialog->setAcceptMode(QFileDialog::AcceptOpen);
+  dialog->setAttribute(Qt::WA_DeleteOnClose);
 
+  connect(dialog, &QDialog::accepted, this, [this, dialog]() {
+    const QStringList fileNames = dialog->selectedFiles();
+    if (fileNames.isEmpty())
+      return;
+
+    // Let the native chooser finish teardown before a malformed import can
+    // present its asynchronous aggregate warning.
+    QTimer::singleShot(
+        0, this, [this, fileNames]() { loadMtfFiles(fileNames); });
+  });
+  dialog->open();
+}
+
+void SharpnessPanel::loadMtfFiles(const QStringList &fileNames) {
   if (fileNames.isEmpty())
     return;
 

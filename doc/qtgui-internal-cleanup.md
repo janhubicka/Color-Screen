@@ -817,13 +817,15 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   Open/Reload revokes an obsolete question before closing it, and its old
   `finished` callback cannot parse parameters or launch image decoding. This
   removes the last nested question loop from the image-replacement transaction.
-- QuickMTF batch import is transactional at the GUI boundary too. Selected
-  files are parsed into a private MTF collection without opening per-file modal
-  warnings; valid files are published in one undoable edit that touches only
-  `scanner_mtf`, while malformed/unreadable files are summarized once in a
-  parent-owned asynchronous warning. A bad file therefore cannot re-enter the
-  event loop while a whole stale `ParameterState` snapshot is waiting to be
-  written back.
+- QuickMTF batch import is transactional at the GUI boundary too. The native
+  multi-file chooser is a parent-owned asynchronous `QuickMtfOpenFileDialog`;
+  its accepted selection is parsed on the next event-loop turn after native
+  chooser teardown. Selected files are parsed into a private MTF collection
+  without opening per-file modal warnings; valid files are published in one
+  undoable edit that touches only `scanner_mtf`, while malformed/unreadable
+  files are summarized once in a parent-owned asynchronous warning. A bad file
+  therefore cannot re-enter the event loop while a whole stale
+  `ParameterState` snapshot is waiting to be written back.
 - Parameter saving keeps its write result synchronous so close/save policy can
   decide immediately, but write failures no longer open a static blocking error
   box from inside `closeEvent()`. A failed write vetoes close first, preserves
