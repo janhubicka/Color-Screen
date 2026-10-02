@@ -498,8 +498,8 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   presentation. Refresh re-applies folding to rows added after the header, and
   guarded callbacks tolerate UI rebuilds. The beta smoke covers recreation with
   renamed/repeated captions, key separation, unkeyed compatibility, dynamic rows,
-  applicability, programmatic changes, and zero document setter calls. The next
-  real-panel probe covers all five Color and four Contact Copy sections under
+  applicability, programmatic changes, and zero document setter calls. The
+  real-panel probe now covers all five Color and four Contact Copy sections under
   an isolated settings identity, including multiple live panels and reopening.
   Color's Tone Curve wrapper now belongs to Final adjustments instead of the
   outer form, preventing that editor from escaping the section's fold. Nested
@@ -815,6 +815,12 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   parent-owned asynchronous warning. A bad file therefore cannot re-enter the
   event loop while a whole stale `ParameterState` snapshot is waiting to be
   written back.
+- Parameter saving keeps its write result synchronous so close/save policy can
+  decide immediately, but write failures no longer open a static blocking error
+  box from inside `closeEvent()`. A failed write vetoes close first, preserves
+  the previous target bytes and dirty document state, then presents one
+  parent-owned asynchronous `ParameterSaveFailureDialog`; a newer save attempt
+  supersedes an older warning.
 - Flat-field reference selection no longer chains static/native modal calls on
   the MainWindow stack. White-file selection, the optional-black question and
   black-file selection are parent-owned asynchronous dialogs under one setup

@@ -1006,6 +1006,11 @@ private:
   };
   ParameterFileState m_parameterFile;
 
+  /** Presentation ownership for one non-blocking parameter-save failure.
+      A newer save attempt supersedes an older warning; save success/failure
+      itself remains synchronous so closeEvent can decide immediately. */
+  QPointer<QMessageBox> m_parameterSaveFailurePrompt;
+
   /** Session-only ownership for asynchronous image replacement.
       Generation gates stale completions; the optional autodetect handoff names
       the exact reload generation allowed to continue into Detect screen. */

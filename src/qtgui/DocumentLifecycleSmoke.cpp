@@ -1052,8 +1052,7 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
         }
 
         queueDialogResponses(
-            app, {{QStringLiteral("Unsaved Changes"), QMessageBox::Save},
-                  {QStringLiteral("Error"), QMessageBox::Ok}});
+            app, {{QStringLiteral("Unsaved Changes"), QMessageBox::Save}});
         if (second->close() || !state->second ||
             !second->documentDisplayName().endsWith(QLatin1Char('*')) ||
             app.documentWindows().size() != 1 || app.tabCount() != 1) {
@@ -1061,6 +1060,18 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
               "Failed Save on close did not keep the dirty document open"));
           return;
         }
+
+        QMessageBox *saveFailure = second->findChild<QMessageBox *>(
+            QStringLiteral("ParameterSaveFailureDialog"));
+        if (!saveFailure ||
+            second->m_parameterSaveFailurePrompt != saveFailure ||
+            !saveFailure->text().contains(
+                QStringLiteral("previous file was left unchanged"))) {
+          fail(QStringLiteral(
+              "Failed Save on close did not publish its asynchronous warning"));
+          return;
+        }
+        saveFailure->accept();
         schedule(5, 0, 40);
         return;
       }
