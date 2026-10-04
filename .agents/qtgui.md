@@ -99,9 +99,12 @@ document state. Detached-document geometry is also presentation state. Do not
 add per-document "last open/save directory" members for application file-dialog
 history. Image Open and Parameter Open use parent-owned asynchronous
 `ImageOpenFileDialog` / `ParameterOpenFileDialog` objects and preserve the
-one-event-turn handoff before image/parameter processing; do not replace them
-with static `QFileDialog::getOpenFileName(s)` helpers. Parameter Save As remains
-synchronous because `maybeSave()` / `closeEvent()` consume its boolean result.
+one-event-turn handoff before image/parameter processing. Slanted-edge reference
+selection likewise uses one asynchronous `SlantedEdgeReferenceFileDialog` per
+source document; repeating the action supersedes the obsolete chooser before its
+acceptance can create another view. Do not replace these with static
+`QFileDialog::getOpenFileName(s)` helpers. Parameter Save As remains synchronous
+because `maybeSave()` / `closeEvent()` consume its boolean result.
 Parameter dialogs still prefer the document's current/suggested
 `ParameterFileState::path`; only when that target is empty do they fall back to
 the application-wide `lastParameterDir`. Successful parameter loads/saves
