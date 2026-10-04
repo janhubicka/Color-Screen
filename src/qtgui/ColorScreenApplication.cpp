@@ -104,9 +104,6 @@ MainWindow *ColorScreenApplication::createDocumentWindow(
     m_hiddenDocumentPresentations.remove(document);
     m_finalizingDocuments.remove(document);
     m_closingDocuments.remove(document);
-    if (QPointer<QFileDialog> dialog =
-            m_slantedReferenceFileDialogs.take(document))
-      dialog->close();
     QTimer::singleShot(0, this, [this]() {
       pruneDocumentWindows();
       refreshWindowMenus();
@@ -275,6 +272,14 @@ void ColorScreenApplication::openSlantedEdgeReference(
   connect(dialog, &QDialog::rejected, this, [this, source, dialog]() {
     if (m_slantedReferenceFileDialogs.value(source) == dialog)
       m_slantedReferenceFileDialogs.remove(source);
+  });
+  // Use the chooser itself as connection context so superseding/deleting the
+  // chooser removes this source-lifetime hook instead of accumulating one
+  // lambda per click.
+  connect(source, &QObject::destroyed, dialog, [this, source]() {
+    if (QPointer<QFileDialog> current =
+            m_slantedReferenceFileDialogs.take(source))
+      current->close();
   });
   dialog->open();
 }
