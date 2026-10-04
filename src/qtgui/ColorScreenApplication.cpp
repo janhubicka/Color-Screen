@@ -104,6 +104,9 @@ MainWindow *ColorScreenApplication::createDocumentWindow(
     m_hiddenDocumentPresentations.remove(document);
     m_finalizingDocuments.remove(document);
     m_closingDocuments.remove(document);
+    if (QPointer<QFileDialog> dialog =
+            m_slantedReferenceFileDialogs.take(document))
+      dialog->close();
     QTimer::singleShot(0, this, [this]() {
       pruneDocumentWindows();
       refreshWindowMenus();
@@ -272,11 +275,6 @@ void ColorScreenApplication::openSlantedEdgeReference(
   connect(dialog, &QDialog::rejected, this, [this, source, dialog]() {
     if (m_slantedReferenceFileDialogs.value(source) == dialog)
       m_slantedReferenceFileDialogs.remove(source);
-  });
-  connect(source, &QObject::destroyed, this, [this, source]() {
-    if (QPointer<QFileDialog> dialog =
-            m_slantedReferenceFileDialogs.take(source))
-      dialog->close();
   });
   dialog->open();
 }
