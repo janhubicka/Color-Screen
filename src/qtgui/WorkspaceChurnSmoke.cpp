@@ -4632,8 +4632,9 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         }
 
         app.openSlantedEdgeReference(first, view);
-        QCoreApplication::sendPostedEvents(obsoleteReferenceChooser.data(),
-                                           QEvent::DeferredDelete);
+        if (obsoleteReferenceChooser)
+          QCoreApplication::sendPostedEvents(obsoleteReferenceChooser.data(),
+                                             QEvent::DeferredDelete);
         QFileDialog *referenceChooser = view->findChild<QFileDialog *>(
             QStringLiteral("SlantedEdgeReferenceFileDialog"));
         if (obsoleteReferenceChooser || !referenceChooser ||
@@ -4643,10 +4644,13 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
               "Repeated slanted-reference chooser did not supersede the obsolete request"));
           return;
         }
+        QPointer<QFileDialog> cancelledReferenceChooser(referenceChooser);
         referenceChooser->reject();
-        QCoreApplication::sendPostedEvents(referenceChooser,
-                                           QEvent::DeferredDelete);
-        if (view->findChild<QFileDialog *>(
+        if (cancelledReferenceChooser)
+          QCoreApplication::sendPostedEvents(cancelledReferenceChooser.data(),
+                                             QEvent::DeferredDelete);
+        if (cancelledReferenceChooser ||
+            view->findChild<QFileDialog *>(
                 QStringLiteral("SlantedEdgeReferenceFileDialog")) ||
             app.viewWindows().size() != viewsBeforeReferenceChooser) {
           fail(QStringLiteral(
