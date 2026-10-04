@@ -826,6 +826,14 @@ many screens.  Changes here deserve focused tests before broad visual cleanup.
   files are summarized once in a parent-owned asynchronous warning. A bad file
   therefore cannot re-enter the event loop while a whole stale
   `ParameterState` snapshot is waiting to be written back.
+- Slanted-edge reference selection now follows the same asynchronous
+  file-dialog rule. `ColorScreenApplication` owns at most one
+  `SlantedEdgeReferenceFileDialog` per source document; repeating the action
+  closes the obsolete chooser, source destruction revokes any outstanding
+  chooser, and accepted creation is deferred one event-loop turn so native
+  dialog teardown completes before a new reference presentation is added.
+  Workspace churn exercises detached-inspector parentage, supersession and
+  cancellation without creating a reference view.
 - Parameter saving keeps its write result synchronous so close/save policy can
   decide immediately, but write failures no longer open a static blocking error
   box from inside `closeEvent()`. A failed write vetoes close first, preserves
