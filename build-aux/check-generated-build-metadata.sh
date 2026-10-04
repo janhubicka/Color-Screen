@@ -139,27 +139,17 @@ if test -n "$static_notifications"; then
   exit 1
 fi
 
-# Document Open commands do not need a synchronous return value. Keep their
-# native QFileDialog objects parent-owned/asynchronous so document destruction
-# cannot resume a static getOpenFileName(s) call on a dead MainWindow. Save As
-# remains intentionally synchronous because maybeSave()/closeEvent() consumes
-# its boolean result.
-blocking_document_open_dialogs=$(
-  grep -nHE 'QFileDialog::getOpenFileName(s)?[[:space:]]*[(]'     src/qtgui/MainWindowDocument.cpp || true
+# Open-file commands do not need a synchronous return value. Keep native
+# QFileDialog objects parent-owned/asynchronous so closing a document/view cannot
+# resume a static getOpenFileName(s) call on dead presentation state. Parameter
+# Save As remains intentionally synchronous because maybeSave()/closeEvent()
+# consumes its boolean result.
+blocking_open_dialogs=$(
+  grep -nHE 'QFileDialog::getOpenFileName(s)?[[:space:]]*[(]' src/qtgui/*.cpp || true
 )
-if test -n "$blocking_document_open_dialogs"; then
-  echo "error: blocking document-open QFileDialog convenience call:" >&2
-  echo "$blocking_document_open_dialogs" >&2
-  echo "Use a parent-owned QFileDialog with open()/accepted continuation." >&2
-  exit 1
-fi
-
-blocking_sharpness_open_dialogs=$(
-  grep -nHE 'QFileDialog::getOpenFileName(s)?[[:space:]]*[(]'     src/qtgui/SharpnessPanel.cpp || true
-)
-if test -n "$blocking_sharpness_open_dialogs"; then
-  echo "error: blocking Sharpness QFileDialog convenience call:" >&2
-  echo "$blocking_sharpness_open_dialogs" >&2
+if test -n "$blocking_open_dialogs"; then
+  echo "error: blocking open-file QFileDialog convenience call:" >&2
+  echo "$blocking_open_dialogs" >&2
   echo "Use a parent-owned QFileDialog with open()/accepted continuation." >&2
   exit 1
 fi
