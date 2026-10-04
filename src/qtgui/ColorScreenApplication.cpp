@@ -273,11 +273,14 @@ void ColorScreenApplication::openSlantedEdgeReference(
     if (m_slantedReferenceFileDialogs.value(source) == dialog)
       m_slantedReferenceFileDialogs.remove(source);
   });
-  connect(dialog, &QObject::destroyed, this, [this, source]() {
-    // Parent-window destruction does not have to emit rejected(). QPointer is
-    // already null by the time destroyed() is delivered, so remove only a
-    // null current entry and never erase a replacement chooser.
-    if (!m_slantedReferenceFileDialogs.value(source))
+  connect(dialog, &QObject::destroyed, this, [this, source, dialog]() {
+    // Parent-window destruction does not have to emit rejected(). Qt may clear
+    // QPointer before or after destroyed() observers run, so accept either the
+    // null weak pointer or the exact dying object. Never erase a replacement
+    // chooser installed for the same source document.
+    const QPointer<QFileDialog> current =
+        m_slantedReferenceFileDialogs.value(source);
+    if (!current || current.data() == dialog)
       m_slantedReferenceFileDialogs.remove(source);
   });
   // Use the chooser itself as connection context so superseding/deleting the
