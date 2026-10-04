@@ -21,6 +21,7 @@
 #include <QDialog>
 #include <QEvent>
 #include <QFile>
+#include <QFileDialog>
 #include <QFont>
 #include <QLabel>
 #include <QLineEdit>
@@ -4609,6 +4610,47 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
                    .arg(workspace->statusBar()->currentMessage() == marker)
                    .arg(QApplication::focusWidget() &&
                         QApplication::focusWidget()->window() == view));
+          return;
+        }
+
+        // The slanted-edge reference chooser is inspector-owned presentation,
+        // not synchronous control flow. Repeating the action must revoke the
+        // obsolete chooser without creating a reference from either cancelled
+        // request.
+        const int viewsBeforeReferenceChooser = app.viewWindows().size();
+        app.openSlantedEdgeReference(first, view);
+        QPointer<QFileDialog> obsoleteReferenceChooser =
+            view->findChild<QFileDialog *>(
+                QStringLiteral("SlantedEdgeReferenceFileDialog"));
+        if (!obsoleteReferenceChooser ||
+            obsoleteReferenceChooser->parentWidget() != view ||
+            obsoleteReferenceChooser->fileMode() != QFileDialog::ExistingFile ||
+            obsoleteReferenceChooser->acceptMode() != QFileDialog::AcceptOpen) {
+          fail(QStringLiteral(
+              "Detached slanted-reference chooser lost asynchronous inspector ownership"));
+          return;
+        }
+
+        app.openSlantedEdgeReference(first, view);
+        QCoreApplication::sendPostedEvents(obsoleteReferenceChooser.data(),
+                                           QEvent::DeferredDelete);
+        QFileDialog *referenceChooser = view->findChild<QFileDialog *>(
+            QStringLiteral("SlantedEdgeReferenceFileDialog"));
+        if (obsoleteReferenceChooser || !referenceChooser ||
+            referenceChooser->parentWidget() != view ||
+            app.viewWindows().size() != viewsBeforeReferenceChooser) {
+          fail(QStringLiteral(
+              "Repeated slanted-reference chooser did not supersede the obsolete request"));
+          return;
+        }
+        referenceChooser->reject();
+        QCoreApplication::sendPostedEvents(referenceChooser,
+                                           QEvent::DeferredDelete);
+        if (view->findChild<QFileDialog *>(
+                QStringLiteral("SlantedEdgeReferenceFileDialog")) ||
+            app.viewWindows().size() != viewsBeforeReferenceChooser) {
+          fail(QStringLiteral(
+              "Cancelled slanted-reference chooser created presentation state"));
           return;
         }
 
