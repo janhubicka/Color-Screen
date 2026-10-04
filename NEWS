@@ -2,8 +2,9 @@ Changes planned for version 2.0 (development version 2.0alpha)
  - New features:
    - New QT based graphical user interface
    - The Qt GUI can keep multiple images open in a standard MDI workspace. The
-     tab bar is hidden for one image and appears below the toolbar for multiple
-     images; documents can be rearranged as tabs, tiles, or cascaded windows,
+     document tab bar stays visible below the toolbar even with one attached
+     image, keeping its detach/close affordances stable; documents can be
+     rearranged as tabs, tiles, or cascaded windows,
      and tabs can be detached/re-attached without losing document state. Every
      image retains its own parameters, undo history, background tasks, progress
      reporting, and crash recovery. In tabbed mode the active image fills the
