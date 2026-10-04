@@ -53,13 +53,14 @@ navigation before beta feedback.
 
 ## 4. Change release-version metadata together
 
-The development version is currently `2.0alpha`. For final 2.0, update all
+The development version is currently `2.0alpha`. For final 2.0, update the
 tracked release-version sources in the same patch:
 
 - `configure.ac`: `AC_INIT([colorscreen], [2.0], ...)`;
-- `os/linux/control`: `Version: 2.0`;
-- `.github/workflows/build-ubuntu.yml`: Debian packaging version argument
-  currently hard-coded as `2.0alpha`.
+- `os/linux/control`: `Version: 2.0`.
+
+Ubuntu CI derives its Debian package version from the configured top-level
+`PACKAGE_VERSION`, so it must not grow another literal release version.
 
 Run `autoreconf -fi` when required by the normal generated-build-metadata
 workflow and verify the generated-file audit before merging.
