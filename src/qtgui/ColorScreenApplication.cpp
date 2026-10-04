@@ -218,21 +218,67 @@ ImageViewWindow *ColorScreenApplication::createSlantedEdgeReference(
   return view;
 }
 
-/** Ask the user for another scan to use as a slanted-edge MTF reference. */
-ImageViewWindow *ColorScreenApplication::openSlantedEdgeReference(
-    MainWindow *source, QWidget *dialogParent) {
-  if (!source)
-    return nullptr;
+/** Ask asynchronously for another scan to use as a slanted-edge reference.
 
-  const QString fileName = QFileDialog::getOpenFileName(
-      dialogParent ? dialogParent : source,
-      tr("Open slanted edge reference"), QString(),
+    Exactly one chooser belongs to each SOURCE. Repeating the action closes the
+    obsolete chooser before installing a new one, and the accepted continuation
+    is guarded against source-document teardown. */
+void ColorScreenApplication::openSlantedEdgeReference(
+    MainWindow *source, QWidget *dialogParent) {
+  if (!source || m_closingDocuments.contains(source))
+    return;
+
+  if (QPointer<QFileDialog> obsolete =
+          m_slantedReferenceFileDialogs.value(source)) {
+    m_slantedReferenceFileDialogs.remove(source);
+    obsolete->close();
+  } else {
+    m_slantedReferenceFileDialogs.remove(source);
+  }
+
+  QWidget *parent = dialogParent ? dialogParent : source;
+  auto *dialog = new QFileDialog(
+      parent, tr("Open slanted edge reference"), QString(),
       tr("Images (*.tif *.tiff *.jpg *.jpeg *.jp2 *.j2k *.jpc *.jpf *.jpx "
          "*.png *.raw *.dng *.iiq *.nef *.cr2 *.eip *.arw *.raf *.arq);;"
          "All Files (*)"));
-  if (fileName.isEmpty())
-    return nullptr;
-  return createSlantedEdgeReference(source, fileName);
+  dialog->setObjectName(QStringLiteral("SlantedEdgeReferenceFileDialog"));
+  dialog->setFileMode(QFileDialog::ExistingFile);
+  dialog->setAcceptMode(QFileDialog::AcceptOpen);
+  dialog->setAttribute(Qt::WA_DeleteOnClose);
+  m_slantedReferenceFileDialogs.insert(source, dialog);
+
+  const QPointer<MainWindow> guardedSource(source);
+  connect(dialog, &QDialog::accepted, this,
+          [this, source, guardedSource, dialog]() {
+            if (m_slantedReferenceFileDialogs.value(source) != dialog)
+              return;
+            m_slantedReferenceFileDialogs.remove(source);
+            const QStringList selected = dialog->selectedFiles();
+            if (selected.isEmpty())
+              return;
+
+            const QString fileName = selected.constFirst();
+            // Let native chooser teardown finish before creating another
+            // top-level/MDI presentation.
+            QTimer::singleShot(0, this,
+                               [this, guardedSource, fileName]() {
+              if (!guardedSource ||
+                  m_closingDocuments.contains(guardedSource.data()))
+                return;
+              createSlantedEdgeReference(guardedSource.data(), fileName);
+            });
+          });
+  connect(dialog, &QDialog::rejected, this, [this, source, dialog]() {
+    if (m_slantedReferenceFileDialogs.value(source) == dialog)
+      m_slantedReferenceFileDialogs.remove(source);
+  });
+  connect(source, &QObject::destroyed, this, [this, source]() {
+    if (QPointer<QFileDialog> dialog =
+            m_slantedReferenceFileDialogs.take(source))
+      dialog->close();
+  });
+  dialog->open();
 }
 
 /** Detach VIEW from the primary workspace without recreating it. */
