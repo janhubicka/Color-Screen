@@ -384,11 +384,23 @@ class FinalReleaseTests(unittest.TestCase):
         self.github.final_release = {
             "draft": True, "prerelease": False, "immutable": False,
             "target_commitish": SHA,
+            "assets": [{"name": promoter.FINAL_PACKAGES[0]}],
         }
         self.assertTrue(self.publish())
         self.assertEqual(len(self.github.writes), 2)
         self.assertEqual(self.github.writes[0][:2], ("release", "upload"))
         self.assertEqual(self.github.writes[1][:2], ("release", "edit"))
+
+    def test_matching_draft_with_unexpected_asset_is_rejected(self):
+        self.github.final_ref = SHA
+        self.github.final_release = {
+            "draft": True, "prerelease": False, "immutable": False,
+            "target_commitish": SHA,
+            "assets": [{"name": "unrelated-debug-build.zip"}],
+        }
+        with self.assertRaises(RuntimeError):
+            self.publish()
+        self.assertEqual(self.github.writes, [])
 
     def test_upload_failure_never_publishes_draft(self):
         self.github.fail_upload = True
