@@ -987,9 +987,20 @@ void MainWindow::setupUi() {
 
 
 
-  m_configTabs->addTab(m_capturePanel, "Digital capture",
-                       QStringLiteral("digital_capture"));
-  m_configTabs->addTab(m_tilesPanel, "Tiles", QStringLiteral("tiles"));
+  // Keep all specialist panels and stable panel keys, but present them through
+  // five workflow stages. The stage is presentation state derived from the
+  // selected panel; it never becomes another document parameter.
+  m_configTabs->addStage(tr("Capture"), QStringLiteral("capture"));
+  m_configTabs->addStage(tr("Process"), QStringLiteral("process"));
+  m_configTabs->addStage(tr("Register"), QStringLiteral("register"));
+  m_configTabs->addStage(tr("Reconstruct"), QStringLiteral("reconstruct"));
+  m_configTabs->addStage(tr("Color"), QStringLiteral("color"));
+
+  m_configTabs->addTab(m_capturePanel, tr("Digital capture"),
+                       QStringLiteral("digital_capture"),
+                       QStringLiteral("capture"));
+  m_configTabs->addTab(m_tilesPanel, tr("Tiles"), QStringLiteral("tiles"),
+                       QStringLiteral("capture"));
   connect(m_capturePanel, &CapturePanel::cropRequested, this,
           &MainWindow::onCropRequested);
   connect(m_capturePanel, &CapturePanel::measureRequested, this,
@@ -1042,24 +1053,31 @@ void MainWindow::setupUi() {
               clearTemporaryCanvasInstruction();
           });
   connect(m_imageWidget, &ImageWidget::distanceMeasured, this, &MainWindow::onDistanceMeasured);
-  m_configTabs->addTab(m_sharpnessPanel, "Sharpness",
-                       QStringLiteral("sharpness"));
-  m_configTabs->addTab(m_imageLayerPanel, "Image Layer",
-                       QStringLiteral("image_layer"));
-  m_configTabs->addTab(m_contactCopyPanel, "Contact copy",
-                       QStringLiteral("contact_copy"));
-  m_configTabs->addTab(m_screenPanel, "Screen", QStringLiteral("screen"));
-  m_configTabs->addTab(m_geometryPanel, "Geometry",
-                       QStringLiteral("geometry"));
-  m_configTabs->addTab(m_colorPanel, "Color", QStringLiteral("color"));
-  m_configTabs->addTab(m_profilePanel, "Profile calibration",
-                       QStringLiteral("profile"));
+  m_configTabs->addTab(m_sharpnessPanel, tr("Sharpness"),
+                       QStringLiteral("sharpness"),
+                       QStringLiteral("reconstruct"));
+  m_configTabs->addTab(m_imageLayerPanel, tr("Image Layer"),
+                       QStringLiteral("image_layer"),
+                       QStringLiteral("process"));
+  m_configTabs->addTab(m_contactCopyPanel, tr("Contact copy"),
+                       QStringLiteral("contact_copy"),
+                       QStringLiteral("process"));
+  m_configTabs->addTab(m_screenPanel, tr("Screen"), QStringLiteral("screen"),
+                       QStringLiteral("process"));
+  m_configTabs->addTab(m_geometryPanel, tr("Geometry"),
+                       QStringLiteral("geometry"),
+                       QStringLiteral("register"));
+  m_configTabs->addTab(m_colorPanel, tr("Color"), QStringLiteral("color"),
+                       QStringLiteral("color"));
+  m_configTabs->addTab(m_profilePanel, tr("Profile calibration"),
+                       QStringLiteral("profile"),
+                       QStringLiteral("color"));
 
   m_configTabs->setTabToolTip(0, "Capture — configure demosaicking, resolution, "
                                  "sensor parameters, and image gamma.");
   m_configTabs->setTabToolTip(1, "Capture — manage per-tile adjustments "
                                  "(exposure, dark point) for stitched images.");
-  m_configTabs->setTabToolTip(2, "Capture/Reconstruct — configure sharpening "
+  m_configTabs->setTabToolTip(2, "Reconstruct — configure sharpening "
                                  "algorithms and MTF models.");
   m_configTabs->setTabToolTip(3, "Process — choose or synthesize the analysis "
                                  "image layer, including infrared/dark mixing.");
@@ -2470,6 +2488,18 @@ void MainWindow::createMenus() {
       QStringLiteral("DeleteParameterPresetAction"));
   connect(deletePresetAction, &QAction::triggered, this,
           &MainWindow::promptDeletePreset);
+
+
+  QAction *reportAction =
+      m_fileMenu->addAction("Save &Reproducibility Report...");
+  reportAction->setObjectName(
+      QStringLiteral("SaveReproducibilityReportAction"));
+  reportAction->setToolTip(
+      tr("Save current workflow/provenance information together with an exact "
+         "copy of the current parameter payload. This diagnostic export does "
+         "not mark the document saved."));
+  connect(reportAction, &QAction::triggered, this,
+          &MainWindow::onSaveReproducibilityReport);
 
   m_fileMenu->addSeparator();
 

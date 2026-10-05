@@ -46,7 +46,7 @@ names.
 ## Recommended processing order
 
 The existing panels are already surprisingly close to a useful pipeline.  A
-beta does not need a wholesale reorder.  The first goal should be to make the
+remaining alpha work does not need a wholesale reorder.  The first goal should be to make the
 stages explicit and remove the few semantic surprises.
 
 ### Stage 1 — Digital capture
@@ -117,25 +117,25 @@ reconstruction.  Stochastic screens (Random, Autochrome, Agfa Farbenplatte)
 cannot be reconstructed from monochrome data because the colour identity of
 their individual screen elements has been lost.
 
-The initial **Suggested image setup** guide should make that distinction
-actionable.  Selecting one of these monochrome screened capture types exposes a
+The initial **Suggested image setup** guide now makes that distinction
+actionable. Selecting one of these monochrome screened capture types exposes a
 regular **Original color screen** selector and an **Automatically detect the
-screen** checkbox which remains disabled until the screen type is chosen.
-Use the same thumbnail/pattern selector as the Screen panel, not a second
-text-only list. When the selected process has a preferred dye model, offer that
-model immediately as a checked suggestion. Conversely, when the historical
+screen** checkbox which remains disabled until the screen type is chosen. It
+reuses the Screen panel's thumbnail/pattern selector rather than maintaining a
+second text-only list. When the selected process has a preferred dye model, the
+guide offers that model as a checked suggestion. Conversely, when the historical
 screen itself is visible in RGB, common screen types can be autodetected from
-their colour pattern: keep automatic detection available without forcing a
-prior screen-type selection or showing a redundant screen chooser.
+their colour pattern without forcing a prior screen-type selection or showing a
+redundant screen chooser.
 
-After successful regular-screen geometry discovery, finish this guided opening
-sequence by offering **Resolution from screen** as a checked PPI suggestion,
-computed by the same physical-screen calibration used by Digital Capture.
-Combine it with any still-needed preferred dye-model suggestion. RGB screen
-identification and monochrome/known-screen geometry discovery should converge on
-this same final recommendation step, so a successful opening normally ends with
-configured geometry and an explicit opportunity to accept the inferred physical
-resolution.
+After successful regular-screen geometry discovery, the same guided path now
+offers **Resolution from screen** as an independent checked PPI suggestion,
+computed by the same physical-screen calibration used by Digital Capture, and
+combines it with any still-needed preferred dye-model suggestion. RGB screen
+identification and monochrome/known-screen geometry discovery converge on this
+same final recommendation step. The recommendation is snapshot-bound and optional:
+closing it never discards mandatory detected geometry, while an intervening
+document/image change invalidates the optional suggestions.
 
 ### Stage 4 — Screen detection and geometry
 
@@ -257,7 +257,7 @@ slider.
 
 **Recommendation:** retain it near Color but label it **Color profile** or
 **Profile calibration**. Auto optimize should mean "rerun when calibration
-spots change", not "rerun after every unrelated parameter refresh". The beta
+spots change", not "rerun after every unrelated parameter refresh". The current alpha
 hardening patch corrects that behaviour. Profile **Add spot** and Sharpness
 **Analyze area** also share one temporary point-click owner: switching between
 them preserves the operator's prior canvas tool, and choosing another canvas
@@ -268,7 +268,7 @@ tool cancels the temporary action rather than leaving an invisible pending mode.
 Rendering/export is currently a command/dialog rather than a parameter-panel
 stage.  That is reasonable and conventional.
 
-For beta, the render flow now makes these items explicit without creating
+The current alpha render flow makes these items explicit without creating
 another layer of saved export state:
 
 - the native save dialog chooses destination/file format and retains native
@@ -291,7 +291,7 @@ than silently turning the last export dialog state into image-processing state.
 
 ## Suggested inspector organization
 
-### Low-risk beta presentation
+### Current low-risk alpha presentation
 
 Keep the existing tabs and order, but add stage vocabulary to documentation and
 possibly short subtitles/tooltips.  The current order can be interpreted as:
@@ -309,7 +309,7 @@ possibly short subtitles/tooltips.  The current order can be interpreted as:
 This is defensible and avoids destabilizing a GUI that has just gained robust
 multi-document/view handling.
 
-### Preferred post-beta presentation
+### Preferred later-alpha presentation
 
 After observing real operators, consider replacing the flat nine-tab row with
 five workflow categories whose detailed panels remain reusable:
@@ -373,7 +373,7 @@ A specialist tool benefits disproportionately from keyboard consistency:
 - discoverable shortcuts for pan/zoom/fit and registration tools;
 - no shortcut that changes document parameters while focus is in a text field.
 
-The beta implementation scopes canvas tools, saved scan rotation and
+The current alpha implementation scopes canvas tools, saved scan rotation and
 registration editing shortcuts to ordinary `ImageWidget` descendants instead
 of the whole top-level window. Render-mode digits and bare +/=/- zoom are
 canvas-only too; standard modified application/view shortcuts remain
@@ -490,7 +490,7 @@ process/capture and showing it would be noise.
 
 Do not base logical availability on effective QWidget visibility.  An inspector
 may be temporarily hidden while it moves between a workspace and detached view.
-The beta patch fixes this exact issue in `MultiLineTabWidget`.
+The current alpha implementation fixes this exact issue in `MultiLineTabWidget`.
 
 ## Advanced mode without a second application
 
@@ -604,7 +604,7 @@ before retrying **Render to file**.
 
 ## Visual style
 
-The beta should prioritize native, predictable behaviour over ornamental custom
+The alpha-to-beta work should prioritize native, predictable behaviour over ornamental custom
 styling.  Qt platform conventions are valuable for museum workstations that may
 run Windows, macOS or Linux for years.
 
@@ -619,13 +619,19 @@ Guidelines:
 - tooltips should explain physical meaning and units, not merely repeat labels.
 
 `MultiLineTabWidget` currently carries custom tab styling.  Replacing it should
-be evaluated after beta with real wide/narrow inspector sizes; do not trade its
-useful wrapping behaviour for a standard `QTabWidget` that truncates nine
+be evaluated later in alpha with real wide/narrow inspector sizes; do not trade
+its useful wrapping behaviour for a standard `QTabWidget` that truncates nine
 specialist stages.
 
-## Proposed implementation sequence
+## Implementation status and remaining alpha sequence
 
-### Phase A — beta hardening (now)
+The current alpha baseline implements the original Phase A hardening, the Phase B
+workflow summaries/terminology, and the core Phase C module grammar. Treat those
+sections below as maintained invariants rather than a backlog. Remaining alpha
+work should finish the GUI roadmap and its regression coverage before the
+project/parameter file format is redesigned.
+
+### Phase A — robustness hardening (implemented foundation; keep green)
 
 - fix proven correctness/packaging bugs;
 - keep current tab order and architecture;
@@ -633,7 +639,7 @@ specialist stages.
 - expand smoke/sanitizer invariants;
 - make errors and task cancellation reliable.
 
-### Phase B — terminology and summaries
+### Phase B — terminology and summaries (implemented foundation)
 
 - add stage labels and one-line process/image-layer/geometry/MTF/profile
   summaries. The persistent Workflow card reports the actual scalar
@@ -692,13 +698,14 @@ specialist stages.
   same ordinary-view synchronization rule, while Locate remains an active-view
   navigation action and reference scans keep their own source-matched overlay.
 
-### Phase C — module grammar
+### Phase C — module grammar (implemented foundation)
 
-- teach `ParameterPanel` reset/default/modified metadata; the first numeric
-  pilot is active in Digital Capture, with Reset disclosed only for values
-  that differ from their real `ParameterState` defaults. Explicit sentinels
-  such as `0 = not configured/use process default` remain first-class stored
-  defaults even when the ordinary numeric editing range starts above zero;
+- keep `ParameterPanel` reset/default/modified metadata as the shared
+  convention for ordinary saved controls. The original Digital Capture pilot has
+  expanded across the processing panels; Reset is disclosed only for values that
+  differ from their real `ParameterState` defaults. Explicit sentinels such as
+  `0 = not configured/use process default` remain first-class stored defaults
+  even when the ordinary numeric editing range starts above zero;
 - standardize collapsible Common/Diagnostics/Advanced sections;
 - remember expansion state through stable, untranslated section keys.
   All nine processing panels now use this contract: Digital Capture, Tiles,
@@ -758,7 +765,48 @@ specialist stages.
 - provenance for measured/fitted/default values;
 - optional reproducibility report useful for archival workflows.
 
-## Questions to answer with real beta users
+### Phase F — project/parameter format modernization
+
+Do this only after the GUI work above is complete, while the application still
+carries an alpha version. The current CSP/`.par` reader must remain available
+for backwards compatibility, but new files should move to an explicitly
+versioned structured schema rather than extending the ad-hoc keyword stream.
+
+The format decision is now a libzip-backed `.cspar` archive with a UTF-8
+JSON manifest; see [the parameter archive format](parameter-archive-format.md).
+JSON is deliberately used as the strict manifest syntax because it is also valid
+YAML 1.2 while avoiding a new YAML parser dependency in libcolorscreen and the
+CLI. General YAML tags, anchors/aliases, merge keys and implicit scalar typing
+therefore never enter the compatibility surface.
+
+The archive keeps ordinary settings/provenance human-readable while allowing
+dense geometry meshes, scanner-blur correction grids and sampled curves to live
+in typed binary payload entries rather than enormous text arrays. The manifest
+identifies every dense payload by stable name, archive path, explicitly sized
+endian-qualified element type, dimensions and required/optional status. Schema
+version 1 first establishes the durable container/version boundary around an
+exact legacy CSP payload; structured domains then migrate incrementally without
+breaking old `.par` import.
+
+Whichever syntax/container is chosen, the schema is the compatibility contract:
+
+- one top-level format identifier and integer schema version;
+- stable string spellings for enums and named algorithms;
+- optional namespaced sections so new GUI/library state can be added without
+  another trailing-data convention;
+- defined unknown-key behaviour and per-version migrations;
+- explicit distinction between persisted inputs, measured/calibrated results,
+  provenance and transient diagnostics;
+- canonical writer output so round-trip tests produce deterministic files;
+- transactional/atomic save semantics identical to the current GUI path;
+- fixtures proving legacy `.par` import, current-format round trips, forward
+  unknown-key tolerance, and migration of every historical default whose
+  semantics changed.
+
+Only after that migration and the remaining alpha GUI work are complete should
+the project be considered for a beta version.
+
+## Questions to answer during alpha field testing
 
 Do not guess these from generic Lightroom conventions.  Observe museum operators:
 
@@ -774,7 +822,7 @@ Do not guess these from generic Lightroom conventions.  Observe museum operators
   Color-Screen?
 - What is the most common point at which an operator is unsure what to do next?
 
-Answers should drive the post-beta regrouping.  The application is specialized
+Answers should drive the remaining alpha regrouping.  The application is specialized
 enough that copying another editor's panel order verbatim would be less standard,
 not more: the standard behaviour to borrow is consistency, reversibility,
 feedback and clear stage ownership.
