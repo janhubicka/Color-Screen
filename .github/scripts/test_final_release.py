@@ -205,8 +205,11 @@ class FinalReleaseWorkflowTests(unittest.TestCase):
         workflow = workflow_text()
         self.assertIn("workflow_dispatch:", workflow)
         self.assertNotIn("\n  push:", workflow)
+        self.assertIn("confirm_release:", workflow)
+        self.assertIn("Type v2.0 to publish the final stable release", workflow)
         self.assertIn("github.event_name == 'workflow_dispatch'", workflow)
         self.assertIn("github.ref == 'refs/heads/main'", workflow)
+        self.assertIn("inputs.confirm_release == 'v2.0'", workflow)
 
     def test_final_and_current_publishers_share_one_lock(self):
         workflow = workflow_text()
