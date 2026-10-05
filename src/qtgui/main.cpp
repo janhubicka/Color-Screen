@@ -1946,7 +1946,7 @@ bool scopedPresetSmoke() {
   source.rparams.saturation = 1.18;
   source.rparams.brightness = 1.27;
   source.rparams.output_tone_curve =
-      colorscreen::tone_curve::tone_curve_gamma;
+      colorscreen::tone_curve::tone_curve_custom;
   source.rparams.output_tone_curve_control_points =
       {{0, 0}, {0.4, 0.22}, {1, 1}};
   source.rparams.output_profile =
