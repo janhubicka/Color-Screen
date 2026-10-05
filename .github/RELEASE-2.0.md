@@ -58,7 +58,8 @@ The development version is currently `2.0alpha`. For final 2.0, update the
 tracked release-version sources in the same patch:
 
 - `configure.ac`: `AC_INIT([colorscreen], [2.0], ...)`;
-- `os/linux/control`: `Version: 2.0`.
+- `os/linux/control`: `Version: 2.0`;
+- `NEWS`: first line exactly `Changes in version 2.0`.
 
 Ubuntu CI derives its Debian package version from the configured top-level
 `PACKAGE_VERSION`, so it must not grow another literal release version.
@@ -71,9 +72,10 @@ as part of this step.
 
 ## 5. Freeze and verify release notes
 
-`NEWS` should describe the 2.0 release, not the abandoned 1.1 development
-label. Review it once for user-visible additions/removals and high-impact fixes,
-then stop accumulating unrelated development notes on the release commit.
+`NEWS` should describe the 2.0 release, with the exact final heading required
+by the promotion workflow. Review it once for user-visible additions/removals and
+high-impact fixes, then stop accumulating unrelated development notes on the
+release commit.
 
 ## 6. Publish the final release
 
@@ -81,16 +83,17 @@ After the version patch itself passes the complete automated and manual gates:
 
 1. Confirm `current` points to the exact chosen SHA and its
    `BUILD-INFO.json`/checksums match that SHA.
-2. Create the immutable `v2.0` tag at that SHA.
-3. Create a non-prerelease GitHub release for `v2.0` and mark it Latest.
-4. Publish/copy the tested macOS and general Windows packages, plus the
-   specialized Windows variants if they remain supported.
-5. Publish the exact `Color-Screen-2.0-current-sources.tar.gz` payload already
-   produced/validated by `distcheck` for the chosen SHA (renaming it for the
-   stable release if desired) and regenerate stable-release checksums.
-6. Smoke-test downloads from the final release page, not only Actions artifacts.
-7. Leave `current` available for subsequent post-2.0 development rather than
+2. From branch **main**, manually run **Publish Color-Screen 2.0**.
+3. The guarded promoter rechecks final source metadata, `main`/`current`
+   identity, rolling-release provenance/checksums and every package before any
+   stable-release write.
+4. It creates/resumes a draft `v2.0` release, uploads byte-identical tested
+   package payloads under stable names, writes final provenance/checksums, and
+   only then publishes it as a non-prerelease Latest release.
+5. Smoke-test downloads from the final release page, not only Actions artifacts.
+6. Leave `current` available for subsequent post-2.0 development rather than
    moving the stable `v2.0` tag.
 
-A dedicated final-release publisher does not currently exist; the rolling
-`release-current.yml` workflow must not be mistaken for one.
+The workflow refuses to modify an already-published `v2.0` release or a
+`v2.0` tag pointing at another commit. A failed upload leaves at most a draft
+that can be resumed by rerunning the same manual workflow.
