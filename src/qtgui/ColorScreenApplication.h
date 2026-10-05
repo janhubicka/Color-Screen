@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QApplication>
+#include <QHash>
 #include <QList>
 #include <QPointer>
 #include <QSet>
@@ -10,6 +11,7 @@
 class MainWindow;
 class ImageViewWindow;
 class QEvent;
+class QFileDialog;
 class QMenu;
 class QWidget;
 class WorkspaceWindow;
@@ -48,9 +50,11 @@ public:
                                               const QString &referenceFile,
                                               bool detached = false);
 
-  /** Prompt for a slanted-edge reference image and open it for SOURCE. */
-  ImageViewWindow *openSlantedEdgeReference(MainWindow *source,
-                                            QWidget *dialogParent = nullptr);
+  /** Prompt asynchronously for a slanted-edge reference image for SOURCE.
+
+      A newer request for the same document supersedes the older chooser. */
+  void openSlantedEdgeReference(MainWindow *source,
+                                QWidget *dialogParent = nullptr);
 
   /** Move VIEW from the workspace into a standalone top-level window. */
   void detachView(ImageViewWindow *view);
@@ -192,6 +196,8 @@ private:
 
   QList<QPointer<MainWindow>> m_documentWindows;
   QList<QPointer<ImageViewWindow>> m_viewWindows;
+  /** One active reference-file chooser per source document. */
+  QHash<MainWindow *, QPointer<QFileDialog>> m_slantedReferenceFileDialogs;
   QPointer<WorkspaceWindow> m_workspaceWindow;
   QSet<MainWindow *> m_restoringReferenceRecovery;
   QSet<MainWindow *> m_hiddenDocumentPresentations;
