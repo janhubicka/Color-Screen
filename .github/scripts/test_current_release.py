@@ -6,6 +6,7 @@ import io
 import json
 from pathlib import Path
 import subprocess
+import tarfile
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -39,6 +40,18 @@ def zip_bytes(files):
     return stream.getvalue()
 
 
+def tar_gz_bytes(files):
+    """Create an in-memory source tarball fixture without extracting anything."""
+    stream = io.BytesIO()
+    with tarfile.open(fileobj=stream, mode="w:gz") as archive:
+        for name, data in files.items():
+            info = tarfile.TarInfo(name)
+            info.size = len(data)
+            info.mode = 0o755 if name.endswith("/configure") else 0o644
+            archive.addfile(info, io.BytesIO(data))
+    return stream.getvalue()
+
+
 class FakeGitHub:
     """Model read APIs, downloads and release writes independently of gh."""
 
@@ -48,7 +61,7 @@ class FakeGitHub:
         self.head = SHA
         self.runs = {workflow: [run_record(index + 1)]
                      for index, workflow in enumerate(publisher.WORKFLOWS)}
-        self.artifacts = {1: [], 2: []}
+        self.artifacts = {index + 1: [] for index in range(len(publisher.WORKFLOWS))}
         self.archives = {}
         self.writes = []
         self.release = None
@@ -69,6 +82,14 @@ class FakeGitHub:
                 "bin/colorscreen-qt.exe": b"MZGUI", "bin/colorscreen.exe": b"MZCLI",
                 "bin/Qt6Core.dll": b"MZruntime", "share/resources/example": b"data",
                 "LICENSE": b"license", "README.md": b"documentation"}))
+        source = tar_gz_bytes({
+            "colorscreen-2.0alpha/configure": b"#!/bin/sh\n",
+            "colorscreen-2.0alpha/NEWS": b"news\n",
+            "colorscreen-2.0alpha/README.md": b"readme\n",
+            "colorscreen-2.0alpha/src/qtgui/Makefile.in": b"makefile\n",
+        })
+        self.add_artifact(3, "source-tarball",
+                          zip_bytes({"colorscreen-2.0alpha.tar.gz": source}))
 
     def add_artifact(self, run_id, name, data):
         """Register an archive and the associated Actions metadata."""
@@ -187,7 +208,7 @@ class PublicationTests(unittest.TestCase):
         manifest = json.loads((self.directory / "BUILD-INFO.json").read_text())
         self.assertEqual(manifest["commit"], SHA)
         self.assertEqual(manifest["target_version"], "2.0")
-        self.assertEqual(len(manifest["sha256"]), 7)
+        self.assertEqual(len(manifest["sha256"]), 8)
         for line in (self.directory / "SHA256SUMS").read_text().splitlines():
             digest, name = line.split("  ")
             self.assertEqual(digest, publisher.sha256(self.directory / name))
@@ -215,15 +236,68 @@ class PublicationTests(unittest.TestCase):
             self.assertEqual((self.directory / f"{publisher.PREFIX}-macOS.zip").read_bytes(),
                              archive.read("Color-Screen-macOS.zip"))
 
+    def test_source_tarball_is_published_byte_for_byte(self):
+        self.publish()
+        artifact = self.github.artifacts[3][0]
+        with zipfile.ZipFile(io.BytesIO(self.github.archives[artifact["id"]])) as archive:
+            expected = archive.read("colorscreen-2.0alpha.tar.gz")
+        path = self.directory / f"{publisher.PREFIX}-sources.tar.gz"
+        self.assertEqual(path.read_bytes(), expected)
+        with tarfile.open(path, "r:gz") as source:
+            self.assertIn("colorscreen-2.0alpha/configure", source.getnames())
+
+    def test_missing_source_artifact_leaves_release_untouched(self):
+        self.github.artifacts[3].clear()
+        with self.assertRaises(RuntimeError):
+            self.publish()
+        self.assertEqual(self.github.writes, [])
+
+    def test_invalid_source_artifact_leaves_release_untouched(self):
+        artifact = self.github.artifacts[3][0]
+        self.github.archives[artifact["id"]] = zip_bytes({
+            "not-a-dist-file.txt": b"wrong",
+        })
+        with self.assertRaises(RuntimeError):
+            self.publish()
+        self.assertEqual(self.github.writes, [])
+
+    def test_corrupt_source_tarball_leaves_release_untouched(self):
+        artifact = self.github.artifacts[3][0]
+        self.github.archives[artifact["id"]] = zip_bytes({
+            "colorscreen-2.0alpha.tar.gz": b"not a tarball",
+        })
+        with self.assertRaises(RuntimeError):
+            self.publish()
+        self.assertEqual(self.github.writes, [])
+
+    def test_source_tarball_rejects_unsafe_member(self):
+        artifact = self.github.artifacts[3][0]
+        source = tar_gz_bytes({
+            "colorscreen-2.0alpha/configure": b"#!/bin/sh\n",
+            "colorscreen-2.0alpha/NEWS": b"news\n",
+            "colorscreen-2.0alpha/README.md": b"readme\n",
+            "colorscreen-2.0alpha/src/qtgui/Makefile.in": b"makefile\n",
+            "colorscreen-2.0alpha/../escape": b"bad\n",
+        })
+        self.github.archives[artifact["id"]] = zip_bytes({
+            "colorscreen-2.0alpha.tar.gz": source,
+        })
+        with self.assertRaises(RuntimeError):
+            self.publish()
+        self.assertEqual(self.github.writes, [])
+
     def test_stale_main_cannot_publish(self):
         self.github.head = OTHER_SHA
         self.assertFalse(self.publish())
         self.assertEqual(self.github.writes, [])
 
     def test_one_workflow_not_ready(self):
-        self.github.runs[publisher.WORKFLOWS[1]][0]["conclusion"] = "failure"
-        self.assertFalse(self.publish())
-        self.assertEqual(self.github.writes, [])
+        for workflow in publisher.WORKFLOWS:
+            with self.subTest(workflow=workflow):
+                github = FakeGitHub()
+                github.runs[workflow][0]["conclusion"] = "failure"
+                self.assertFalse(publisher.publish(github, SHA, self.directory))
+                self.assertEqual(github.writes, [])
 
     def test_main_changes_during_download(self):
         self.github.change_on_download = lambda: setattr(self.github, "head", OTHER_SHA)
