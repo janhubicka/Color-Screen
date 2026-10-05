@@ -22,6 +22,9 @@
 #include <QFileInfo>
 #include <QFuture>
 #include <QFutureWatcher>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QLabel>
 #include <QMenu>
 #include <QMessageBox>
 #include <QObject>
@@ -133,6 +136,14 @@ bool loadParameterPayload(
   if (error)
     error->clear();
   return true;
+}
+
+/** Return the current text of a named provenance/status label. */
+QString reportStatusText(const QObject *root, const QString &objectName) {
+  if (!root)
+    return QString();
+  const QLabel *label = root->findChild<QLabel *>(objectName);
+  return label ? label->text().trimmed() : QString();
 }
 
 /** Present one nonblocking parameter-load failure without changing state. */
@@ -276,6 +287,187 @@ bool MainWindow::saveParametersAs() {
   if (!fileName.endsWith(QLatin1String(".par"), Qt::CaseInsensitive))
     fileName += QStringLiteral(".par");
   return saveParametersToFile(fileName);
+}
+
+/** Atomically write a human-readable provenance snapshot followed by the exact
+    current CSP/Qt parameter payload. This is a diagnostic export, not a new
+    project-file format, and therefore never changes dirty/undo/save-target state. */
+bool MainWindow::saveReproducibilityReportToFile(const QString &fileName,
+                                                 QString *error) {
+  updateWorkflowSummary();
+
+  const ParameterState state = getCurrentState();
+  const bool hasRgb = m_scan && m_scan->has_rgb();
+
+  QJsonObject workflow;
+  workflow.insert(QStringLiteral("process"),
+                  m_workflowProcessLabel ? m_workflowProcessLabel->text()
+                                         : QString());
+  workflow.insert(QStringLiteral("image_layer"),
+                  m_workflowImageLayerLabel ? m_workflowImageLayerLabel->text()
+                                            : QString());
+  workflow.insert(QStringLiteral("registration"),
+                  m_workflowRegistrationLabel
+                      ? m_workflowRegistrationLabel->text()
+                      : QString());
+  workflow.insert(QStringLiteral("sharpening_and_mtf"),
+                  m_workflowCalibrationLabel
+                      ? m_workflowCalibrationLabel->text()
+                      : QString());
+  workflow.insert(QStringLiteral("profile"),
+                  m_workflowProfileLabel ? m_workflowProfileLabel->text()
+                                         : QString());
+
+  QJsonObject provenance;
+  provenance.insert(
+      QStringLiteral("flat_field"),
+      reportStatusText(this, QStringLiteral("CaptureFlatFieldStatus")));
+  provenance.insert(
+      QStringLiteral("geometry"),
+      reportStatusText(this, QStringLiteral("GeometryFitStatus")));
+  provenance.insert(
+      QStringLiteral("adaptive_sharpening"),
+      reportStatusText(this, QStringLiteral("SharpnessAdaptiveCorrectionStatus")));
+  provenance.insert(
+      QStringLiteral("mtf"),
+      reportStatusText(this, QStringLiteral("MtfCalibrationStatus")));
+  provenance.insert(
+      QStringLiteral("profile"),
+      reportStatusText(this, QStringLiteral("ProfileCalibrationStatus")));
+
+  QString parameterState = QStringLiteral("none");
+  if (!m_parameterFile.path.isEmpty())
+    parameterState =
+        m_parameterFile.suggested ? QStringLiteral("suggested")
+                                  : QStringLiteral("loaded");
+
+  QString applicationVersion = QCoreApplication::applicationVersion();
+  if (applicationVersion.isEmpty())
+    applicationVersion = QStringLiteral(PACKAGE_VERSION);
+
+  QJsonObject metadata;
+  metadata.insert(QStringLiteral("format"),
+                  QStringLiteral("colorscreen-reproducibility-report"));
+  metadata.insert(QStringLiteral("format_version"), 1);
+  metadata.insert(QStringLiteral("application"), QStringLiteral("Color-Screen"));
+  metadata.insert(QStringLiteral("application_version"), applicationVersion);
+  metadata.insert(QStringLiteral("image_file"), m_currentImageFile);
+  metadata.insert(QStringLiteral("parameter_file"), m_parameterFile.path);
+  metadata.insert(QStringLiteral("parameter_file_state"), parameterState);
+  metadata.insert(QStringLiteral("document_modified"), isDocumentModified());
+  metadata.insert(QStringLiteral("registration_point_count"),
+                  static_cast<int>(state.solver.n_points()));
+  metadata.insert(QStringLiteral("profile_spot_count"),
+                  static_cast<int>(state.profileSpots.size()));
+  metadata.insert(
+      QStringLiteral("mtf_measurement_count"),
+      static_cast<int>(state.rparams.sharpen.scanner_mtf.measurements.size()));
+  metadata.insert(QStringLiteral("workflow"), workflow);
+  metadata.insert(QStringLiteral("provenance"), provenance);
+
+  const QByteArray json =
+      QJsonDocument(metadata).toJson(QJsonDocument::Indented);
+  const QByteArray title =
+      QByteArrayLiteral("# Color-Screen reproducibility report\n"
+                        "# Metadata (JSON)\n");
+  const QByteArray payloadMarker =
+      QByteArrayLiteral(
+          "\n# Exact Color-Screen parameter payload follows.\n"
+          "# It can be extracted from the next screen_alignment_version line.\n");
+
+  const QString absoluteFileName = QFileInfo(fileName).absoluteFilePath();
+  return qtgui_io::saveStdioAtomically(
+      absoluteFileName,
+      [title, json, payloadMarker, state, hasRgb](FILE *staged) {
+        if (std::fwrite(title.constData(), 1, static_cast<size_t>(title.size()),
+                        staged) != static_cast<size_t>(title.size()) ||
+            std::fwrite(json.constData(), 1, static_cast<size_t>(json.size()),
+                        staged) != static_cast<size_t>(json.size()) ||
+            std::fwrite(payloadMarker.constData(), 1,
+                        static_cast<size_t>(payloadMarker.size()), staged) !=
+                static_cast<size_t>(payloadMarker.size()))
+          return false;
+
+        return colorscreen::save_csp_with_profile_spots(
+            staged, &state.scrToImg, hasRgb ? &state.detect : nullptr,
+            &state.rparams, &state.solver, state.profileSpots);
+      },
+      error);
+}
+
+/** Choose a report destination asynchronously and save a provenance snapshot. */
+void MainWindow::onSaveReproducibilityReport() {
+  if (QFileDialog *existing =
+          findChild<QFileDialog *>(
+              QStringLiteral("ReproducibilityReportFileDialog"))) {
+    existing->raise();
+    existing->activateWindow();
+    return;
+  }
+
+  QString baseName;
+  QString sourceDirectory;
+  if (!m_currentImageFile.isEmpty()) {
+    const QFileInfo imageInfo(m_currentImageFile);
+    baseName = imageInfo.completeBaseName();
+    sourceDirectory = imageInfo.absolutePath();
+  } else if (!m_parameterFile.path.isEmpty()) {
+    const QFileInfo parameterInfo(m_parameterFile.path);
+    baseName = parameterInfo.completeBaseName();
+    sourceDirectory = parameterInfo.absolutePath();
+  }
+  if (baseName.isEmpty())
+    baseName = QStringLiteral("colorscreen");
+
+  QString directory =
+      fileDialogDirectoryPreference(QStringLiteral("lastReportDir"));
+  if (directory.isEmpty())
+    directory = sourceDirectory;
+
+  const QString suggested =
+      QDir(directory).filePath(baseName + QStringLiteral("-report.txt"));
+  auto *dialog = new QFileDialog(
+      this, tr("Save Reproducibility Report"), suggested,
+      tr("Text report (*.txt);;All Files (*)"));
+  dialog->setObjectName(QStringLiteral("ReproducibilityReportFileDialog"));
+  dialog->setAcceptMode(QFileDialog::AcceptSave);
+  dialog->setFileMode(QFileDialog::AnyFile);
+  dialog->setDefaultSuffix(QStringLiteral("txt"));
+  dialog->setAttribute(Qt::WA_DeleteOnClose);
+
+  connect(dialog, &QDialog::accepted, this, [this, dialog]() {
+    const QStringList selected = dialog->selectedFiles();
+    if (selected.isEmpty())
+      return;
+    const QString fileName = selected.constFirst();
+
+    // Let the native chooser tear down before a write error can present a
+    // nonblocking warning.
+    QTimer::singleShot(0, this, [this, fileName]() {
+      QString error;
+      if (!saveReproducibilityReportToFile(fileName, &error)) {
+        auto *message = new QMessageBox(
+            QMessageBox::Critical, tr("Reproducibility Report Save Failed"),
+            tr("Failed to save the reproducibility report to %1. Any previous "
+               "file at that path was left unchanged.\n\n%2")
+                .arg(QFileInfo(fileName).absoluteFilePath(),
+                     error.isEmpty() ? tr("Unknown write error.") : error),
+            QMessageBox::Ok, this);
+        message->setObjectName(
+            QStringLiteral("ReproducibilityReportSaveFailureDialog"));
+        message->setAttribute(Qt::WA_DeleteOnClose);
+        message->open();
+        return;
+      }
+
+      rememberFileDialogDirectory(QStringLiteral("lastReportDir"), fileName);
+      statusBar()->showMessage(
+          tr("Reproducibility report saved to %1")
+              .arg(QFileInfo(fileName).absoluteFilePath()),
+          3000);
+    });
+  });
+  dialog->open();
 }
 
 /** Show a multi-selection file dialog and open each image independently.
