@@ -2249,9 +2249,9 @@ void MainWindow::promptApplyPreset() {
                 QString::fromUtf8(colorscreen::scr_names[index].pretty_name);
           warning = tr(
               "This Process preset changes the historical screen type to %1. "
-              "Existing screen registration coordinates, nonlinear mesh, and "
-              "control points will be cleared because they belong to the old "
-              "screen coordinate system.")
+              "Existing screen registration coordinates, nonlinear mesh, control points, "
+              "detected screen-color calibration, and screen-coordinate profile "
+              "spots will be cleared because they belong to the old screen.")
                         .arg(screenName);
         }
         screenWarning->setText(warning);
@@ -2303,7 +2303,7 @@ void MainWindow::promptApplyPreset() {
                 tr("%1 preset “%2” applied.")
                     .arg(qtgui_presets::scopeLabel(record.scope), record.name);
             if (clearedRegistration)
-              status += tr(" Incompatible screen registration was cleared.");
+              status += tr(" Incompatible screen-bound registration and calibration were cleared.");
             statusBar()->showMessage(status, 4000);
             dialog->accept();
           });
