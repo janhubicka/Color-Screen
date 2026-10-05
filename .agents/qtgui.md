@@ -967,14 +967,16 @@ void MyPanel::updateData(const Data &data) {
 
 ## UI Guidelines
 
-The beta-oriented architecture/robustness audit is in
+The beta-readiness architecture/robustness audit is in
 [`doc/qtgui-internal-cleanup.md`](../doc/qtgui-internal-cleanup.md), and the
 operator-facing workflow/design roadmap is in
 [`doc/qtgui-workflow-roadmap.md`](../doc/qtgui-workflow-roadmap.md).  Read both
-before making broad inspector/navigation changes.  The current nine-panel order
-is intentionally kept stable during beta hardening; post-beta regrouping should
-preserve the distinction between digital-capture correction, historical-process
-calibration, reconstruction, appearance, and view/session state.
+before making broad inspector/navigation changes.  Color-Screen remains alpha
+while that roadmap is finished. Any later alpha regrouping of the current
+nine-panel order must preserve the distinction between digital-capture
+correction, historical-process calibration, reconstruction, appearance, and
+view/session state. The project/parameter file-format redesign is deliberately
+after the GUI roadmap, not part of an inspector/navigation patch.
 
 Classify every new control as a processing parameter, calibration result,
 one-shot operation, view option, or application preference.  That classification
