@@ -772,23 +772,21 @@ carries an alpha version. The current CSP/`.par` reader must remain available
 for backwards compatibility, but new files should move to an explicitly
 versioned structured schema rather than extending the ad-hoc keyword stream.
 
-YAML is a reasonable candidate because the document naturally contains nested
-capture, process, geometry, reconstruction, colour, calibration and provenance
-sections. If YAML is selected, use a deliberately small safe subset: mappings,
-sequences, strings, booleans and finite numeric scalars only; no application
-tags, anchors/aliases or implicit timestamp/type tricks. Compare that against a
-similarly versioned JSON representation before implementation, because the
-library and command-line tools must not become dependent on Qt merely to read a
-project.
+The format decision is now a libzip-backed `.cspar` archive with a UTF-8
+JSON manifest; see [the parameter archive format](parameter-archive-format.md).
+JSON is deliberately used as the strict manifest syntax because it is also valid
+YAML 1.2 while avoiding a new YAML parser dependency in libcolorscreen and the
+CLI. General YAML tags, anchors/aliases, merge keys and implicit scalar typing
+therefore never enter the compatibility surface.
 
-Do not assume that one text document is the best physical container. Existing
-parameter files can contain dense geometry meshes, scanner-blur correction grids
-and sampled MTF curves. Keep ordinary settings and provenance human-readable,
-but evaluate a versioned archive with a YAML/JSON manifest plus typed binary
-payload entries for large arrays. Color-Screen already has archive support in
-its dependency set, so this can remain one atomic user-visible file without
-turning large floating-point grids into an unwieldy YAML sequence. The manifest
-must identify every payload by name, element type, dimensions and checksum.
+The archive keeps ordinary settings/provenance human-readable while allowing
+dense geometry meshes, scanner-blur correction grids and sampled curves to live
+in typed binary payload entries rather than enormous text arrays. The manifest
+identifies every dense payload by stable name, archive path, explicitly sized
+endian-qualified element type, dimensions and required/optional status. Schema
+version 1 first establishes the durable container/version boundary around an
+exact legacy CSP payload; structured domains then migrate incrementally without
+breaking old `.par` import.
 
 Whichever syntax/container is chosen, the schema is the compatibility contract:
 
