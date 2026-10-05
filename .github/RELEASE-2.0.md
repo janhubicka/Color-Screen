@@ -83,7 +83,8 @@ After the version patch itself passes the complete automated and manual gates:
 
 1. Confirm `current` points to the exact chosen SHA and its
    `BUILD-INFO.json`/checksums match that SHA.
-2. From branch **main**, manually run **Publish Color-Screen 2.0**.
+2. From branch **main**, manually run **Publish Color-Screen 2.0** and
+   type the required confirmation value `v2.0`.
 3. The guarded promoter shares the rolling publisher's concurrency lock and
    rechecks final source metadata, `main`/`current` identity, rolling-release
    provenance/checksums and the exact staged asset identity before any
