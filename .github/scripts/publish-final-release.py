@@ -183,6 +183,21 @@ def validate_source_tarball(archive: Path) -> None:
         if name not in by_name or by_name[name].size == 0:
             raise RuntimeError(f"Missing or empty {name}")
 
+    # The archive root is derived from PACKAGE_VERSION, but also verify that the
+    # release notes inside the promoted source payload are the frozen final
+    # notes rather than a stale development snapshot.
+    with tarfile.open(archive, "r:gz") as source:
+        news_stream = source.extractfile(f"{root}/NEWS")
+        if news_stream is None:
+            raise RuntimeError("Final source archive has no readable NEWS")
+        try:
+            news_heading = news_stream.readline().decode("utf-8").rstrip("\n")
+        except UnicodeDecodeError as error:
+            raise RuntimeError("Final source NEWS is not UTF-8") from error
+    if news_heading != "Changes in version 2.0":
+        raise RuntimeError(
+            f"Unexpected final source NEWS heading: {news_heading!r}")
+
 
 def validate_package(path: Path) -> None:
     """Validate one package according to its final/current filename suffix."""
