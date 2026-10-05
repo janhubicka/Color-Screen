@@ -2078,6 +2078,8 @@ bool scopedPresetSmoke() {
       target.rparams.sharpen.usm_radius != source.rparams.sharpen.usm_radius ||
       target.rparams.collection_threshold !=
           source.rparams.collection_threshold ||
+      target.rparams.demosaiced_scaling !=
+          source.rparams.demosaiced_scaling ||
       target.rparams.sharpen.scanner_mtf.measurements !=
           measurementsBeforeReconstruction)
     return fail(QStringLiteral(
