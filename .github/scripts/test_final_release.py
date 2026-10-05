@@ -320,6 +320,7 @@ class FinalReleaseTests(unittest.TestCase):
         self.github.final_ref = SHA
         self.github.final_release = {
             "draft": False, "prerelease": False, "immutable": False,
+            "target_commitish": SHA,
         }
         with self.assertRaises(RuntimeError):
             self.publish()
@@ -331,10 +332,28 @@ class FinalReleaseTests(unittest.TestCase):
             self.publish()
         self.assertEqual(self.github.writes, [])
 
+    def test_draft_for_another_commit_is_rejected(self):
+        self.github.final_release = {
+            "draft": True, "prerelease": False, "immutable": False,
+            "target_commitish": OTHER_SHA,
+        }
+        with self.assertRaises(RuntimeError):
+            self.publish()
+        self.assertEqual(self.github.writes, [])
+
+    def test_current_must_remain_prerelease_during_staging(self):
+        def change_release_state():
+            self.github.current_release["prerelease"] = False
+        self.github.change_on_download = change_release_state
+        with self.assertRaises(RuntimeError):
+            self.publish()
+        self.assertEqual(self.github.writes, [])
+
     def test_matching_draft_can_resume(self):
         self.github.final_ref = SHA
         self.github.final_release = {
             "draft": True, "prerelease": False, "immutable": False,
+            "target_commitish": SHA,
         }
         self.assertTrue(self.publish())
         self.assertEqual(len(self.github.writes), 2)
