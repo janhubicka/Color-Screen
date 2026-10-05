@@ -208,6 +208,7 @@ class PublicationTests(unittest.TestCase):
         manifest = json.loads((self.directory / "BUILD-INFO.json").read_text())
         self.assertEqual(manifest["commit"], SHA)
         self.assertEqual(manifest["target_version"], "2.0")
+        self.assertEqual(set(manifest["runs"]), set(publisher.WORKFLOWS))
         self.assertEqual(len(manifest["sha256"]), 8)
         for line in (self.directory / "SHA256SUMS").read_text().splitlines():
             digest, name = line.split("  ")
@@ -265,6 +266,20 @@ class PublicationTests(unittest.TestCase):
         artifact = self.github.artifacts[3][0]
         self.github.archives[artifact["id"]] = zip_bytes({
             "colorscreen-2.0alpha.tar.gz": b"not a tarball",
+        })
+        with self.assertRaises(RuntimeError):
+            self.publish()
+        self.assertEqual(self.github.writes, [])
+
+    def test_source_tarball_requires_release_files(self):
+        artifact = self.github.artifacts[3][0]
+        source = tar_gz_bytes({
+            "colorscreen-2.0alpha/configure": b"#!/bin/sh\n",
+            "colorscreen-2.0alpha/NEWS": b"news\n",
+            "colorscreen-2.0alpha/README.md": b"readme\n",
+        })
+        self.github.archives[artifact["id"]] = zip_bytes({
+            "colorscreen-2.0alpha.tar.gz": source,
         })
         with self.assertRaises(RuntimeError):
             self.publish()
