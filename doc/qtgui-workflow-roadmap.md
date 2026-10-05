@@ -46,7 +46,7 @@ names.
 ## Recommended processing order
 
 The existing panels are already surprisingly close to a useful pipeline.  A
-beta does not need a wholesale reorder.  The first goal should be to make the
+remaining alpha work does not need a wholesale reorder.  The first goal should be to make the
 stages explicit and remove the few semantic surprises.
 
 ### Stage 1 — Digital capture
@@ -257,7 +257,7 @@ slider.
 
 **Recommendation:** retain it near Color but label it **Color profile** or
 **Profile calibration**. Auto optimize should mean "rerun when calibration
-spots change", not "rerun after every unrelated parameter refresh". The beta
+spots change", not "rerun after every unrelated parameter refresh". The current alpha
 hardening patch corrects that behaviour. Profile **Add spot** and Sharpness
 **Analyze area** also share one temporary point-click owner: switching between
 them preserves the operator's prior canvas tool, and choosing another canvas
@@ -268,7 +268,7 @@ tool cancels the temporary action rather than leaving an invisible pending mode.
 Rendering/export is currently a command/dialog rather than a parameter-panel
 stage.  That is reasonable and conventional.
 
-For beta, the render flow now makes these items explicit without creating
+The current alpha render flow makes these items explicit without creating
 another layer of saved export state:
 
 - the native save dialog chooses destination/file format and retains native
@@ -291,7 +291,7 @@ than silently turning the last export dialog state into image-processing state.
 
 ## Suggested inspector organization
 
-### Low-risk beta presentation
+### Current low-risk alpha presentation
 
 Keep the existing tabs and order, but add stage vocabulary to documentation and
 possibly short subtitles/tooltips.  The current order can be interpreted as:
@@ -309,7 +309,7 @@ possibly short subtitles/tooltips.  The current order can be interpreted as:
 This is defensible and avoids destabilizing a GUI that has just gained robust
 multi-document/view handling.
 
-### Preferred post-beta presentation
+### Preferred later-alpha presentation
 
 After observing real operators, consider replacing the flat nine-tab row with
 five workflow categories whose detailed panels remain reusable:
@@ -373,7 +373,7 @@ A specialist tool benefits disproportionately from keyboard consistency:
 - discoverable shortcuts for pan/zoom/fit and registration tools;
 - no shortcut that changes document parameters while focus is in a text field.
 
-The beta implementation scopes canvas tools, saved scan rotation and
+The current alpha implementation scopes canvas tools, saved scan rotation and
 registration editing shortcuts to ordinary `ImageWidget` descendants instead
 of the whole top-level window. Render-mode digits and bare +/=/- zoom are
 canvas-only too; standard modified application/view shortcuts remain
@@ -490,7 +490,7 @@ process/capture and showing it would be noise.
 
 Do not base logical availability on effective QWidget visibility.  An inspector
 may be temporarily hidden while it moves between a workspace and detached view.
-The beta patch fixes this exact issue in `MultiLineTabWidget`.
+The current alpha implementation fixes this exact issue in `MultiLineTabWidget`.
 
 ## Advanced mode without a second application
 
@@ -604,7 +604,7 @@ before retrying **Render to file**.
 
 ## Visual style
 
-The beta should prioritize native, predictable behaviour over ornamental custom
+The alpha-to-beta work should prioritize native, predictable behaviour over ornamental custom
 styling.  Qt platform conventions are valuable for museum workstations that may
 run Windows, macOS or Linux for years.
 
