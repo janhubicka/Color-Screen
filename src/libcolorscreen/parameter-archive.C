@@ -903,12 +903,14 @@ read_parameter_archive (const char *name, std::string *legacy_csp,
         }
 
       std::map<std::string, std::pair<zip_uint64_t, uint64_t>> entries;
+      bool entries_ok = true;
       for (zip_uint64_t i = 0; i < (zip_uint64_t)count; ++i)
         {
           const char *raw_name = zip_get_name (archive, i, ZIP_FL_ENC_GUESS);
           if (!raw_name)
             {
               archive_fail (error, zip_strerror (archive));
+              entries_ok = false;
               break;
             }
           std::string entry_name = raw_name;
@@ -916,25 +918,38 @@ read_parameter_archive (const char *name, std::string *legacy_csp,
             {
               archive_fail (error, "unsafe path in parameter archive: "
                                        + entry_name);
+              entries_ok = false;
               break;
             }
 
           zip_stat_t stat;
           zip_stat_init (&stat);
-          if (zip_stat_index (archive, i, 0, &stat) != 0
-              || !validate_zip_methods (stat, error)
+          if (zip_stat_index (archive, i, 0, &stat) != 0)
+            {
+              archive_fail (error, zip_strerror (archive));
+              entries_ok = false;
+              break;
+            }
+          if (!validate_zip_methods (stat, error)
               || !(stat.valid & ZIP_STAT_SIZE))
-            break;
+            {
+              if (stat.valid && !(stat.valid & ZIP_STAT_SIZE))
+                archive_fail (error,
+                              "parameter archive entry has no declared size");
+              entries_ok = false;
+              break;
+            }
           if (!entries.emplace (entry_name,
                                 std::make_pair (i, (uint64_t)stat.size))
                    .second)
             {
               archive_fail (error,
                             "duplicate path in parameter archive: " + entry_name);
+              entries_ok = false;
               break;
             }
         }
-      if (error && !error->empty ())
+      if (!entries_ok)
         break;
 
       auto manifest_entry = entries.find ("manifest.json");
