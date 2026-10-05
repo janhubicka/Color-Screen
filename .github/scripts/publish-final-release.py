@@ -240,6 +240,20 @@ def stage_current_release(github: GitHub, sha: str, directory: Path) -> tuple[li
     if not isinstance(recorded, dict) or set(recorded) != set(CURRENT_PACKAGES):
         raise RuntimeError("current BUILD-INFO package set is incomplete")
 
+    runs = build_info.get("runs")
+    required_runs = ("build-macos.yml", "build-windows.yml", "build-ubuntu.yml")
+    if not isinstance(runs, dict) or set(runs) != set(required_runs):
+        raise RuntimeError("current BUILD-INFO build provenance is incomplete")
+    for workflow in required_runs:
+        run = runs.get(workflow)
+        if (not isinstance(run, dict)
+                or not isinstance(run.get("id"), int) or run["id"] <= 0
+                or not isinstance(run.get("attempt"), int)
+                or run["attempt"] <= 0
+                or not isinstance(run.get("url"), str) or not run["url"]):
+            raise RuntimeError(
+                f"current BUILD-INFO has invalid provenance for {workflow}")
+
     sums = parse_checksums(sums_path.read_text(encoding="utf-8"))
     if set(sums) != set(CURRENT_PACKAGES) | {"BUILD-INFO.json"}:
         raise RuntimeError("current SHA256SUMS package set is incomplete")
@@ -285,12 +299,26 @@ def stage_current_release(github: GitHub, sha: str, directory: Path) -> tuple[li
     return staged + [final_sums], build_info
 
 
+def require_current_release_unchanged(
+        github: GitHub, sha: str, expected_identity: dict[str, tuple]) -> None:
+    """Recheck MAIN/CURRENT and rolling assets immediately before stable writes."""
+    if github.api("git/ref/heads/main")["object"]["sha"] != sha:
+        raise RuntimeError("main changed before final release publication")
+    if github.api(f"git/ref/tags/{CURRENT_TAG}")["object"]["sha"] != sha:
+        raise RuntimeError("current tag changed before final release publication")
+    release = github.api(f"releases/tags/{CURRENT_TAG}")
+    if release.get("draft") or not release.get("prerelease"):
+        raise RuntimeError("current release state changed before publication")
+    if release_asset_identity(release) != expected_identity:
+        raise RuntimeError("current release assets changed before publication")
+
+
 def publish_final(github: GitHub, sha: str, root: Path, directory: Path) -> bool:
     """Promote CURRENT to final v2.0 after all release gates are satisfied."""
     if not release_metadata_is_final(root):
         raise RuntimeError(
             "Source metadata is not final 2.0 (configure.ac/control/NEWS)")
-    assets, _ = stage_current_release(github, sha, directory)
+    assets, build_info = stage_current_release(github, sha, directory)
 
     existing_release = github.api(f"releases/tags/{FINAL_TAG}", optional=True)
     existing_ref = github.api(f"git/ref/tags/{FINAL_TAG}", optional=True)
@@ -304,6 +332,15 @@ def publish_final(github: GitHub, sha: str, root: Path, directory: Path) -> bool
         target = existing_release.get("target_commitish")
         if target and target != sha:
             raise RuntimeError(f"{FINAL_TAG} draft targets another commit")
+
+    # stage_current_release() already performed a full recheck after download.
+    # Re-read the rolling release once more after inspecting any existing final
+    # tag/draft and immediately before the first stable-release mutation. The
+    # current publisher uses a different concurrency group, so this closes the
+    # otherwise small check-to-write race.
+    current_release = github.api(f"releases/tags/{CURRENT_TAG}")
+    require_current_release_unchanged(
+        github, sha, release_asset_identity(current_release))
 
     notes = directory / "release-notes.md"
     notes.write_text(
