@@ -1845,6 +1845,284 @@ bool renderDialogPresentationSmoke() {
   return true;
 }
 
+/** Exercise scoped preset storage, canonicalization, and application. */
+bool scopedPresetSmoke() {
+  auto fail = [](const QString &reason) {
+    qCritical() << "Scoped preset smoke failed:" << reason;
+    return false;
+  };
+
+  QTemporaryDir temporary;
+  if (!temporary.isValid())
+    return fail(QStringLiteral("could not allocate isolated settings identity"));
+
+  struct SettingsIdentityGuard {
+    QString organization = QCoreApplication::organizationName();
+    QString domain = QCoreApplication::organizationDomain();
+    QString application = QCoreApplication::applicationName();
+    ~SettingsIdentityGuard() {
+      QSettings settings;
+      settings.clear();
+      settings.sync();
+      QCoreApplication::setOrganizationName(organization);
+      QCoreApplication::setOrganizationDomain(domain);
+      QCoreApplication::setApplicationName(application);
+    }
+  } guard;
+  const QString identity = QStringLiteral("ColorScreenPresetSmoke-%1")
+      .arg(QFileInfo(temporary.path()).fileName());
+  QCoreApplication::setOrganizationName(identity);
+  QCoreApplication::setOrganizationDomain(identity + QStringLiteral(".invalid"));
+  QCoreApplication::setApplicationName(QStringLiteral("ScopedPresets"));
+  QSettings().clear();
+
+  ParameterState source;
+  source.rparams.capture_type =
+      colorscreen::render_parameters::capture_transparency_with_screen;
+  source.rparams.gamma = 1.7;
+  source.rparams.dark_point = 0.07;
+  source.rparams.scan_exposure = 1.35;
+  source.rparams.sharpen.scanner_mtf.scan_dpi = 4800;
+  source.rparams.sharpen.scanner_mtf.f_stop = 8;
+  source.rparams.sharpen.scanner_mtf.pixel_pitch = 5.4;
+  source.rparams.sharpen.scanner_mtf.sensor_fill_factor = 0.92;
+  source.rparams.sharpen.scanner_mtf.wavelengths = {610, 540, 460, 850};
+
+  // Image-specific state must never become Capture-preset baggage.
+  source.rparams.scan_rotation = 3;
+  source.rparams.scan_mirror = true;
+  source.rparams.scan_crop.set = true;
+  source.rparams.scan_crop.x = 11;
+  source.rparams.scan_crop.y = 12;
+  source.rparams.scan_crop.width = 130;
+  source.rparams.scan_crop.height = 140;
+
+  source.scrToImg.type = colorscreen::Dufay;
+  source.scrToImg.center = {15, 16};
+  source.scrToImg.coordinate1 = {7, 0};
+  source.scrToImg.coordinate2 = {0, 7};
+  source.solver.add_point({20, 20}, {0, 0},
+                          colorscreen::solver_parameters::green);
+  source.profileSpots.push_back({2, 3});
+
+  source.rparams.ignore_infrared = true;
+  source.rparams.mix_dark = {0.01, 0.02, 0.03};
+  source.rparams.mix_red = 0.6;
+  source.rparams.mix_green = 0.3;
+  source.rparams.mix_blue = 0.1;
+  source.rparams.contact_copy.simulate = true;
+  source.rparams.contact_copy.preflash = 0.12;
+  source.rparams.contact_copy.exposure = 1.8;
+  source.rparams.contact_copy.boost = 1.25;
+  source.rparams.red_strip_width = 0.42;
+  source.rparams.green_strip_width = 0.31;
+  source.rparams.color_model =
+      colorscreen::render_parameters::color_model_dufay_manual;
+  source.rparams.age = {0.8, 0.7, 0.6};
+  source.rparams.dye_density = {1.1, 0.9, 1.2};
+
+  source.rparams.collection_quality =
+      colorscreen::render_parameters::fast_collection;
+  source.rparams.screen_demosaic =
+      colorscreen::render_parameters::linear_demosaic;
+  source.rparams.demosaiced_scaling =
+      colorscreen::render_parameters::lanczos3_scaling;
+  source.rparams.screen_blur_radius = 0.8;
+  source.rparams.collection_threshold = 0.37;
+  source.rparams.sharpen.mode =
+      colorscreen::sharpen_parameters::unsharp_mask;
+  source.rparams.sharpen.usm_radius = 1.25;
+  source.rparams.sharpen.usm_amount = 0.55;
+  source.rparams.sharpen.scanner_snr = 1750;
+  source.rparams.sharpen.supersample = 3;
+
+  source.rparams.white_balance = {1.1, 0.95, 1.25};
+  source.rparams.presaturation = 1.3;
+  source.rparams.temperature = 6100;
+  source.rparams.backlight_temperature = 5300;
+  source.rparams.observer_whitepoint = colorscreen::xy_t(0.32, 0.34);
+  source.rparams.dye_balance =
+      colorscreen::render_parameters::dye_balance_neutral;
+  source.rparams.saturation = 1.18;
+  source.rparams.brightness = 1.27;
+  source.rparams.output_tone_curve =
+      colorscreen::tone_curve::tone_curve_gamma;
+  source.rparams.output_tone_curve_control_points =
+      {{0, 0}, {0.4, 0.22}, {1, 1}};
+  source.rparams.output_profile =
+      colorscreen::render_parameters::output_profile_xyz;
+  source.rparams.output_gamma = 2.15;
+  source.rparams.gamut_warning = true;
+
+  QString error;
+  if (!qtgui_presets::save(QStringLiteral("Capture rig"),
+                           qtgui_presets::Scope::Capture, source, &error) ||
+      !qtgui_presets::save(QStringLiteral("Dufay process"),
+                           qtgui_presets::Scope::Process, source, &error) ||
+      !qtgui_presets::save(QStringLiteral("Fine reconstruction"),
+                           qtgui_presets::Scope::Reconstruction, source,
+                           &error) ||
+      !qtgui_presets::save(QStringLiteral("Archive color"),
+                           qtgui_presets::Scope::Color, source, &error))
+    return fail(QStringLiteral("could not save preset records: %1").arg(error));
+
+  QList<qtgui_presets::Record> presets = qtgui_presets::records();
+  if (presets.size() != 4)
+    return fail(QStringLiteral("expected four scoped preset records"));
+
+  auto presetFor = [&presets](qtgui_presets::Scope scope) {
+    for (const auto &record : presets)
+      if (record.scope == scope)
+        return record;
+    return qtgui_presets::Record{};
+  };
+
+  const auto capturePreset = presetFor(qtgui_presets::Scope::Capture);
+  const auto processPreset = presetFor(qtgui_presets::Scope::Process);
+  const auto reconstructionPreset =
+      presetFor(qtgui_presets::Scope::Reconstruction);
+  const auto colorPreset = presetFor(qtgui_presets::Scope::Color);
+  if (capturePreset.id.isEmpty() || processPreset.id.isEmpty() ||
+      reconstructionPreset.id.isEmpty() || colorPreset.id.isEmpty())
+    return fail(QStringLiteral("scope lookup lost a stored preset"));
+
+  // Stored payloads themselves are canonical and do not retain unrelated
+  // image-specific state.
+  ParameterState storedCapture;
+  if (!qtgui_presets::decode(capturePreset, &storedCapture, &error) ||
+      storedCapture.rparams.scan_crop.set ||
+      storedCapture.rparams.scan_rotation != 0 ||
+      storedCapture.scrToImg.geometry_configured_p() ||
+      storedCapture.solver.n_points() != 0 ||
+      !storedCapture.profileSpots.empty() ||
+      !storedCapture.rparams.sharpen.scanner_mtf.measurements.empty())
+    return fail(QStringLiteral(
+        "Capture preset retained image-specific calibration baggage"));
+
+  ParameterState target;
+  target.rparams.capture_type =
+      colorscreen::render_parameters::capture_plain_image;
+  target.rparams.gamma = 2.4;
+  target.rparams.scan_rotation = 2;
+  target.rparams.scan_mirror = false;
+  target.rparams.scan_crop.set = true;
+  target.rparams.scan_crop.x = 7;
+  target.rparams.scan_crop.y = 8;
+  target.rparams.scan_crop.width = 90;
+  target.rparams.scan_crop.height = 100;
+  target.scrToImg.type = colorscreen::Paget;
+  target.scrToImg.center = {30, 30};
+  target.scrToImg.coordinate1 = {5, 0};
+  target.scrToImg.coordinate2 = {0, 5};
+  target.solver.add_point({30, 30}, {0, 0},
+                          colorscreen::solver_parameters::green);
+  target.profileSpots.push_back({9, 10});
+  colorscreen::mtf_measurement measured;
+  measured.name = "Keep me";
+  measured.add_value(0.1, 90);
+  measured.add_value(0.4, 45);
+  target.rparams.sharpen.scanner_mtf.measurements.push_back(measured);
+
+  const auto retainedCrop = target.rparams.scan_crop;
+  const auto retainedRotation = target.rparams.scan_rotation;
+  const auto retainedGeometry = target.scrToImg;
+  const auto retainedPoints = target.solver;
+  const auto retainedSpots = target.profileSpots;
+  const auto retainedMeasurements =
+      target.rparams.sharpen.scanner_mtf.measurements;
+
+  bool clearedRegistration = false;
+  if (!qtgui_presets::apply(capturePreset, &target, &clearedRegistration,
+                            &error) ||
+      clearedRegistration ||
+      target.rparams.capture_type != source.rparams.capture_type ||
+      target.rparams.gamma != source.rparams.gamma ||
+      target.rparams.sharpen.scanner_mtf.scan_dpi !=
+          source.rparams.sharpen.scanner_mtf.scan_dpi ||
+      target.rparams.scan_crop != retainedCrop ||
+      target.rparams.scan_rotation != retainedRotation ||
+      target.scrToImg != retainedGeometry ||
+      target.solver != retainedPoints ||
+      target.profileSpots != retainedSpots ||
+      target.rparams.sharpen.scanner_mtf.measurements !=
+          retainedMeasurements)
+    return fail(QStringLiteral(
+        "Capture preset changed state outside its declared scope"));
+
+  const auto captureTypeBeforeProcess = target.rparams.capture_type;
+  const auto spotsBeforeProcess = target.profileSpots;
+  if (!qtgui_presets::apply(processPreset, &target, &clearedRegistration,
+                            &error) ||
+      !clearedRegistration || target.scrToImg.type != colorscreen::Dufay ||
+      target.scrToImg.geometry_configured_p() ||
+      target.solver.n_points() != 0 ||
+      target.profileSpots != spotsBeforeProcess ||
+      target.rparams.capture_type != captureTypeBeforeProcess ||
+      !target.rparams.contact_copy.simulate ||
+      target.rparams.color_model != source.rparams.color_model)
+    return fail(QStringLiteral(
+        "Process preset failed to isolate/clear registration correctly"));
+
+  // Reconstruction recipes may change algorithms but must not replace accepted
+  // measured/fitted transfer evidence.
+  target.rparams.sharpen.mode = colorscreen::sharpen_parameters::none;
+  target.rparams.sharpen.usm_radius = 0;
+  target.rparams.sharpen.usm_amount = 0;
+  const auto measurementsBeforeReconstruction =
+      target.rparams.sharpen.scanner_mtf.measurements;
+  if (!qtgui_presets::apply(reconstructionPreset, &target,
+                            &clearedRegistration, &error) ||
+      clearedRegistration ||
+      target.rparams.sharpen.mode !=
+          colorscreen::sharpen_parameters::unsharp_mask ||
+      target.rparams.sharpen.usm_radius != source.rparams.sharpen.usm_radius ||
+      target.rparams.collection_threshold !=
+          source.rparams.collection_threshold ||
+      target.rparams.sharpen.scanner_mtf.measurements !=
+          measurementsBeforeReconstruction)
+    return fail(QStringLiteral(
+        "Reconstruction preset replaced calibration/provenance evidence"));
+
+  // Color includes Qt-only values absent from legacy CSP via Record::extras,
+  // while historical dye identity and fitted profile calibration stay intact.
+  target.rparams.color_model =
+      colorscreen::render_parameters::color_model_paget;
+  target.rparams.profiled_red = {0.2, 0.3, 0.4};
+  const auto retainedColorModel = target.rparams.color_model;
+  const auto retainedProfileRed = target.rparams.profiled_red;
+  const auto retainedColorSpots = target.profileSpots;
+  if (!qtgui_presets::apply(colorPreset, &target, &clearedRegistration,
+                            &error) ||
+      target.rparams.white_balance != source.rparams.white_balance ||
+      target.rparams.observer_whitepoint != source.rparams.observer_whitepoint ||
+      target.rparams.output_profile != source.rparams.output_profile ||
+      target.rparams.output_gamma != source.rparams.output_gamma ||
+      target.rparams.gamut_warning != source.rparams.gamut_warning ||
+      target.rparams.output_tone_curve_control_points !=
+          source.rparams.output_tone_curve_control_points ||
+      target.rparams.color_model != retainedColorModel ||
+      target.rparams.profiled_red != retainedProfileRed ||
+      target.profileSpots != retainedColorSpots)
+    return fail(QStringLiteral(
+        "Color preset lost extras or overwrote process/profile calibration"));
+
+  // Same scope + case-insensitive name replaces rather than accumulating
+  // ambiguous duplicates.
+  source.rparams.gamma = 1.9;
+  if (!qtgui_presets::save(QStringLiteral("capture RIG"),
+                           qtgui_presets::Scope::Capture, source, &error) ||
+      qtgui_presets::records().size() != 4)
+    return fail(QStringLiteral("preset replacement created a duplicate"));
+
+  for (const auto &record : qtgui_presets::records())
+    if (!qtgui_presets::remove(record.id))
+      return fail(QStringLiteral("preset deletion failed"));
+  if (!qtgui_presets::records().isEmpty())
+    return fail(QStringLiteral("deleted presets remained in QSettings"));
+
+  return true;
+}
+
 /** Exercise beta-critical non-rendering UI/document invariants. */
 bool runBetaInvariantSmoke() {
   auto fail = [](const char *reason) {
@@ -2013,7 +2291,8 @@ bool runBetaInvariantSmoke() {
       || !geometrySectionPreferencesSmoke()
       || !profileSectionPreferencesSmoke()
       || !renderDialogPresentationSmoke()
-      || !initialSetupGuideScreenDetectionSmoke())
+      || !initialSetupGuideScreenDetectionSmoke()
+      || !scopedPresetSmoke())
     return false;
 
   // Logical tab availability must not depend on whether an ancestor is
