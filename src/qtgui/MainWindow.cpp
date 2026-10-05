@@ -2446,6 +2446,31 @@ void MainWindow::createMenus() {
   connect(m_saveAsAction, &QAction::triggered, this,
           &MainWindow::onSaveParametersAs);
 
+  QMenu *presetMenu = m_fileMenu->addMenu(tr("&Presets"));
+  QMenu *savePresetMenu = presetMenu->addMenu(tr("Save Current as Preset"));
+  const auto addPresetSaveAction =
+      [this, savePresetMenu](qtgui_presets::Scope scope) {
+        QAction *action =
+            savePresetMenu->addAction(qtgui_presets::scopeLabel(scope));
+        connect(action, &QAction::triggered, this,
+                [this, scope]() { promptSavePreset(scope); });
+      };
+  addPresetSaveAction(qtgui_presets::Scope::Capture);
+  addPresetSaveAction(qtgui_presets::Scope::Process);
+  addPresetSaveAction(qtgui_presets::Scope::Reconstruction);
+  addPresetSaveAction(qtgui_presets::Scope::Color);
+
+  QAction *applyPresetAction = presetMenu->addAction(tr("&Apply Preset..."));
+  applyPresetAction->setObjectName(QStringLiteral("ApplyParameterPresetAction"));
+  connect(applyPresetAction, &QAction::triggered, this,
+          &MainWindow::promptApplyPreset);
+  QAction *deletePresetAction =
+      presetMenu->addAction(tr("&Delete Preset..."));
+  deletePresetAction->setObjectName(
+      QStringLiteral("DeleteParameterPresetAction"));
+  connect(deletePresetAction, &QAction::triggered, this,
+          &MainWindow::promptDeletePreset);
+
   m_fileMenu->addSeparator();
 
   m_renderAction = m_fileMenu->addAction("&Render...");
