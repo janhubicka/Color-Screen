@@ -382,7 +382,26 @@ bool save(const QString &name, Scope scope, const ParameterState &state,
         return false;
     }
 
-    const QByteArray payload = serializePresetState(state, error);
+    // Persist only the declared reusable domain. Besides keeping QSettings
+    // compact, this prevents unused image-specific calibration from being
+    // retained inside a preset payload that would never apply it.
+    ParameterState stored;
+    switch (scope) {
+    case Scope::Capture:
+        applyCaptureScope(&stored, state);
+        break;
+    case Scope::Process:
+        applyProcessScope(&stored, state);
+        break;
+    case Scope::Reconstruction:
+        applyReconstructionScope(&stored, state);
+        break;
+    case Scope::Color:
+        applyColorScope(&stored, state);
+        break;
+    }
+
+    const QByteArray payload = serializePresetState(stored, error);
     if (payload.isEmpty())
         return false;
 
