@@ -2050,13 +2050,14 @@ bool scopedPresetSmoke() {
         "Capture preset changed state outside its declared scope"));
 
   const auto captureTypeBeforeProcess = target.rparams.capture_type;
-  const auto spotsBeforeProcess = target.profileSpots;
+  target.detect.min_ratio = 3.25;
   if (!qtgui_presets::apply(processPreset, &target, &clearedRegistration,
                             &error) ||
       !clearedRegistration || target.scrToImg.type != colorscreen::Dufay ||
       target.scrToImg.geometry_configured_p() ||
       target.solver.n_points() != 0 ||
-      target.profileSpots != spotsBeforeProcess ||
+      !target.profileSpots.empty() ||
+      target.detect != colorscreen::scr_detect_parameters() ||
       target.rparams.capture_type != captureTypeBeforeProcess ||
       !target.rparams.contact_copy.simulate ||
       target.rparams.color_model != source.rparams.color_model)
