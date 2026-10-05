@@ -335,6 +335,17 @@ def publish_final(github: GitHub, sha: str, root: Path, directory: Path) -> bool
         target = existing_release.get("target_commitish")
         if target and target != sha:
             raise RuntimeError(f"{FINAL_TAG} draft targets another commit")
+        allowed_draft_assets = set(FINAL_PACKAGES) | {
+            "BUILD-INFO.json", "SHA256SUMS"
+        }
+        unexpected = {
+            asset.get("name") for asset in existing_release.get("assets", [])
+            if asset.get("name") not in allowed_draft_assets
+        }
+        if unexpected:
+            raise RuntimeError(
+                f"{FINAL_TAG} draft contains unexpected assets: "
+                + ", ".join(sorted(str(name) for name in unexpected)))
 
     # stage_current_release() already performed a full recheck after download.
     # Re-read the rolling release once more after inspecting any existing final
