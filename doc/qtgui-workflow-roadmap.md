@@ -619,19 +619,19 @@ Guidelines:
 - tooltips should explain physical meaning and units, not merely repeat labels.
 
 `MultiLineTabWidget` currently carries custom tab styling.  Replacing it should
-be evaluated after beta with real wide/narrow inspector sizes; do not trade its
-useful wrapping behaviour for a standard `QTabWidget` that truncates nine
+be evaluated later in alpha with real wide/narrow inspector sizes; do not trade
+its useful wrapping behaviour for a standard `QTabWidget` that truncates nine
 specialist stages.
 
-## Implementation status and post-beta sequence
+## Implementation status and remaining alpha sequence
 
-The beta baseline now implements the original Phase A hardening, the Phase B
+The current alpha baseline implements the original Phase A hardening, the Phase B
 workflow summaries/terminology, and the core Phase C module grammar. Treat those
-sections below as maintained invariants rather than a backlog. New pre-beta work
-should be driven by a reproduced correctness/usability problem or beta-gate
-regression, not by reopening already-settled architecture.
+sections below as maintained invariants rather than a backlog. Remaining alpha
+work should finish the GUI roadmap and its regression coverage before the
+project/parameter file format is redesigned.
 
-### Phase A — beta hardening (implemented; keep green)
+### Phase A — robustness hardening (implemented foundation; keep green)
 
 - fix proven correctness/packaging bugs;
 - keep current tab order and architecture;
@@ -639,7 +639,7 @@ regression, not by reopening already-settled architecture.
 - expand smoke/sanitizer invariants;
 - make errors and task cancellation reliable.
 
-### Phase B — terminology and summaries (implemented for beta)
+### Phase B — terminology and summaries (implemented foundation)
 
 - add stage labels and one-line process/image-layer/geometry/MTF/profile
   summaries. The persistent Workflow card reports the actual scalar
@@ -698,7 +698,7 @@ regression, not by reopening already-settled architecture.
   same ordinary-view synchronization rule, while Locate remains an active-view
   navigation action and reference scans keep their own source-matched overlay.
 
-### Phase C — module grammar (implemented for beta)
+### Phase C — module grammar (implemented foundation)
 
 - keep `ParameterPanel` reset/default/modified metadata as the shared
   convention for ordinary saved controls. The original Digital Capture pilot has
@@ -765,7 +765,41 @@ regression, not by reopening already-settled architecture.
 - provenance for measured/fitted/default values;
 - optional reproducibility report useful for archival workflows.
 
-## Questions to answer with real beta users
+### Phase F — project/parameter format modernization
+
+Do this only after the GUI work above is complete, while the application still
+carries an alpha version. The current CSP/`.par` reader must remain available
+for backwards compatibility, but new files should move to an explicitly
+versioned structured schema rather than extending the ad-hoc keyword stream.
+
+YAML is a reasonable candidate because the document naturally contains nested
+capture, process, geometry, reconstruction, colour, calibration and provenance
+sections. If YAML is selected, use a deliberately small safe subset: mappings,
+sequences, strings, booleans and finite numeric scalars only; no application
+tags, anchors/aliases or implicit timestamp/type tricks. Compare that against a
+similarly versioned JSON representation before implementation, because the
+library and command-line tools must not become dependent on Qt merely to read a
+project.
+
+Whichever syntax is chosen, the schema is the compatibility contract:
+
+- one top-level format identifier and integer schema version;
+- stable string spellings for enums and named algorithms;
+- optional namespaced sections so new GUI/library state can be added without
+  another trailing-data convention;
+- defined unknown-key behaviour and per-version migrations;
+- explicit distinction between persisted inputs, measured/calibrated results,
+  provenance and transient diagnostics;
+- canonical writer output so round-trip tests produce deterministic files;
+- transactional/atomic save semantics identical to the current GUI path;
+- fixtures proving legacy `.par` import, current-format round trips, forward
+  unknown-key tolerance, and migration of every historical default whose
+  semantics changed.
+
+Only after that migration and the remaining alpha GUI work are complete should
+the project be considered for a beta version.
+
+## Questions to answer during alpha field testing
 
 Do not guess these from generic Lightroom conventions.  Observe museum operators:
 
@@ -781,7 +815,7 @@ Do not guess these from generic Lightroom conventions.  Observe museum operators
   Color-Screen?
 - What is the most common point at which an operator is unsure what to do next?
 
-Answers should drive the post-beta regrouping.  The application is specialized
+Answers should drive the remaining alpha regrouping.  The application is specialized
 enough that copying another editor's panel order verbatim would be less standard,
 not more: the standard behaviour to borrow is consistency, reversibility,
 feedback and clear stage ownership.
