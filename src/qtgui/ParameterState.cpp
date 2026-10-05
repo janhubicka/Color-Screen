@@ -140,7 +140,7 @@ std::optional<qtgui_presets::Scope> scopeFromKey(const QString &key)
     Final presentation rotation/mirroring, scanner geometry policy, and the
     lens model are capture/device state rather than screen-lattice coordinates,
     so keep them. */
-void clearRegistrationForScreenChange(ParameterState *state)
+void clearScreenBoundStateForScreenChange(ParameterState *state)
 {
     if (!state)
         return;
@@ -195,7 +195,7 @@ bool applyProcessScope(ParameterState *target, const ParameterState &source)
 
     const bool screenChanged = target->scrToImg.type != source.scrToImg.type;
     if (screenChanged)
-        clearRegistrationForScreenChange(target);
+        clearScreenBoundStateForScreenChange(target);
     target->scrToImg.type = source.scrToImg.type;
 
     dst.ignore_infrared = src.ignore_infrared;
