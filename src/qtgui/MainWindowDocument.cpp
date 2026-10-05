@@ -318,22 +318,24 @@ bool MainWindow::saveReproducibilityReportToFile(const QString &fileName,
                   m_workflowProfileLabel ? m_workflowProfileLabel->text()
                                          : QString());
 
+  const QWidget *inspector = workspaceInspectorWidget();
   QJsonObject provenance;
   provenance.insert(
       QStringLiteral("flat_field"),
-      reportStatusText(this, QStringLiteral("CaptureFlatFieldStatus")));
+      reportStatusText(inspector, QStringLiteral("CaptureFlatFieldStatus")));
   provenance.insert(
       QStringLiteral("geometry"),
-      reportStatusText(this, QStringLiteral("GeometryFitStatus")));
+      reportStatusText(inspector, QStringLiteral("GeometryFitStatus")));
   provenance.insert(
       QStringLiteral("adaptive_sharpening"),
-      reportStatusText(this, QStringLiteral("SharpnessAdaptiveCorrectionStatus")));
+      reportStatusText(inspector,
+                       QStringLiteral("SharpnessAdaptiveCorrectionStatus")));
   provenance.insert(
       QStringLiteral("mtf"),
-      reportStatusText(this, QStringLiteral("MtfCalibrationStatus")));
+      reportStatusText(inspector, QStringLiteral("MtfCalibrationStatus")));
   provenance.insert(
       QStringLiteral("profile"),
-      reportStatusText(this, QStringLiteral("ProfileCalibrationStatus")));
+      reportStatusText(inspector, QStringLiteral("ProfileCalibrationStatus")));
 
   QString parameterState = QStringLiteral("none");
   if (!m_parameterFile.path.isEmpty())
