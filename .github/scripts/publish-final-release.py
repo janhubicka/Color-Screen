@@ -264,6 +264,8 @@ def stage_current_release(github: GitHub, sha: str, directory: Path) -> tuple[li
     if github.api(f"git/ref/tags/{CURRENT_TAG}")["object"]["sha"] != sha:
         raise RuntimeError("current tag changed while staging final release")
     latest = github.api(f"releases/tags/{CURRENT_TAG}")
+    if latest.get("draft") or not latest.get("prerelease"):
+        raise RuntimeError("current release state changed while staging final release")
     if release_asset_identity(latest) != release_asset_identity(release):
         raise RuntimeError("current release assets changed while staging final release")
 
@@ -298,6 +300,10 @@ def publish_final(github: GitHub, sha: str, root: Path, directory: Path) -> bool
         raise RuntimeError(f"{FINAL_TAG} is already published; refusing to modify it")
     if existing_release and existing_release.get("immutable"):
         raise RuntimeError(f"{FINAL_TAG} draft is immutable")
+    if existing_release:
+        target = existing_release.get("target_commitish")
+        if target and target != sha:
+            raise RuntimeError(f"{FINAL_TAG} draft targets another commit")
 
     notes = directory / "release-notes.md"
     notes.write_text(
