@@ -13,8 +13,8 @@ Ubuntu workflows are triggered by pushes to `main` (and selected maintenance
 branches), not tag pushes.
 
 Prefer a commit for which the rolling `current` release already points to the
-same SHA. That gives the final release packages a tested, provenance-recorded
-macOS/Windows source.
+same SHA. That gives the final release a tested, provenance-recorded macOS app,
+Windows packages and distchecked source archive from one commit.
 
 ## 2. Require the complete automated gate
 
@@ -29,9 +29,10 @@ For the chosen SHA, require successful main runs of:
 - Doxygen Documentation;
 - Publish current release.
 
-The rolling publisher itself gates on matching successful macOS and Windows
-builds. The final-release decision should additionally inspect the independent
-Ubuntu, clang-Windows, sanitizer and documentation workflows above.
+The rolling publisher itself gates on matching successful macOS, Windows and
+Ubuntu builds, including the Ubuntu `distcheck` source artifact. The
+final-release decision should additionally inspect the independent clang-Windows,
+dedicated sanitizer and documentation workflows above.
 
 ## 3. Complete the manual GUI beta gate
 
@@ -84,8 +85,9 @@ After the version patch itself passes the complete automated and manual gates:
 3. Create a non-prerelease GitHub release for `v2.0` and mark it Latest.
 4. Publish/copy the tested macOS and general Windows packages, plus the
    specialized Windows variants if they remain supported.
-5. Publish the source archive produced/validated by `distcheck` (or an
-   equivalently verified source archive) and checksums.
+5. Publish the exact `Color-Screen-2.0-current-sources.tar.gz` payload already
+   produced/validated by `distcheck` for the chosen SHA (renaming it for the
+   stable release if desired) and regenerate stable-release checksums.
 6. Smoke-test downloads from the final release page, not only Actions artifacts.
 7. Leave `current` available for subsequent post-2.0 development rather than
    moving the stable `v2.0` tag.
