@@ -2039,7 +2039,7 @@ bool scopedPresetSmoke() {
       target.rparams.gamma != source.rparams.gamma ||
       target.rparams.sharpen.scanner_mtf.scan_dpi !=
           source.rparams.sharpen.scanner_mtf.scan_dpi ||
-      target.rparams.scan_crop != retainedCrop ||
+      !(target.rparams.scan_crop == retainedCrop) ||
       target.rparams.scan_rotation != retainedRotation ||
       target.scrToImg != retainedGeometry ||
       target.solver != retainedPoints ||
