@@ -11,6 +11,7 @@
 #include <cstring>
 #include <utility>
 #include <vector>
+#include <QByteArray>
 #include <QList>
 #include <QString>
 
