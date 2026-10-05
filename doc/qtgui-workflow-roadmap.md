@@ -781,7 +781,16 @@ similarly versioned JSON representation before implementation, because the
 library and command-line tools must not become dependent on Qt merely to read a
 project.
 
-Whichever syntax is chosen, the schema is the compatibility contract:
+Do not assume that one text document is the best physical container. Existing
+parameter files can contain dense geometry meshes, scanner-blur correction grids
+and sampled MTF curves. Keep ordinary settings and provenance human-readable,
+but evaluate a versioned archive with a YAML/JSON manifest plus typed binary
+payload entries for large arrays. Color-Screen already has archive support in
+its dependency set, so this can remain one atomic user-visible file without
+turning large floating-point grids into an unwieldy YAML sequence. The manifest
+must identify every payload by name, element type, dimensions and checksum.
+
+Whichever syntax/container is chosen, the schema is the compatibility contract:
 
 - one top-level format identifier and integer schema version;
 - stable string spellings for enums and named algorithms;
