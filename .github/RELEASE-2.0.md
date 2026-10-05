@@ -84,10 +84,12 @@ After the version patch itself passes the complete automated and manual gates:
 1. Confirm `current` points to the exact chosen SHA and its
    `BUILD-INFO.json`/checksums match that SHA.
 2. From branch **main**, manually run **Publish Color-Screen 2.0**.
-3. The guarded promoter rechecks final source metadata, `main`/`current`
-   identity, rolling-release provenance/checksums and every package before any
+3. The guarded promoter shares the rolling publisher's concurrency lock and
+   rechecks final source metadata, `main`/`current` identity, rolling-release
+   provenance/checksums and the exact staged asset identity before any
    stable-release write.
-4. It creates/resumes a draft `v2.0` release, uploads byte-identical tested
+4. It creates/resumes a draft `v2.0` release only when that draft targets the
+   same SHA and contains no unrelated assets, then uploads byte-identical tested
    package payloads under stable names, writes final provenance/checksums, and
    only then publishes it as a non-prerelease Latest release.
 5. Smoke-test downloads from the final release page, not only Actions artifacts.
