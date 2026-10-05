@@ -22,6 +22,7 @@
 #include <QFileInfo>
 #include <QFuture>
 #include <QFutureWatcher>
+#include <QInputDialog>
 #include <QMenu>
 #include <QMessageBox>
 #include <QObject>
@@ -276,6 +277,217 @@ bool MainWindow::saveParametersAs() {
   if (!fileName.endsWith(QLatin1String(".par"), Qt::CaseInsensitive))
     fileName += QStringLiteral(".par");
   return saveParametersToFile(fileName);
+}
+
+/** Ask for a name and save one explicit preset domain.
+
+    Presets are application preferences, not document saves. Reusing a name in
+    the same scope replaces that preset without affecting the live document. */
+void MainWindow::promptSavePreset(qtgui_presets::Scope scope) {
+  auto *dialog = new QInputDialog(this);
+  dialog->setObjectName(
+      QStringLiteral("SaveParameterPresetDialog_%1")
+          .arg(qtgui_presets::scopeKey(scope)));
+  dialog->setWindowTitle(tr("Save %1 Preset")
+                             .arg(qtgui_presets::scopeLabel(scope)));
+  dialog->setInputMode(QInputDialog::TextInput);
+  dialog->setLabelText(
+      tr("%1\n\nName this preset. Saving the same name again replaces only "
+         "the %2 preset with that name.")
+          .arg(qtgui_presets::scopeDescription(scope),
+               qtgui_presets::scopeLabel(scope)));
+  dialog->setOkButtonText(tr("Save Preset"));
+  dialog->setCancelButtonText(tr("Cancel"));
+  dialog->setAttribute(Qt::WA_DeleteOnClose);
+
+  connect(dialog, &QDialog::accepted, this, [this, dialog, scope]() {
+    const QString name = dialog->textValue().trimmed();
+    if (name.isEmpty())
+      return;
+
+    QString error;
+    if (!qtgui_presets::save(name, scope, getCurrentState(), &error)) {
+      auto *message = new QMessageBox(
+          QMessageBox::Critical, tr("Preset Save Failed"),
+          tr("The %1 preset \"%2\" could not be saved. The document was not "
+             "changed.\n\n%3")
+              .arg(qtgui_presets::scopeLabel(scope), name,
+                   error.isEmpty() ? tr("Unknown preset storage error.") : error),
+          QMessageBox::Ok, this);
+      message->setObjectName(QStringLiteral("ParameterPresetSaveFailureDialog"));
+      message->setAttribute(Qt::WA_DeleteOnClose);
+      message->open();
+      return;
+    }
+
+    statusBar()->showMessage(
+        tr("%1 preset \"%2\" saved.")
+            .arg(qtgui_presets::scopeLabel(scope), name),
+        3000);
+  });
+  dialog->open();
+}
+
+/** Let the user preview and apply exactly one scoped preset. */
+void MainWindow::promptApplyPreset() {
+  const QList<qtgui_presets::Record> presetRecords = qtgui_presets::records();
+  if (presetRecords.isEmpty()) {
+    statusBar()->showMessage(
+        tr("No presets are saved yet. Use Edit → Presets → Save Current As."),
+        4000);
+    return;
+  }
+
+  QStringList items;
+  items.reserve(presetRecords.size());
+  for (const qtgui_presets::Record &record : presetRecords)
+    items.append(tr("[%1] %2")
+                     .arg(qtgui_presets::scopeLabel(record.scope), record.name));
+
+  auto *dialog = new QInputDialog(this);
+  dialog->setObjectName(QStringLiteral("ApplyParameterPresetDialog"));
+  dialog->setWindowTitle(tr("Apply Preset"));
+  dialog->setInputMode(QInputDialog::TextInput);
+  dialog->setComboBoxItems(items);
+  dialog->setComboBoxEditable(false);
+  dialog->setOption(QInputDialog::UseListViewForComboBoxItems,
+                    items.size() > 8);
+  dialog->setOkButtonText(tr("Apply Preset"));
+  dialog->setCancelButtonText(tr("Cancel"));
+  dialog->setAttribute(Qt::WA_DeleteOnClose);
+
+  auto updateDescription = [dialog, presetRecords, items](const QString &item) {
+    const int index = items.indexOf(item);
+    if (index < 0 || index >= presetRecords.size())
+      return;
+    const auto &record = presetRecords[index];
+    dialog->setLabelText(
+        QCoreApplication::translate(
+            "MainWindow",
+            "This applies only the %1 domain.\n\n%2\n\nThe change is one "
+            "Undo step; all omitted calibration/image-specific state remains "
+            "unchanged.")
+            .arg(qtgui_presets::scopeLabel(record.scope),
+                 qtgui_presets::scopeDescription(record.scope)));
+  };
+  connect(dialog, &QInputDialog::textValueChanged, dialog, updateDescription);
+  if (!items.isEmpty()) {
+    dialog->setTextValue(items.constFirst());
+    updateDescription(items.constFirst());
+  }
+
+  connect(dialog, &QDialog::accepted, this,
+          [this, dialog, presetRecords, items]() {
+            const int index = items.indexOf(dialog->textValue());
+            if (index < 0 || index >= presetRecords.size())
+              return;
+            const qtgui_presets::Record record = presetRecords[index];
+
+            const ParameterState before = getCurrentState();
+            ParameterState updated = before;
+            bool registrationCleared = false;
+            QString error;
+            if (!qtgui_presets::apply(record, &updated, &registrationCleared,
+                                      &error)) {
+              auto *message = new QMessageBox(
+                  QMessageBox::Critical, tr("Preset Apply Failed"),
+                  tr("The %1 preset \"%2\" could not be read. The document "
+                     "was left unchanged.\n\n%3")
+                      .arg(qtgui_presets::scopeLabel(record.scope), record.name,
+                           error.isEmpty()
+                               ? tr("Unknown preset data error.")
+                               : error),
+                  QMessageBox::Ok, this);
+              message->setObjectName(
+                  QStringLiteral("ParameterPresetApplyFailureDialog"));
+              message->setAttribute(Qt::WA_DeleteOnClose);
+              message->open();
+              return;
+            }
+
+            if (updated == before) {
+              statusBar()->showMessage(
+                  tr("%1 preset \"%2\" already matches this document.")
+                      .arg(qtgui_presets::scopeLabel(record.scope), record.name),
+                  3000);
+              return;
+            }
+
+            changeParameters(
+                updated,
+                tr("Apply %1 preset \"%2\"")
+                    .arg(qtgui_presets::scopeLabel(record.scope), record.name));
+            if (registrationCleared) {
+              statusBar()->showMessage(
+                  tr("%1 preset \"%2\" applied. The screen type changed, so "
+                     "incompatible registration coordinates and control points "
+                     "were cleared; Undo restores them.")
+                      .arg(qtgui_presets::scopeLabel(record.scope), record.name),
+                  6000);
+            } else {
+              statusBar()->showMessage(
+                  tr("%1 preset \"%2\" applied.")
+                      .arg(qtgui_presets::scopeLabel(record.scope), record.name),
+                  3000);
+            }
+          });
+  dialog->open();
+}
+
+/** Delete one named application preset without touching document state. */
+void MainWindow::promptDeletePreset() {
+  const QList<qtgui_presets::Record> presetRecords = qtgui_presets::records();
+  if (presetRecords.isEmpty()) {
+    statusBar()->showMessage(tr("No saved presets to delete."), 3000);
+    return;
+  }
+
+  QStringList items;
+  items.reserve(presetRecords.size());
+  for (const qtgui_presets::Record &record : presetRecords)
+    items.append(tr("[%1] %2")
+                     .arg(qtgui_presets::scopeLabel(record.scope), record.name));
+
+  auto *dialog = new QInputDialog(this);
+  dialog->setObjectName(QStringLiteral("DeleteParameterPresetDialog"));
+  dialog->setWindowTitle(tr("Delete Preset"));
+  dialog->setInputMode(QInputDialog::TextInput);
+  dialog->setComboBoxItems(items);
+  dialog->setComboBoxEditable(false);
+  dialog->setOption(QInputDialog::UseListViewForComboBoxItems,
+                    items.size() > 8);
+  dialog->setLabelText(
+      tr("Choose an application preset to delete. This does not change the "
+         "current document."));
+  dialog->setOkButtonText(tr("Delete Preset"));
+  dialog->setCancelButtonText(tr("Cancel"));
+  dialog->setAttribute(Qt::WA_DeleteOnClose);
+
+  connect(dialog, &QDialog::accepted, this,
+          [this, dialog, presetRecords, items]() {
+            const int index = items.indexOf(dialog->textValue());
+            if (index < 0 || index >= presetRecords.size())
+              return;
+            const auto record = presetRecords[index];
+            if (!qtgui_presets::remove(record.id)) {
+              auto *message = new QMessageBox(
+                  QMessageBox::Warning, tr("Preset Delete Failed"),
+                  tr("The preset \"%1\" could not be deleted. The current "
+                     "document was not changed.")
+                      .arg(record.name),
+                  QMessageBox::Ok, this);
+              message->setObjectName(
+                  QStringLiteral("ParameterPresetDeleteFailureDialog"));
+              message->setAttribute(Qt::WA_DeleteOnClose);
+              message->open();
+              return;
+            }
+            statusBar()->showMessage(
+                tr("%1 preset \"%2\" deleted.")
+                    .arg(qtgui_presets::scopeLabel(record.scope), record.name),
+                3000);
+          });
+  dialog->open();
 }
 
 /** Show a multi-selection file dialog and open each image independently.
