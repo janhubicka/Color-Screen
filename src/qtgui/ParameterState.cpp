@@ -405,7 +405,10 @@ bool save(const QString &name, Scope scope, const ParameterState &state,
         return false;
 
     QVariantMap extras;
-    if (scope == Scope::Color) {
+    if (scope == Scope::Reconstruction) {
+        extras.insert(QStringLiteral("demosaicedScaling"),
+                      static_cast<int>(state.rparams.demosaiced_scaling));
+    } else if (scope == Scope::Color) {
         extras.insert(QStringLiteral("observerWhitepointX"),
                       state.rparams.observer_whitepoint.x);
         extras.insert(QStringLiteral("observerWhitepointY"),
@@ -505,6 +508,17 @@ bool apply(const Record &record, ParameterState *target,
         break;
     case Scope::Reconstruction:
         applyReconstructionScope(target, source);
+        if (record.extras.contains(QStringLiteral("demosaicedScaling"))) {
+            const int scaling =
+                record.extras.value(QStringLiteral("demosaicedScaling")).toInt();
+            if (scaling >= 0 &&
+                scaling <
+                    static_cast<int>(colorscreen::render_parameters::
+                                         max_demosaiced_scaling))
+                target->rparams.demosaiced_scaling =
+                    static_cast<colorscreen::render_parameters::
+                                    demosaiced_scaling_t>(scaling);
+        }
         break;
     case Scope::Color:
         applyColorScope(target, source);
