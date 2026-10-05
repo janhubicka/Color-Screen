@@ -476,6 +476,15 @@ private:
   /** Prompt for a parameter filename and save synchronously. */
   bool saveParametersAs();
 
+  /** Ask for a name and save the current document's selected preset domain. */
+  void promptSavePreset(qtgui_presets::Scope scope);
+
+  /** Let the user preview and apply one named scoped preset. */
+  void promptApplyPreset();
+
+  /** Let the user delete one named scoped preset. */
+  void promptDeletePreset();
+
   /** Return whether undo state or recovered state differs from the last save. */
   bool isDocumentModified() const;
 
