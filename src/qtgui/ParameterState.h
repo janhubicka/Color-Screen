@@ -14,6 +14,7 @@
 #include <QByteArray>
 #include <QList>
 #include <QString>
+#include <QVariantMap>
 
 namespace colorscreen {
 
@@ -176,6 +177,8 @@ struct Record {
     QString name;
     Scope scope = Scope::Capture;
     QByteArray payload;
+    /** Qt-only fields not represented by the legacy CSP stream. */
+    QVariantMap extras;
 };
 
 /** Stable storage key for SCOPE. */
