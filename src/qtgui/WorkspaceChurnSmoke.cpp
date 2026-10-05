@@ -408,6 +408,61 @@ void startWorkspaceChurnSmoke(ColorScreenApplication &app,
           return;
         }
 
+        // Reproducibility-report export is diagnostic only. It must preserve the
+        // live save target, modified state and Undo cleanliness while embedding
+        // both structured provenance and an exact extractable parameter payload.
+        QTemporaryDir reportDirectory;
+        if (!reportDirectory.isValid()) {
+          fail(QStringLiteral(
+              "Workspace churn could not create reproducibility-report directory"));
+          return;
+        }
+        const QString reportPath =
+            reportDirectory.filePath(QStringLiteral("reproducibility.txt"));
+        const QString reportParameterPath = first->m_parameterFile.path;
+        const bool reportParameterSuggested = first->m_parameterFile.suggested;
+        const bool reportModified = first->isDocumentModified();
+        const int reportUndoIndex =
+            first->m_undoStack ? first->m_undoStack->index() : -1;
+        const bool reportUndoClean =
+            first->m_undoStack ? first->m_undoStack->isClean() : false;
+        QString reportError;
+        if (!first->saveReproducibilityReportToFile(reportPath, &reportError)) {
+          fail(QStringLiteral("Reproducibility report export failed: %1")
+                   .arg(reportError));
+          return;
+        }
+        QFile reportFile(reportPath);
+        if (!reportFile.open(QIODevice::ReadOnly)) {
+          fail(QStringLiteral("Reproducibility report could not be reopened"));
+          return;
+        }
+        const QByteArray reportBytes = reportFile.readAll();
+        if (!reportBytes.startsWith(
+                QByteArray("# Color-Screen reproducibility report\n")) ||
+            !reportBytes.contains(
+                QByteArray("\"format\": \"colorscreen-reproducibility-report\"")) ||
+            !reportBytes.contains(QByteArray("\"format_version\": 1")) ||
+            !reportBytes.contains(QByteArray("\"workflow\"")) ||
+            !reportBytes.contains(QByteArray("\"provenance\"")) ||
+            !reportBytes.contains(QByteArray("screen_alignment_version: 1")) ||
+            !reportBytes.contains(
+                QByteArray("colorscreen_qt_metadata_version: 1"))) {
+          fail(QStringLiteral(
+              "Reproducibility report lost metadata or exact parameter payload"));
+          return;
+        }
+        if (first->m_parameterFile.path != reportParameterPath ||
+            first->m_parameterFile.suggested != reportParameterSuggested ||
+            first->isDocumentModified() != reportModified ||
+            (first->m_undoStack &&
+             (first->m_undoStack->index() != reportUndoIndex ||
+              first->m_undoStack->isClean() != reportUndoClean))) {
+          fail(QStringLiteral(
+              "Reproducibility report export changed live document/save state"));
+          return;
+        }
+
 QWidget *workflowSummary =
     inspector->findChild<QWidget *>(QStringLiteral("WorkflowSummary"));
 QToolButton *workflowToggle = inspector->findChild<QToolButton *>(

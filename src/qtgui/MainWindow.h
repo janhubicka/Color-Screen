@@ -409,6 +409,8 @@ private slots:
   void onOpenParameters();
   void onSaveParameters();
   void onSaveParametersAs();
+  /** Save a human-readable provenance report without changing document state. */
+  void onSaveReproducibilityReport();
   void onRender();
   void onColorOptimizeRequested(bool autoMode);
   void onAddSpotModeRequested(bool active);
@@ -475,6 +477,10 @@ private:
 
   /** Prompt for a parameter filename and save synchronously. */
   bool saveParametersAs();
+
+  /** Atomically write provenance plus the exact current parameter payload. */
+  bool saveReproducibilityReportToFile(const QString &fileName,
+                                       QString *error = nullptr);
 
   /** Return whether undo state or recovered state differs from the last save. */
   bool isDocumentModified() const;
