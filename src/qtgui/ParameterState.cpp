@@ -255,16 +255,13 @@ void applyColorScope(ParameterState *target, const ParameterState &source)
     dst.presaturation = src.presaturation;
     dst.temperature = src.temperature;
     dst.backlight_temperature = src.backlight_temperature;
-    dst.observer_whitepoint = src.observer_whitepoint;
     dst.dye_balance = src.dye_balance;
     dst.saturation = src.saturation;
     dst.brightness = src.brightness;
     dst.output_tone_curve = src.output_tone_curve;
-    dst.output_tone_curve_control_points =
-        src.output_tone_curve_control_points;
-    dst.output_profile = src.output_profile;
-    dst.output_gamma = src.output_gamma;
-    dst.gamut_warning = src.gamut_warning;
+    // observer_whitepoint, custom tone-curve points, output profile/gamma and
+    // gamut warning are not represented by the legacy CSP stream. They are
+    // carried by Record::extras instead of being silently reset here.
 }
 
 } // namespace
@@ -348,11 +345,13 @@ QList<Record> records()
             scopeFromKey(settings.value(QStringLiteral("scope")).toString());
         const QByteArray payload =
             settings.value(QStringLiteral("payload")).toByteArray();
+        const QVariantMap extras =
+            settings.value(QStringLiteral("extras")).toMap();
         settings.endGroup();
 
         if (name.trimmed().isEmpty() || !scope || payload.isEmpty())
             continue;
-        result.append({id, name, *scope, payload});
+        result.append({id, name, *scope, payload, extras});
     }
     settings.endGroup();
 
@@ -405,6 +404,28 @@ bool save(const QString &name, Scope scope, const ParameterState &state,
     if (payload.isEmpty())
         return false;
 
+    QVariantMap extras;
+    if (scope == Scope::Color) {
+        extras.insert(QStringLiteral("observerWhitepointX"),
+                      state.rparams.observer_whitepoint.x);
+        extras.insert(QStringLiteral("observerWhitepointY"),
+                      state.rparams.observer_whitepoint.y);
+        extras.insert(QStringLiteral("outputProfile"),
+                      static_cast<int>(state.rparams.output_profile));
+        extras.insert(QStringLiteral("outputGamma"), state.rparams.output_gamma);
+        extras.insert(QStringLiteral("gamutWarning"), state.rparams.gamut_warning);
+
+        QVariantList controlPoints;
+        for (const colorscreen::point_t &point :
+             state.rparams.output_tone_curve_control_points) {
+            QVariantList encodedPoint;
+            encodedPoint.append(point.x);
+            encodedPoint.append(point.y);
+            controlPoints.append(QVariant(encodedPoint));
+        }
+        extras.insert(QStringLiteral("toneCurveControlPoints"), controlPoints);
+    }
+
     QString id;
     for (const Record &record : records())
         if (record.scope == scope &&
@@ -421,6 +442,7 @@ bool save(const QString &name, Scope scope, const ParameterState &state,
     settings.setValue(QStringLiteral("name"), normalizedName);
     settings.setValue(QStringLiteral("scope"), scopeKey(scope));
     settings.setValue(QStringLiteral("payload"), payload);
+    settings.setValue(QStringLiteral("extras"), extras);
     settings.setValue(QStringLiteral("applicationVersion"),
                       QCoreApplication::applicationVersion());
     settings.endGroup();
@@ -486,6 +508,57 @@ bool apply(const Record &record, ParameterState *target,
         break;
     case Scope::Color:
         applyColorScope(target, source);
+        if (record.extras.contains(QStringLiteral("observerWhitepointX")) &&
+            record.extras.contains(QStringLiteral("observerWhitepointY"))) {
+            target->rparams.observer_whitepoint = colorscreen::xy_t(
+                record.extras.value(QStringLiteral("observerWhitepointX"))
+                    .toDouble(),
+                record.extras.value(QStringLiteral("observerWhitepointY"))
+                    .toDouble());
+        }
+        if (record.extras.contains(QStringLiteral("outputProfile"))) {
+            const int profile =
+                record.extras.value(QStringLiteral("outputProfile")).toInt();
+            if (profile >= 0 &&
+                profile <
+                    static_cast<int>(colorscreen::render_parameters::
+                                         output_profile_max))
+                target->rparams.output_profile =
+                    static_cast<colorscreen::render_parameters::output_profile_t>(
+                        profile);
+        }
+        if (record.extras.contains(QStringLiteral("outputGamma")))
+            target->rparams.output_gamma =
+                record.extras.value(QStringLiteral("outputGamma")).toDouble();
+        if (record.extras.contains(QStringLiteral("gamutWarning")))
+            target->rparams.gamut_warning =
+                record.extras.value(QStringLiteral("gamutWarning")).toBool();
+
+        if (record.extras.contains(QStringLiteral("toneCurveControlPoints"))) {
+            std::vector<colorscreen::point_t> points;
+            const QVariantList encoded =
+                record.extras.value(QStringLiteral("toneCurveControlPoints"))
+                    .toList();
+            bool valid = !encoded.isEmpty();
+            for (const QVariant &entry : encoded) {
+                const QVariantList pair = entry.toList();
+                if (pair.size() != 2) {
+                    valid = false;
+                    break;
+                }
+                const double x = pair[0].toDouble();
+                const double y = pair[1].toDouble();
+                if (!colorscreen::my_isfinite(x) ||
+                    !colorscreen::my_isfinite(y)) {
+                    valid = false;
+                    break;
+                }
+                points.push_back({x, y});
+            }
+            if (valid)
+                target->rparams.output_tone_curve_control_points =
+                    std::move(points);
+        }
         break;
     }
 
