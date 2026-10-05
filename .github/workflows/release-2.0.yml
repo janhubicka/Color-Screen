@@ -36,8 +36,11 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: write
+    # Serialize with the rolling current publisher as well as with another
+    # final promotion. This keeps the tested current tag/assets fixed while the
+    # promoter validates and copies them.
     concurrency:
-      group: colorscreen-final-2.0-release
+      group: colorscreen-current-release
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
