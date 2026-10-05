@@ -192,6 +192,28 @@ class FakeGitHub:
         return ""
 
 
+def workflow_text():
+    """Return the release workflow text tracked beside this test suite."""
+    return (Path(__file__).parents[1] / "workflows" / "release-2.0.yml").read_text(
+        encoding="utf-8")
+
+
+class FinalReleaseWorkflowTests(unittest.TestCase):
+    """Keep the YAML wrapper as restrictive as the promoter itself."""
+
+    def test_publication_is_manual_only_and_main_only(self):
+        workflow = workflow_text()
+        self.assertIn("workflow_dispatch:", workflow)
+        self.assertNotIn("\n  push:", workflow)
+        self.assertIn("github.event_name == 'workflow_dispatch'", workflow)
+        self.assertIn("github.ref == 'refs/heads/main'", workflow)
+
+    def test_final_and_current_publishers_share_one_lock(self):
+        workflow = workflow_text()
+        self.assertIn("group: colorscreen-current-release", workflow)
+        self.assertIn("cancel-in-progress: false", workflow)
+
+
 class FinalReleaseTests(unittest.TestCase):
     """Exercise release gating, exact payload promotion and failure recovery."""
 
