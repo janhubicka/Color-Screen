@@ -270,6 +270,18 @@ class FinalReleaseTests(unittest.TestCase):
             self.publish()
         self.assertEqual(self.github.writes, [])
 
+    def test_current_build_workflow_provenance_is_complete(self):
+        asset = self.github.asset("BUILD-INFO.json")
+        info = json.loads(self.github.archives[asset["id"]])
+        del info["runs"]["build-ubuntu.yml"]
+        data = (json.dumps(info, indent=2) + "\n").encode()
+        self.github.archives[asset["id"]] = data
+        asset["size"] = len(data)
+        asset["digest"] = "sha256:" + self.github.hash_bytes(data)
+        with self.assertRaises(RuntimeError):
+            self.publish()
+        self.assertEqual(self.github.writes, [])
+
     def test_package_checksum_mismatch_is_rejected(self):
         asset = self.github.asset(promoter.CURRENT_PACKAGES[0])
         self.github.archives[asset["id"]] += b"changed"
@@ -345,6 +357,24 @@ class FinalReleaseTests(unittest.TestCase):
         def change_release_state():
             self.github.current_release["prerelease"] = False
         self.github.change_on_download = change_release_state
+        with self.assertRaises(RuntimeError):
+            self.publish()
+        self.assertEqual(self.github.writes, [])
+
+    def test_current_change_after_staging_is_rejected_before_writes(self):
+        original_api = self.github.api
+        current_reads = 0
+
+        def racing_api(path, **kwargs):
+            nonlocal current_reads
+            if path == "releases/tags/current" and kwargs.get("method", "GET") == "GET":
+                current_reads += 1
+                if current_reads == 3:
+                    self.github.current_release["assets"][0]["updated_at"] = (
+                        "2026-10-05T02:00:00Z")
+            return original_api(path, **kwargs)
+
+        self.github.api = racing_api
         with self.assertRaises(RuntimeError):
             self.publish()
         self.assertEqual(self.github.writes, [])
