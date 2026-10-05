@@ -207,7 +207,8 @@ bool decode(const Record &record, ParameterState *state,
 /** Apply RECORD's one domain to TARGET.
 
     CLEAREDREGISTRATION is set when changing the historical screen type made
-    existing registration coordinates/control points semantically invalid. */
+    screen-bound registration/detection/profile evidence semantically invalid
+    and therefore cleared it atomically. */
 bool apply(const Record &record, ParameterState *target,
            bool *clearedRegistration = nullptr, QString *error = nullptr);
 
