@@ -117,25 +117,25 @@ reconstruction.  Stochastic screens (Random, Autochrome, Agfa Farbenplatte)
 cannot be reconstructed from monochrome data because the colour identity of
 their individual screen elements has been lost.
 
-The initial **Suggested image setup** guide should make that distinction
-actionable.  Selecting one of these monochrome screened capture types exposes a
+The initial **Suggested image setup** guide now makes that distinction
+actionable. Selecting one of these monochrome screened capture types exposes a
 regular **Original color screen** selector and an **Automatically detect the
-screen** checkbox which remains disabled until the screen type is chosen.
-Use the same thumbnail/pattern selector as the Screen panel, not a second
-text-only list. When the selected process has a preferred dye model, offer that
-model immediately as a checked suggestion. Conversely, when the historical
+screen** checkbox which remains disabled until the screen type is chosen. It
+reuses the Screen panel's thumbnail/pattern selector rather than maintaining a
+second text-only list. When the selected process has a preferred dye model, the
+guide offers that model as a checked suggestion. Conversely, when the historical
 screen itself is visible in RGB, common screen types can be autodetected from
-their colour pattern: keep automatic detection available without forcing a
-prior screen-type selection or showing a redundant screen chooser.
+their colour pattern without forcing a prior screen-type selection or showing a
+redundant screen chooser.
 
-After successful regular-screen geometry discovery, finish this guided opening
-sequence by offering **Resolution from screen** as a checked PPI suggestion,
-computed by the same physical-screen calibration used by Digital Capture.
-Combine it with any still-needed preferred dye-model suggestion. RGB screen
-identification and monochrome/known-screen geometry discovery should converge on
-this same final recommendation step, so a successful opening normally ends with
-configured geometry and an explicit opportunity to accept the inferred physical
-resolution.
+After successful regular-screen geometry discovery, the same guided path now
+offers **Resolution from screen** as an independent checked PPI suggestion,
+computed by the same physical-screen calibration used by Digital Capture, and
+combines it with any still-needed preferred dye-model suggestion. RGB screen
+identification and monochrome/known-screen geometry discovery converge on this
+same final recommendation step. The recommendation is snapshot-bound and optional:
+closing it never discards mandatory detected geometry, while an intervening
+document/image change invalidates the optional suggestions.
 
 ### Stage 4 — Screen detection and geometry
 
@@ -623,9 +623,15 @@ be evaluated after beta with real wide/narrow inspector sizes; do not trade its
 useful wrapping behaviour for a standard `QTabWidget` that truncates nine
 specialist stages.
 
-## Proposed implementation sequence
+## Implementation status and post-beta sequence
 
-### Phase A — beta hardening (now)
+The beta baseline now implements the original Phase A hardening, the Phase B
+workflow summaries/terminology, and the core Phase C module grammar. Treat those
+sections below as maintained invariants rather than a backlog. New pre-beta work
+should be driven by a reproduced correctness/usability problem or beta-gate
+regression, not by reopening already-settled architecture.
+
+### Phase A — beta hardening (implemented; keep green)
 
 - fix proven correctness/packaging bugs;
 - keep current tab order and architecture;
@@ -633,7 +639,7 @@ specialist stages.
 - expand smoke/sanitizer invariants;
 - make errors and task cancellation reliable.
 
-### Phase B — terminology and summaries
+### Phase B — terminology and summaries (implemented for beta)
 
 - add stage labels and one-line process/image-layer/geometry/MTF/profile
   summaries. The persistent Workflow card reports the actual scalar
@@ -692,13 +698,14 @@ specialist stages.
   same ordinary-view synchronization rule, while Locate remains an active-view
   navigation action and reference scans keep their own source-matched overlay.
 
-### Phase C — module grammar
+### Phase C — module grammar (implemented for beta)
 
-- teach `ParameterPanel` reset/default/modified metadata; the first numeric
-  pilot is active in Digital Capture, with Reset disclosed only for values
-  that differ from their real `ParameterState` defaults. Explicit sentinels
-  such as `0 = not configured/use process default` remain first-class stored
-  defaults even when the ordinary numeric editing range starts above zero;
+- keep `ParameterPanel` reset/default/modified metadata as the shared
+  convention for ordinary saved controls. The original Digital Capture pilot has
+  expanded across the processing panels; Reset is disclosed only for values that
+  differ from their real `ParameterState` defaults. Explicit sentinels such as
+  `0 = not configured/use process default` remain first-class stored defaults
+  even when the ordinary numeric editing range starts above zero;
 - standardize collapsible Common/Diagnostics/Advanced sections;
 - remember expansion state through stable, untranslated section keys.
   All nine processing panels now use this contract: Digital Capture, Tiles,
