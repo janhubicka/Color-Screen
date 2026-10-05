@@ -964,7 +964,10 @@ read_parameter_archive (const char *name, std::string *legacy_csp,
     }
   while (false);
 
-  zip_close (archive);
+  /* Read-only inspection never needs central-directory updates.  Discarding
+     avoids turning an otherwise successful read into an irrelevant close-time
+     write/finalization path.  */
+  zip_discard (archive);
   return ok;
 }
 
@@ -1019,9 +1022,13 @@ write_parameter_archive (const char *name, const std::string &legacy_csp,
 
   if (zip_close (archive) != 0)
     {
-      std::string message = "could not finalize parameter archive";
+      /* libzip retains ownership after a failed zip_close().  Release that
+         handle before removing the caller's staging file.  */
+      std::string message = zip_strerror (archive);
+      zip_discard (archive);
       std::remove (name);
-      return archive_fail (error, message);
+      return archive_fail (
+          error, "could not finalize parameter archive: " + message);
     }
   return true;
 }
