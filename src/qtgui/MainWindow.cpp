@@ -2165,6 +2165,17 @@ void MainWindow::createMenus() {
   connect(m_saveAsAction, &QAction::triggered, this,
           &MainWindow::onSaveParametersAs);
 
+  QAction *reportAction =
+      m_fileMenu->addAction("Save &Reproducibility Report...");
+  reportAction->setObjectName(
+      QStringLiteral("SaveReproducibilityReportAction"));
+  reportAction->setToolTip(
+      tr("Save current workflow/provenance information together with an exact "
+         "copy of the current parameter payload. This diagnostic export does "
+         "not mark the document saved."));
+  connect(reportAction, &QAction::triggered, this,
+          &MainWindow::onSaveReproducibilityReport);
+
   m_fileMenu->addSeparator();
 
   m_renderAction = m_fileMenu->addAction("&Render...");
