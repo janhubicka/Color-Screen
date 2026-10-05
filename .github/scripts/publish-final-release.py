@@ -208,8 +208,10 @@ def validate_package(path: Path) -> None:
         raise RuntimeError(f"Unexpected package asset: {name}")
 
 
-def stage_current_release(github: GitHub, sha: str, directory: Path) -> tuple[list[Path], dict]:
-    """Validate CURRENT and stage byte-identical packages under final names."""
+def stage_current_release(
+        github: GitHub, sha: str, directory: Path
+) -> tuple[list[Path], dict, dict[str, tuple]]:
+    """Validate CURRENT and stage packages plus its exact rolling identity."""
     main_sha = github.api("git/ref/heads/main")["object"]["sha"]
     current_ref = github.api(f"git/ref/tags/{CURRENT_TAG}")["object"]["sha"]
     if main_sha != sha or current_ref != sha:
@@ -296,7 +298,7 @@ def stage_current_release(github: GitHub, sha: str, directory: Path) -> tuple[li
         "".join(f"{sha256(path)}  {path.name}\n" for path in sorted(staged)),
         encoding="utf-8",
     )
-    return staged + [final_sums], build_info
+    return staged + [final_sums], build_info, release_asset_identity(release)
 
 
 def require_current_release_unchanged(
@@ -318,7 +320,8 @@ def publish_final(github: GitHub, sha: str, root: Path, directory: Path) -> bool
     if not release_metadata_is_final(root):
         raise RuntimeError(
             "Source metadata is not final 2.0 (configure.ac/control/NEWS)")
-    assets, build_info = stage_current_release(github, sha, directory)
+    assets, build_info, staged_current_identity = stage_current_release(
+        github, sha, directory)
 
     existing_release = github.api(f"releases/tags/{FINAL_TAG}", optional=True)
     existing_ref = github.api(f"git/ref/tags/{FINAL_TAG}", optional=True)
@@ -338,9 +341,8 @@ def publish_final(github: GitHub, sha: str, root: Path, directory: Path) -> bool
     # tag/draft and immediately before the first stable-release mutation. The
     # current publisher uses a different concurrency group, so this closes the
     # otherwise small check-to-write race.
-    current_release = github.api(f"releases/tags/{CURRENT_TAG}")
     require_current_release_unchanged(
-        github, sha, release_asset_identity(current_release))
+        github, sha, staged_current_identity)
 
     notes = directory / "release-notes.md"
     notes.write_text(
