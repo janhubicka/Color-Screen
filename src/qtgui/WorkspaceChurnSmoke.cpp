@@ -408,6 +408,27 @@ void startWorkspaceChurnSmoke(ColorScreenApplication &app,
           return;
         }
 
+        const QStringList expectedWorkflowStages = {
+            QStringLiteral("Capture"), QStringLiteral("Process"),
+            QStringLiteral("Register"), QStringLiteral("Reconstruct"),
+            QStringLiteral("Color")};
+        QStringList actualWorkflowStages;
+        if (processingTabs) {
+          for (int i = 0; i < processingTabs->stageCount(); ++i)
+            actualWorkflowStages.append(processingTabs->stageText(i));
+        }
+        if (actualWorkflowStages != expectedWorkflowStages ||
+            processingTabs->indexOfStageKey(QStringLiteral("capture")) != 0 ||
+            processingTabs->indexOfStageKey(QStringLiteral("process")) != 1 ||
+            processingTabs->indexOfStageKey(QStringLiteral("register")) != 2 ||
+            processingTabs->indexOfStageKey(QStringLiteral("reconstruct")) != 3 ||
+            processingTabs->indexOfStageKey(QStringLiteral("color")) != 4) {
+          fail(QStringLiteral(
+                   "Workspace churn source document lost the five-stage inspector navigation; actual=[%1]")
+                   .arg(actualWorkflowStages.join(QStringLiteral(", "))));
+          return;
+        }
+
         // Reproducibility-report export is diagnostic only. It must preserve the
         // live save target, modified state and Undo cleanliness while embedding
         // both structured provenance and an exact extractable parameter payload.
@@ -2329,6 +2350,12 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
           return;
         }
         processingTabs->setCurrentIndex(sharpnessTab);
+        if (processingTabs->currentStageKey() !=
+            QStringLiteral("reconstruct")) {
+          fail(QStringLiteral(
+              "Sharpness did not select the Reconstruct workflow stage"));
+          return;
+        }
         first->m_renderTypeParams.type = colorscreen::render_type_realistic_scr;
         first->updateWorkflowSummary();
         if (!nextStepSummary->text().contains(
@@ -2371,6 +2398,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
 
           openWorkflowStageButton->click();
           if (processingTabs->currentIndex() != screenTab ||
+              processingTabs->currentStageKey() != QStringLiteral("process") ||
               QSettings().value(activePanelKey).toString() !=
                   QStringLiteral("screen") ||
               !openWorkflowStageButton->isHidden()) {
