@@ -11,7 +11,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import re
 import shutil
 import subprocess
@@ -174,12 +174,17 @@ def validate_source_tarball(archive: Path) -> None:
         raise RuntimeError(f"Invalid source tarball: {archive.name}") from error
     if not members:
         raise RuntimeError(f"Empty source tarball: {archive.name}")
+    for member in members:
+        path = PurePosixPath(member.name)
+        if path.is_absolute() or ".." in path.parts:
+            raise RuntimeError(
+                f"Unsafe source tarball member in {archive.name}: {member.name}")
     roots = {member.name.split("/", 1)[0] for member in members if member.name}
     if len(roots) != 1 or not next(iter(roots)).startswith("colorscreen-"):
         raise RuntimeError(
             f"Unexpected source tarball root in {archive.name}: {sorted(roots)}")
     root = next(iter(roots))
-    names = {member.name for member in members}
+    by_name = {member.name: member for member in members}
     required = (
         f"{root}/configure",
         f"{root}/NEWS",
@@ -187,8 +192,8 @@ def validate_source_tarball(archive: Path) -> None:
         f"{root}/src/qtgui/Makefile.in",
     )
     for name in required:
-        if name not in names:
-            raise RuntimeError(f"Missing {name} in {archive.name}")
+        if name not in by_name or by_name[name].size == 0:
+            raise RuntimeError(f"Missing or empty {name} in {archive.name}")
 
 
 def validate_zip(archive: Path, required: tuple[str, ...]) -> None:
@@ -268,6 +273,7 @@ def prepare_assets(github: GitHub, runs: dict[str, dict], directory: Path) -> li
                                  for path in sorted(assets)), encoding="utf-8")
     return assets + [checksums]
 
+
 def publish(github: GitHub, sha: str, directory: Path) -> bool:
     """Publish only after staging all packages and rechecking build eligibility."""
     runs = ready_runs(github, sha)
@@ -296,9 +302,11 @@ def publish(github: GitHub, sha: str, directory: Path) -> bool:
         "x86-64 build. The **znver2** and **znver4** alternatives require CPUs "
         "supporting those instruction sets. Extract the entire portable ZIP "
         "and launch `bin/colorscreen-qt.exe`; keep the bundled DLLs and resources.\n\n"
-        "`SHA256SUMS` contains checksums; `BUILD-INFO.json` records the source "
-        "commit and build runs. These assets are replaced after both platform "
-        "workflows pass for a new main commit.\n", encoding="utf-8")
+        "The source tarball is the exact archive produced and validated by "
+        "Ubuntu `make distcheck`. `SHA256SUMS` contains checksums; "
+        "`BUILD-INFO.json` records the source commit and build runs. These "
+        "assets are replaced after macOS, Windows and Ubuntu workflows pass "
+        "for a new main commit.\n", encoding="utf-8")
     # Stage everything before touching the release. Only current is modified;
     # stable release tags and unrelated assets are deliberately left alone.
     if release is None:
