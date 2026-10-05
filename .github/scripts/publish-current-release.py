@@ -11,17 +11,21 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import re
 import shutil
 import subprocess
 import sys
+import tarfile
 import tempfile
 from urllib.parse import urlencode
 import zipfile
 
 
-WORKFLOWS = ("build-macos.yml", "build-windows.yml")
+MACOS_WORKFLOW = "build-macos.yml"
+WINDOWS_WORKFLOW = "build-windows.yml"
+UBUNTU_WORKFLOW = "build-ubuntu.yml"
+WORKFLOWS = (MACOS_WORKFLOW, WINDOWS_WORKFLOW, UBUNTU_WORKFLOW)
 VARIANTS = ("ucrt64", "ucrt64-znver2", "ucrt64-znver4")
 PREFIX = "Color-Screen-2.0-current"
 TAG = "current"
@@ -100,7 +104,7 @@ def select_run(runs: list[dict], repository: str, sha: str) -> dict | None:
 
 
 def ready_runs(github: GitHub, sha: str) -> dict[str, dict] | None:
-    """Require both complete platform workflows for the current main commit."""
+    """Require complete macOS, Windows and Ubuntu workflows for current main."""
     if github.api("git/ref/heads/main")["object"]["sha"] != sha:
         print("Skipping superseded main commit.")
         return None
@@ -145,6 +149,53 @@ def unpack_single(archive: Path, member: str, destination: Path) -> None:
             shutil.copyfileobj(stream, output)
 
 
+def unpack_source_tarball(archive: Path, destination: Path) -> str:
+    """Copy the one dist tarball from an Actions ZIP and return its member name."""
+    with zipfile.ZipFile(archive) as source:
+        names = source.namelist()
+        if len(names) != 1 or not re.fullmatch(
+                r"colorscreen-[A-Za-z0-9_.+-]+[.]tar[.]gz", names[0]):
+            raise RuntimeError(
+                f"Unexpected source artifact contents in {archive.name}: {names}")
+        member = names[0]
+        if source.getinfo(member).file_size == 0:
+            raise RuntimeError(f"Empty source tarball in {archive.name}")
+        with source.open(member) as stream, destination.open("wb") as output:
+            shutil.copyfileobj(stream, output)
+        return member
+
+
+def validate_source_tarball(archive: Path) -> None:
+    """Inspect the dist tarball without extracting it or executing its contents."""
+    try:
+        with tarfile.open(archive, "r:gz") as source:
+            members = source.getmembers()
+    except (tarfile.TarError, OSError) as error:
+        raise RuntimeError(f"Invalid source tarball: {archive.name}") from error
+    if not members:
+        raise RuntimeError(f"Empty source tarball: {archive.name}")
+    for member in members:
+        path = PurePosixPath(member.name)
+        if path.is_absolute() or ".." in path.parts:
+            raise RuntimeError(
+                f"Unsafe source tarball member in {archive.name}: {member.name}")
+    roots = {member.name.split("/", 1)[0] for member in members if member.name}
+    if len(roots) != 1 or not next(iter(roots)).startswith("colorscreen-"):
+        raise RuntimeError(
+            f"Unexpected source tarball root in {archive.name}: {sorted(roots)}")
+    root = next(iter(roots))
+    by_name = {member.name: member for member in members}
+    required = (
+        f"{root}/configure",
+        f"{root}/NEWS",
+        f"{root}/README.md",
+        f"{root}/src/qtgui/Makefile.in",
+    )
+    for name in required:
+        if name not in by_name or by_name[name].size == 0:
+            raise RuntimeError(f"Missing or empty {name} in {archive.name}")
+
+
 def validate_zip(archive: Path, required: tuple[str, ...]) -> None:
     """Check ZIP integrity and expected application files without executing them."""
     with zipfile.ZipFile(archive) as source:
@@ -157,23 +208,37 @@ def validate_zip(archive: Path, required: tuple[str, ...]) -> None:
 
 
 def prepare_assets(github: GitHub, runs: dict[str, dict], directory: Path) -> list[Path]:
-    """Stage the tested app bundle and every Windows installer/portable variant."""
+    """Stage tested binary packages plus the distchecked source tarball."""
     assets = []
     for workflow, run in runs.items():
         artifacts = github.items(f"actions/runs/{run['id']}/artifacts?per_page=100",
                                  "artifacts")
-        specs = [("macOS-Color-Screen-App", "Color-Screen-macOS.zip",
-                  f"{PREFIX}-macOS.zip")] if workflow == WORKFLOWS[0] else [
-            spec for variant in VARIANTS for spec in (
-                (f"windows-installer-{variant}",
-                 f"Color-Screen-Installer-{variant}.exe",
-                 f"{PREFIX}-windows-{variant}-installer.exe"),
-                # Use the COMPLETE installed tree: bin, shared resources, LICENSE
-                # and README. The older bin-only artifact omits installed data.
-                (f"windows-binary-{variant}", None,
-                 f"{PREFIX}-windows-{variant}-portable.zip"),
-            )
-        ]
+        if workflow == MACOS_WORKFLOW:
+            specs = [("macOS-Color-Screen-App", "Color-Screen-macOS.zip",
+                      f"{PREFIX}-macOS.zip")]
+        elif workflow == WINDOWS_WORKFLOW:
+            specs = [
+                spec for variant in VARIANTS for spec in (
+                    (f"windows-installer-{variant}",
+                     f"Color-Screen-Installer-{variant}.exe",
+                     f"{PREFIX}-windows-{variant}-installer.exe"),
+                    (f"windows-binary-{variant}", None,
+                     f"{PREFIX}-windows-{variant}-portable.zip"),
+                )
+            ]
+        elif workflow == UBUNTU_WORKFLOW:
+            artifact = require_artifact(artifacts, "source-tarball", run)
+            artifact_zip = directory / "source-artifact.zip"
+            destination = directory / f"{PREFIX}-sources.tar.gz"
+            github.download(artifact, artifact_zip)
+            unpack_source_tarball(artifact_zip, destination)
+            artifact_zip.unlink()
+            validate_source_tarball(destination)
+            assets.append(destination)
+            continue
+        else:
+            raise RuntimeError(f"Unexpected release workflow: {workflow}")
+
         for artifact_name, member, filename in specs:
             artifact = require_artifact(artifacts, artifact_name, run)
             destination = directory / filename
@@ -197,7 +262,7 @@ def prepare_assets(github: GitHub, runs: dict[str, dict], directory: Path) -> li
     manifest = directory / "BUILD-INFO.json"
     manifest.write_text(json.dumps({
         "release": TAG, "target_version": "2.0", "repository": github.repository,
-        "commit": runs[WORKFLOWS[0]]["head_sha"],
+        "commit": runs[MACOS_WORKFLOW]["head_sha"],
         "runs": {name: {"id": run["id"], "attempt": run["run_attempt"],
                         "url": run["html_url"]} for name, run in runs.items()},
         "sha256": {path.name: sha256(path) for path in assets},
@@ -237,9 +302,11 @@ def publish(github: GitHub, sha: str, directory: Path) -> bool:
         "x86-64 build. The **znver2** and **znver4** alternatives require CPUs "
         "supporting those instruction sets. Extract the entire portable ZIP "
         "and launch `bin/colorscreen-qt.exe`; keep the bundled DLLs and resources.\n\n"
-        "`SHA256SUMS` contains checksums; `BUILD-INFO.json` records the source "
-        "commit and build runs. These assets are replaced after both platform "
-        "workflows pass for a new main commit.\n", encoding="utf-8")
+        "The source tarball is the exact archive produced and validated by "
+        "Ubuntu `make distcheck`. `SHA256SUMS` contains checksums; "
+        "`BUILD-INFO.json` records the source commit and build runs. These "
+        "assets are replaced after macOS, Windows and Ubuntu workflows pass "
+        "for a new main commit.\n", encoding="utf-8")
     # Stage everything before touching the release. Only current is modified;
     # stable release tags and unrelated assets are deliberately left alone.
     if release is None:

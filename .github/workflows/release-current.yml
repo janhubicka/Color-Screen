@@ -2,7 +2,7 @@ name: Publish current release
 
 on:
   workflow_run:
-    workflows: ["MacOS build", "Windows build"]
+    workflows: ["MacOS build", "Windows build", "Ubuntu build"]
     types: [completed]
     branches: [main]
   workflow_dispatch:
@@ -12,6 +12,7 @@ on:
       - .github/workflows/release-current.yml
       - .github/workflows/build-macos.yml
       - .github/workflows/build-windows.yml
+      - .github/workflows/build-ubuntu.yml
       - .github/scripts/*current*release*
       - .github/CURRENT-RELEASE.md
 
@@ -46,8 +47,8 @@ jobs:
     permissions:
       contents: write
       actions: read
-    # Both platform completion events share one publisher lock. Never cancel
-    # a publisher halfway through replacing the rolling release's assets.
+    # All platform completion events share one publisher lock. Never cancel a
+    # publisher halfway through replacing the rolling release's assets.
     concurrency:
       group: colorscreen-current-release
       cancel-in-progress: false
