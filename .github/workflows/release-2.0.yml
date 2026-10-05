@@ -2,6 +2,11 @@ name: Publish Color-Screen 2.0
 
 on:
   workflow_dispatch:
+    inputs:
+      confirm_release:
+        description: "Type v2.0 to publish the final stable release"
+        required: true
+        type: string
   pull_request:
     branches: [main]
     paths:
@@ -31,7 +36,8 @@ jobs:
     if: >-
       github.repository == 'janhubicka/Color-Screen' &&
       github.event_name == 'workflow_dispatch' &&
-      github.ref == 'refs/heads/main'
+      github.ref == 'refs/heads/main' &&
+      inputs.confirm_release == 'v2.0'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
