@@ -2073,6 +2073,82 @@ bool runBetaInvariantSmoke() {
       userActivations != 1)
     return fail("user inspector activation was not distinguished from fallback");
 
+  // Workflow stages filter only presentation buttons; panel keys, programmatic
+  // selection, and explicit logical visibility retain their old semantics.
+  MultiLineTabWidget groupedTabs(&hiddenHost);
+  groupedTabs.addStage(QStringLiteral("Capture"), QStringLiteral("capture"));
+  groupedTabs.addStage(QStringLiteral("Process"), QStringLiteral("process"));
+  const int groupedCapture =
+      groupedTabs.addTab(new QWidget, QStringLiteral("Digital capture"),
+                         QStringLiteral("capture_panel"),
+                         QStringLiteral("capture"));
+  const int groupedTiles =
+      groupedTabs.addTab(new QWidget, QStringLiteral("Tiles"),
+                         QStringLiteral("tiles_panel"),
+                         QStringLiteral("capture"));
+  const int groupedScreen =
+      groupedTabs.addTab(new QWidget, QStringLiteral("Screen"),
+                         QStringLiteral("screen_panel"),
+                         QStringLiteral("process"));
+  if (groupedTabs.stageCount() != 2 ||
+      groupedTabs.stageText(0) != QStringLiteral("Capture") ||
+      groupedTabs.stageKey(1) != QStringLiteral("process") ||
+      groupedTabs.indexOfStageKey(QStringLiteral("capture")) != 0 ||
+      groupedTabs.currentStageKey() != QStringLiteral("capture"))
+    return fail("workflow-stage registration or stable-key lookup is inconsistent");
+
+  int groupedChanges = 0;
+  int groupedActivations = 0;
+  QObject::connect(&groupedTabs, &MultiLineTabWidget::currentChanged,
+                   &groupedTabs,
+                   [&groupedChanges](int) { ++groupedChanges; });
+  QObject::connect(&groupedTabs, &MultiLineTabWidget::tabActivated,
+                   &groupedTabs,
+                   [&groupedActivations](int) { ++groupedActivations; });
+
+  groupedTabs.setCurrentIndex(groupedScreen);
+  if (groupedTabs.currentIndex() != groupedScreen ||
+      groupedTabs.currentStageKey() != QStringLiteral("process") ||
+      groupedChanges != 1 || groupedActivations != 0)
+    return fail("programmatic grouped-panel selection changed user semantics");
+
+  QPushButton *captureStageButton = nullptr;
+  for (QPushButton *button : groupedTabs.findChildren<QPushButton *>())
+    if (button->objectName() == QStringLiteral("WorkflowStageButton") &&
+        button->property("stageKey").toString() == QStringLiteral("capture")) {
+      captureStageButton = button;
+      break;
+    }
+  if (!captureStageButton)
+    return fail("workflow stage did not expose its stable key on the button");
+
+  captureStageButton->click();
+  if (groupedTabs.currentIndex() != groupedCapture ||
+      groupedTabs.currentStageKey() != QStringLiteral("capture") ||
+      groupedChanges != 2 || groupedActivations != 1)
+    return fail("user workflow-stage activation did not select its first panel");
+
+  groupedTabs.setTabVisible(groupedCapture, false);
+  if (groupedTabs.currentIndex() != groupedTiles ||
+      groupedTabs.currentStageKey() != QStringLiteral("capture") ||
+      groupedChanges != 3 || groupedActivations != 1)
+    return fail("grouped hidden-panel fallback escaped the selected stage");
+
+  groupedTabs.setTabVisible(groupedTiles, false);
+  if (groupedTabs.currentIndex() != groupedScreen ||
+      groupedTabs.currentStageKey() != QStringLiteral("process") ||
+      !captureStageButton->isHidden() || groupedChanges != 4 ||
+      groupedActivations != 1)
+    return fail("empty workflow stage did not fall back without user activation");
+
+  groupedTabs.setTabVisible(groupedCapture, true);
+  groupedTabs.setCurrentIndex(groupedCapture);
+  if (groupedTabs.currentIndex() != groupedCapture ||
+      groupedTabs.currentStageKey() != QStringLiteral("capture") ||
+      captureStageButton->isHidden() || groupedChanges != 5 ||
+      groupedActivations != 1)
+    return fail("restored workflow stage did not support programmatic navigation");
+
   // Checkbox enabledCheck must match the rest of ParameterPanel: a missing
   // prerequisite disables a still-visible row. Logical disappearance is an
   // explicit setParameterApplicability() decision, never an overloaded meaning
