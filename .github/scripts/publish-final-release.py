@@ -174,9 +174,9 @@ def validate_source_tarball(archive: Path) -> None:
         if path.is_absolute() or ".." in path.parts:
             raise RuntimeError(f"Unsafe source member: {member.name}")
     roots = {member.name.split("/", 1)[0] for member in members if member.name}
-    if len(roots) != 1 or not next(iter(roots)).startswith("colorscreen-2.0"):
+    if roots != {"colorscreen-2.0"}:
         raise RuntimeError(f"Unexpected final source root: {sorted(roots)}")
-    root = next(iter(roots))
+    root = "colorscreen-2.0"
     by_name = {member.name: member for member in members}
     for relative in ("configure", "NEWS", "README.md", "src/qtgui/Makefile.in"):
         name = f"{root}/{relative}"
@@ -303,15 +303,15 @@ def publish_final(github: GitHub, sha: str, root: Path, directory: Path) -> bool
     notes.write_text(
         "# Color-Screen 2.0\n\n"
         f"Final release built and tested from commit "
-        f"[\`{sha}\`](https://github.com/{github.repository}/commit/{sha}).\n\n"
+        f"[`{sha}`](https://github.com/{github.repository}/commit/{sha}).\n\n"
         "The packages below are byte-identical payloads promoted from the tested "
-        "rolling \`current\` prerelease for this commit. See "
+        "rolling `current` prerelease for this commit. See "
         f"[NEWS](https://github.com/{github.repository}/blob/{FINAL_TAG}/NEWS) "
         "for the complete change list.\n\n"
         "Use the general **ucrt64** Windows package unless your CPU supports one "
         "of the specialized znver builds. The macOS bundle is ad-hoc signed and "
-        "is not Developer ID notarized. \`SHA256SUMS\` and "
-        "\`BUILD-INFO.json\` record package integrity and build provenance.\n",
+        "is not Developer ID notarized. `SHA256SUMS` and "
+        "`BUILD-INFO.json` record package integrity and build provenance.\n",
         encoding="utf-8",
     )
 
