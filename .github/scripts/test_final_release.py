@@ -345,6 +345,40 @@ class FinalReleaseTests(unittest.TestCase):
             self.publish()
         self.assertEqual(self.github.writes, [])
 
+    def test_stale_news_in_final_source_archive_is_rejected(self):
+        asset = self.github.asset(promoter.CURRENT_PACKAGES[-1])
+        data = tar_gz_bytes(extra={
+            "colorscreen-2.0/NEWS":
+                b"Changes planned for version 2.0 (development version 2.0alpha)\n",
+        })
+        self.github.archives[asset["id"]] = data
+        asset["size"] = len(data)
+        asset["digest"] = "sha256:" + self.github.hash_bytes(data)
+
+        build_asset = self.github.asset("BUILD-INFO.json")
+        info = json.loads(self.github.archives[build_asset["id"]])
+        info["sha256"][promoter.CURRENT_PACKAGES[-1]] = self.github.hash_bytes(data)
+        build_data = (json.dumps(info, indent=2) + "\n").encode()
+        self.github.archives[build_asset["id"]] = build_data
+        build_asset["size"] = len(build_data)
+        build_asset["digest"] = "sha256:" + self.github.hash_bytes(build_data)
+
+        sums_asset = self.github.asset("SHA256SUMS")
+        sums = promoter.parse_checksums(
+            self.github.archives[sums_asset["id"]].decode())
+        sums[promoter.CURRENT_PACKAGES[-1]] = self.github.hash_bytes(data)
+        sums["BUILD-INFO.json"] = self.github.hash_bytes(build_data)
+        sums_data = "".join(
+            f"{digest}  {name}\n" for name, digest in sorted(sums.items())
+        ).encode()
+        self.github.archives[sums_asset["id"]] = sums_data
+        sums_asset["size"] = len(sums_data)
+        sums_asset["digest"] = "sha256:" + self.github.hash_bytes(sums_data)
+
+        with self.assertRaises(RuntimeError):
+            self.publish()
+        self.assertEqual(self.github.writes, [])
+
     def test_current_change_during_download_is_rejected(self):
         def change_current():
             self.github.current_release["assets"][0]["updated_at"] = (
