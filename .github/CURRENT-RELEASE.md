@@ -7,21 +7,25 @@ version, publish a `v2.0` tag, or replace the existing stable release as Latest.
 
 ## When it publishes
 
-The workflow responds to completion of **MacOS build** or **Windows build** on
-`main`. It publishes only when **both complete workflows have succeeded for the
-same current `main` commit**, including the existing checks and smoke tests.
-It does not publish a macOS package merely because the app artifact was uploaded
-before the later checking build and relocated-bundle smoke test.
+The workflow responds to completion of **MacOS build**, **Windows build**, or
+**Ubuntu build** on `main`. It publishes only when all three complete workflows
+have succeeded for the same current `main` commit, including the existing
+checks and smoke tests. The Ubuntu workflow supplies the source tarball only
+after `make distcheck` has validated it. The publisher therefore does not
+publish a macOS package merely because the app artifact was uploaded before the
+later checking build and relocated-bundle smoke test, nor publish a source
+archive before distcheck succeeds.
 
 Only same-repository **push** builds qualify. Pull requests (including forks),
 other branches, manual platform builds, failed/cancelled builds and superseded
-main commits cannot publish. All Windows GCC matrix variants must finish
-successfully. The Windows Clang, Linux and dedicated sanitizer workflows remain
-independent CI checks; they are not additional gates for this packaging release.
+main commits cannot publish. All Windows GCC matrix variants and the complete
+Ubuntu workflow must finish successfully. Windows Clang and the dedicated
+sanitizer workflow remain independent CI checks; they are not additional gates
+for this packaging release.
 
 Publication is serialized without cancelling an active publisher. Main HEAD and
-both run IDs/attempts are checked again after downloading every package, so a
-new commit or rerun during staging cannot silently mix revisions. Missing,
+all three run IDs/attempts are checked again after downloading every package, so
+a new commit or rerun during staging cannot silently mix revisions. Missing,
 expired, corrupt or wrongly attributed artifacts fail before release writes.
 The workflow reuses existing build artifacts; it does not rebuild the program.
 
@@ -36,8 +40,9 @@ The workflow reuses existing build artifacts; it does not rebuild the program.
 | `Color-Screen-2.0-current-windows-ucrt64-znver2-portable.zip` | Portable `-march=znver2` build. |
 | `Color-Screen-2.0-current-windows-ucrt64-znver4-installer.exe` | Installer for the existing `-march=znver4` build. |
 | `Color-Screen-2.0-current-windows-ucrt64-znver4-portable.zip` | Portable `-march=znver4` build. |
-| `SHA256SUMS` | SHA-256 checksums of all seven packages and the build manifest. |
-| `BUILD-INFO.json` | Source SHA, target release series, source build URLs/IDs/attempts and package checksums. |
+| `Color-Screen-2.0-current-sources.tar.gz` | Exact source archive produced and validated by Ubuntu `make distcheck`. |
+| `SHA256SUMS` | SHA-256 checksums of all eight packages and the build manifest. |
+| `BUILD-INFO.json` | Source SHA, target release series, all three source build URLs/IDs/attempts and package checksums. |
 
 Prefer the unsuffixed `ucrt64` Windows packages unless the CPU supports the
 instruction set used by a specialized build. Portable packages use the
@@ -46,8 +51,12 @@ archives: the complete tree retains shared resources, DLLs, LICENSE and README.
 The raw Actions ZIP is already a portable archive and is not wrapped in another
 ZIP. The macOS app's internal executable permissions, framework symlinks and
 ad-hoc signature are preserved by copying its original `ditto` ZIP byte-for-byte.
-This does not introduce Developer ID signing or notarization, a new macOS
-architecture, or a change to the existing packaging process.
+The source Actions artifact is opened only to copy its single
+`colorscreen-*.tar.gz` member; the publisher never extracts it. It rejects
+unexpected roots, unsafe absolute/`..` members and missing core release files
+before touching the GitHub release. This does not introduce Developer ID signing
+or notarization, a new macOS architecture, or a change to the application build
+process.
 
 Asset names and the release URL remain stable between successful main builds:
 
@@ -85,7 +94,8 @@ python3 -m unittest discover -s .github/scripts -p 'test_current_release.py' -v
 ```
 
 It covers provenance and latest-run selection, failed/incomplete builds, artifact
-validation, checksum manifests, intact macOS archives and Windows installed trees,
-first/repeated publication, stale HEADs, reruns, immutability and upload errors.
-If platform workflow names, artifact names or Windows variants change, update
+validation, checksum manifests, intact macOS archives, Windows installed trees,
+distchecked source archives (including unsafe-member rejection), first/repeated
+publication, stale HEADs, reruns, immutability and upload errors. If platform
+workflow names, artifact names or Windows variants change, update
 `release-current.yml`, `publish-current-release.py` and its tests together.
