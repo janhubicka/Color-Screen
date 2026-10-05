@@ -51,8 +51,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # Promotion is always trusted main; never execute PR script content.
-          ref: main
+          # Pin the trusted main revision selected by workflow_dispatch. API
+          # gates below still require main/current to remain at this exact SHA.
+          ref: ${{ github.sha }}
           persist-credentials: false
       - name: Promote exact tested current packages
         env:
