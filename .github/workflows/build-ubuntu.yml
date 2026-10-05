@@ -116,8 +116,14 @@ jobs:
         mkdir -p /tmp/install
         # Install to temp dir
         make install DESTDIR=/tmp/install
-        # Run packaging script
-        ./os/linux/package_deb.sh /tmp/install 2.0alpha ${{ matrix.arch }}
+        # Package with the version produced by configure rather than keeping a
+        # second release-version literal in CI.
+        PACKAGE_VERSION=$(awk '$1 == "PACKAGE_VERSION" && $2 == "=" { print $3; exit }' Makefile)
+        if [ -z "$PACKAGE_VERSION" ]; then
+          echo "Could not determine PACKAGE_VERSION from configured Makefile" >&2
+          exit 1
+        fi
+        ./os/linux/package_deb.sh /tmp/install "$PACKAGE_VERSION" ${{ matrix.arch }}
     - uses: actions/upload-artifact@v4
       with:
         name: colorscreen-deb-${{ matrix.arch }}

@@ -16,9 +16,13 @@ rendering tool that would later become Color-Screen.
 
 # Installing Color-Screen
 ## Binary packages
-We provide binary packages for Windows (x86) and MacOS (aarch64) at
+The stable release and installation notes are listed on
 our [wiki page](https://github.com/janhubicka/Color-Screen/wiki#software-packages).
-We are happy to build more configurations if that seem useful.
+Rolling Windows (x86-64) and macOS (aarch64) development packages for the
+upcoming 2.0 release are published as the
+[`current` GitHub prerelease](https://github.com/janhubicka/Color-Screen/releases/tag/current).
+Those packages are built from tested `main` revisions and are not the final
+2.0 release. We are happy to build more configurations if that seems useful.
 
 ## Building from source code
 ### Prerequisites
