@@ -154,6 +154,8 @@ void clearRegistrationForScreenChange(ParameterState *state)
     state->scrToImg.mesh_trans.reset();
     state->scrToImg.mesh_trans_is_scr_to_img = false;
     state->solver.remove_points();
+    state->detect = colorscreen::scr_detect_parameters();
+    state->profileSpots.clear();
 }
 
 /** Apply capture/device defaults without copying image-specific calibrations. */
@@ -313,9 +315,10 @@ QString scopeDescription(Scope scope)
             "ParameterPreset",
             "Historical screen type, image-layer mixing, contact-copy "
             "simulation, strip proportions, and dye model assumptions. If the "
-            "screen type changes, incompatible registration coordinates and "
-            "control points are cleared. Fitted profile matrices are not "
-            "changed.");
+            "screen type changes, incompatible registration coordinates, "
+            "control points, detected screen-color calibration, and "
+            "screen-coordinate profile spots are cleared. Fitted profile "
+            "matrices are retained and become stale until refitted.");
     case Scope::Reconstruction:
         return QCoreApplication::translate(
             "ParameterPreset",
