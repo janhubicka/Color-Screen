@@ -2468,46 +2468,36 @@ digital_laboratory (int argc, char **argv)
 	  fprintf (stderr, "Cannot load %s: %s\n", argv[1], error);
 	  exit(1);
 	}
-      FILE *in = fopen (argv[2], "rt");
       if (verbose)
 	{
 	  progress.pause_stdout ();
 	  printf ("Loading color screen parameters: %s\n", argv[2]);
 	  progress.resume_stdout ();
 	}
-      if (!in)
+      std::string parameter_error;
+      if (!load_parameter_filename (argv[2], &param1, NULL, &rparam1, NULL,
+                                    &parameter_error))
 	{
 	  progress.pause_stdout ();
-	  perror (argv[2]);
-	  return;
-	}
-      if (!load_csp (in, &param1, NULL, &rparam1, NULL, &error))
-	{
-	  progress.pause_stdout ();
-	  fprintf (stderr, "Cannot load %s: %s\n", argv[2], error);
+	  fprintf (stderr, "Cannot load %s: %s\n", argv[2],
+                   parameter_error.c_str ());
 	  exit(1);
 	}
-      fclose (in);
-      in = fopen (argv[3], "rt");
       if (verbose)
 	{
 	  progress.pause_stdout ();
 	  printf ("Loading color screen parameters: %s\n", argv[3]);
 	  progress.resume_stdout ();
 	}
-      if (!in)
+      parameter_error.clear ();
+      if (!load_parameter_filename (argv[3], &param2, NULL, &rparam2, NULL,
+                                    &parameter_error))
 	{
 	  progress.pause_stdout ();
-	  perror (argv[3]);
+	  fprintf (stderr, "Cannot load %s: %s\n", argv[3],
+                   parameter_error.c_str ());
 	  exit(1);
 	}
-      if (!load_csp (in, &param2, NULL, &rparam2, NULL, &error))
-	{
-	  progress.pause_stdout ();
-	  fprintf (stderr, "Cannot load %s: %s\n", argv[3], error);
-	  exit(1);
-	}
-      fclose (in);
       double deltae_avg, deltae_max;
       if (!compare_deltae (scan, param1, rparam1, param2, rparam2, argc == 4 ? NULL : argv[4], &deltae_avg, &deltae_max, &progress))
         {
