@@ -964,6 +964,7 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
     std::optional<ParameterState> state;
     std::vector<colorscreen::color_match> spotResults;
     QString loadedPath;
+    bool loadedArchive = false;
     QString suggestedPath;
     std::optional<ParameterState> baseline;
   };
@@ -1109,7 +1110,11 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
                       m_profileSpots = std::move(sidecarState.profileSpots);
                       m_profileCalibration.spotResults =
                           std::move(sidecarStaging->spotResults);
-                      m_parameterFile.setLoaded(sidecarStaging->loadedPath);
+                      m_parameterFile.setLoaded(
+                          sidecarStaging->loadedPath,
+                          sidecarStaging->loadedArchive
+                              ? ParameterFileState::Format::Archive
+                              : ParameterFileState::Format::LegacyCsp);
                       addToRecentParams(sidecarStaging->loadedPath);
 
                       if (colorscreen::screen_geometry_configured_p(
@@ -1369,9 +1374,11 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
             if (result == QMessageBox::Yes) {
               ParameterState sidecarState;
               std::vector<colorscreen::color_match> sidecarSpotResults;
+              bool sidecarArchive = false;
               QString loadError;
               if (!loadParameterPayload(parFile, &sidecarState,
-                                        &sidecarSpotResults, &loadError)) {
+                                        &sidecarSpotResults, &sidecarArchive,
+                                        &loadError)) {
                 // Parsing failed, so the file is at most a later Save-As
                 // suggestion. Publish that suggestion only if the image opens.
                 sidecarStaging->suggestedPath = parFile;
@@ -1381,6 +1388,7 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
                 sidecarStaging->spotResults =
                     std::move(sidecarSpotResults);
                 sidecarStaging->loadedPath = parFile;
+                sidecarStaging->loadedArchive = sidecarArchive;
               }
             } else {
               // Declining (or closing) the optional question keeps the natural
@@ -1811,9 +1819,10 @@ bool MainWindow::loadParameterFile(const QString &fileName) {
 
   ParameterState loadedState;
   std::vector<colorscreen::color_match> loadedSpotResults;
+  bool loadedArchive = false;
   QString loadError;
   if (!loadParameterPayload(fileName, &loadedState, &loadedSpotResults,
-                            &loadError)) {
+                            &loadedArchive, &loadError)) {
     showParameterLoadFailure(this, loadError);
     return false;
   }
@@ -1858,7 +1867,10 @@ bool MainWindow::loadParameterFile(const QString &fileName) {
   m_recoveryDirty = false;
 
   const QString absoluteFileName = QFileInfo(fileName).absoluteFilePath();
-  m_parameterFile.setLoaded(absoluteFileName);
+  m_parameterFile.setLoaded(
+      absoluteFileName,
+      loadedArchive ? ParameterFileState::Format::Archive
+                    : ParameterFileState::Format::LegacyCsp);
   rememberFileDialogDirectory(QStringLiteral("lastParameterDir"),
                               absoluteFileName);
 
