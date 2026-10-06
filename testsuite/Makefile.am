@@ -66,9 +66,13 @@ CLEANFILES              = slanted-edge-1.log \
                           paget_amaze_test.tiff \
                           paget_rcd_test.tiff \
                           paget_lmmse_test.tiff \
-                          dufay_rcd_test.tiff
+                          dufay_rcd_test.tiff \
+                          out-parameter-archive.cspar \
+                          out-parameter-legacy.tif \
+                          out-parameter-archive.tif
 
 TESTS                   = unittests.test \
+                          parameter-archive-cli.test \
 			  dufaycolor_nikon_coolsan9000ED_4000DPI_raw.test  \
 			  dufaycolor_nikon_coolsan9000ED_4000DPI_raw-finetune.test \
 			  dufaycolor_dt_captureone_export.test \
