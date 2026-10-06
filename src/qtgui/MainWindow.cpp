@@ -56,6 +56,7 @@
 #include <QHBoxLayout>
 #include <QIcon>
 #include <QLabel>
+#include <QLineEdit>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
@@ -2107,6 +2108,304 @@ void MainWindow::onModeChanged(int index) {
   }
 }
 
+/** Prompt for a name and save one explicit reusable parameter domain. */
+void MainWindow::promptSavePreset(qtgui_presets::Scope scope) {
+  if (QDialog *existing =
+          findChild<QDialog *>(QStringLiteral("SaveParameterPresetDialog"))) {
+    existing->raise();
+    existing->activateWindow();
+    return;
+  }
+
+  auto *dialog = new QDialog(this);
+  dialog->setObjectName(QStringLiteral("SaveParameterPresetDialog"));
+  dialog->setWindowTitle(
+      tr("Save %1 Preset").arg(qtgui_presets::scopeLabel(scope)));
+  dialog->setAttribute(Qt::WA_DeleteOnClose);
+  dialog->setModal(false);
+
+  auto *layout = new QVBoxLayout(dialog);
+  auto *description = new QLabel(qtgui_presets::scopeDescription(scope), dialog);
+  description->setWordWrap(true);
+  layout->addWidget(description);
+
+  auto *form = new QFormLayout();
+  auto *name = new QLineEdit(dialog);
+  name->setObjectName(QStringLiteral("ParameterPresetName"));
+  form->addRow(tr("Preset name:"), name);
+  layout->addLayout(form);
+
+  auto *replaceNotice = new QLabel(dialog);
+  replaceNotice->setObjectName(QStringLiteral("ParameterPresetReplaceNotice"));
+  replaceNotice->setWordWrap(true);
+  replaceNotice->hide();
+  layout->addWidget(replaceNotice);
+
+  auto *buttons =
+      new QDialogButtonBox(QDialogButtonBox::Save | QDialogButtonBox::Cancel,
+                           dialog);
+  QPushButton *saveButton = buttons->button(QDialogButtonBox::Save);
+  saveButton->setEnabled(false);
+  layout->addWidget(buttons);
+
+  auto refreshNameState = [name, replaceNotice, saveButton, scope]() {
+    const QString normalized = name->text().trimmed();
+    saveButton->setEnabled(!normalized.isEmpty());
+    bool replaces = false;
+    for (const qtgui_presets::Record &record : qtgui_presets::records())
+      if (record.scope == scope &&
+          record.name.compare(normalized, Qt::CaseInsensitive) == 0) {
+        replaces = true;
+        break;
+      }
+    replaceNotice->setText(
+        QCoreApplication::translate(
+            "MainWindow",
+            "A %1 preset with this name already exists and will be replaced.")
+            .arg(qtgui_presets::scopeLabel(scope)));
+    replaceNotice->setVisible(replaces && !normalized.isEmpty());
+  };
+  connect(name, &QLineEdit::textChanged, dialog,
+          [refreshNameState](const QString &) { refreshNameState(); });
+  connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
+  connect(buttons, &QDialogButtonBox::accepted, dialog,
+          [this, dialog, name, scope]() {
+            const QString presetName = name->text().trimmed();
+            QString error;
+            if (!qtgui_presets::save(presetName, scope, getCurrentState(),
+                                     &error)) {
+              auto *message = new QMessageBox(
+                  QMessageBox::Critical, tr("Preset Save Failed"),
+                  tr("Could not save the %1 preset “%2”.\n\n%3")
+                      .arg(qtgui_presets::scopeLabel(scope), presetName,
+                           error.isEmpty() ? tr("Unknown settings error.")
+                                           : error),
+                  QMessageBox::Ok, this);
+              message->setObjectName(
+                  QStringLiteral("ParameterPresetSaveFailureDialog"));
+              message->setAttribute(Qt::WA_DeleteOnClose);
+              message->open();
+              return;
+            }
+            statusBar()->showMessage(
+                tr("%1 preset “%2” saved.")
+                    .arg(qtgui_presets::scopeLabel(scope), presetName),
+                3000);
+            dialog->accept();
+          });
+
+  dialog->resize(500, dialog->sizeHint().height());
+  dialog->open();
+  name->setFocus();
+}
+
+/** Present one named preset's exact scope before applying it atomically. */
+void MainWindow::promptApplyPreset() {
+  if (QDialog *existing =
+          findChild<QDialog *>(QStringLiteral("ApplyParameterPresetDialog"))) {
+    existing->raise();
+    existing->activateWindow();
+    return;
+  }
+
+  const QList<qtgui_presets::Record> presets = qtgui_presets::records();
+  if (presets.isEmpty()) {
+    statusBar()->showMessage(tr("No parameter presets have been saved."), 3000);
+    return;
+  }
+
+  auto *dialog = new QDialog(this);
+  dialog->setObjectName(QStringLiteral("ApplyParameterPresetDialog"));
+  dialog->setWindowTitle(tr("Apply Preset"));
+  dialog->setAttribute(Qt::WA_DeleteOnClose);
+  dialog->setModal(false);
+
+  auto *layout = new QVBoxLayout(dialog);
+  auto *form = new QFormLayout();
+  auto *choice = new QComboBox(dialog);
+  choice->setObjectName(QStringLiteral("ParameterPresetApplyChoice"));
+  for (int i = 0; i < presets.size(); ++i) {
+    const auto &record = presets[i];
+    choice->addItem(
+        tr("%1 — %2").arg(qtgui_presets::scopeLabel(record.scope), record.name),
+        i);
+  }
+  form->addRow(tr("Preset:"), choice);
+  layout->addLayout(form);
+
+  auto *description = new QLabel(dialog);
+  description->setObjectName(QStringLiteral("ParameterPresetApplyDescription"));
+  description->setWordWrap(true);
+  layout->addWidget(description);
+
+  auto *screenWarning = new QLabel(dialog);
+  screenWarning->setObjectName(QStringLiteral("ParameterPresetScreenWarning"));
+  screenWarning->setWordWrap(true);
+  screenWarning->hide();
+  layout->addWidget(screenWarning);
+
+  auto refreshDescription =
+      [this, choice, description, screenWarning, presets]() {
+        const int recordIndex = choice->currentData().toInt();
+        if (recordIndex < 0 || recordIndex >= presets.size())
+          return;
+        const auto &record = presets[recordIndex];
+        description->setText(qtgui_presets::scopeDescription(record.scope));
+
+        ParameterState stored;
+        QString error;
+        bool warns = false;
+        QString warning;
+        if (record.scope == qtgui_presets::Scope::Process &&
+            qtgui_presets::decode(record, &stored, &error) &&
+            stored.scrToImg.type != getCurrentState().scrToImg.type) {
+          warns = true;
+          QString screenName;
+          const int index = static_cast<int>(stored.scrToImg.type);
+          if (index >= 0 && index < colorscreen::max_scr_type)
+            screenName =
+                QString::fromUtf8(colorscreen::scr_names[index].pretty_name);
+          warning = tr(
+              "This Process preset changes the historical screen type to %1. "
+              "Existing screen registration coordinates, nonlinear mesh, control points, "
+              "detected screen-color calibration, and screen-coordinate profile "
+              "spots will be cleared because they belong to the old screen.")
+                        .arg(screenName);
+        }
+        screenWarning->setText(warning);
+        screenWarning->setVisible(warns);
+      };
+  connect(choice, QOverload<int>::of(&QComboBox::currentIndexChanged), dialog,
+          [refreshDescription](int) { refreshDescription(); });
+  refreshDescription();
+
+  auto *buttons =
+      new QDialogButtonBox(QDialogButtonBox::Apply | QDialogButtonBox::Cancel,
+                           dialog);
+  layout->addWidget(buttons);
+  connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
+  connect(buttons, &QDialogButtonBox::accepted, dialog,
+          [this, dialog, choice, presets]() {
+            const int recordIndex = choice->currentData().toInt();
+            if (recordIndex < 0 || recordIndex >= presets.size())
+              return;
+
+            const qtgui_presets::Record &record = presets[recordIndex];
+            const ParameterState before = getCurrentState();
+            ParameterState after = before;
+            bool clearedRegistration = false;
+            QString error;
+            if (!qtgui_presets::apply(record, &after, &clearedRegistration,
+                                      &error)) {
+              auto *message = new QMessageBox(
+                  QMessageBox::Critical, tr("Preset Apply Failed"),
+                  tr("Could not apply preset “%1”. The document was left "
+                     "unchanged.\n\n%2")
+                      .arg(record.name,
+                           error.isEmpty() ? tr("Invalid preset data.") : error),
+                  QMessageBox::Ok, this);
+              message->setObjectName(
+                  QStringLiteral("ParameterPresetApplyFailureDialog"));
+              message->setAttribute(Qt::WA_DeleteOnClose);
+              message->open();
+              return;
+            }
+
+            if (after != before) {
+              changeParameters(
+                  after,
+                  tr("Apply %1 preset “%2”")
+                      .arg(qtgui_presets::scopeLabel(record.scope), record.name));
+            }
+            QString status =
+                tr("%1 preset “%2” applied.")
+                    .arg(qtgui_presets::scopeLabel(record.scope), record.name);
+            if (clearedRegistration)
+              status += tr(" Incompatible screen-bound registration and calibration were cleared.");
+            statusBar()->showMessage(status, 4000);
+            dialog->accept();
+          });
+
+  dialog->resize(560, dialog->sizeHint().height());
+  dialog->open();
+}
+
+/** Let the user remove a named preset without touching document state. */
+void MainWindow::promptDeletePreset() {
+  if (QDialog *existing =
+          findChild<QDialog *>(QStringLiteral("DeleteParameterPresetDialog"))) {
+    existing->raise();
+    existing->activateWindow();
+    return;
+  }
+
+  const QList<qtgui_presets::Record> presets = qtgui_presets::records();
+  if (presets.isEmpty()) {
+    statusBar()->showMessage(tr("No parameter presets have been saved."), 3000);
+    return;
+  }
+
+  auto *dialog = new QDialog(this);
+  dialog->setObjectName(QStringLiteral("DeleteParameterPresetDialog"));
+  dialog->setWindowTitle(tr("Delete Preset"));
+  dialog->setAttribute(Qt::WA_DeleteOnClose);
+  dialog->setModal(false);
+
+  auto *layout = new QVBoxLayout(dialog);
+  auto *form = new QFormLayout();
+  auto *choice = new QComboBox(dialog);
+  choice->setObjectName(QStringLiteral("ParameterPresetDeleteChoice"));
+  for (int i = 0; i < presets.size(); ++i) {
+    const auto &record = presets[i];
+    choice->addItem(
+        tr("%1 — %2").arg(qtgui_presets::scopeLabel(record.scope), record.name),
+        i);
+  }
+  form->addRow(tr("Preset:"), choice);
+  layout->addLayout(form);
+
+  auto *description = new QLabel(dialog);
+  description->setWordWrap(true);
+  layout->addWidget(description);
+  auto refreshDescription = [choice, description, presets]() {
+    const int recordIndex = choice->currentData().toInt();
+    if (recordIndex >= 0 && recordIndex < presets.size())
+      description->setText(
+          qtgui_presets::scopeDescription(presets[recordIndex].scope));
+  };
+  connect(choice, QOverload<int>::of(&QComboBox::currentIndexChanged), dialog,
+          [refreshDescription](int) { refreshDescription(); });
+  refreshDescription();
+
+  auto *buttons = new QDialogButtonBox(QDialogButtonBox::Cancel, dialog);
+  QPushButton *deleteButton = buttons->addButton(
+      tr("Delete"), QDialogButtonBox::DestructiveRole);
+  layout->addWidget(buttons);
+  connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
+  connect(deleteButton, &QPushButton::clicked, dialog,
+          [this, dialog, choice, presets]() {
+            const int recordIndex = choice->currentData().toInt();
+            if (recordIndex < 0 || recordIndex >= presets.size())
+              return;
+            const qtgui_presets::Record &record = presets[recordIndex];
+            if (!qtgui_presets::remove(record.id)) {
+              auto *message = new QMessageBox(
+                  QMessageBox::Critical, tr("Preset Delete Failed"),
+                  tr("Could not delete preset “%1”.").arg(record.name),
+                  QMessageBox::Ok, this);
+              message->setAttribute(Qt::WA_DeleteOnClose);
+              message->open();
+              return;
+            }
+            statusBar()->showMessage(tr("Preset “%1” deleted.").arg(record.name),
+                                     3000);
+            dialog->accept();
+          });
+
+  dialog->resize(520, dialog->sizeHint().height());
+  dialog->open();
+}
+
 /** Create all document-window menus in conventional application order:
    File, Edit, View, Registration, Window, Help.
    File menu: multi-image Open, Save, Render, Close, and application Exit.
@@ -2161,11 +2460,38 @@ void MainWindow::createMenus() {
           &MainWindow::onSaveParameters);
 
   m_saveAsAction = m_fileMenu->addAction("Save Parameters &As...");
-  m_saveAsAction->setToolTip("Save current parameters to a new .par file.");
+  m_saveAsAction->setToolTip(
+      "Save current parameters to a new .cspar archive or legacy .par file.");
   m_saveAsAction->setShortcut(QKeySequence::SaveAs); // Ctrl+Shift+S
   m_saveAsAction->setShortcutContext(Qt::WindowShortcut);
   connect(m_saveAsAction, &QAction::triggered, this,
           &MainWindow::onSaveParametersAs);
+
+  QMenu *presetMenu = m_fileMenu->addMenu(tr("&Presets"));
+  QMenu *savePresetMenu = presetMenu->addMenu(tr("Save Current as Preset"));
+  const auto addPresetSaveAction =
+      [this, savePresetMenu](qtgui_presets::Scope scope) {
+        QAction *action =
+            savePresetMenu->addAction(qtgui_presets::scopeLabel(scope));
+        connect(action, &QAction::triggered, this,
+                [this, scope]() { promptSavePreset(scope); });
+      };
+  addPresetSaveAction(qtgui_presets::Scope::Capture);
+  addPresetSaveAction(qtgui_presets::Scope::Process);
+  addPresetSaveAction(qtgui_presets::Scope::Reconstruction);
+  addPresetSaveAction(qtgui_presets::Scope::Color);
+
+  QAction *applyPresetAction = presetMenu->addAction(tr("&Apply Preset..."));
+  applyPresetAction->setObjectName(QStringLiteral("ApplyParameterPresetAction"));
+  connect(applyPresetAction, &QAction::triggered, this,
+          &MainWindow::promptApplyPreset);
+  QAction *deletePresetAction =
+      presetMenu->addAction(tr("&Delete Preset..."));
+  deletePresetAction->setObjectName(
+      QStringLiteral("DeleteParameterPresetAction"));
+  connect(deletePresetAction, &QAction::triggered, this,
+          &MainWindow::promptDeletePreset);
+
 
   QAction *reportAction =
       m_fileMenu->addAction("Save &Reproducibility Report...");

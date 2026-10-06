@@ -56,6 +56,7 @@ class QThread;
 #include "ImageLayerPanel.h"
 #include "ContactCopyPanel.h"
 #include "ParameterState.h"
+#include "ParameterPresets.h"
 #include "SharpnessPanel.h"
 #include "TaskQueue.h"
 #include "BackgroundThreadRegistry.h"
@@ -478,6 +479,15 @@ private:
 
   /** Prompt for a parameter filename and save synchronously. */
   bool saveParametersAs();
+
+  /** Ask for a name and save the current document's selected preset domain. */
+  void promptSavePreset(qtgui_presets::Scope scope);
+
+  /** Let the user preview and apply one named scoped preset. */
+  void promptApplyPreset();
+
+  /** Let the user delete one named scoped preset. */
+  void promptDeletePreset();
 
   /** Atomically write provenance plus the exact current parameter payload. */
   bool saveReproducibilityReportToFile(const QString &fileName,
@@ -1005,7 +1015,8 @@ private:
     bool suggested = false;
     Format format = Format::LegacyCsp;
 
-    void setLoaded(const QString &fileName, Format fileFormat = Format::LegacyCsp) {
+    void setLoaded(const QString &fileName,
+                   Format fileFormat = Format::LegacyCsp) {
       path = fileName;
       suggested = false;
       format = fileFormat;
