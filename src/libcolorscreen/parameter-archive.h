@@ -1,5 +1,6 @@
 #ifndef PARAMETER_ARCHIVE_H
 #define PARAMETER_ARCHIVE_H
+#include "include/dllpublic.h"
 
 #include <string>
 
@@ -16,7 +17,7 @@ struct parameter_archive_manifest
 /* Return true if NAME starts with a ZIP signature and may therefore be a
    Color-Screen parameter archive.  This is only format dispatch; callers must
    still validate the archive with read_parameter_archive.  */
-bool parameter_archive_signature_p (const char *name);
+DLL_PUBLIC bool parameter_archive_signature_p (const char *name);
 
 /* Read and validate parameter archive NAME.
 
@@ -24,7 +25,7 @@ bool parameter_archive_signature_p (const char *name);
    non-null, parsed manifest information to MANIFEST.  ERROR receives a
    user-facing diagnostic on failure.  No archive entry is extracted to the
    filesystem.  */
-bool read_parameter_archive (const char *name, std::string *legacy_csp,
+DLL_PUBLIC bool read_parameter_archive (const char *name, std::string *legacy_csp,
                              parameter_archive_manifest *manifest,
                              std::string *error);
 
@@ -35,7 +36,7 @@ bool read_parameter_archive (const char *name, std::string *legacy_csp,
    destination: this function may create/truncate it and deliberately does not
    implement the caller's final atomic replacement policy.  ERROR receives a
    diagnostic on failure.  */
-bool write_parameter_archive (const char *name, const std::string &legacy_csp,
+DLL_PUBLIC bool write_parameter_archive (const char *name, const std::string &legacy_csp,
                               const char *generator_version,
                               std::string *error);
 
