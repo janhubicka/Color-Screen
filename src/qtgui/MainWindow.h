@@ -56,6 +56,7 @@ class QThread;
 #include "ImageLayerPanel.h"
 #include "ContactCopyPanel.h"
 #include "ParameterState.h"
+#include "ParameterPresets.h"
 #include "SharpnessPanel.h"
 #include "TaskQueue.h"
 #include "BackgroundThreadRegistry.h"
