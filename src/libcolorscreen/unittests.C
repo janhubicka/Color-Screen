@@ -14,7 +14,9 @@
 #include <cstring>
 #include <limits>
 #include <string>
+#include <utility>
 
+#include <zip.h>
 
 #include "include/colorscreen.h"
 #include "include/imagedata.h"
@@ -42,6 +44,7 @@
 #include "gaussian-blur.h"
 #include "nmsimplex.h"
 #include "gsl-solver.h"
+#include "parameter-archive.h"
 
 
 using namespace colorscreen;
@@ -9327,6 +9330,268 @@ test_demosaic ()
 }
 }
 
+/* Return one deterministic temporary archive path in the test build directory. */
+static std::string
+parameter_archive_test_path (const char *tag)
+{
+  return std::string ("parameter-archive-") + tag + ".cspar";
+}
+
+/* Write one custom archive fixture.  ENTRIES are added after manifest.json. */
+static bool
+write_parameter_archive_fixture (
+    const std::string &name, const std::string &manifest,
+    const std::vector<std::pair<std::string, std::string>> &entries)
+{
+  std::remove (name.c_str ());
+  int error_code = 0;
+  zip_t *archive
+      = zip_open (name.c_str (), ZIP_CREATE | ZIP_TRUNCATE, &error_code);
+  if (!archive)
+    return false;
+
+  auto add = [archive] (const std::string &entry_name,
+                        const std::string &contents) {
+    zip_source_t *source
+        = zip_source_buffer (archive, contents.data (), contents.size (), 0);
+    if (!source)
+      return false;
+    if (zip_file_add (archive, entry_name.c_str (), source, ZIP_FL_ENC_UTF_8)
+        < 0)
+      {
+        zip_source_free (source);
+        return false;
+      }
+    return true;
+  };
+
+  bool ok = add ("manifest.json", manifest);
+  for (const auto &entry : entries)
+    if (ok)
+      ok = add (entry.first, entry.second);
+
+  if (!ok)
+    {
+      zip_discard (archive);
+      std::remove (name.c_str ());
+      return false;
+    }
+  if (zip_close (archive) != 0)
+    {
+      zip_discard (archive);
+      std::remove (name.c_str ());
+      return false;
+    }
+  return true;
+}
+
+/* Verify schema-v1 parameter archives and hostile-input rejection. */
+static bool
+test_parameter_archive ()
+{
+  const std::string legacy
+      = "screen_alignment_version: 1\n"
+        "gamma: 1.700000\n"
+        "screen_alignment_end\n";
+  std::string error;
+  std::string loaded;
+  parameter_archive_manifest parsed;
+
+  const std::string roundtrip = parameter_archive_test_path ("roundtrip");
+  std::remove (roundtrip.c_str ());
+  if (!write_parameter_archive (roundtrip.c_str (), legacy, "2.0alpha-test",
+                                &error))
+    {
+      fprintf (stderr, "Parameter archive writer failed: %s\n", error.c_str ());
+      return false;
+    }
+  if (!parameter_archive_signature_p (roundtrip.c_str ())
+      || !read_parameter_archive (roundtrip.c_str (), &loaded, &parsed, &error)
+      || loaded != legacy || parsed.schema_version != 1
+      || parsed.legacy_csp_path != "state/legacy.par")
+    {
+      fprintf (stderr, "Parameter archive round trip failed: %s\n",
+               error.c_str ());
+      std::remove (roundtrip.c_str ());
+      return false;
+    }
+  std::remove (roundtrip.c_str ());
+
+  const std::string plain = parameter_archive_test_path ("plain");
+  {
+    FILE *file = fopen (plain.c_str (), "wb");
+    if (!file)
+      return false;
+    fwrite (legacy.data (), 1, legacy.size (), file);
+    fclose (file);
+  }
+  if (parameter_archive_signature_p (plain.c_str ()))
+    {
+      fprintf (stderr, "Legacy CSP text was misclassified as a ZIP archive\n");
+      std::remove (plain.c_str ());
+      return false;
+    }
+  std::remove (plain.c_str ());
+
+  const auto expect_read = [&legacy] (
+                               const char *tag, const std::string &manifest,
+                               const std::vector<std::pair<std::string,
+                                                           std::string>>
+                                   &entries,
+                               bool expected,
+                               const char *diagnostic = nullptr) {
+    const std::string path = parameter_archive_test_path (tag);
+    if (!write_parameter_archive_fixture (path, manifest, entries))
+      {
+        fprintf (stderr, "Could not create parameter archive fixture %s\n",
+                 tag);
+        return false;
+      }
+    std::string payload;
+    std::string local_error;
+    parameter_archive_manifest info;
+    const bool result = read_parameter_archive (
+        path.c_str (), &payload, &info, &local_error);
+    std::remove (path.c_str ());
+    if (result != expected)
+      {
+        fprintf (stderr,
+                 "Parameter archive fixture %s unexpectedly %s: %s\n", tag,
+                 result ? "succeeded" : "failed", local_error.c_str ());
+        return false;
+      }
+    if (result && (payload != legacy || info.schema_version != 1))
+      {
+        fprintf (stderr, "Parameter archive fixture %s lost state\n", tag);
+        return false;
+      }
+    if (!result && diagnostic
+        && local_error.find (diagnostic) == std::string::npos)
+      {
+        fprintf (stderr,
+                 "Parameter archive fixture %s returned wrong diagnostic: %s\n",
+                 tag, local_error.c_str ());
+        return false;
+      }
+    return true;
+  };
+
+  const std::string base_manifest
+      = "{"
+        "\"format\":\"org.colorscreen.parameters\","
+        "\"schema_version\":1,"
+        "\"state\":{\"legacy_csp\":\"state/legacy.par\"},"
+        "\"payloads\":[],"
+        "\"future_optional\":{\"ignored\":true}"
+        "}";
+  if (!expect_read ("optional", base_manifest,
+                    {{"state/legacy.par", legacy}}, true))
+    return false;
+
+  const std::string future_manifest
+      = "{"
+        "\"format\":\"org.colorscreen.parameters\","
+        "\"schema_version\":2,"
+        "\"state\":{\"legacy_csp\":\"state/legacy.par\"}"
+        "}";
+  if (!expect_read ("future-version", future_manifest,
+                    {{"state/legacy.par", legacy}}, false,
+                    "unsupported parameter archive schema version"))
+    return false;
+
+  const std::string feature_manifest
+      = "{"
+        "\"format\":\"org.colorscreen.parameters\","
+        "\"schema_version\":1,"
+        "\"required_features\":[\"future-required-v1\"],"
+        "\"state\":{\"legacy_csp\":\"state/legacy.par\"}"
+        "}";
+  if (!expect_read ("required-feature", feature_manifest,
+                    {{"state/legacy.par", legacy}}, false,
+                    "unsupported required parameter archive feature"))
+    return false;
+
+  const std::string wrong_format
+      = "{"
+        "\"format\":\"example.other.parameters\","
+        "\"schema_version\":1,"
+        "\"state\":{\"legacy_csp\":\"state/legacy.par\"}"
+        "}";
+  if (!expect_read ("wrong-format", wrong_format,
+                    {{"state/legacy.par", legacy}}, false,
+                    "not a Color-Screen parameter archive"))
+    return false;
+
+  const std::string malformed
+      = "{\"format\":\"org.colorscreen.parameters\","
+        "\"schema_version\":1,";
+  if (!expect_read ("malformed-json", malformed,
+                    {{"state/legacy.par", legacy}}, false,
+                    "invalid parameter archive manifest"))
+    return false;
+
+  const std::string traversal_manifest
+      = "{"
+        "\"format\":\"org.colorscreen.parameters\","
+        "\"schema_version\":1,"
+        "\"state\":{\"legacy_csp\":\"state/legacy.par\"}"
+        "}";
+  if (!expect_read ("traversal", traversal_manifest,
+                    {{"state/legacy.par", legacy}, {"../escape.bin", "bad"}},
+                    false, "unsafe path in parameter archive"))
+    return false;
+
+  const std::string mismatched_payload_manifest
+      = "{"
+        "\"format\":\"org.colorscreen.parameters\","
+        "\"schema_version\":1,"
+        "\"state\":{\"legacy_csp\":\"state/legacy.par\"},"
+        "\"payloads\":[{"
+        "\"name\":\"geometry.mesh\","
+        "\"path\":\"payload/mesh.f64le\","
+        "\"element_type\":\"float64-le\","
+        "\"shape\":[2,2],"
+        "\"required\":true"
+        "}]"
+        "}";
+  if (!expect_read ("payload-size", mismatched_payload_manifest,
+                    {{"state/legacy.par", legacy},
+                     {"payload/mesh.f64le", std::string (24, '\0')}},
+                    false, "byte size does not match shape"))
+    return false;
+
+  const std::string unsupported_payload_manifest
+      = "{"
+        "\"format\":\"org.colorscreen.parameters\","
+        "\"schema_version\":1,"
+        "\"state\":{\"legacy_csp\":\"state/legacy.par\"},"
+        "\"payloads\":[{"
+        "\"name\":\"future.payload\","
+        "\"path\":\"payload/future.bin\","
+        "\"element_type\":\"future128-le\","
+        "\"shape\":[1],"
+        "\"required\":true"
+        "}]"
+        "}";
+  if (!expect_read ("payload-required", unsupported_payload_manifest,
+                    {{"state/legacy.par", legacy},
+                     {"payload/future.bin", std::string (16, '\0')}},
+                    false, "unsupported required parameter payload"))
+    return false;
+
+  const std::string missing_legacy_manifest
+      = "{"
+        "\"format\":\"org.colorscreen.parameters\","
+        "\"schema_version\":1,"
+        "\"state\":{\"legacy_csp\":\"state/missing.par\"}"
+        "}";
+  if (!expect_read ("missing-legacy", missing_legacy_manifest, {}, false,
+                    "missing its legacy CSP state"))
+    return false;
+
+  return true;
+}
+
 /* Verify conservative detection of monochromatic data that was initially
    rendered as RGB from a standard Bayer RAW file.  Channel gains/offsets and
    small noise are allowed; real chromatic structure, flat data and non-Bayer
@@ -9493,6 +9758,8 @@ main (int argc, char **argv)
     { "demosaic", "dufay and paget demosaicing tests", [] () { return test_demosaic (); } },
     { "monochrome_bayer", "monochrome Bayer candidate analysis tests",
       [] () { return test_monochrome_bayer_analysis (); } },
+    { "parameter_archive", "versioned parameter archive contract tests",
+      [] () { return test_parameter_archive (); } },
     { NULL, NULL, NULL }
   };
 
