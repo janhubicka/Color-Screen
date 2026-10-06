@@ -9,6 +9,7 @@
 #include <cerrno>
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <cstdlib>
 #include <limits>
 #include <map>
@@ -872,6 +873,55 @@ parameter_archive_signature_p (const char *name)
   return (signature[2] == 3 && signature[3] == 4)
          || (signature[2] == 5 && signature[3] == 6)
          || (signature[2] == 7 && signature[3] == 8);
+}
+
+/* Open plain CSP or one validated archive payload as a FILE*.  */
+FILE *
+open_parameter_payload (const char *name, bool *is_archive, std::string *error)
+{
+  if (error)
+    error->clear ();
+  if (is_archive)
+    *is_archive = false;
+  if (!name)
+    {
+      archive_fail (error, "invalid parameter filename");
+      return nullptr;
+    }
+
+  if (!parameter_archive_signature_p (name))
+    {
+      FILE *file = fopen (name, "rb");
+      if (!file)
+        archive_fail (error, std::string ("could not open parameter file: ")
+                                 + std::strerror (errno));
+      return file;
+    }
+
+  std::string payload;
+  if (!read_parameter_archive (name, &payload, nullptr, error))
+    return nullptr;
+
+  FILE *file = std::tmpfile ();
+  if (!file)
+    {
+      archive_fail (error,
+                    std::string ("could not create temporary parameter stream: ")
+                        + std::strerror (errno));
+      return nullptr;
+    }
+  const bool written
+      = fwrite (payload.data (), 1, payload.size (), file) == payload.size ();
+  if (!written || fflush (file) != 0 || fseek (file, 0, SEEK_SET) != 0)
+    {
+      fclose (file);
+      archive_fail (error, "could not stage archived parameter payload");
+      return nullptr;
+    }
+
+  if (is_archive)
+    *is_archive = true;
+  return file;
 }
 
 /* Read and validate schema-v1 parameter archive NAME.  */
