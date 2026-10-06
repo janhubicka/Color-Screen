@@ -535,7 +535,9 @@ CLEANFILES = slanted-edge-1.log slanted-edge-2.log \
 	slanted-edge-6.log slanted-edge-invalid-mtf.txt \
 	epson-v850-defocused-mtf.txt epson-v850-defocused-mtf-output.log \
 	paget_ha_test.tiff paget_ahd_test.tiff paget_amaze_test.tiff \
-	paget_rcd_test.tiff paget_lmmse_test.tiff dufay_rcd_test.tiff
+	paget_rcd_test.tiff paget_lmmse_test.tiff dufay_rcd_test.tiff \
+	out-parameter-archive.cspar out-parameter-legacy.tif \
+	out-parameter-archive.tif
 TESTS = unittests.test \
                           parameter-archive-cli.test \
 			  dufaycolor_nikon_coolsan9000ED_4000DPI_raw.test  \
