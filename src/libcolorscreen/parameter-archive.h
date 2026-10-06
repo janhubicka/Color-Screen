@@ -28,7 +28,7 @@ DLL_PUBLIC bool parameter_archive_signature_p (const char *name);
    belongs to the caller. IS_ARCHIVE, when non-null, reports which path was
    taken. ERROR receives a diagnostic on failure. */
 DLL_PUBLIC FILE *open_parameter_payload (const char *name, bool *is_archive,
-                              std::string *error);
+                                         std::string *error);
 
 /* Read and validate parameter archive NAME.
 
@@ -36,9 +36,10 @@ DLL_PUBLIC FILE *open_parameter_payload (const char *name, bool *is_archive,
    non-null, parsed manifest information to MANIFEST.  ERROR receives a
    user-facing diagnostic on failure.  No archive entry is extracted to the
    filesystem.  */
-DLL_PUBLIC bool read_parameter_archive (const char *name, std::string *legacy_csp,
-                             parameter_archive_manifest *manifest,
-                             std::string *error);
+DLL_PUBLIC bool
+read_parameter_archive (const char *name, std::string *legacy_csp,
+                        parameter_archive_manifest *manifest,
+                        std::string *error);
 
 /* Write one schema-v1 archive to NAME.
 
@@ -47,9 +48,9 @@ DLL_PUBLIC bool read_parameter_archive (const char *name, std::string *legacy_cs
    destination: this function may create/truncate it and deliberately does not
    implement the caller's final atomic replacement policy.  ERROR receives a
    diagnostic on failure.  */
-DLL_PUBLIC bool write_parameter_archive (const char *name, const std::string &legacy_csp,
-                              const char *generator_version,
-                              std::string *error);
+DLL_PUBLIC bool
+write_parameter_archive (const char *name, const std::string &legacy_csp,
+                         const char *generator_version, std::string *error);
 
 }
 
