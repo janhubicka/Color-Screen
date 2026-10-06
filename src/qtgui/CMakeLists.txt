@@ -63,6 +63,7 @@ set(SOURCES
     Renderer.cpp
     NavigationView.cpp
     ParameterState.cpp
+    ParameterPresets.cpp
     CapturePanel.cpp
     ParameterPanel.cpp
     TilePreviewPanel.cpp
@@ -136,6 +137,7 @@ set(HEADERS
     NavigationView.h
     ParameterPanel.h
     ParameterState.h
+    ParameterPresets.h
     Renderer.h
     SynchronizedRunnable.h
     SharpnessPanel.h
