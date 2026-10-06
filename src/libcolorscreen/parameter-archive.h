@@ -1,6 +1,7 @@
 #ifndef PARAMETER_ARCHIVE_H
 #define PARAMETER_ARCHIVE_H
 
+#include <cstdio>
 #include <string>
 
 namespace colorscreen
@@ -17,6 +18,16 @@ struct parameter_archive_manifest
    Color-Screen parameter archive.  This is only format dispatch; callers must
    still validate the archive with read_parameter_archive.  */
 bool parameter_archive_signature_p (const char *name);
+
+/* Open NAME as a parameter payload stream.
+
+   Plain CSP text is opened directly. A ZIP signature is treated as a
+   Color-Screen archive and its validated schema-v1 legacy payload is copied to
+   a private temporary stream. The returned FILE* is positioned at byte zero and
+   belongs to the caller. IS_ARCHIVE, when non-null, reports which path was
+   taken. ERROR receives a diagnostic on failure. */
+FILE *open_parameter_payload (const char *name, bool *is_archive,
+                              std::string *error);
 
 /* Read and validate parameter archive NAME.
 
