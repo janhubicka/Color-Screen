@@ -1,6 +1,7 @@
 #include "AtomicFileSave.h"
 
 #include <QByteArray>
+#include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QIODevice>
