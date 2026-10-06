@@ -257,7 +257,7 @@ void showParameterLoadFailure(QWidget *parent, const QString &detail) {
 }
 } // namespace
 
-/** Open a .par parameter file chosen by the user.
+/** Open a legacy or archive parameter file chosen by the user.
    Prompts for unsaved changes first, then delegates to the transactional
    parameter loader. On success, re-initialises the image widget and renderer,
    clears undo history, and refreshes the UI. Failed parsing never mutates live
@@ -299,7 +299,7 @@ void MainWindow::onOpenParameters() {
   dialog->open();
 }
 
-/** Save parameters to the current .par file.
+/** Save parameters to the current parameter target.
    A weak auto-suggested filename is confirmed through Save As before writing.
    Saving is synchronous so closeEvent can reliably decide whether it is safe
    to close this particular document window.  */
@@ -311,7 +311,7 @@ void MainWindow::onSaveParameters() {
   saveParametersToFile(m_parameterFile.path);
 }
 
-/** Save parameters to a new .par file chosen by the user. */
+/** Save parameters to a new legacy or archive file chosen by the user. */
 void MainWindow::onSaveParametersAs() { saveParametersAs(); }
 
 /** Atomically write the current document parameters and mark them saved. */
@@ -480,6 +480,11 @@ bool MainWindow::saveReproducibilityReportToFile(const QString &fileName,
   metadata.insert(QStringLiteral("image_file"), m_currentImageFile);
   metadata.insert(QStringLiteral("parameter_file"), m_parameterFile.path);
   metadata.insert(QStringLiteral("parameter_file_state"), parameterState);
+  metadata.insert(
+      QStringLiteral("parameter_file_format"),
+      m_parameterFile.format == ParameterFileState::Format::Archive
+          ? QStringLiteral("archive")
+          : QStringLiteral("legacy"));
   metadata.insert(QStringLiteral("document_modified"), isDocumentModified());
   metadata.insert(QStringLiteral("registration_point_count"),
                   static_cast<int>(state.solver.n_points()));
@@ -1672,8 +1677,9 @@ void MainWindow::saveRecoveryState() {
   const bool hasRgb = m_scan->has_rgb();
   QString paramsError;
   if (!saveParameterPayloadAtomically(
-          paramsPath, m_scrToImgParams, hasRgb ? &m_detectParams : nullptr,
-          m_rparams, m_solverParams, m_profileSpots, &paramsError)) {
+          paramsPath, false, m_scrToImgParams,
+          hasRgb ? &m_detectParams : nullptr, m_rparams, m_solverParams,
+          m_profileSpots, &paramsError)) {
     qWarning() << "Could not atomically save recovery parameters to" << paramsPath
                << paramsError;
   }
@@ -1683,7 +1689,10 @@ void MainWindow::saveRecoveryState() {
       (m_parameterFile.suggested ? QStringLiteral("1\n")
                                  : QStringLiteral("0\n")) +
       (isDocumentModified() ? QStringLiteral("1\n")
-                            : QStringLiteral("0\n"));
+                            : QStringLiteral("0\n")) +
+      (m_parameterFile.format == ParameterFileState::Format::Archive
+           ? QStringLiteral("archive\n")
+           : QStringLiteral("legacy\n"));
   if (!saveRecoveryTextAtomically(
           directory.filePath(QStringLiteral("recovery_params_meta.txt")),
           meta)) {
@@ -1766,11 +1775,19 @@ bool MainWindow::restoreRecoveryState() {
     const QString recoveredParameterPath = in.readLine().trimmed();
     const bool recoveredParameterPathSuggested =
         (in.readLine().trimmed() == QLatin1String("1"));
-    if (recoveredParameterPathSuggested)
-      m_parameterFile.setSuggested(recoveredParameterPath);
-    else
-      m_parameterFile.setLoaded(recoveredParameterPath);
     const QString dirtyFlag = in.readLine().trimmed();
+    const QString recoveredFormat = in.readLine().trimmed();
+    const ParameterFileState::Format format =
+        recoveredFormat == QLatin1String("archive") ||
+                (recoveredFormat.isEmpty() &&
+                 recoveredParameterPath.endsWith(
+                     QLatin1String(".cspar"), Qt::CaseInsensitive))
+            ? ParameterFileState::Format::Archive
+            : ParameterFileState::Format::LegacyCsp;
+    if (recoveredParameterPathSuggested)
+      m_parameterFile.setSuggested(recoveredParameterPath, format);
+    else
+      m_parameterFile.setLoaded(recoveredParameterPath, format);
     if (!dirtyFlag.isEmpty())
       m_recoveryDirty = (dirtyFlag == QLatin1String("1"));
   }
@@ -1807,7 +1824,7 @@ void MainWindow::clearRecoveryFiles() {
     QDir(m_recoveryDir).removeRecursively();
 }
 
-/** Load parameters from a .par file and update all UI components.
+/** Load legacy or archive parameters and update all UI components.
    Parses into private default state because load_csp merges into its outputs;
    only a complete payload is published. Updates ImageWidget, NavigationView,
    gamut warning, undo history, and all panels. Returns true on success. */
