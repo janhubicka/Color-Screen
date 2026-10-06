@@ -81,17 +81,19 @@ each document has independent:
 - `QUndoStack`, selection/tool state, panels, navigation, and detached docks;
 - worker objects, `TaskQueue` instances, progress entries, and render
   cancellation state;
-- current image filename, one `ParameterFileState` (path + whether it is only
-  a suggested Save-As target), and a UUID-named recovery directory. Never let a
-  suggested `.par` name become an overwrite target without an explicit save/load
-  transition. User parameter saves must stage the complete FILE*-serialized CSP
-  payload through `qtgui_io::saveStdioAtomically()` before committing it with
-  `QSaveFile` and direct-write fallback disabled; a failed save must leave any
-  previous usable target unchanged. Recovery image/parameter/metadata files use
-  the same per-file atomic replacement rule rather than truncating their previous
-  payloads in place. Keep the lightweight atomic-file smoke: a deliberately
-  failing serializer must preserve pre-existing target bytes, while a successful
-  serializer replaces them.
+- current image filename, one `ParameterFileState` (path + suggested/loaded
+  status + physical LegacyCsp/Archive format), and a UUID-named recovery
+  directory. Never let a suggested parameter filename become an overwrite target
+  without an explicit save/load transition. An established target must preserve
+  its loaded format on ordinary Save. Legacy CSP writes stage the complete FILE*
+  payload through `qtgui_io::saveStdioAtomically()`; `.cspar` writes let libzip
+  finalize a private staging path and then commit those finished bytes through
+  `qtgui_io::savePathAtomically()`. Both use `QSaveFile` with direct-write
+  fallback disabled, so a failed serializer/write/commit leaves any previous
+  usable target unchanged. Recovery parameters intentionally remain an internal
+  legacy CSP payload for now, while recovery metadata preserves the user's
+  Archive/Legacy target identity. Keep atomic-file smoke coverage for both
+  FILE*- and path-backed serializers.
 
 Workspace geometry, image/parameter file-dialog directory history, and
 recent-file lists remain application preferences in `QSettings`; they are not
@@ -1061,7 +1063,25 @@ To maintain consistency across different UI actions, use the following standardi
   stage sidecar data and launch decoding. Do not reintroduce the static
   `QMessageBox::question()` path here; it creates a nested event loop after
   replacement has already been marked pending.
-- **Parameter loading**: Every `.par` ingress path uses the same transactional `loadParameterPayload()` parser. `loadParameterFile()` (dialogs, Recent, drag/drop) parses the complete core + Qt metadata payload into a private default `ParameterState`, then publishes only on success. Image-sidecar loading adds one more transaction boundary: a valid sidecar is staged privately, may supply the demosaic choice used to decode the image, and is published/adopted as the parameter target only after the associated image load succeeds. If the live ParameterState changes while loading, those edits win; the sidecar remains only a suggested target and the post-load document remains dirty even though image publication resets the old Undo history. Open/parse failure must leave live document parameters and calibration provenance untouched. Explicit parameter loading must also preserve the current parameter-file target and Undo/dirty state. A failed sidecar is never adopted as loaded; keep it only as a suggested Save-As target so any overwrite still requires confirmation. Failure reporting is a parent-owned asynchronous `ParameterLoadFailureDialog`, not a nested static error box. On successful explicit load, adopt the target, clear stale calibration/session provenance, reset Undo/dirty state, and refresh the UI consistently.
+- **Parameter loading**: Every explicit parameter ingress path uses the same
+  transactional `loadParameterPayload()` parser. It calls libcolorscreen's
+  `open_parameter_payload()`, which dispatches by file content: plain CSP is
+  read directly, while ZIP-signature input must validate as a supported
+  Color-Screen archive and yields its private legacy payload stream. Malformed
+  ZIP-looking data never falls back to text parsing. `loadParameterFile()`
+  (dialogs, Recent, drag/drop) parses the complete core + Qt metadata payload
+  into a private default `ParameterState`, then publishes state and adopts the
+  detected LegacyCsp/Archive target format only on success. Image-sidecar
+  discovery remains legacy `.par` for now; a valid sidecar is staged privately,
+  may supply the demosaic choice used to decode the image, and is published only
+  after the associated image load succeeds. If live ParameterState changes while
+  loading, those edits win and the sidecar remains only a suggested target.
+  Open/parse failure must leave live parameters, calibration provenance,
+  parameter target/format, Undo index and clean state untouched. Failure
+  reporting is a parent-owned asynchronous `ParameterLoadFailureDialog`, not a
+  nested static error box. On successful explicit load, clear stale
+  calibration/session provenance, reset Undo/dirty state, and refresh the UI
+  consistently.
 
 ### 7. Documentation
 - **Document function**: Add block comments to functions using Doxygen-style (`/** ... */`) to allow for automated documentation generation.
