@@ -1,0 +1,59 @@
+## -*- sh -*-
+## parameter-archive-cli.test -- CLI legacy/archive parameter parity
+
+if test -z "$srcdir"; then
+    srcdir=echo "$0" | sed 's,[^/]*$,,'
+    test "$srcdir" = "$0" && srcdir=.
+    test -z "$srcdir" && srcdir=.
+    test "${VERBOSE+set}" != set && VERBOSE=1
+fi
+
+echo 1..3
+. $srcdir/defs.sh
+
+archive=out-parameter-archive.cspar
+legacy_out=out-parameter-legacy.tif
+archive_out=out-parameter-archive.tif
+rm -f "$archive" "$legacy_out" "$archive_out"
+
+python3 - "$srcdir/empty.par" "$archive" <<'PY' || exit 1
+import json
+import sys
+import zipfile
+
+source, destination = sys.argv[1:3]
+with open(source, "rb") as f:
+    payload = f.read()
+manifest = {
+    "format": "org.colorscreen.parameters",
+    "schema_version": 1,
+    "generator": {
+        "application": "Color-Screen testsuite",
+        "version": "2.0alpha",
+    },
+    "state": {"legacy_csp": "state/legacy.par"},
+    "payloads": [],
+}
+with zipfile.ZipFile(destination, "w") as z:
+    z.writestr(
+        "manifest.json",
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+        compress_type=zipfile.ZIP_STORED,
+    )
+    z.writestr(
+        "state/legacy.par", payload, compress_type=zipfile.ZIP_DEFLATED
+    )
+PY
+
+pexec $RUNCOLORSCREEN render --mode original --geometry scan \
+  --output-profile=original "$srcdir/checkerboard.tif" "$srcdir/empty.par" \
+  "$legacy_out" || exit 1
+echo 'ok 1 - legacy parameter render'
+
+pexec $RUNCOLORSCREEN render --mode original --geometry scan \
+  --output-profile=original "$srcdir/checkerboard.tif" "$archive" \
+  "$archive_out" || exit 1
+echo 'ok 2 - archive parameter render'
+
+pexec $RUNCOLORSCREEN lab compare-images "$legacy_out" "$archive_out" || exit 1
+echo 'ok 3 - legacy/archive outputs match'
