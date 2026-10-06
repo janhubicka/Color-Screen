@@ -386,11 +386,15 @@ bool MainWindow::saveParametersAs() {
   const QString archiveFilter = tr("Archive parameters (*.cspar)");
   const QString legacyFilter = tr("Legacy parameters (*.par)");
   const QString allFilter = tr("All Files (*)");
+  // Keep legacy as the default for new files until the archive rollout gate
+  // (CLI parity, Unicode filenames, and cross-platform fixtures) is complete.
+  // Once an archive target is already established, Save As naturally starts on
+  // the archive choice.
   QString selectedFilter =
-      m_parameterFile.format == ParameterFileState::Format::LegacyCsp &&
+      m_parameterFile.format == ParameterFileState::Format::Archive &&
               !m_parameterFile.path.isEmpty()
-          ? legacyFilter
-          : archiveFilter;
+          ? archiveFilter
+          : legacyFilter;
   QString fileName = QFileDialog::getSaveFileName(
       this, tr("Save Parameters"), initialPath,
       archiveFilter + QStringLiteral(";;") + legacyFilter +
