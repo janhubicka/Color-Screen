@@ -278,6 +278,51 @@ bool atomicFileSaveSmoke() {
   if (!replaced.open(QIODevice::ReadOnly) ||
       replaced.readAll() != QByteArray("replacement payload"))
     return fail("successful atomic save did not replace the target");
+  replaced.close();
+
+  // Path-backed serializers such as libzip must have the same all-or-nothing
+  // contract even though they cannot write directly to QSaveFile.
+  error.clear();
+  if (qtgui_io::savePathAtomically(
+          path,
+          [](const QString &stagedPath, QString *) {
+            QFile staged(stagedPath);
+            if (!staged.open(QIODevice::WriteOnly | QIODevice::Truncate) ||
+                staged.write("partial path payload") != 20)
+              return false;
+            staged.close();
+            return false;
+          },
+          &error))
+    return fail("failed path serializer was committed");
+
+  QFile pathPreserved(path);
+  if (!pathPreserved.open(QIODevice::ReadOnly) ||
+      pathPreserved.readAll() != QByteArray("replacement payload"))
+    return fail("failed path serializer changed the existing target");
+  pathPreserved.close();
+
+  error.clear();
+  if (!qtgui_io::savePathAtomically(
+          path,
+          [](const QString &stagedPath, QString *writerError) {
+            QFile staged(stagedPath);
+            if (!staged.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+              if (writerError)
+                *writerError = staged.errorString();
+              return false;
+            }
+            const bool ok = staged.write("path replacement") == 16;
+            staged.close();
+            return ok;
+          },
+          &error))
+    return fail("successful path serializer was not committed");
+
+  QFile pathReplaced(path);
+  if (!pathReplaced.open(QIODevice::ReadOnly) ||
+      pathReplaced.readAll() != QByteArray("path replacement"))
+    return fail("successful path save did not replace the target");
   return true;
 }
 
