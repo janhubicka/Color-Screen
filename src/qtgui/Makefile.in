@@ -131,6 +131,7 @@ am_colorscreen_qt_OBJECTS = colorscreen_qt-main.$(OBJEXT) \
 	colorscreen_qt-Renderer.$(OBJEXT) \
 	colorscreen_qt-NavigationView.$(OBJEXT) \
 	colorscreen_qt-ParameterState.$(OBJEXT) \
+	colorscreen_qt-ParameterPresets.$(OBJEXT) \
 	colorscreen_qt-CapturePanel.$(OBJEXT) \
 	colorscreen_qt-ParameterPanel.$(OBJEXT) \
 	colorscreen_qt-TilePreviewPanel.$(OBJEXT) \
@@ -299,6 +300,7 @@ am__depfiles_remade =  \
 	./$(DEPDIR)/colorscreen_qt-PagetAnimation.Po \
 	./$(DEPDIR)/colorscreen_qt-ParameterPanel.Po \
 	./$(DEPDIR)/colorscreen_qt-ParameterState.Po \
+	./$(DEPDIR)/colorscreen_qt-ParameterPresets.Po \
 	./$(DEPDIR)/colorscreen_qt-ProfilePanel.Po \
 	./$(DEPDIR)/colorscreen_qt-RenderDialog.Po \
 	./$(DEPDIR)/colorscreen_qt-Renderer.Po \
@@ -569,6 +571,7 @@ colorscreen_qt_SOURCES = \
     Renderer.cpp \
     NavigationView.cpp \
     ParameterState.cpp \
+    ParameterPresets.cpp \
     CapturePanel.cpp \
     ParameterPanel.cpp \
     TilePreviewPanel.cpp \
@@ -670,7 +673,7 @@ EXTRA_DIST = ColorScreenApplication.h AtomicFileSave.h DocumentLifecycleSmoke.h 
 	InitialSetupGuideDialog.h MTFChartWidget.h \
 	DeformationChartWidget.h FinetuneImagesPanel.h \
 	BacklightChartWidget.h ColorUtils.h NavigationView.h \
-	ParameterPanel.h ParameterState.h Renderer.h \
+	ParameterPanel.h ParameterState.h ParameterPresets.h Renderer.h \
 	SynchronizedRunnable.h SharpnessPanel.h SmartSpinBox.h \
 	TilePreviewPanel.h ScreenPanel.h GeometryPanel.h \
 	GeometrySolverWorker.h DetectScreenWorker.h FlatFieldWorker.h \
@@ -849,6 +852,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-PagetAnimation.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-ParameterPanel.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-ParameterState.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-ParameterPresets.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-ProfilePanel.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-RenderDialog.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/colorscreen_qt-Renderer.Po@am__quote@ # am--include-marker
@@ -1218,6 +1222,20 @@ colorscreen_qt-ParameterState.obj: ParameterState.cpp
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='ParameterState.cpp' object='colorscreen_qt-ParameterState.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-ParameterState.obj `if test -f 'ParameterState.cpp'; then $(CYGPATH_W) 'ParameterState.cpp'; else $(CYGPATH_W) '$(srcdir)/ParameterState.cpp'; fi`
+colorscreen_qt-ParameterPresets.o: ParameterPresets.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-ParameterPresets.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-ParameterPresets.Tpo -c -o colorscreen_qt-ParameterPresets.o `test -f 'ParameterPresets.cpp' || echo '$(srcdir)/'`ParameterPresets.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-ParameterPresets.Tpo $(DEPDIR)/colorscreen_qt-ParameterPresets.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='ParameterPresets.cpp' object='colorscreen_qt-ParameterPresets.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-ParameterPresets.o `test -f 'ParameterPresets.cpp' || echo '$(srcdir)/'`ParameterPresets.cpp
+
+colorscreen_qt-ParameterPresets.obj: ParameterPresets.cpp
+@am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-ParameterPresets.obj -MD -MP -MF $(DEPDIR)/colorscreen_qt-ParameterPresets.Tpo -c -o colorscreen_qt-ParameterPresets.obj `if test -f 'ParameterPresets.cpp'; then $(CYGPATH_W) 'ParameterPresets.cpp'; else $(CYGPATH_W) '$(srcdir)/ParameterPresets.cpp'; fi`
+@am__fastdepCXX_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/colorscreen_qt-ParameterPresets.Tpo $(DEPDIR)/colorscreen_qt-ParameterPresets.Po
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	$(AM_V_CXX)source='ParameterPresets.cpp' object='colorscreen_qt-ParameterPresets.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCXX_FALSE@	DEPDIR=$(DEPDIR) $(CXXDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCXX_FALSE@	$(AM_V_CXX@am__nodep@)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -c -o colorscreen_qt-ParameterPresets.obj `if test -f 'ParameterPresets.cpp'; then $(CYGPATH_W) 'ParameterPresets.cpp'; else $(CYGPATH_W) '$(srcdir)/ParameterPresets.cpp'; fi`
+
 
 colorscreen_qt-CapturePanel.o: CapturePanel.cpp
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXX) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(colorscreen_qt_CXXFLAGS) $(CXXFLAGS) -MT colorscreen_qt-CapturePanel.o -MD -MP -MF $(DEPDIR)/colorscreen_qt-CapturePanel.Tpo -c -o colorscreen_qt-CapturePanel.o `test -f 'CapturePanel.cpp' || echo '$(srcdir)/'`CapturePanel.cpp
@@ -2633,6 +2651,7 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-PagetAnimation.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-ParameterPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-ParameterState.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-ParameterPresets.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-ProfilePanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-RenderDialog.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-Renderer.Po
@@ -2786,6 +2805,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/colorscreen_qt-PagetAnimation.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-ParameterPanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-ParameterState.Po
+	-rm -f ./$(DEPDIR)/colorscreen_qt-ParameterPresets.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-ProfilePanel.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-RenderDialog.Po
 	-rm -f ./$(DEPDIR)/colorscreen_qt-Renderer.Po
