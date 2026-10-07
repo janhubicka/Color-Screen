@@ -153,17 +153,20 @@ private temporary file when an existing library API requires a `FILE *`.
 
 ## Atomic writes
 
-GUI saves retain the existing failure contract:
+All frontends retain the same failure contract:
 
-1. build the complete archive in a private staging file;
-2. close/finalize the ZIP successfully;
-3. atomically replace the user target with `QSaveFile` and direct-write
-   fallback disabled;
-4. on any serialization, archive, copy, or commit failure, leave an older target
+1. serialize the complete parameter payload before replacement;
+2. build/finalize the archive in a sibling staging file on the target
+   filesystem;
+3. atomically replace the target only after successful archive finalization;
+4. on any serialization, archive, or replacement failure, leave an older target
    byte-for-byte intact.
 
-Core/CLI writers that do not use Qt must likewise write a sibling/private
-temporary file and rename only after successful archive finalization.
+The shared `write_parameter_payload_file()` implementation provides this
+UTF-8-path contract for archive and core/CLI legacy writes, using POSIX
+`rename()` or Windows `MoveFileExW(...REPLACE_EXISTING|WRITE_THROUGH)`.
+Qt uses the same core primitive for archives; its existing `QSaveFile` bridge
+remains appropriate for GUI-only FILE*/text recovery and legacy-save paths.
 
 ## Legacy compatibility
 
@@ -242,14 +245,27 @@ user Save As supports `.cspar`.
 
 ## Rollout
 
-1. Add archive manifest parser/writer and hostile-input unit tests in
-   `libcolorscreen`.
-2. Add v1 legacy-payload archive read/write helpers using libzip.
-3. Teach CLI parameter loading to accept both CSP and archives.
-4. Teach Qt Open/Save As and MRU paths to accept both formats while keeping
-   ordinary Save tied to the format already loaded/chosen.
-5. Add transactional GUI smoke coverage.
-6. Make `.cspar` the default for new saves while retaining `.par` export.
-7. Migrate high-value structured sections and dense payloads incrementally.
-8. Only after this migration and the remaining alpha gate are green, advance the
+Implementation status in the alpha tree:
+
+- the strict schema-v1 libzip/manifest core, hostile-input coverage, shared
+  content-signature dispatch, UTF-8 host-path handling, and the cross-platform
+  atomic replacement primitive are merged;
+- Qt archive Open/Save As, format-preserving ordinary Save, recovery-format
+  metadata, and transactional workspace smoke are the current integration step;
+  that smoke uses a Czech/CJK Unicode `.cspar` filename on every Qt CI platform;
+- CLI read/write parity is being validated separately with the same Unicode
+  archive-name class and format-preserving atomic rewrite coverage;
+- archive-first image-sidecar discovery (`.cspar` then legacy `.par`, never
+  both) is staged separately on top of the Qt integration;
+- new Save As remains legacy-first until those frontend matrices are green.
+
+Remaining rollout sequence:
+
+1. Merge Qt and CLI archive parity after their focused matrices are green.
+2. Merge archive-first sidecar discovery after its image-load transaction smoke
+   is green.
+3. Make `.cspar` the default for new saves while retaining explicit legacy
+   `.par` export.
+4. Migrate high-value structured sections and dense payloads incrementally.
+5. Only after this migration and the remaining alpha gate are green, advance the
    product version toward beta.

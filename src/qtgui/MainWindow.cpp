@@ -2435,7 +2435,8 @@ void MainWindow::createMenus() {
 
   QAction *openParamsAction = m_fileMenu->addAction("Open &Parameters...");
   openParamsAction->setToolTip(
-      "Load rendering and geometry settings from a parameter (.par) file.");
+      "Load rendering and geometry settings from a Color-Screen archive "
+      "(.cspar) or legacy parameter (.par) file.");
   connect(openParamsAction, &QAction::triggered, this,
           &MainWindow::onOpenParameters);
 
@@ -2451,14 +2452,16 @@ void MainWindow::createMenus() {
 
   m_saveAction = m_fileMenu->addAction("&Save Parameters");
   m_saveAction->setToolTip(
-      "Save all current parameters to the current .par file.");
+      "Save all current parameters to the current parameter file, preserving "
+      "its archive or legacy format.");
   m_saveAction->setShortcut(QKeySequence::Save); // Ctrl+S
   m_saveAction->setShortcutContext(Qt::WindowShortcut);
   connect(m_saveAction, &QAction::triggered, this,
           &MainWindow::onSaveParameters);
 
   m_saveAsAction = m_fileMenu->addAction("Save Parameters &As...");
-  m_saveAsAction->setToolTip("Save current parameters to a new .par file.");
+  m_saveAsAction->setToolTip(
+      "Save current parameters to a new .cspar archive or legacy .par file.");
   m_saveAsAction->setShortcut(QKeySequence::SaveAs); // Ctrl+Shift+S
   m_saveAsAction->setShortcutContext(Qt::WindowShortcut);
   connect(m_saveAsAction, &QAction::triggered, this,

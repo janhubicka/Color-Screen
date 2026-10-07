@@ -3,6 +3,7 @@
 #include "../libcolorscreen/include/base.h"
 #include "../libcolorscreen/include/render-parameters.h"
 #include "../libcolorscreen/include/stitch.h"
+#include "../libcolorscreen/parameter-archive.h"
 #include "ColorOptimizerWorker.h"
 #include "ColorScreenApplication.h"
 #include "GeometryPanel.h"
@@ -45,6 +46,7 @@
 #include <cstdio>
 #include <exception>
 #include <memory>
+#include <string>
 #include <utility>
 
 namespace {
@@ -70,20 +72,97 @@ void rememberFileDialogDirectory(const QString &settingsKey,
   settings.setValue(settingsKey, QFileInfo(fileName).absolutePath());
 }
 
-/** Serialize one Qt parameter payload through the shared atomic FILE* bridge. */
+/** Serialize one complete CSP + Qt metadata payload into BYTES. */
+bool serializeParameterPayload(
+    const colorscreen::scr_to_img_parameters &scrToImg,
+    const colorscreen::scr_detect_parameters *detect,
+    const colorscreen::render_parameters &render,
+    const colorscreen::solver_parameters &solver,
+    const std::vector<colorscreen::point_t> &profileSpots,
+    std::string *bytes, QString *error) {
+  if (!bytes)
+    return false;
+
+  FILE *staged = std::tmpfile();
+  if (!staged) {
+    if (error)
+      *error = QCoreApplication::translate(
+          "MainWindow", "Could not create a temporary parameter payload.");
+    return false;
+  }
+
+  bool ok = colorscreen::save_csp_with_profile_spots(
+      staged, &scrToImg, detect, &render, &solver, profileSpots);
+  if (ok && std::fflush(staged) != 0)
+    ok = false;
+  if (ok && std::fseek(staged, 0, SEEK_SET) != 0)
+    ok = false;
+
+  std::string result;
+  char buffer[64 * 1024];
+  while (ok) {
+    const size_t count = std::fread(buffer, 1, sizeof(buffer), staged);
+    if (count > 0)
+      result.append(buffer, count);
+    if (count < sizeof(buffer)) {
+      if (std::ferror(staged))
+        ok = false;
+      break;
+    }
+  }
+  std::fclose(staged);
+
+  if (!ok || result.empty()) {
+    if (error)
+      *error = QCoreApplication::translate(
+          "MainWindow", "Could not serialize the complete parameter payload.");
+    return false;
+  }
+
+  *bytes = std::move(result);
+  if (error)
+    error->clear();
+  return true;
+}
+
+/** Atomically save one legacy CSP or versioned parameter archive. */
 bool saveParameterPayloadAtomically(
-    const QString &path, const colorscreen::scr_to_img_parameters &scrToImg,
+    const QString &path, bool archive,
+    const colorscreen::scr_to_img_parameters &scrToImg,
     const colorscreen::scr_detect_parameters *detect,
     const colorscreen::render_parameters &render,
     const colorscreen::solver_parameters &solver,
     const std::vector<colorscreen::point_t> &profileSpots, QString *error) {
-  return qtgui_io::saveStdioAtomically(
-      path,
-      [&scrToImg, detect, &render, &solver, &profileSpots](FILE *staged) {
-        return colorscreen::save_csp_with_profile_spots(
-            staged, &scrToImg, detect, &render, &solver, profileSpots);
-      },
-      error);
+  if (!archive) {
+    return qtgui_io::saveStdioAtomically(
+        path,
+        [&scrToImg, detect, &render, &solver, &profileSpots](FILE *staged) {
+          return colorscreen::save_csp_with_profile_spots(
+              staged, &scrToImg, detect, &render, &solver, profileSpots);
+        },
+        error);
+  }
+
+  std::string payload;
+  if (!serializeParameterPayload(scrToImg, detect, render, solver, profileSpots,
+                                 &payload, error))
+    return false;
+
+  QString version = QCoreApplication::applicationVersion();
+  if (version.isEmpty())
+    version = QStringLiteral(PACKAGE_VERSION);
+  const QByteArray versionBytes = version.toUtf8();
+
+  std::string archiveError;
+  const QByteArray targetName = path.toUtf8();
+  const bool written = colorscreen::write_parameter_payload_file(
+      targetName.constData(), payload, true, versionBytes.constData(),
+      &archiveError);
+  if (!written && error)
+    *error = QString::fromUtf8(archiveError);
+  else if (written && error)
+    error->clear();
+  return written;
 }
 
 /** Atomically replace a small UTF-8 recovery metadata file. */
@@ -97,15 +176,24 @@ bool saveRecoveryTextAtomically(const QString &path, const QString &text) {
     members here. ERROR receives a copied open/parse diagnostic on failure. */
 bool loadParameterPayload(
     const QString &path, ParameterState *state,
-    std::vector<colorscreen::color_match> *spotResults, QString *error) {
+    std::vector<colorscreen::color_match> *spotResults, bool *isArchive,
+    QString *error) {
   if (!state)
     return false;
 
-  FILE *f = fopen(path.toUtf8().constData(), "r");
+  std::string openError;
+  bool archive = false;
+  const QByteArray encodedPath = path.toUtf8();
+  FILE *f = colorscreen::open_parameter_payload(
+      encodedPath.constData(), &archive, &openError);
   if (!f) {
-    if (error)
-      *error = QCoreApplication::translate(
-          "MainWindow", "Could not open %1.").arg(path);
+    if (error) {
+      const QString detail = QString::fromUtf8(openError);
+      *error = detail.isEmpty()
+                   ? QCoreApplication::translate(
+                         "MainWindow", "Could not open %1.").arg(path)
+                   : detail;
+    }
     return false;
   }
 
@@ -133,6 +221,8 @@ bool loadParameterPayload(
   *state = std::move(loadedState);
   if (spotResults)
     *spotResults = std::move(loadedSpotResults);
+  if (isArchive)
+    *isArchive = archive;
   if (error)
     error->clear();
   return true;
@@ -163,7 +253,7 @@ void showParameterLoadFailure(QWidget *parent, const QString &detail) {
 }
 } // namespace
 
-/** Open a .par parameter file chosen by the user.
+/** Open a legacy or archive parameter file chosen by the user.
    Prompts for unsaved changes first, then delegates to the transactional
    parameter loader. On success, re-initialises the image widget and renderer,
    clears undo history, and refreshes the UI. Failed parsing never mutates live
@@ -181,7 +271,7 @@ void MainWindow::onOpenParameters() {
 
   auto *dialog = new QFileDialog(
       this, tr("Open Parameters"), initialPath,
-      tr("Parameters (*.par);;All Files (*)"));
+      tr("Color-Screen parameters (*.cspar *.par);;Archive parameters (*.cspar);;Legacy parameters (*.par);;All Files (*)"));
   dialog->setObjectName(QStringLiteral("ParameterOpenFileDialog"));
   dialog->setFileMode(QFileDialog::ExistingFile);
   dialog->setAcceptMode(QFileDialog::AcceptOpen);
@@ -205,7 +295,7 @@ void MainWindow::onOpenParameters() {
   dialog->open();
 }
 
-/** Save parameters to the current .par file.
+/** Save parameters to the current parameter target.
    A weak auto-suggested filename is confirmed through Save As before writing.
    Saving is synchronous so closeEvent can reliably decide whether it is safe
    to close this particular document window.  */
@@ -217,7 +307,7 @@ void MainWindow::onSaveParameters() {
   saveParametersToFile(m_parameterFile.path);
 }
 
-/** Save parameters to a new .par file chosen by the user. */
+/** Save parameters to a new legacy or archive file chosen by the user. */
 void MainWindow::onSaveParametersAs() { saveParametersAs(); }
 
 /** Atomically write the current document parameters and mark them saved. */
@@ -229,10 +319,21 @@ bool MainWindow::saveParametersToFile(const QString &fileName) {
   }
 
   const QString absoluteFileName = QFileInfo(fileName).absoluteFilePath();
+  const bool preservingCurrentTarget =
+      !m_parameterFile.suggested && !m_parameterFile.path.isEmpty() &&
+      QFileInfo(m_parameterFile.path).absoluteFilePath() == absoluteFileName;
+  const ParameterFileState::Format format =
+      preservingCurrentTarget
+          ? m_parameterFile.format
+          : (absoluteFileName.endsWith(QLatin1String(".cspar"),
+                                       Qt::CaseInsensitive)
+                 ? ParameterFileState::Format::Archive
+                 : ParameterFileState::Format::LegacyCsp);
+  const bool archive = format == ParameterFileState::Format::Archive;
   const bool hasRgb = m_scan && m_scan->has_rgb();
   QString error;
   if (!saveParameterPayloadAtomically(
-          absoluteFileName, m_scrToImgParams,
+          absoluteFileName, archive, m_scrToImgParams,
           hasRgb ? &m_detectParams : nullptr, m_rparams, m_solverParams,
           m_profileSpots, &error)) {
     // The write result is synchronous because closeEvent needs it immediately,
@@ -257,7 +358,7 @@ bool MainWindow::saveParametersToFile(const QString &fileName) {
     return false;
   }
 
-  m_parameterFile.setLoaded(absoluteFileName);
+  m_parameterFile.setLoaded(absoluteFileName, format);
   m_recoveryDirty = false;
   rememberFileDialogDirectory(QStringLiteral("lastParameterDir"),
                               absoluteFileName);
@@ -278,14 +379,37 @@ bool MainWindow::saveParametersAs() {
   if (initialPath.isEmpty())
     initialPath =
         fileDialogDirectoryPreference(QStringLiteral("lastParameterDir"));
+  const QString archiveFilter = tr("Archive parameters (*.cspar)");
+  const QString legacyFilter = tr("Legacy parameters (*.par)");
+  const QString allFilter = tr("All Files (*)");
+  // Keep legacy as the default for new files until the archive rollout gate
+  // (CLI parity, Unicode filenames, and cross-platform fixtures) is complete.
+  // Once an archive target is already established, Save As naturally starts on
+  // the archive choice.
+  QString selectedFilter =
+      m_parameterFile.format == ParameterFileState::Format::Archive &&
+              !m_parameterFile.path.isEmpty()
+          ? archiveFilter
+          : legacyFilter;
   QString fileName = QFileDialog::getSaveFileName(
-      this, "Save Parameters", initialPath,
-      "Parameters (*.par);;All Files (*)");
+      this, tr("Save Parameters"), initialPath,
+      archiveFilter + QStringLiteral(";;") + legacyFilter +
+          QStringLiteral(";;") + allFilter,
+      &selectedFilter);
   if (fileName.isEmpty())
     return false;
 
-  if (!fileName.endsWith(QLatin1String(".par"), Qt::CaseInsensitive))
-    fileName += QStringLiteral(".par");
+  if (selectedFilter == legacyFilter) {
+    if (!fileName.endsWith(QLatin1String(".par"), Qt::CaseInsensitive))
+      fileName += QStringLiteral(".par");
+  } else if (selectedFilter == archiveFilter) {
+    if (!fileName.endsWith(QLatin1String(".cspar"), Qt::CaseInsensitive))
+      fileName += QStringLiteral(".cspar");
+  } else if (!fileName.endsWith(QLatin1String(".par"), Qt::CaseInsensitive) &&
+             !fileName.endsWith(QLatin1String(".cspar"),
+                                Qt::CaseInsensitive)) {
+    fileName += QStringLiteral(".cspar");
+  }
   return saveParametersToFile(fileName);
 }
 
@@ -356,6 +480,11 @@ bool MainWindow::saveReproducibilityReportToFile(const QString &fileName,
   metadata.insert(QStringLiteral("image_file"), m_currentImageFile);
   metadata.insert(QStringLiteral("parameter_file"), m_parameterFile.path);
   metadata.insert(QStringLiteral("parameter_file_state"), parameterState);
+  metadata.insert(
+      QStringLiteral("parameter_file_format"),
+      m_parameterFile.format == ParameterFileState::Format::Archive
+          ? QStringLiteral("archive")
+          : QStringLiteral("legacy"));
   metadata.insert(QStringLiteral("document_modified"), isDocumentModified());
   metadata.insert(QStringLiteral("registration_point_count"),
                   static_cast<int>(state.solver.n_points()));
@@ -840,6 +969,7 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
     std::optional<ParameterState> state;
     std::vector<colorscreen::color_match> spotResults;
     QString loadedPath;
+    bool loadedArchive = false;
     QString suggestedPath;
     std::optional<ParameterState> baseline;
   };
@@ -985,7 +1115,11 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
                       m_profileSpots = std::move(sidecarState.profileSpots);
                       m_profileCalibration.spotResults =
                           std::move(sidecarStaging->spotResults);
-                      m_parameterFile.setLoaded(sidecarStaging->loadedPath);
+                      m_parameterFile.setLoaded(
+                          sidecarStaging->loadedPath,
+                          sidecarStaging->loadedArchive
+                              ? ParameterFileState::Format::Archive
+                              : ParameterFileState::Format::LegacyCsp);
                       addToRecentParams(sidecarStaging->loadedPath);
 
                       if (colorscreen::screen_geometry_configured_p(
@@ -1245,9 +1379,11 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
             if (result == QMessageBox::Yes) {
               ParameterState sidecarState;
               std::vector<colorscreen::color_match> sidecarSpotResults;
+              bool sidecarArchive = false;
               QString loadError;
               if (!loadParameterPayload(parFile, &sidecarState,
-                                        &sidecarSpotResults, &loadError)) {
+                                        &sidecarSpotResults, &sidecarArchive,
+                                        &loadError)) {
                 // Parsing failed, so the file is at most a later Save-As
                 // suggestion. Publish that suggestion only if the image opens.
                 sidecarStaging->suggestedPath = parFile;
@@ -1257,6 +1393,7 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
                 sidecarStaging->spotResults =
                     std::move(sidecarSpotResults);
                 sidecarStaging->loadedPath = parFile;
+                sidecarStaging->loadedArchive = sidecarArchive;
               }
             } else {
               // Declining (or closing) the optional question keeps the natural
@@ -1540,8 +1677,9 @@ void MainWindow::saveRecoveryState() {
   const bool hasRgb = m_scan->has_rgb();
   QString paramsError;
   if (!saveParameterPayloadAtomically(
-          paramsPath, m_scrToImgParams, hasRgb ? &m_detectParams : nullptr,
-          m_rparams, m_solverParams, m_profileSpots, &paramsError)) {
+          paramsPath, false, m_scrToImgParams,
+          hasRgb ? &m_detectParams : nullptr, m_rparams, m_solverParams,
+          m_profileSpots, &paramsError)) {
     qWarning() << "Could not atomically save recovery parameters to" << paramsPath
                << paramsError;
   }
@@ -1551,7 +1689,10 @@ void MainWindow::saveRecoveryState() {
       (m_parameterFile.suggested ? QStringLiteral("1\n")
                                  : QStringLiteral("0\n")) +
       (isDocumentModified() ? QStringLiteral("1\n")
-                            : QStringLiteral("0\n"));
+                            : QStringLiteral("0\n")) +
+      (m_parameterFile.format == ParameterFileState::Format::Archive
+           ? QStringLiteral("archive\n")
+           : QStringLiteral("legacy\n"));
   if (!saveRecoveryTextAtomically(
           directory.filePath(QStringLiteral("recovery_params_meta.txt")),
           meta)) {
@@ -1634,11 +1775,19 @@ bool MainWindow::restoreRecoveryState() {
     const QString recoveredParameterPath = in.readLine().trimmed();
     const bool recoveredParameterPathSuggested =
         (in.readLine().trimmed() == QLatin1String("1"));
-    if (recoveredParameterPathSuggested)
-      m_parameterFile.setSuggested(recoveredParameterPath);
-    else
-      m_parameterFile.setLoaded(recoveredParameterPath);
     const QString dirtyFlag = in.readLine().trimmed();
+    const QString recoveredFormat = in.readLine().trimmed();
+    const ParameterFileState::Format format =
+        recoveredFormat == QLatin1String("archive") ||
+                (recoveredFormat.isEmpty() &&
+                 recoveredParameterPath.endsWith(
+                     QLatin1String(".cspar"), Qt::CaseInsensitive))
+            ? ParameterFileState::Format::Archive
+            : ParameterFileState::Format::LegacyCsp;
+    if (recoveredParameterPathSuggested)
+      m_parameterFile.setSuggested(recoveredParameterPath, format);
+    else
+      m_parameterFile.setLoaded(recoveredParameterPath, format);
     if (!dirtyFlag.isEmpty())
       m_recoveryDirty = (dirtyFlag == QLatin1String("1"));
   }
@@ -1675,7 +1824,7 @@ void MainWindow::clearRecoveryFiles() {
     QDir(m_recoveryDir).removeRecursively();
 }
 
-/** Load parameters from a .par file and update all UI components.
+/** Load legacy or archive parameters and update all UI components.
    Parses into private default state because load_csp merges into its outputs;
    only a complete payload is published. Updates ImageWidget, NavigationView,
    gamut warning, undo history, and all panels. Returns true on success. */
@@ -1687,9 +1836,10 @@ bool MainWindow::loadParameterFile(const QString &fileName) {
 
   ParameterState loadedState;
   std::vector<colorscreen::color_match> loadedSpotResults;
+  bool loadedArchive = false;
   QString loadError;
   if (!loadParameterPayload(fileName, &loadedState, &loadedSpotResults,
-                            &loadError)) {
+                            &loadedArchive, &loadError)) {
     showParameterLoadFailure(this, loadError);
     return false;
   }
@@ -1734,7 +1884,10 @@ bool MainWindow::loadParameterFile(const QString &fileName) {
   m_recoveryDirty = false;
 
   const QString absoluteFileName = QFileInfo(fileName).absoluteFilePath();
-  m_parameterFile.setLoaded(absoluteFileName);
+  m_parameterFile.setLoaded(
+      absoluteFileName,
+      loadedArchive ? ParameterFileState::Format::Archive
+                    : ParameterFileState::Format::LegacyCsp);
   rememberFileDialogDirectory(QStringLiteral("lastParameterDir"),
                               absoluteFileName);
 

@@ -148,8 +148,9 @@ public:
   QString currentImageFile() const { return m_currentImageFile; }
 
   /** Save the current document parameters to FILENAME without opening a dialog.
-      On success the file becomes the document's current parameter file and the
-      undo stack is marked clean. */
+      An established current target preserves its loaded format; otherwise
+      .cspar selects the archive format and every other suffix remains legacy
+      CSP. On success the file becomes the current clean parameter target. */
   bool saveParametersToFile(const QString &fileName);
 
   /** Load FILENAME as this document's parameter file without opening a dialog.
@@ -1008,16 +1009,23 @@ private:
       A suggested path is only a Save-As default and must never be overwritten
       without confirmation as though it had already been loaded/saved. */
   struct ParameterFileState {
+    enum class Format { LegacyCsp, Archive };
+
     QString path;
     bool suggested = false;
+    Format format = Format::LegacyCsp;
 
-    void setLoaded(const QString &fileName) {
+    void setLoaded(const QString &fileName,
+                   Format fileFormat = Format::LegacyCsp) {
       path = fileName;
       suggested = false;
+      format = fileFormat;
     }
-    void setSuggested(const QString &fileName) {
+    void setSuggested(const QString &fileName,
+                      Format fileFormat = Format::LegacyCsp) {
       path = fileName;
       suggested = true;
+      format = fileFormat;
     }
   };
   ParameterFileState m_parameterFile;

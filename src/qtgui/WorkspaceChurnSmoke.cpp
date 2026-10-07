@@ -269,16 +269,22 @@ void startWorkspaceChurnSmoke(ColorScreenApplication &app,
         MainWindow::ParameterFileState parameterFileProbe;
         parameterFileProbe.setSuggested(QStringLiteral("/tmp/suggested.par"));
         if (parameterFileProbe.path != QStringLiteral("/tmp/suggested.par") ||
-            !parameterFileProbe.suggested) {
+            !parameterFileProbe.suggested ||
+            parameterFileProbe.format !=
+                MainWindow::ParameterFileState::Format::LegacyCsp) {
           fail(QStringLiteral(
               "Suggested parameter-file target lost Save-As-only semantics"));
           return;
         }
-        parameterFileProbe.setLoaded(QStringLiteral("/tmp/loaded.par"));
-        if (parameterFileProbe.path != QStringLiteral("/tmp/loaded.par") ||
-            parameterFileProbe.suggested) {
+        parameterFileProbe.setLoaded(
+            QStringLiteral("/tmp/loaded.cspar"),
+            MainWindow::ParameterFileState::Format::Archive);
+        if (parameterFileProbe.path != QStringLiteral("/tmp/loaded.cspar") ||
+            parameterFileProbe.suggested ||
+            parameterFileProbe.format !=
+                MainWindow::ParameterFileState::Format::Archive) {
           fail(QStringLiteral(
-              "Loaded parameter-file target retained suggested semantics"));
+              "Loaded parameter-file target lost its explicit archive format"));
           return;
         }
 
@@ -2887,9 +2893,11 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
           return;
         }
         if (!second->saveParametersToFile(persistenceFile) ||
-            second->documentDisplayName().endsWith(QLatin1Char('*'))) {
+            second->documentDisplayName().endsWith(QLatin1Char('*')) ||
+            second->m_parameterFile.format !=
+                MainWindow::ParameterFileState::Format::LegacyCsp) {
           fail(QStringLiteral(
-              "Workspace churn persistence save did not establish a clean document"));
+              "Workspace churn legacy persistence save did not establish a clean legacy document"));
           return;
         }
 
@@ -2906,9 +2914,11 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         }
         if (!second->loadParameterFile(persistenceFile) ||
             second->documentStateSnapshot() != savedSecondState ||
-            second->documentDisplayName().endsWith(QLatin1Char('*'))) {
+            second->documentDisplayName().endsWith(QLatin1Char('*')) ||
+            second->m_parameterFile.format !=
+                MainWindow::ParameterFileState::Format::LegacyCsp) {
           fail(QStringLiteral(
-              "Workspace churn save/reload did not restore the complete clean document state"));
+              "Workspace churn legacy save/reload did not restore the complete clean document state"));
           return;
         }
 
@@ -2950,6 +2960,8 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         const QString beforeFailedLoadPath = second->m_parameterFile.path;
         const bool beforeFailedLoadSuggested =
             second->m_parameterFile.suggested;
+        const MainWindow::ParameterFileState::Format beforeFailedLoadFormat =
+            second->m_parameterFile.format;
         if (second->loadParameterFile(corruptParameterFile)) {
           fail(QStringLiteral(
               "Workspace churn accepted a truncated parameter file"));
@@ -2962,6 +2974,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
             second->documentDisplayName().endsWith(QLatin1Char('*')) ||
             second->m_parameterFile.path != beforeFailedLoadPath ||
             second->m_parameterFile.suggested != beforeFailedLoadSuggested ||
+            second->m_parameterFile.format != beforeFailedLoadFormat ||
             !QFile::exists(corruptParameterFile) || !parameterLoadFailure ||
             !parameterLoadFailure->text().contains(
                 QStringLiteral("left unchanged"))) {
@@ -2972,6 +2985,135 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
           return;
         }
         parameterLoadFailure->close();
+
+        // Save the same complete document through the new archive path. The
+        // chosen/loaded physical format becomes part of the current target so
+        // an ordinary subsequent Save can never replace ZIP bytes with CSP text.
+        const QString archiveFile =
+            persistenceDir.filePath(
+                QStringLiteral("workspace-\u017Elu\u0165ou\u010Dk\u00FD-"
+                               "\u6D4B\u8BD5.cspar"));
+        ParameterState archiveState = savedSecondState;
+        archiveState.rparams.saturation += 0.07;
+        second->applySharedDocumentState(
+            archiveState, QStringLiteral("Archive persistence smoke edit"));
+        if (!second->isDocumentModified() ||
+            !second->saveParametersToFile(archiveFile) ||
+            second->isDocumentModified() ||
+            second->m_parameterFile.format !=
+                MainWindow::ParameterFileState::Format::Archive) {
+          fail(QStringLiteral(
+              "Workspace churn archive save did not establish a clean archive target"));
+          return;
+        }
+
+        auto archiveHasZipSignature = [](const QString &path) {
+          QFile file(path);
+          if (!file.open(QIODevice::ReadOnly))
+            return false;
+          return file.read(4).startsWith(QByteArray("PK"));
+        };
+        if (!archiveHasZipSignature(archiveFile)) {
+          fail(QStringLiteral(
+              "Workspace churn .cspar save did not produce a ZIP archive"));
+          return;
+        }
+
+        ParameterState archiveMutation = archiveState;
+        archiveMutation.rparams.saturation += 0.11;
+        archiveMutation.profileSpots.clear();
+        second->applyState(archiveMutation);
+        if (!second->loadParameterFile(archiveFile) ||
+            second->documentStateSnapshot() != archiveState ||
+            second->m_parameterFile.format !=
+                MainWindow::ParameterFileState::Format::Archive ||
+            second->isDocumentModified()) {
+          fail(QStringLiteral(
+              "Workspace churn archive load did not restore/adopt the complete clean archive state"));
+          return;
+        }
+
+        ParameterState archiveResaveState = archiveState;
+        archiveResaveState.rparams.brightness += 0.09;
+        second->applySharedDocumentState(
+            archiveResaveState, QStringLiteral("Archive ordinary Save smoke"));
+        if (!second->isDocumentModified() ||
+            !second->saveParametersToFile(second->m_parameterFile.path) ||
+            second->documentStateSnapshot() != archiveResaveState ||
+            second->m_parameterFile.format !=
+                MainWindow::ParameterFileState::Format::Archive ||
+            second->isDocumentModified() ||
+            !archiveHasZipSignature(archiveFile)) {
+          fail(QStringLiteral(
+              "Ordinary Save on an archive target changed format or save semantics"));
+          return;
+        }
+
+        // Corrupt a copy after the ZIP signature. Archive detection must stay on
+        // the archive path and the transactional loader must publish nothing.
+        QFile validArchive(archiveFile);
+        if (!validArchive.open(QIODevice::ReadOnly)) {
+          fail(QStringLiteral(
+              "Workspace churn could not reopen the archive fixture"));
+          return;
+        }
+        QByteArray corruptArchivePayload = validArchive.readAll();
+        validArchive.close();
+        if (corruptArchivePayload.size() < 16) {
+          fail(QStringLiteral("Workspace churn archive fixture is unexpectedly small"));
+          return;
+        }
+        corruptArchivePayload.truncate(corruptArchivePayload.size() / 2);
+        const QString corruptArchiveFile =
+            persistenceDir.filePath(QStringLiteral("workspace-corrupt.cspar"));
+        QFile corruptArchiveOutput(corruptArchiveFile);
+        if (!corruptArchiveOutput.open(
+                QIODevice::WriteOnly | QIODevice::Truncate) ||
+            corruptArchiveOutput.write(corruptArchivePayload) !=
+                corruptArchivePayload.size() ||
+            !corruptArchiveOutput.flush()) {
+          fail(QStringLiteral(
+              "Workspace churn could not write corrupt archive fixture"));
+          return;
+        }
+        corruptArchiveOutput.close();
+
+        const ParameterState beforeFailedArchive =
+            second->documentStateSnapshot();
+        const QString beforeFailedArchivePath = second->m_parameterFile.path;
+        const bool beforeFailedArchiveSuggested =
+            second->m_parameterFile.suggested;
+        const MainWindow::ParameterFileState::Format beforeFailedArchiveFormat =
+            second->m_parameterFile.format;
+        const int beforeFailedArchiveUndo =
+            second->m_undoStack ? second->m_undoStack->index() : -1;
+        const bool beforeFailedArchiveClean =
+            second->m_undoStack ? second->m_undoStack->isClean() : false;
+        if (second->loadParameterFile(corruptArchiveFile)) {
+          fail(QStringLiteral(
+              "Workspace churn accepted a truncated parameter archive"));
+          return;
+        }
+        QMessageBox *archiveLoadFailure =
+            second->findChild<QMessageBox *>(
+                QStringLiteral("ParameterLoadFailureDialog"));
+        if (second->documentStateSnapshot() != beforeFailedArchive ||
+            second->m_parameterFile.path != beforeFailedArchivePath ||
+            second->m_parameterFile.suggested != beforeFailedArchiveSuggested ||
+            second->m_parameterFile.format != beforeFailedArchiveFormat ||
+            (second->m_undoStack &&
+             (second->m_undoStack->index() != beforeFailedArchiveUndo ||
+              second->m_undoStack->isClean() != beforeFailedArchiveClean)) ||
+            !archiveLoadFailure ||
+            !archiveLoadFailure->text().contains(
+                QStringLiteral("left unchanged"))) {
+          if (archiveLoadFailure)
+            archiveLoadFailure->close();
+          fail(QStringLiteral(
+              "Failed archive load mutated live state/target/Undo semantics"));
+          return;
+        }
+        archiveLoadFailure->close();
 
         // The workspace lifecycle test itself should start from the same
         // processing state as before the persistence probe.  The second
