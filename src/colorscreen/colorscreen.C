@@ -207,9 +207,12 @@ save_parameter_filename (const char *filename, bool archive,
                  + std::strerror (errno);
       return false;
     }
-  const bool ok
-      = fwrite (payload.data (), 1, payload.size (), out) == payload.size ()
-        && fflush (out) == 0 && fclose (out) == 0;
+  bool ok
+      = fwrite (payload.data (), 1, payload.size (), out) == payload.size ();
+  if (fflush (out) != 0)
+    ok = false;
+  if (fclose (out) != 0)
+    ok = false;
   if (!ok)
     {
       if (error)
@@ -1324,7 +1327,6 @@ autodetect (int argc, char **argv)
       fprintf (stderr, "Can not load %s: %s\n", infname, error);
       return 1;
     }
-  bool input_archive = false;
   std::string input_trailing;
   if (cspname)
     {
@@ -1336,8 +1338,8 @@ autodetect (int argc, char **argv)
         }
       std::string parameter_error;
       if (!load_parameter_filename (cspname, &param, &dparam, &rparam,
-                                    &solver_param, &parameter_error,
-                                    &input_archive, &input_trailing))
+                                    &solver_param, &parameter_error, nullptr,
+                                    &input_trailing))
         {
           progress.pause_stdout ();
           fprintf (stderr, "Can not load %s: %s\n", cspname,
