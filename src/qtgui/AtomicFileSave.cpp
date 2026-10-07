@@ -1,12 +1,8 @@
 #include "AtomicFileSave.h"
 
 #include <QByteArray>
-#include <QDir>
-#include <QFile>
-#include <QFileInfo>
 #include <QIODevice>
 #include <QSaveFile>
-#include <QTemporaryFile>
 
 namespace qtgui_io {
 
@@ -71,77 +67,6 @@ bool saveStdioAtomically(const QString &path,
       *error = output.errorString();
     return false;
   }
-  return true;
-}
-
-bool savePathAtomically(
-    const QString &path,
-    const std::function<bool(const QString &, QString *)> &writer,
-    QString *error) {
-  const QFileInfo targetInfo(path);
-  QTemporaryFile staged(
-      targetInfo.absoluteDir().filePath(QStringLiteral(".colorscreen-save-XXXXXX")));
-  staged.setAutoRemove(true);
-  if (!staged.open()) {
-    if (error)
-      *error = staged.errorString();
-    return false;
-  }
-  const QString stagedPath = staged.fileName();
-  staged.close();
-
-  QString writerError;
-  if (!writer || !writer(stagedPath, &writerError)) {
-    if (error)
-      *error = writerError.isEmpty()
-                   ? QStringLiteral("Could not serialize the complete payload.")
-                   : writerError;
-    return false;
-  }
-
-  QFile input(stagedPath);
-  if (!input.open(QIODevice::ReadOnly)) {
-    if (error)
-      *error = input.errorString();
-    return false;
-  }
-
-  QSaveFile output(path);
-  output.setDirectWriteFallback(false);
-  if (!output.open(QIODevice::WriteOnly)) {
-    if (error)
-      *error = output.errorString();
-    return false;
-  }
-
-  char buffer[64 * 1024];
-  while (true) {
-    const qint64 count = input.read(buffer, sizeof(buffer));
-    if (count < 0) {
-      if (error)
-        *error = input.errorString();
-      output.cancelWriting();
-      return false;
-    }
-    if (count == 0)
-      break;
-    if (output.write(buffer, count) != count) {
-      if (error)
-        *error = output.errorString().isEmpty()
-                     ? QStringLiteral("Could not write the complete payload.")
-                     : output.errorString();
-      output.cancelWriting();
-      return false;
-    }
-  }
-
-  if (!output.commit()) {
-    if (error)
-      *error = output.errorString();
-    return false;
-  }
-  if (error)
-    error->clear();
   return true;
 }
 
