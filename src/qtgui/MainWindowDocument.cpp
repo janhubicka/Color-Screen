@@ -1787,7 +1787,9 @@ bool MainWindow::restoreRecoveryState() {
       directory.filePath(QStringLiteral("recovery_params.cspar"));
   const QString legacyPath =
       directory.filePath(QStringLiteral("recovery_params.par"));
-  const QString paramsPath = QFile::exists(archivePath) ? archivePath : legacyPath;
+  const bool hasArchiveSnapshot = QFile::exists(archivePath);
+  const QString paramsPath =
+      hasArchiveSnapshot ? archivePath : legacyPath;
   if (!QFile::exists(imagePath) && !QFile::exists(paramsPath))
     return false;
 
@@ -1858,9 +1860,11 @@ bool MainWindow::restoreRecoveryState() {
       m_recoveryDirty = (dirtyFlag == QLatin1String("1"));
   }
 
-  // A failed or missing parameter recovery cannot certify a clean user
-  // document even if older metadata says the original save was clean.
-  if (!parametersRecovered)
+  // Neither a failed recovery nor an old CSP-only recovery can certify that
+  // all current structured render fields were restored. The old metadata
+  // clean bit must not allow a later ordinary Save to silently replace the
+  // user's complete .cspar state with legacy defaults.
+  if (!parametersRecovered || !hasArchiveSnapshot)
     m_recoveryDirty = true;
 
   if (!imageToLoad.isEmpty() && QFile::exists(imageToLoad)) {
