@@ -23,6 +23,7 @@
 #include <QFileInfo>
 #include <QFuture>
 #include <QFutureWatcher>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLabel>
@@ -500,6 +501,32 @@ bool MainWindow::saveReproducibilityReportToFile(const QString &fileName,
   metadata.insert(
       QStringLiteral("mtf_measurement_count"),
       static_cast<int>(state.rparams.sharpen.scanner_mtf.measurements.size()));
+
+  QJsonObject renderOverrides;
+  renderOverrides.insert(QStringLiteral("ignore_infrared"),
+                         state.rparams.ignore_infrared);
+  renderOverrides.insert(
+      QStringLiteral("demosaiced_scaling"),
+      QString::fromLatin1(
+          colorscreen::render_parameters::demosaiced_scaling_names
+              [static_cast<int>(state.rparams.demosaiced_scaling)]
+                  .name));
+  QJsonArray observerWhitepoint;
+  observerWhitepoint.append(state.rparams.observer_whitepoint.x);
+  observerWhitepoint.append(state.rparams.observer_whitepoint.y);
+  renderOverrides.insert(QStringLiteral("observer_whitepoint"),
+                         observerWhitepoint);
+  renderOverrides.insert(
+      QStringLiteral("output_profile"),
+      QString::fromLatin1(
+          colorscreen::render_parameters::output_profile_names
+              [static_cast<int>(state.rparams.output_profile)]));
+  renderOverrides.insert(QStringLiteral("output_gamma"),
+                         state.rparams.output_gamma);
+  renderOverrides.insert(QStringLiteral("gamut_warning"),
+                         state.rparams.gamut_warning);
+  metadata.insert(QStringLiteral("render_overrides"), renderOverrides);
+
   metadata.insert(QStringLiteral("workflow"), workflow);
   metadata.insert(QStringLiteral("provenance"), provenance);
 
@@ -510,8 +537,9 @@ bool MainWindow::saveReproducibilityReportToFile(const QString &fileName,
                         "# Metadata (JSON)\n");
   const QByteArray payloadMarker =
       QByteArrayLiteral(
-          "\n# Exact Color-Screen parameter payload follows.\n"
-          "# It can be extracted from the next screen_alignment_version line.\n");
+          "\n# Legacy-compatible Color-Screen parameter payload follows.\n"
+          "# Structured-only render values are recorded in the JSON metadata.\n"
+          "# The legacy payload starts at the next screen_alignment_version line.\n");
 
   const QString absoluteFileName = QFileInfo(fileName).absoluteFilePath();
   return qtgui_io::saveStdioAtomically(
