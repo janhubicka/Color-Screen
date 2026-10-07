@@ -183,8 +183,10 @@ temporary stream and feeds the normal CSP loader. Qt then processes its existing
 metadata postamble exactly as for legacy `.par`. The live document is published
 only after the whole archive and parameter payload have parsed successfully.
 
-The writer should initially support an opt-in/new Save-As path and only become
-the default after cross-platform round-trip fixtures are established.
+The archive writer is now the default for genuinely new parameter saves after
+cross-platform core/CLI/GUI round-trip fixtures were established. Explicit
+legacy `.par` export remains available, and an established target always
+preserves its loaded/chosen format on ordinary Save.
 
 ## Structured migration after version 1
 
@@ -222,7 +224,7 @@ changes a historical default must materialize the old semantic value explicitly.
 
 ## Testing gate
 
-Before `.cspar` becomes the default user save format, CI must cover:
+The default-save gate below is now implemented and must remain green in CI:
 
 - legacy `.par` import;
 - archive v1 write/read round trip for representative full ParameterState;
@@ -261,10 +263,15 @@ Implementation status in the alpha tree:
 
 Remaining rollout sequence:
 
-1. Merge this archive-default switch while retaining explicit legacy `.par`
-   export.
-2. Migrate high-value structured sections and dense payloads incrementally.
-3. Keep crash recovery on its internal legacy payload until archive recovery has
-   equivalent unclean-shutdown coverage.
-4. Only after the structured migration and the remaining alpha gate are green,
-   advance the product version toward beta.
+1. Migrate high-value structured sections and dense payloads incrementally,
+   declaring one authoritative representation per schema version and validating
+   the legacy mirror rather than silently merging conflicts.
+2. Move crash recovery to the archive path only after equivalent
+   unclean-shutdown/partial-recovery coverage exists; until then its internal
+   legacy payload remains deliberate.
+3. Audit any remaining saved `ParameterState` fields that are not represented
+   by legacy CSP and make their structured archive representation authoritative
+   before beta.
+4. Keep all sanitizer/platform matrices green, run alpha field testing on the
+   completed workflow/file format, and only then consider advancing the product
+   version toward beta.
