@@ -5,6 +5,7 @@
 #include "MainWindow.h"
 #include "TaskQueue.h"
 #include "WorkspaceWindow.h"
+#include "../libcolorscreen/parameter-archive.h"
 
 #include <QAbstractButton>
 #include <QApplication>
@@ -51,6 +52,7 @@ struct DocumentLifecycleState {
   QString failedOpenParameterPath;
   QString failedOpenImagePath;
   bool failedOpenParameterSuggested = false;
+  bool failedOpenParameterArchive = false;
   bool failedOpenRecoveryDirty = false;
   std::unique_ptr<QTemporaryDir> temporaryDirectory;
   QString recoveryProbeDirectory;
@@ -696,21 +698,53 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
         const QString missingImagePath =
             state->temporaryDirectory->filePath(
                 QStringLiteral("missing-image-load.tif"));
-        const QString missingSidecarPath =
+        const QString missingLegacySidecarPath =
             state->temporaryDirectory->filePath(
                 QStringLiteral("missing-image-load.par"));
-        QFile::remove(missingSidecarPath);
-        if (!QFile::copy(state->firstParameters, missingSidecarPath)) {
+        const QString missingArchiveSidecarPath =
+            state->temporaryDirectory->filePath(
+                QStringLiteral("missing-image-load.cspar"));
+        QFile::remove(missingLegacySidecarPath);
+        QFile::remove(missingArchiveSidecarPath);
+        if (!QFile::copy(state->firstParameters, missingLegacySidecarPath)) {
           delete loadProbe;
           state->recoveryProbe = nullptr;
           fail(QStringLiteral(
-              "Image-load failure smoke could not create a valid sidecar"));
+              "Image-load failure smoke could not create a valid legacy sidecar"));
           return;
         }
+
+        QFile archivePayloadFile(state->firstParameters);
+        if (!archivePayloadFile.open(QIODevice::ReadOnly)) {
+          delete loadProbe;
+          state->recoveryProbe = nullptr;
+          fail(QStringLiteral(
+              "Image-load failure smoke could not read its sidecar payload"));
+          return;
+        }
+        const QByteArray archivePayload = archivePayloadFile.readAll();
+        archivePayloadFile.close();
+        std::string archiveError;
+        if (!colorscreen::write_parameter_archive(
+                missingArchiveSidecarPath.toUtf8().constData(),
+                std::string(archivePayload.constData(),
+                            static_cast<size_t>(archivePayload.size())),
+                "document-lifecycle-smoke", &archiveError)) {
+          delete loadProbe;
+          state->recoveryProbe = nullptr;
+          fail(QStringLiteral(
+                   "Image-load failure smoke could not create archive sidecar: %1")
+                   .arg(QString::fromUtf8(archiveError)));
+          return;
+        }
+
         state->failedOpenBaseline = loadProbe->getCurrentState();
         state->failedOpenParameterPath = loadProbe->m_parameterFile.path;
         state->failedOpenParameterSuggested =
             loadProbe->m_parameterFile.suggested;
+        state->failedOpenParameterArchive =
+            loadProbe->m_parameterFile.format ==
+            MainWindow::ParameterFileState::Format::Archive;
         state->failedOpenRecoveryDirty = loadProbe->m_recoveryDirty;
         state->failedOpenImagePath = loadProbe->m_currentImageFile;
 
@@ -741,6 +775,10 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
         if (!loadProbe->m_imageLoad.pending || !sidecarPrompt ||
             sidecarPrompt->objectName() !=
                 QStringLiteral("ImageSidecarLoadPrompt") ||
+            !sidecarPrompt->text().contains(
+                QStringLiteral("missing-image-load.cspar")) ||
+            sidecarPrompt->text().contains(
+                QStringLiteral("missing-image-load.par")) ||
             !adaptiveProgress->pool_cancel() ||
             loadProbe->m_adaptiveSharpening.baseline ||
             loadProbe->m_adaptiveSharpening.scan ||
@@ -779,6 +817,11 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
             probe->m_parameterFile.path != state->failedOpenParameterPath ||
             probe->m_parameterFile.suggested !=
                 state->failedOpenParameterSuggested ||
+            (probe->m_parameterFile.format ==
+             MainWindow::ParameterFileState::Format::Archive) !=
+                state->failedOpenParameterArchive ||
+            probe->findChild<QMessageBox *>(
+                QStringLiteral("ParameterLoadFailureDialog")) ||
             probe->m_recoveryDirty != state->failedOpenRecoveryDirty ||
             probe->m_currentImageFile != state->failedOpenImagePath ||
             !probe->canReuseForOpen()) {
