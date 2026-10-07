@@ -196,32 +196,8 @@ save_parameter_filename (const char *filename, bool archive,
                                     &payload, error))
     return false;
 
-  if (archive)
-    return write_parameter_archive (filename, payload, PACKAGE_VERSION, error);
-
-  FILE *out = fopen (filename, "wb");
-  if (!out)
-    {
-      if (error)
-        *error = std::string ("could not open parameter output: ")
-                 + std::strerror (errno);
-      return false;
-    }
-  bool ok
-      = fwrite (payload.data (), 1, payload.size (), out) == payload.size ();
-  if (fflush (out) != 0)
-    ok = false;
-  if (fclose (out) != 0)
-    ok = false;
-  if (!ok)
-    {
-      if (error)
-        *error = "could not write complete parameter output";
-      return false;
-    }
-  if (error)
-    error->clear ();
-  return true;
+  return write_parameter_payload_file (filename, payload, archive,
+                                       PACKAGE_VERSION, error);
 }
 
 static enum subhelp {
