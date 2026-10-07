@@ -161,6 +161,7 @@ jobs:
           testsuite/*.txt
           testsuite/*.log
           testsuite/*.par
+          testsuite/*.cspar
     - name: Compiler cache stats
       if: always()
       run: ccache --show-stats
