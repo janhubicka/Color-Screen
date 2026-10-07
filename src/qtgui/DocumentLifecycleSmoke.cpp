@@ -822,17 +822,17 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
         }
         const QByteArray archivePayload = archivePayloadFile.readAll();
         archivePayloadFile.close();
-        std::string archiveError;
+        std::string sidecarArchiveError;
         if (!colorscreen::write_parameter_archive(
                 missingArchiveSidecarPath.toUtf8().constData(),
                 std::string(archivePayload.constData(),
                             static_cast<size_t>(archivePayload.size())),
-                "document-lifecycle-smoke", &archiveError)) {
+                "document-lifecycle-smoke", &sidecarArchiveError)) {
           delete loadProbe;
           state->recoveryProbe = nullptr;
           fail(QStringLiteral(
                    "Image-load failure smoke could not create archive sidecar: %1")
-                   .arg(QString::fromUtf8(archiveError)));
+                   .arg(QString::fromUtf8(sidecarArchiveError)));
           return;
         }
 
