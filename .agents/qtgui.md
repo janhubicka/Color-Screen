@@ -83,8 +83,10 @@ each document has independent:
   cancellation state;
 - current image filename, one `ParameterFileState` (path + suggested/loaded
   status + physical LegacyCsp/Archive format), and a UUID-named recovery
-  directory. Never let a suggested parameter filename become an overwrite target
-  without an explicit save/load transition. An established target must preserve
+  directory. A fresh target defaults to Archive; an explicit loaded or suggested
+  legacy target remains LegacyCsp. Never let a suggested parameter filename
+  become an overwrite target without an explicit save/load transition. An
+  established target must preserve
   its loaded format on ordinary Save. Legacy CSP writes stage the complete FILE*
   payload through `qtgui_io::saveStdioAtomically()`; `.cspar` writes serialize
   the complete CSP+Qt payload first and pass it, together with the UTF-8 target
@@ -1077,8 +1079,10 @@ To maintain consistency across different UI actions, use the following standardi
   discovery prefers `<image>.cspar` when it exists and otherwise falls back to
   legacy `<image>.par`; it never merges both. A chosen sidecar is staged
   privately, may supply the demosaic choice used to decode the image, and is
-  published only after the associated image load succeeds. Declined, invalid or
-  stale-completion sidecars remain at most format-aware Save-As suggestions.
+  published only after the associated image load succeeds. When no sidecar
+  exists, the natural Save-As suggestion is now `<image>.cspar`; an existing or
+  declined legacy `.par` sidecar retains LegacyCsp identity. Declined, invalid
+  or stale-completion sidecars remain at most format-aware Save-As suggestions.
   Open/parse failure must leave live parameters, calibration provenance,
   parameter target/format, Undo index and clean state untouched. Failure
   reporting is a parent-owned asynchronous `ParameterLoadFailureDialog`, not a

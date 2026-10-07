@@ -382,15 +382,15 @@ bool MainWindow::saveParametersAs() {
   const QString archiveFilter = tr("Archive parameters (*.cspar)");
   const QString legacyFilter = tr("Legacy parameters (*.par)");
   const QString allFilter = tr("All Files (*)");
-  // Keep legacy as the default for new files until the archive rollout gate
-  // (CLI parity, Unicode filenames, and cross-platform fixtures) is complete.
-  // Once an archive target is already established, Save As naturally starts on
-  // the archive choice.
+  // A new document defaults to the versioned archive. Existing/suggested
+  // targets keep their explicit physical format so Save As never silently
+  // converts a legacy workflow merely because the new default changed.
   QString selectedFilter =
-      m_parameterFile.format == ParameterFileState::Format::Archive &&
-              !m_parameterFile.path.isEmpty()
+      m_parameterFile.path.isEmpty()
           ? archiveFilter
-          : legacyFilter;
+          : (m_parameterFile.format == ParameterFileState::Format::Archive
+                 ? archiveFilter
+                 : legacyFilter);
   QString fileName = QFileDialog::getSaveFileName(
       this, tr("Save Parameters"), initialPath,
       archiveFilter + QStringLiteral(";;") + legacyFilter +
@@ -1424,10 +1424,11 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
           });
       question->open();
     } else {
-      // No sidecar exists. Keep the legacy-first Save-As suggestion until the
-      // rollout gate deliberately changes the default.
-      sidecarStaging->suggestedPath = legacyFile;
-      sidecarStaging->suggestedArchive = false;
+      // No sidecar exists. The post-migration natural Save-As target is the
+      // versioned archive; explicit/declined legacy sidecars above still retain
+      // LegacyCsp identity.
+      sidecarStaging->suggestedPath = archiveFile;
+      sidecarStaging->suggestedArchive = true;
       startImageRead();
     }
   } else {
@@ -1441,8 +1442,8 @@ void MainWindow::loadRecentFiles() {
 }
 
 /** Return whether this document has parameters not represented by its saved
-    .par file.  Recovered state remains dirty even though the reconstructed undo
-    stack starts empty.  */
+    parameter target. Recovered state remains dirty even though the
+    reconstructed undo stack starts empty. */
 bool MainWindow::isDocumentModified() const {
   return m_recoveryDirty || (m_undoStack && !m_undoStack->isClean());
 }
