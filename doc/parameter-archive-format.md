@@ -273,9 +273,12 @@ The default-save gate below is now implemented and must remain green in CI:
 - CLI and GUI reading the same fixtures;
 - Windows, macOS and Linux filenames containing Unicode.
 
-Recovery should switch formats only after the same tests cover unclean-shutdown
-restore. Until then it may keep the internal legacy payload even after ordinary
-user Save As supports `.cspar`.
+Private crash recovery now uses `recovery_params.cspar` with the same
+structured render state and atomic writer as ordinary archives. The lifecycle
+smoke covers unclean-shutdown restoration of structured-only values, profile
+spots, original target/dirty metadata, corrupt/truncated archives, and old
+`recovery_params.par` snapshots. An invalid newer archive never falls back to
+an older legacy snapshot.
 
 ## Rollout
 
@@ -300,9 +303,9 @@ Remaining rollout sequence:
 1. Migrate high-value structured sections and dense payloads incrementally,
    declaring one authoritative representation per schema version and validating
    the legacy mirror rather than silently merging conflicts.
-2. Move crash recovery to the archive path only after equivalent
-   unclean-shutdown/partial-recovery coverage exists; until then its internal
-   legacy payload remains deliberate.
+2. Crash recovery now saves structured `.cspar` snapshots, while reading
+   old `recovery_params.par` snapshots when no archive exists. Preserve this
+   compatibility and the corrupt-new-archive/no-stale-fallback tests.
 3. Audit any remaining saved `ParameterState` fields that are not represented
    by legacy CSP and make their structured archive representation authoritative
    before beta.
