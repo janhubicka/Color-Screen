@@ -11,7 +11,7 @@ fi
 echo 1..5
 . $srcdir/defs.sh
 
-archive=$(python3 - <<'PY'
+archive=$(python3 -X utf8 - <<'PY'
 print("out-parameter-\u017elu\u0165ou\u010dk\u00fd-\u6d4b\u8bd5.cspar")
 PY
 )
