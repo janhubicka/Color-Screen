@@ -11,7 +11,10 @@ fi
 echo 1..5
 . $srcdir/defs.sh
 
-archive=out-parameter-archive.cspar
+archive=$(python3 - <<'PY'
+print("out-parameter-\u017elu\u0165ou\u010dk\u00fd-\u6d4b\u8bd5.cspar")
+PY
+)
 legacy_out=out-parameter-legacy.tif
 archive_out=out-parameter-archive.tif
 rm -f "$archive" "$legacy_out" "$archive_out"
@@ -85,4 +88,6 @@ echo 'ok 4 - adjust-par preserves archive and trailing metadata'
 pexec $RUNCOLORSCREEN render --mode original --geometry scan \
   --output-profile=original "$srcdir/checkerboard.tif" "$archive" \
   "$archive_out" || exit 1
-echo 'ok 5 - rewritten archive remains readable'
+echo 'ok 5 - rewritten Unicode archive remains readable'
+
+rm -f "$archive"
