@@ -480,11 +480,14 @@ void startWorkspaceChurnSmoke(ColorScreenApplication &app,
             !reportBytes.contains(QByteArray("\"format_version\": 1")) ||
             !reportBytes.contains(QByteArray("\"workflow\"")) ||
             !reportBytes.contains(QByteArray("\"provenance\"")) ||
+            !reportBytes.contains(QByteArray("\"render_overrides\"")) ||
+            !reportBytes.contains(
+                QByteArray("\"demosaiced_scaling\"")) ||
             !reportBytes.contains(QByteArray("screen_alignment_version: 1")) ||
             !reportBytes.contains(
                 QByteArray("colorscreen_qt_metadata_version: 1"))) {
           fail(QStringLiteral(
-              "Reproducibility report lost metadata or exact parameter payload"));
+              "Reproducibility report lost structured metadata or legacy payload"));
           return;
         }
         if (first->m_parameterFile.path != reportParameterPath ||
