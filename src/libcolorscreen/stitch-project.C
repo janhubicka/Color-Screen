@@ -11,8 +11,39 @@
 #include "render-to-scr.h"
 #include "analyze-base.h"
 #include "loadsave.h"
+#include "parameter-archive.h"
 namespace colorscreen
 {
+
+/* Load a user-supplied stitch parameter filename through the shared
+   legacy/archive dispatcher.  */
+static bool
+load_stitch_parameter_file (const char *name, scr_to_img_parameters *param,
+                            scr_detect_parameters *dparam,
+                            render_parameters *rparam,
+                            solver_parameters *sparam)
+{
+  std::string open_error;
+  FILE *in = open_parameter_payload (name, nullptr, &open_error);
+  if (!in)
+    {
+      fprintf (stderr, "Can not load %s: %s\n", name, open_error.c_str ());
+      return false;
+    }
+
+  const char *parse_error = nullptr;
+  const bool loaded
+      = load_csp (in, param, dparam, rparam, sparam, &parse_error);
+  fclose (in);
+  if (!loaded)
+    {
+      fprintf (stderr, "Can not load %s: %s\n", name,
+               parse_error ? parse_error : "invalid parameter data");
+      return false;
+    }
+  return true;
+}
+
 stitch_project::stitch_project ()
   : params (), report_file (NULL), images(), param (), rparam (),
     common_scr_to_img (), dparam (), solver_param (),
@@ -1432,24 +1463,14 @@ stitch_project::stitch (progress_info *progress, detect_regular_screen_params *d
       if (params.csp_filename.length ())
 	{
 	  const char *cspname = params.csp_filename.c_str ();
-	  FILE *in = fopen (cspname, "rt");
 	  progress->pause_stdout ();
 	  printf ("Loading color screen parameters: %s\n", cspname);
 	  progress->resume_stdout ();
-	  if (!in)
-	    {
-	      perror (cspname);
-	      return false;
-	    }
-	  const char *error;
-	  if (!load_csp (in, &param, &dparam, &rparam, &solver_param, &error))
-	    {
-	      fprintf (stderr, "Can not load %s: %s\n", cspname, error);
-	      return false;
-	    }
+	  if (!load_stitch_parameter_file (cspname, &param, &dparam, &rparam,
+	                                   &solver_param))
+	    return false;
 	  if (param.mesh_trans)
 	    param.mesh_trans = NULL;
-	  fclose (in);
 	  solver_param.remove_points ();
 	}
 
@@ -1474,24 +1495,14 @@ stitch_project::stitch (progress_info *progress, detect_regular_screen_params *d
       if (params.csp_filename.length ())
 	{
 	  const char *cspname = params.csp_filename.c_str ();
-	  FILE *in = fopen (cspname, "rt");
 	  progress->pause_stdout ();
 	  printf ("Loading color screen parameters: %s\n", cspname);
 	  progress->resume_stdout ();
-	  if (!in)
-	    {
-	      perror (cspname);
-	      return false;
-	    }
-	  const char *error;
-	  if (!load_csp (in, &param, &dparam, &rparam, &solver_param, &error))
-	    {
-	      fprintf (stderr, "Can not load %s: %s\n", cspname, error);
-	      return false;
-	    }
+	  if (!load_stitch_parameter_file (cspname, &param, &dparam, &rparam,
+	                                   &solver_param))
+	    return false;
 	  if (param.mesh_trans)
 	    param.mesh_trans = NULL;
-	  fclose (in);
 	  solver_param.remove_points ();
 	}
       if (!f)
