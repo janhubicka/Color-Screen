@@ -116,7 +116,9 @@ load_parameter_filename (const char *filename, scr_to_img_parameters *param,
 {
   std::string open_error;
   bool archive = false;
-  FILE *in = open_parameter_payload (filename, &archive, &open_error);
+  parameter_archive_manifest archive_manifest;
+  FILE *in = open_parameter_payload (filename, &archive, &open_error,
+                                     &archive_manifest);
   if (!in)
     {
       if (error)
@@ -134,6 +136,10 @@ load_parameter_filename (const char *filename, scr_to_img_parameters *param,
         *error = parse_error ? parse_error : "invalid parameter data";
       return false;
     }
+
+  if (archive && rparam)
+    apply_parameter_archive_render_overrides (
+        archive_manifest.render_overrides, rparam);
 
   std::string trailing;
   if (trailing_payload)
@@ -262,8 +268,15 @@ save_parameter_filename (const char *filename, bool archive,
                                     &payload, error))
     return false;
 
+  parameter_archive_render_overrides render_overrides;
+  const parameter_archive_render_overrides *structured = nullptr;
+  if (archive && rparam)
+    {
+      render_overrides = parameter_archive_render_overrides_from (*rparam);
+      structured = &render_overrides;
+    }
   return write_parameter_payload_file (filename, payload, archive,
-                                       PACKAGE_VERSION, error);
+                                       PACKAGE_VERSION, error, structured);
 }
 
 static enum subhelp {
