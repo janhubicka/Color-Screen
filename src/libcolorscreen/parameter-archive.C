@@ -1280,6 +1280,261 @@ write_parameter_archive (const char *name, const std::string &legacy_csp,
   return true;
 }
 
+/* Atomically rewrite an existing supported archive, preserving every
+   entry except the manifest-selected legacy CSP payload. */
+bool
+rewrite_parameter_archive_payload_file (const char *source_name,
+                                        const char *target_name,
+                                        const std::string &payload,
+                                        std::string *error)
+{
+  if (error)
+    error->clear ();
+  if (!source_name || !target_name || payload.empty ())
+    return archive_fail (error,
+                         "invalid archive-preserving parameter rewrite arguments");
+
+  int open_error = 0;
+  zip_t *source_archive = zip_open (source_name, ZIP_RDONLY, &open_error);
+  if (!source_archive)
+    return archive_fail (error,
+                         "could not open source parameter archive: "
+                             + zip_open_error (open_error));
+
+  parameter_archive_manifest parsed;
+  std::vector<std::string> entry_names;
+  std::vector<zip_stat_t> entry_stats;
+  bool source_ok = false;
+
+  do
+    {
+      const zip_int64_t count = zip_get_num_entries (source_archive, 0);
+      if (count < 0 || count > archive_max_entries)
+        {
+          archive_fail (error, "parameter archive contains too many entries");
+          break;
+        }
+
+      std::map<std::string, std::pair<zip_uint64_t, uint64_t>> entries;
+      entry_names.reserve ((size_t)count);
+      entry_stats.reserve ((size_t)count);
+      bool entries_ok = true;
+      for (zip_uint64_t i = 0; i < (zip_uint64_t)count; ++i)
+        {
+          const char *raw_name
+              = zip_get_name (source_archive, i, ZIP_FL_ENC_GUESS);
+          if (!raw_name)
+            {
+              archive_fail (error, zip_strerror (source_archive));
+              entries_ok = false;
+              break;
+            }
+
+          std::string entry_name = raw_name;
+          if (!safe_archive_path (entry_name))
+            {
+              archive_fail (error, "unsafe path in parameter archive: "
+                                       + entry_name);
+              entries_ok = false;
+              break;
+            }
+
+          zip_stat_t stat;
+          zip_stat_init (&stat);
+          if (zip_stat_index (source_archive, i, 0, &stat) != 0)
+            {
+              archive_fail (error, zip_strerror (source_archive));
+              entries_ok = false;
+              break;
+            }
+          if (!validate_zip_methods (stat, error)
+              || !(stat.valid & ZIP_STAT_SIZE))
+            {
+              if (stat.valid && !(stat.valid & ZIP_STAT_SIZE))
+                archive_fail (error,
+                              "parameter archive entry has no declared size");
+              entries_ok = false;
+              break;
+            }
+          if (!entries.emplace (entry_name,
+                                std::make_pair (i, (uint64_t)stat.size))
+                   .second)
+            {
+              archive_fail (error,
+                            "duplicate path in parameter archive: " + entry_name);
+              entries_ok = false;
+              break;
+            }
+          entry_names.push_back (std::move (entry_name));
+          entry_stats.push_back (stat);
+        }
+      if (!entries_ok)
+        break;
+
+      const auto manifest_entry = entries.find ("manifest.json");
+      if (manifest_entry == entries.end ())
+        {
+          archive_fail (error, "parameter archive has no manifest.json");
+          break;
+        }
+
+      std::string manifest_text;
+      if (!read_zip_entry (source_archive, manifest_entry->second.first,
+                           manifest_max_size, &manifest_text, error))
+        break;
+      if (!parse_manifest (manifest_text, entries, &parsed, error))
+        break;
+
+      source_ok = true;
+    }
+  while (false);
+
+  if (!source_ok)
+    {
+      zip_discard (source_archive);
+      return false;
+    }
+
+  std::filesystem::path staging_path;
+  if (!create_parameter_staging_path (target_name, &staging_path, error))
+    {
+      zip_discard (source_archive);
+      return false;
+    }
+
+  std::string staging_utf8;
+  try
+    {
+      staging_utf8 = staging_path.u8string ();
+    }
+  catch (...)
+    {
+      zip_discard (source_archive);
+      std::error_code ignored;
+      std::filesystem::remove (staging_path, ignored);
+      return archive_fail (error, "could not encode parameter staging path");
+    }
+
+  open_error = 0;
+  zip_t *target_archive
+      = zip_open (staging_utf8.c_str (), ZIP_CREATE | ZIP_TRUNCATE, &open_error);
+  if (!target_archive)
+    {
+      zip_discard (source_archive);
+      remove_utf8_path (staging_utf8.c_str ());
+      return archive_fail (error,
+                           "could not create parameter archive staging file: "
+                               + zip_open_error (open_error));
+    }
+
+  bool copied = true;
+  for (zip_uint64_t i = 0; i < entry_names.size (); ++i)
+    {
+      if (entry_names[i] == parsed.legacy_csp_path)
+        continue;
+
+      /* ZIP_FL_COMPRESSED asks libzip to transfer the original compressed
+         stream. This both avoids inflating dense future payloads and preserves
+         their exact uncompressed contents without loading them into memory. */
+      zip_source_t *source
+          = zip_source_zip (target_archive, source_archive, i,
+                            ZIP_FL_COMPRESSED, 0, -1);
+      if (!source)
+        {
+          archive_fail (error, zip_strerror (target_archive));
+          copied = false;
+          break;
+        }
+
+      const zip_int64_t new_index
+          = zip_file_add (target_archive, entry_names[i].c_str (), source,
+                          ZIP_FL_ENC_UTF_8 | ZIP_FL_OVERWRITE);
+      if (new_index < 0)
+        {
+          zip_source_free (source);
+          archive_fail (error, zip_strerror (target_archive));
+          copied = false;
+          break;
+        }
+
+      if ((entry_stats[i].valid & ZIP_STAT_MTIME)
+          && zip_file_set_mtime (target_archive, (zip_uint64_t)new_index,
+                                 entry_stats[i].mtime, 0)
+                 != 0)
+        {
+          archive_fail (error, zip_strerror (target_archive));
+          copied = false;
+          break;
+        }
+    }
+
+  if (copied)
+    copied = add_archive_entry (target_archive, parsed.legacy_csp_path.c_str (),
+                                payload, ZIP_CM_DEFLATE, error);
+
+  if (copied)
+    {
+      int comment_length = 0;
+      const char *comment
+          = zip_get_archive_comment (source_archive, &comment_length,
+                                     ZIP_FL_UNCHANGED);
+      if (comment && comment_length > 0
+          && zip_set_archive_comment (target_archive, comment, comment_length)
+                 != 0)
+        {
+          archive_fail (error, zip_strerror (target_archive));
+          copied = false;
+        }
+    }
+
+  if (!copied)
+    {
+      zip_discard (target_archive);
+      zip_discard (source_archive);
+      remove_utf8_path (staging_utf8.c_str ());
+      return false;
+    }
+
+  if (zip_close (target_archive) != 0)
+    {
+      const std::string message = zip_strerror (target_archive);
+      zip_discard (target_archive);
+      zip_discard (source_archive);
+      remove_utf8_path (staging_utf8.c_str ());
+      return archive_fail (
+          error, "could not finalize preserved parameter archive: " + message);
+    }
+
+  zip_discard (source_archive);
+
+  try
+    {
+      const std::filesystem::path target
+          = std::filesystem::u8path (target_name);
+      if (!replace_parameter_staging_path (staging_path, target, error))
+        {
+          remove_utf8_path (staging_utf8.c_str ());
+          return false;
+        }
+    }
+  catch (const std::exception &exception)
+    {
+      remove_utf8_path (staging_utf8.c_str ());
+      return archive_fail (error,
+                           std::string ("invalid parameter target path: ")
+                               + exception.what ());
+    }
+  catch (...)
+    {
+      remove_utf8_path (staging_utf8.c_str ());
+      return archive_fail (error, "invalid parameter target path");
+    }
+
+  if (error)
+    error->clear ();
+  return true;
+}
+
 /* Atomically replace one legacy or archive parameter payload. */
 bool
 write_parameter_payload_file (const char *name, const std::string &payload,
