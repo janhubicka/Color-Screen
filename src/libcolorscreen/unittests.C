@@ -12,6 +12,9 @@
 #include <chrono>
 #include <cstdint>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <limits>
 #include <string>
 #include <utility>
@@ -9478,6 +9481,168 @@ test_parameter_archive ()
       return false;
     }
   std::remove (plain.c_str ());
+
+  // Public host paths are UTF-8. Exercise both archive and plain-CSP dispatch
+  // with characters outside the Windows narrow code page so the test catches a
+  // regression back to fopen()/locale-dependent path handling.
+  const std::string unicode_archive
+      = u8"parameter-archive-\u017Elu\u0165ou\u010Dk\u00FD-\u6D4B\u8BD5.cspar";
+  const std::string unicode_plain
+      = u8"parameter-archive-\u017Elu\u0165ou\u010Dk\u00FD-\u6D4B\u8BD5.par";
+  auto remove_unicode = [] (const std::string &path) {
+    std::error_code ignored;
+    std::filesystem::remove (std::filesystem::u8path (path), ignored);
+  };
+  remove_unicode (unicode_archive);
+  remove_unicode (unicode_plain);
+
+  if (!write_parameter_archive (unicode_archive.c_str (), legacy,
+                                "2.0alpha-unicode", &error))
+    {
+      fprintf (stderr, "Unicode parameter archive writer failed: %s\n",
+               error.c_str ());
+      return false;
+    }
+  loaded.clear ();
+  parsed = {};
+  if (!parameter_archive_signature_p (unicode_archive.c_str ())
+      || !read_parameter_archive (unicode_archive.c_str (), &loaded, &parsed,
+                                  &error)
+      || loaded != legacy || parsed.schema_version != 1)
+    {
+      fprintf (stderr, "Unicode parameter archive round trip failed: %s\n",
+               error.c_str ());
+      remove_unicode (unicode_archive);
+      return false;
+    }
+  opened_archive = false;
+  payload_stream = open_parameter_payload (
+      unicode_archive.c_str (), &opened_archive, &error);
+  if (!payload_stream || !opened_archive)
+    {
+      fprintf (stderr, "Unicode archive payload opener failed: %s\n",
+               error.c_str ());
+      if (payload_stream)
+        fclose (payload_stream);
+      remove_unicode (unicode_archive);
+      return false;
+    }
+  fclose (payload_stream);
+  remove_unicode (unicode_archive);
+
+  {
+    std::ofstream file (std::filesystem::u8path (unicode_plain),
+                        std::ios::binary | std::ios::trunc);
+    if (!file)
+      {
+        fprintf (stderr, "Could not create Unicode legacy parameter fixture\n");
+        return false;
+      }
+    file.write (legacy.data (), (std::streamsize)legacy.size ());
+    if (!file)
+      {
+        fprintf (stderr, "Could not write Unicode legacy parameter fixture\n");
+        remove_unicode (unicode_plain);
+        return false;
+      }
+  }
+  opened_archive = true;
+  payload_stream
+      = open_parameter_payload (unicode_plain.c_str (), &opened_archive, &error);
+  if (!payload_stream || opened_archive)
+    {
+      fprintf (stderr, "Unicode legacy payload opener failed: %s\n",
+               error.c_str ());
+      if (payload_stream)
+        fclose (payload_stream);
+      remove_unicode (unicode_plain);
+      return false;
+    }
+  fclose (payload_stream);
+  remove_unicode (unicode_plain);
+
+  // Atomic core writes must not damage an older target when staging fails.
+  const std::string atomic_target
+      = u8"parameter-archive-atomic-\u017Elu\u0165ou\u010Dk\u00FD.cspar";
+  remove_unicode (atomic_target);
+  {
+    std::ofstream seed (std::filesystem::u8path (atomic_target),
+                        std::ios::binary | std::ios::trunc);
+    seed << "stable-old-target";
+    if (!seed)
+      {
+        fprintf (stderr, "Could not seed atomic parameter target\n");
+        return false;
+      }
+  }
+
+  const char invalid_utf8_version[] = { (char)0xff, 0 };
+  error.clear ();
+  if (write_parameter_payload_file (atomic_target.c_str (), legacy, true,
+                                    invalid_utf8_version, &error))
+    {
+      fprintf (stderr, "Invalid archive writer unexpectedly replaced target\n");
+      remove_unicode (atomic_target);
+      return false;
+    }
+  {
+    std::ifstream preserved (std::filesystem::u8path (atomic_target),
+                             std::ios::binary);
+    std::string bytes ((std::istreambuf_iterator<char> (preserved)),
+                       std::istreambuf_iterator<char> ());
+    if (bytes != "stable-old-target")
+      {
+        fprintf (stderr, "Failed atomic archive write changed old target\n");
+        remove_unicode (atomic_target);
+        return false;
+      }
+  }
+
+  error.clear ();
+  if (!write_parameter_payload_file (atomic_target.c_str (), legacy, true,
+                                     "2.0alpha-atomic", &error))
+    {
+      fprintf (stderr, "Atomic archive replacement failed: %s\n",
+               error.c_str ());
+      remove_unicode (atomic_target);
+      return false;
+    }
+  loaded.clear ();
+  if (!read_parameter_archive (atomic_target.c_str (), &loaded, nullptr, &error)
+      || loaded != legacy)
+    {
+      fprintf (stderr, "Atomic archive replacement lost payload: %s\n",
+               error.c_str ());
+      remove_unicode (atomic_target);
+      return false;
+    }
+  remove_unicode (atomic_target);
+
+  const std::string atomic_legacy
+      = u8"parameter-archive-atomic-\u017Elu\u0165ou\u010Dk\u00FD.par";
+  remove_unicode (atomic_legacy);
+  error.clear ();
+  if (!write_parameter_payload_file (atomic_legacy.c_str (), legacy, false,
+                                     "ignored", &error))
+    {
+      fprintf (stderr, "Atomic legacy replacement failed: %s\n",
+               error.c_str ());
+      return false;
+    }
+  opened_archive = true;
+  payload_stream = open_parameter_payload (atomic_legacy.c_str (),
+                                           &opened_archive, &error);
+  if (!payload_stream || opened_archive)
+    {
+      fprintf (stderr, "Atomic legacy target is not readable as CSP: %s\n",
+               error.c_str ());
+      if (payload_stream)
+        fclose (payload_stream);
+      remove_unicode (atomic_legacy);
+      return false;
+    }
+  fclose (payload_stream);
+  remove_unicode (atomic_legacy);
 
   const auto expect_read = [&legacy] (
                                const char *tag, const std::string &manifest,
