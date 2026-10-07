@@ -1100,6 +1100,8 @@ bool ColorScreenApplication::recoveryDirectoryHasData(
   return QFile::exists(
              recoveryFile(directory, QStringLiteral("recovery_image.txt"))) ||
          QFile::exists(
+             recoveryFile(directory, QStringLiteral("recovery_params.cspar"))) ||
+         QFile::exists(
              recoveryFile(directory, QStringLiteral("recovery_params.par")));
 }
 
