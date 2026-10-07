@@ -267,6 +267,14 @@ void startWorkspaceChurnSmoke(ColorScreenApplication &app,
       switch (phase) {
       case 0: {
         MainWindow::ParameterFileState parameterFileProbe;
+        if (!parameterFileProbe.path.isEmpty() ||
+            parameterFileProbe.suggested ||
+            parameterFileProbe.format !=
+                MainWindow::ParameterFileState::Format::Archive) {
+          fail(QStringLiteral(
+              "Fresh parameter-file target did not default to archive format"));
+          return;
+        }
         parameterFileProbe.setSuggested(QStringLiteral("/tmp/suggested.par"));
         if (parameterFileProbe.path != QStringLiteral("/tmp/suggested.par") ||
             !parameterFileProbe.suggested ||
