@@ -2990,7 +2990,9 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         // chosen/loaded physical format becomes part of the current target so
         // an ordinary subsequent Save can never replace ZIP bytes with CSP text.
         const QString archiveFile =
-            persistenceDir.filePath(QStringLiteral("workspace-roundtrip.cspar"));
+            persistenceDir.filePath(
+                QStringLiteral("workspace-\u017Elu\u0165ou\u010Dk\u00FD-"
+                               "\u6D4B\u8BD5.cspar"));
         ParameterState archiveState = savedSecondState;
         archiveState.rparams.saturation += 0.07;
         second->applySharedDocumentState(
