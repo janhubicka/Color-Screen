@@ -1034,6 +1034,8 @@ parse_manifest (
   if (version != 1)
     return archive_fail (error, "unsupported parameter archive schema version");
 
+  bool render_overrides_feature = false;
+  std::set<std::string> required_feature_names;
   const json_value *features = object_member (root, "required_features");
   if (features)
     {
@@ -1043,9 +1045,15 @@ parse_manifest (
         {
           if (feature.type != json_value::kind::string || feature.text.empty ())
             return archive_fail (error, "invalid required parameter feature");
-          return archive_fail (error,
-                               "unsupported required parameter archive feature: "
-                                   + feature.text);
+          if (!required_feature_names.insert (feature.text).second)
+            return archive_fail (error,
+                                 "duplicate required parameter archive feature");
+          if (feature.text == "render-overrides-v1")
+            render_overrides_feature = true;
+          else
+            return archive_fail (
+                error, "unsupported required parameter archive feature: "
+                           + feature.text);
         }
     }
 
@@ -1058,6 +1066,21 @@ parse_manifest (
   if (entries.find (legacy->text) == entries.end ())
     return archive_fail (error, "parameter archive is missing its legacy CSP state");
 
+  const json_value *render_overrides
+      = object_member (*state, "render_overrides");
+  if (render_overrides && !render_overrides_feature)
+    return archive_fail (
+        error, "state.render_overrides requires render-overrides-v1");
+  if (render_overrides_feature && !render_overrides)
+    return archive_fail (
+        error, "render-overrides-v1 requires state.render_overrides");
+
+  parameter_archive_render_overrides parsed_render_overrides;
+  if (render_overrides_feature
+      && !parse_render_overrides (*render_overrides, &parsed_render_overrides,
+                                  error))
+    return false;
+
   if (!validate_payloads (object_member (root, "payloads"), entries, error))
     return false;
 
@@ -1065,6 +1088,7 @@ parse_manifest (
     {
       manifest->schema_version = (int)version;
       manifest->legacy_csp_path = legacy->text;
+      manifest->render_overrides = parsed_render_overrides;
     }
   return true;
 }
