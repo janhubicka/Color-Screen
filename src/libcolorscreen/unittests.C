@@ -9415,6 +9415,29 @@ test_parameter_archive ()
       std::remove (roundtrip.c_str ());
       return false;
     }
+
+  bool opened_archive = false;
+  FILE *payload_stream
+      = open_parameter_payload (roundtrip.c_str (), &opened_archive, &error);
+  if (!payload_stream || !opened_archive)
+    {
+      fprintf (stderr, "Parameter archive payload opener failed: %s\n",
+               error.c_str ());
+      if (payload_stream)
+        fclose (payload_stream);
+      std::remove (roundtrip.c_str ());
+      return false;
+    }
+  std::string streamed (legacy.size (), '\0');
+  const size_t streamed_count
+      = fread (streamed.data (), 1, streamed.size (), payload_stream);
+  fclose (payload_stream);
+  if (streamed_count != legacy.size () || streamed != legacy)
+    {
+      fprintf (stderr, "Archive payload stream changed legacy data\n");
+      std::remove (roundtrip.c_str ());
+      return false;
+    }
   std::remove (roundtrip.c_str ());
 
   const std::string plain = parameter_archive_test_path ("plain");
@@ -9428,6 +9451,29 @@ test_parameter_archive ()
   if (parameter_archive_signature_p (plain.c_str ()))
     {
       fprintf (stderr, "Legacy CSP text was misclassified as a ZIP archive\n");
+      std::remove (plain.c_str ());
+      return false;
+    }
+  opened_archive = true;
+  payload_stream = open_parameter_payload (plain.c_str (), &opened_archive,
+                                           &error);
+  if (!payload_stream || opened_archive)
+    {
+      fprintf (stderr, "Legacy payload opener failed: %s\n", error.c_str ());
+      if (payload_stream)
+        fclose (payload_stream);
+      std::remove (plain.c_str ());
+      return false;
+    }
+  char header[64] = {};
+  const size_t header_count = fread (header, 1, sizeof (header) - 1,
+                                     payload_stream);
+  fclose (payload_stream);
+  if (header_count == 0
+      || std::string (header, header_count).find ("screen_alignment_version: 1")
+             == std::string::npos)
+    {
+      fprintf (stderr, "Legacy payload opener returned wrong stream\n");
       std::remove (plain.c_str ());
       return false;
     }
@@ -9529,6 +9575,24 @@ test_parameter_archive ()
                     {{"state/legacy.par", legacy}}, false,
                     "invalid parameter archive manifest"))
     return false;
+
+  const std::string malformed_path = parameter_archive_test_path ("malformed-open");
+  if (!write_parameter_archive_fixture (
+          malformed_path, malformed, {{"state/legacy.par", legacy}}))
+    return false;
+  opened_archive = false;
+  payload_stream
+      = open_parameter_payload (malformed_path.c_str (), &opened_archive, &error);
+  std::remove (malformed_path.c_str ());
+  if (payload_stream || opened_archive
+      || error.find ("invalid parameter archive manifest") == std::string::npos)
+    {
+      if (payload_stream)
+        fclose (payload_stream);
+      fprintf (stderr,
+               "Malformed ZIP-looking parameter file fell back to legacy text\n");
+      return false;
+    }
 
   const std::string traversal_manifest
       = "{"
