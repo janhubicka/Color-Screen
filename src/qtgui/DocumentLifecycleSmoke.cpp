@@ -666,12 +666,33 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
           return;
         }
         legacyFile.close();
+
+        // Deliberately claim the original user archive was clean. A recovered
+        // legacy-only snapshot cannot preserve the new structured fields and
+        // therefore must still be marked dirty.
+        const QString legacyMetaPath =
+            QDir(legacyDirectory)
+                .filePath(QStringLiteral("recovery_params_meta.txt"));
+        const QByteArray legacyMeta =
+            QByteArray("legacy-target.cspar\n0\n0\narchive\n");
+        QFile legacyMetaFile(legacyMetaPath);
+        if (!legacyMetaFile.open(QIODevice::WriteOnly | QIODevice::Truncate) ||
+            legacyMetaFile.write(legacyMeta) != legacyMeta.size() ||
+            !legacyMetaFile.flush()) {
+          fail(QStringLiteral(
+              "Recovery legacy compatibility metadata fixture failed"));
+          return;
+        }
+        legacyMetaFile.close();
+
         auto *legacyProbe = new MainWindow(legacyDirectory);
         legacyProbe->hide();
         const bool legacyRestored = legacyProbe->restoreRecoveryState();
         const ParameterState legacyState = legacyProbe->documentStateSnapshot();
         if (!legacyRestored || legacyState.rparams.gamma != 2.0 ||
             legacyState.profileSpots != state->recoveryExpectedState.profileSpots ||
+            legacyProbe->m_parameterFile.format !=
+                MainWindow::ParameterFileState::Format::Archive ||
             !legacyProbe->isDocumentModified()) {
           delete legacyProbe;
           fail(QStringLiteral(
