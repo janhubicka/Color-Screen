@@ -6,18 +6,29 @@
 
 #include <zip.h>
 
+#include <atomic>
 #include <cerrno>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
 #include <filesystem>
+#include <fcntl.h>
 #include <limits>
 #include <map>
 #include <set>
 #include <string>
+#include <system_error>
 #include <utility>
 #include <vector>
+#ifdef _WIN32
+#include <io.h>
+#include <process.h>
+#include <sys/stat.h>
+#include <windows.h>
+#else
+#include <unistd.h>
+#endif
 
 namespace colorscreen
 {
@@ -56,6 +67,28 @@ open_utf8_binary_read (const char *name)
 #endif
 }
 
+/* Open UTF-8 host path NAME for binary replacement/truncation. */
+FILE *
+open_utf8_binary_write (const char *name)
+{
+  if (!name)
+    return nullptr;
+#ifdef _WIN32
+  try
+    {
+      const std::filesystem::path path = std::filesystem::u8path (name);
+      return _wfopen (path.c_str (), L"wb");
+    }
+  catch (...)
+    {
+      errno = EINVAL;
+      return nullptr;
+    }
+#else
+  return fopen (name, "wb");
+#endif
+}
+
 /* Remove UTF-8 host path NAME without throwing while cleaning a failed write. */
 void
 remove_utf8_path (const char *name)
@@ -71,6 +104,100 @@ remove_utf8_path (const char *name)
     {
       /* Best-effort staging cleanup must never replace the real diagnostic. */
     }
+}
+
+static std::atomic<unsigned long long> parameter_temp_counter { 0 };
+
+/* Create one empty sibling staging file exclusively and return its host path. */
+bool
+create_parameter_staging_path (const char *name, std::filesystem::path *result,
+                               std::string *error)
+{
+  if (!name || !result)
+    return archive_fail (error, "invalid parameter staging path");
+
+  try
+    {
+      const std::filesystem::path target = std::filesystem::u8path (name);
+      std::filesystem::path directory = target.parent_path ();
+      if (directory.empty ())
+        directory = std::filesystem::path (".");
+
+#ifdef _WIN32
+      const unsigned long long pid = (unsigned long long)_getpid ();
+#else
+      const unsigned long long pid = (unsigned long long)getpid ();
+#endif
+      const std::string base = target.filename ().u8string ();
+      for (int attempt = 0; attempt < 128; ++attempt)
+        {
+          const unsigned long long serial
+              = parameter_temp_counter.fetch_add (1, std::memory_order_relaxed);
+          const std::string candidate_name
+              = "." + base + ".tmp-" + std::to_string (pid) + "-"
+                + std::to_string (serial);
+          const std::filesystem::path candidate
+              = directory / std::filesystem::u8path (candidate_name);
+
+#ifdef _WIN32
+          int fd = _wopen (candidate.c_str (),
+                           _O_CREAT | _O_EXCL | _O_BINARY | _O_WRONLY,
+                           _S_IREAD | _S_IWRITE);
+          if (fd >= 0)
+            {
+              _close (fd);
+              *result = candidate;
+              return true;
+            }
+#else
+          int fd = open (candidate.c_str (), O_CREAT | O_EXCL | O_WRONLY, 0600);
+          if (fd >= 0)
+            {
+              close (fd);
+              *result = candidate;
+              return true;
+            }
+#endif
+          if (errno != EEXIST)
+            return archive_fail (
+                error, std::string ("could not create parameter staging file: ")
+                           + std::strerror (errno));
+        }
+    }
+  catch (const std::exception &exception)
+    {
+      return archive_fail (error,
+                           std::string ("invalid parameter output path: ")
+                               + exception.what ());
+    }
+  catch (...)
+    {
+      return archive_fail (error, "invalid parameter output path");
+    }
+
+  return archive_fail (error, "could not allocate unique parameter staging file");
+}
+
+/* Atomically replace TARGET with completed STAGING in the same directory. */
+bool
+replace_parameter_staging_path (const std::filesystem::path &staging,
+                                const std::filesystem::path &target,
+                                std::string *error)
+{
+#ifdef _WIN32
+  if (MoveFileExW (staging.c_str (), target.c_str (),
+                   MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
+    return true;
+  const std::error_code ec ((int)GetLastError (), std::system_category ());
+  return archive_fail (error,
+                       "could not replace parameter target: " + ec.message ());
+#else
+  if (rename (staging.c_str (), target.c_str ()) == 0)
+    return true;
+  return archive_fail (
+      error, std::string ("could not replace parameter target: ")
+                 + std::strerror (errno));
+#endif
 }
 
 /* Minimal JSON value used only by the parameter-archive manifest parser.  */
@@ -1139,6 +1266,92 @@ write_parameter_archive (const char *name, const std::string &legacy_csp,
       return archive_fail (
           error, "could not finalize parameter archive: " + message);
     }
+  return true;
+}
+
+/* Atomically replace one legacy or archive parameter payload. */
+bool
+write_parameter_payload_file (const char *name, const std::string &payload,
+                              bool archive, const char *generator_version,
+                              std::string *error)
+{
+  if (error)
+    error->clear ();
+  if (!name || payload.empty ())
+    return archive_fail (error, "invalid parameter payload write arguments");
+
+  std::filesystem::path staging_path;
+  if (!create_parameter_staging_path (name, &staging_path, error))
+    return false;
+
+  bool written = false;
+  std::string staging_utf8;
+  try
+    {
+      staging_utf8 = staging_path.u8string ();
+    }
+  catch (...)
+    {
+      std::error_code ignored;
+      std::filesystem::remove (staging_path, ignored);
+      return archive_fail (error, "could not encode parameter staging path");
+    }
+
+  if (archive)
+    written = write_parameter_archive (staging_utf8.c_str (), payload,
+                                       generator_version, error);
+  else
+    {
+      FILE *out = open_utf8_binary_write (staging_utf8.c_str ());
+      if (!out)
+        archive_fail (
+            error, std::string ("could not open parameter staging output: ")
+                       + std::strerror (errno));
+      else
+        {
+          bool ok
+              = fwrite (payload.data (), 1, payload.size (), out)
+                == payload.size ();
+          if (fflush (out) != 0)
+            ok = false;
+          if (fclose (out) != 0)
+            ok = false;
+          if (!ok)
+            archive_fail (error, "could not write complete parameter payload");
+          written = ok;
+        }
+    }
+
+  if (!written)
+    {
+      remove_utf8_path (staging_utf8.c_str ());
+      return false;
+    }
+
+  try
+    {
+      const std::filesystem::path target = std::filesystem::u8path (name);
+      if (!replace_parameter_staging_path (staging_path, target, error))
+        {
+          remove_utf8_path (staging_utf8.c_str ());
+          return false;
+        }
+    }
+  catch (const std::exception &exception)
+    {
+      remove_utf8_path (staging_utf8.c_str ());
+      return archive_fail (error,
+                           std::string ("invalid parameter target path: ")
+                               + exception.what ());
+    }
+  catch (...)
+    {
+      remove_utf8_path (staging_utf8.c_str ());
+      return archive_fail (error, "invalid parameter target path");
+    }
+
+  if (error)
+    error->clear ();
   return true;
 }
 
