@@ -242,14 +242,28 @@ user Save As supports `.cspar`.
 
 ## Rollout
 
-1. Add archive manifest parser/writer and hostile-input unit tests in
-   `libcolorscreen`.
-2. Add v1 legacy-payload archive read/write helpers using libzip.
-3. Teach CLI parameter loading to accept both CSP and archives.
-4. Teach Qt Open/Save As and MRU paths to accept both formats while keeping
-   ordinary Save tied to the format already loaded/chosen.
-5. Add transactional GUI smoke coverage.
-6. Make `.cspar` the default for new saves while retaining `.par` export.
-7. Migrate high-value structured sections and dense payloads incrementally.
-8. Only after this migration and the remaining alpha gate are green, advance the
+Implementation status in the alpha tree:
+
+- the strict schema-v1 libzip/manifest core and hostile-input unit coverage are
+  merged;
+- shared content-signature dispatch is merged;
+- Qt archive Open/Save As, format-preserving ordinary Save, atomic path-backed
+  commit, recovery-format metadata and transactional workspace smoke are the
+  current integration step;
+- CLI read parity is being validated separately;
+- automatic image-sidecar discovery still deliberately prefers legacy `.par`;
+- new Save As remains legacy-first until CLI parity plus Unicode/cross-platform
+  archive fixtures are green.
+
+Remaining rollout sequence:
+
+1. Merge Qt and CLI read parity after their focused matrices are green.
+2. Add Unicode-path fixtures on Windows, macOS and Linux and verify GUI/CLI
+   interpretation of the same archives.
+3. Decide whether automatic sidecar discovery should prefer `.cspar` over
+   `.par` when both exist, and cover that precedence transactionally.
+4. Make `.cspar` the default for new saves while retaining explicit legacy
+   `.par` export.
+5. Migrate high-value structured sections and dense payloads incrementally.
+6. Only after this migration and the remaining alpha gate are green, advance the
    product version toward beta.
