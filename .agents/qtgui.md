@@ -94,10 +94,12 @@ each document has independent:
   writer finalizes a sibling staging file and atomically replaces the target
   using the platform-native rename primitive already exercised by core Unicode
   and failure-preservation tests. A failed serializer/write/replace must leave
-  any previous usable target unchanged. Recovery parameters intentionally remain
-  an internal legacy CSP payload for now, while recovery metadata preserves the
-  user's Archive/Legacy target identity. Keep the lightweight QSaveFile smoke
-  for legacy/recovery writes; archive atomicity belongs to the core test group.
+  any previous usable target unchanged. Private recovery parameters use
+  `recovery_params.cspar` with the same structured/atomic archive writer.
+  `recovery_params.par` is accepted only when no archive exists. Recovery
+  metadata still preserves the user's Archive/Legacy target identity
+  independently of its private recovery payload. Keep lightweight QSaveFile
+  smoke for legacy writes and core/Qt archive failure tests.
 
 Workspace geometry, image/parameter file-dialog directory history, and
 recent-file lists remain application preferences in `QSettings`; they are not
@@ -376,18 +378,18 @@ application-wide help/about actions. Keep this order when adding new menus.
 Crash recovery is session-aware. `ColorScreenApplication` prompts once and
 restores one `MainWindow` per recovery directory. Each `MainWindow` writes and
 removes only its own payload, so closing one image cannot erase another image's
-recovery state. Parameter recovery is transactional too: parse
-`recovery_params.par` into private defaults and publish only after the complete
-core + Qt metadata payload succeeds. A corrupt/truncated payload must leave live
-parameters unchanged, retain the recovery files for inspection/retry, and report
-the partial recovery through one parent-owned asynchronous
-`RecoveryWarningDialog` rather than a nested static warning.
-`DocumentLifecycleSmoke` includes both a production recovery round-trip and a
-late-corruption probe: it writes one dirty loaded document into an isolated
-recovery directory, restores a fresh hidden `MainWindow`, waits for the
-asynchronous source-image load, checks recovered processing/profile-spot state,
-real parameter-file target metadata and dirty state, then truncates a copy of the
-Qt metadata and verifies that no partially parsed parameters publish.
+recovery state. Recovery writes a complete `recovery_params.cspar` archive
+atomically before updating image/target metadata. The old
+`recovery_params.par` is read only when no archive exists; an invalid
+archive must not fall back to stale legacy data. Both formats use the same
+transactional private-state parameter parser, and a failed parameter recovery
+is always dirty even if older metadata described a clean document. Corrupt
+payloads are retained for inspection/retry and reported through a parent-owned
+asynchronous `RecoveryWarningDialog`, never a nested static warning.
+`DocumentLifecycleSmoke` checks a structured recovery round trip including
+the six render fields absent from legacy CSP, Qt profile spots, image/target
+metadata, a standalone legacy-only recovery fixture, and truncation of a newer
+archive beside a valid stale legacy snapshot without publication.
 Slanted-edge reference filenames
 are stored in the owning document's recovery directory and recreated as attached
 specialized reference views after that document restores. Ordinary New Views,
