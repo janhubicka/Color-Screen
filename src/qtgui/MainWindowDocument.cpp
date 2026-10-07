@@ -158,7 +158,7 @@ bool saveParameterPayloadAtomically(
       [payload = std::move(payload), versionBytes](
           const QString &stagedPath, QString *writerError) {
         std::string archiveError;
-        const QByteArray stagedName = QFile::encodeName(stagedPath);
+        const QByteArray stagedName = stagedPath.toUtf8();
         const bool written = colorscreen::write_parameter_archive(
             stagedName.constData(), payload, versionBytes.constData(),
             &archiveError);
@@ -187,7 +187,7 @@ bool loadParameterPayload(
 
   std::string openError;
   bool archive = false;
-  const QByteArray encodedPath = QFile::encodeName(path);
+  const QByteArray encodedPath = path.toUtf8();
   FILE *f = colorscreen::open_parameter_payload(
       encodedPath.constData(), &archive, &openError);
   if (!f) {
