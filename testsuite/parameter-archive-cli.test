@@ -8,7 +8,7 @@ if test -z "$srcdir"; then
     test "${VERBOSE+set}" != set && VERBOSE=1
 fi
 
-echo 1..3
+echo 1..5
 . $srcdir/defs.sh
 
 archive=out-parameter-archive.cspar
@@ -24,6 +24,11 @@ import zipfile
 source, destination = sys.argv[1:3]
 with open(source, "rb") as f:
     payload = f.read()
+payload += (
+    b"colorscreen_qt_metadata_version: 1\n"
+    b"profile_spot: 0.25 0.5\n"
+    b"colorscreen_qt_metadata_end\n"
+)
 manifest = {
     "format": "org.colorscreen.parameters",
     "schema_version": 1,
@@ -57,3 +62,27 @@ echo 'ok 2 - archive parameter render'
 
 pexec $RUNCOLORSCREEN lab compare-images "$legacy_out" "$archive_out" || exit 1
 echo 'ok 3 - legacy/archive outputs match'
+
+pexec $RUNCOLORSCREEN adjust-par "$archive" || exit 1
+python3 - "$archive" <<'PY' || exit 1
+import sys
+import zipfile
+
+path = sys.argv[1]
+if not zipfile.is_zipfile(path):
+    raise SystemExit("adjust-par replaced archive with plain text")
+with zipfile.ZipFile(path, "r") as z:
+    payload = z.read("state/legacy.par")
+if b"colorscreen_qt_metadata_version: 1\n" not in payload:
+    raise SystemExit("adjust-par dropped Qt metadata version")
+if b"profile_spot: 0.25 0.5\n" not in payload:
+    raise SystemExit("adjust-par dropped Qt profile spot")
+if not payload.endswith(b"colorscreen_qt_metadata_end\n"):
+    raise SystemExit("adjust-par truncated Qt metadata")
+PY
+echo 'ok 4 - adjust-par preserves archive and trailing metadata'
+
+pexec $RUNCOLORSCREEN render --mode original --geometry scan \
+  --output-profile=original "$srcdir/checkerboard.tif" "$archive" \
+  "$archive_out" || exit 1
+echo 'ok 5 - rewritten archive remains readable'
