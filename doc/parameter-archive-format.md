@@ -251,22 +251,20 @@ Implementation status in the alpha tree:
   content-signature dispatch, UTF-8 host-path handling, and the cross-platform
   atomic replacement primitive are merged;
 - Qt archive Open/Save As, format-preserving ordinary Save, recovery-format
-  metadata, and transactional workspace smoke are merged; that smoke uses a
-  Czech/CJK Unicode `.cspar` filename on every Qt CI platform;
-- CLI read/write parity is being validated with the same Unicode archive-name
-  class and format-preserving atomic rewrite coverage;
-- archive-first image-sidecar discovery (`.cspar` then legacy `.par`, never
-  both) is staged and independently tested;
-- this final rollout branch switches genuinely new Save As/no-sidecar targets to
+  metadata, and transactional Unicode workspace smoke are merged;
+- CLI read/write parity, Unicode Windows argv handling, format-preserving atomic
+  rewrite, and the Czech/CJK archive fixture are merged;
+- automatic image-sidecar discovery now prefers `.cspar` and falls back to
+  legacy `.par`, never merging both;
+- this branch makes genuinely new Save As/no-sidecar targets default to
   `.cspar`; established Archive/Legacy targets remain format-preserving.
 
-Merge gate for this default switch:
+Remaining rollout sequence:
 
-1. CLI archive parity must be green, including the Windows Unicode filename
-   fixture.
-2. Archive-first sidecar lifecycle/sanitizer matrices must be green.
-3. Then make `.cspar` the default while retaining explicit legacy `.par`
+1. Merge this archive-default switch while retaining explicit legacy `.par`
    export.
-4. Migrate high-value structured sections and dense payloads incrementally.
-5. Only after this migration and the remaining alpha gate are green, advance the
-   product version toward beta.
+2. Migrate high-value structured sections and dense payloads incrementally.
+3. Keep crash recovery on its internal legacy payload until archive recovery has
+   equivalent unclean-shutdown coverage.
+4. Only after the structured migration and the remaining alpha gate are green,
+   advance the product version toward beta.

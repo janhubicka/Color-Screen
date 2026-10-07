@@ -108,6 +108,7 @@ CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 am__installdirs = "$(DESTDIR)$(bindir)"
 PROGRAMS = $(bin_PROGRAMS)
+@HOST_WIN32_TRUE@am__append_1 = -lshell32
 am_colorscreen_OBJECTS = colorscreen.$(OBJEXT)
 colorscreen_OBJECTS = $(am_colorscreen_OBJECTS)
 colorscreen_LDADD = $(LDADD)
@@ -326,7 +327,7 @@ top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 @static_link_TRUE@AM_LDFLAGS = -static
 @static_link_TRUE@AM_CXXFLAGS = -DLIBCOLORSCREEN -static
-LDADD = ../libcolorscreen/libcolorscreen.la 
+LDADD = ../libcolorscreen/libcolorscreen.la $(am__append_1)
 colorscreen_SOURCES = colorscreen.C
 all: all-am
 
