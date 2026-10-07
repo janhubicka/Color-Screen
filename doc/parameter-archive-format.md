@@ -256,8 +256,8 @@ Implementation status in the alpha tree:
 - CLI read parity is being validated separately;
 - automatic image-sidecar discovery now prefers `.cspar` when present and
   falls back to legacy `.par`; it never merges both;
-- new Save As remains legacy-first until CLI parity plus Unicode/cross-platform
-  archive fixtures are green.
+- this final default-switch branch changes genuinely new Save As/no-sidecar
+  targets to `.cspar`; established Archive/Legacy targets remain format-preserving.
 
 Remaining rollout sequence:
 
