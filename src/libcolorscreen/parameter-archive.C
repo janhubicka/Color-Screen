@@ -9,15 +9,19 @@
 #include <atomic>
 #include <cerrno>
 #include <cstdint>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
 #include <filesystem>
 #include <exception>
 #include <fcntl.h>
+#include <iomanip>
 #include <limits>
+#include <locale>
 #include <map>
 #include <set>
+#include <sstream>
 #include <string>
 #include <system_error>
 #include <utility>
@@ -713,6 +717,106 @@ json_uint64 (const json_value &number, uint64_t *value)
     }
   *value = result;
   return true;
+}
+
+/* Convert strict JSON NUMBER to one finite double. */
+bool
+json_finite_double (const json_value &number, double *value)
+{
+  if (!value || number.type != json_value::kind::number
+      || number.text.empty ())
+    return false;
+  char *end = nullptr;
+  errno = 0;
+  const double parsed = std::strtod (number.text.c_str (), &end);
+  if (errno == ERANGE || !end || *end || !std::isfinite (parsed))
+    return false;
+  *value = parsed;
+  return true;
+}
+
+/* Parse authoritative render fields not represented by the legacy CSP mirror. */
+bool
+parse_render_overrides (const json_value &object,
+                        parameter_archive_render_overrides *result,
+                        std::string *error)
+{
+  if (!result || object.type != json_value::kind::object)
+    return archive_fail (error, "state.render_overrides must be an object");
+
+  const json_value *ignore = object_member (object, "ignore_infrared");
+  const json_value *scaling = object_member (object, "demosaiced_scaling");
+  const json_value *whitepoint = object_member (object, "observer_whitepoint");
+  const json_value *profile = object_member (object, "output_profile");
+  const json_value *gamma = object_member (object, "output_gamma");
+  const json_value *gamut = object_member (object, "gamut_warning");
+
+  if (!ignore || ignore->type != json_value::kind::boolean
+      || !scaling || scaling->type != json_value::kind::string
+      || !whitepoint || whitepoint->type != json_value::kind::array
+      || whitepoint->array_value.size () != 2
+      || !profile || profile->type != json_value::kind::string
+      || !gamma || gamma->type != json_value::kind::number
+      || !gamut || gamut->type != json_value::kind::boolean)
+    return archive_fail (
+        error, "state.render_overrides is missing a required typed field");
+
+  parameter_archive_render_overrides parsed;
+  parsed.present = true;
+  parsed.ignore_infrared = ignore->boolean_value;
+  parsed.gamut_warning = gamut->boolean_value;
+
+  bool scaling_found = false;
+  for (int i = 0; i < (int)render_parameters::max_demosaiced_scaling; ++i)
+    if (scaling->text
+        == render_parameters::demosaiced_scaling_names[i].name)
+      {
+        parsed.demosaiced_scaling
+            = (render_parameters::demosaiced_scaling_t)i;
+        scaling_found = true;
+        break;
+      }
+  if (!scaling_found)
+    return archive_fail (error,
+                         "unknown state.render_overrides demosaiced_scaling");
+
+  bool profile_found = false;
+  for (int i = 0; i < (int)render_parameters::output_profile_max; ++i)
+    if (profile->text == render_parameters::output_profile_names[i])
+      {
+        parsed.output_profile = (render_parameters::output_profile_t)i;
+        profile_found = true;
+        break;
+      }
+  if (!profile_found)
+    return archive_fail (error,
+                         "unknown state.render_overrides output_profile");
+
+  double white_x = 0;
+  double white_y = 0;
+  double output_gamma = 0;
+  if (!json_finite_double (whitepoint->array_value[0], &white_x)
+      || !json_finite_double (whitepoint->array_value[1], &white_y)
+      || white_x < 0 || white_y <= 0 || white_x + white_y > 1
+      || !json_finite_double (*gamma, &output_gamma)
+      || (output_gamma != -1 && output_gamma <= 0))
+    return archive_fail (error,
+                         "invalid numeric state.render_overrides value");
+
+  parsed.observer_whitepoint = xy_t (white_x, white_y);
+  parsed.output_gamma = output_gamma;
+  *result = parsed;
+  return true;
+}
+
+/* Format VALUE as locale-independent finite JSON number text. */
+std::string
+json_number (double value)
+{
+  std::ostringstream stream;
+  stream.imbue (std::locale::classic ());
+  stream << std::setprecision (17) << value;
+  return stream.str ();
 }
 
 /* Return true when PATH is a safe relative ZIP entry path.  */
