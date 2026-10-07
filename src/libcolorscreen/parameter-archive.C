@@ -13,6 +13,7 @@
 #include <cstring>
 #include <cstdlib>
 #include <filesystem>
+#include <exception>
 #include <fcntl.h>
 #include <limits>
 #include <map>
@@ -40,6 +41,10 @@ constexpr uint64_t legacy_csp_max_size = UINT64_C (512) * 1024 * 1024;
 constexpr zip_int64_t archive_max_entries = 128;
 constexpr int json_max_depth = 32;
 constexpr size_t json_max_nodes = 8192;
+
+/* Store MESSAGE in ERROR and return false. Defined below with the manifest
+   helpers; declared here because path staging uses the same diagnostic path. */
+bool archive_fail (std::string *error, const std::string &message);
 
 /* Open UTF-8 host path NAME for binary reading.
 
