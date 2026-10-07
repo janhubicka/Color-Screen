@@ -27,6 +27,13 @@ import zipfile
 source, destination = sys.argv[1:3]
 with open(source, "rb") as f:
     payload = f.read()
+if not payload.endswith(b"\n"):
+    payload += b"\n"
+# Qt metadata is an extension after the portable CSP end marker.  empty.par is
+# deliberately only the version header, so complete that minimal CSP before
+# appending GUI metadata.
+if b"screen_alignment_end\n" not in payload:
+    payload += b"screen_alignment_end\n"
 payload += (
     b"colorscreen_qt_metadata_version: 1\n"
     b"profile_spot: 0.25 0.5\n"
