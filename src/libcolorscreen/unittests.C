@@ -14,6 +14,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <limits>
 #include <string>
 #include <utility>
@@ -9559,6 +9560,89 @@ test_parameter_archive ()
     }
   fclose (payload_stream);
   remove_unicode (unicode_plain);
+
+  // Atomic core writes must not damage an older target when staging fails.
+  const std::string atomic_target
+      = u8"parameter-archive-atomic-\u017Elu\u0165ou\u010Dk\u00FD.cspar";
+  remove_unicode (atomic_target);
+  {
+    std::ofstream seed (std::filesystem::u8path (atomic_target),
+                        std::ios::binary | std::ios::trunc);
+    seed << "stable-old-target";
+    if (!seed)
+      {
+        fprintf (stderr, "Could not seed atomic parameter target\n");
+        return false;
+      }
+  }
+
+  const char invalid_utf8_version[] = { (char)0xff, 0 };
+  error.clear ();
+  if (write_parameter_payload_file (atomic_target.c_str (), legacy, true,
+                                    invalid_utf8_version, &error))
+    {
+      fprintf (stderr, "Invalid archive writer unexpectedly replaced target\n");
+      remove_unicode (atomic_target);
+      return false;
+    }
+  {
+    std::ifstream preserved (std::filesystem::u8path (atomic_target),
+                             std::ios::binary);
+    std::string bytes ((std::istreambuf_iterator<char> (preserved)),
+                       std::istreambuf_iterator<char> ());
+    if (bytes != "stable-old-target")
+      {
+        fprintf (stderr, "Failed atomic archive write changed old target\n");
+        remove_unicode (atomic_target);
+        return false;
+      }
+  }
+
+  error.clear ();
+  if (!write_parameter_payload_file (atomic_target.c_str (), legacy, true,
+                                     "2.0alpha-atomic", &error))
+    {
+      fprintf (stderr, "Atomic archive replacement failed: %s\n",
+               error.c_str ());
+      remove_unicode (atomic_target);
+      return false;
+    }
+  loaded.clear ();
+  if (!read_parameter_archive (atomic_target.c_str (), &loaded, nullptr, &error)
+      || loaded != legacy)
+    {
+      fprintf (stderr, "Atomic archive replacement lost payload: %s\n",
+               error.c_str ());
+      remove_unicode (atomic_target);
+      return false;
+    }
+  remove_unicode (atomic_target);
+
+  const std::string atomic_legacy
+      = u8"parameter-archive-atomic-\u017Elu\u0165ou\u010Dk\u00FD.par";
+  remove_unicode (atomic_legacy);
+  error.clear ();
+  if (!write_parameter_payload_file (atomic_legacy.c_str (), legacy, false,
+                                     "ignored", &error))
+    {
+      fprintf (stderr, "Atomic legacy replacement failed: %s\n",
+               error.c_str ());
+      return false;
+    }
+  opened_archive = true;
+  payload_stream = open_parameter_payload (atomic_legacy.c_str (),
+                                           &opened_archive, &error);
+  if (!payload_stream || opened_archive)
+    {
+      fprintf (stderr, "Atomic legacy target is not readable as CSP: %s\n",
+               error.c_str ());
+      if (payload_stream)
+        fclose (payload_stream);
+      remove_unicode (atomic_legacy);
+      return false;
+    }
+  fclose (payload_stream);
+  remove_unicode (atomic_legacy);
 
   const auto expect_read = [&legacy] (
                                const char *tag, const std::string &manifest,
