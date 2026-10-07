@@ -48,6 +48,10 @@ manifest = {
     },
     "state": {"legacy_csp": "state/legacy.par"},
     "payloads": [],
+    "future_optional": {
+        "owner": "future-writer",
+        "value": 17,
+    },
 }
 with zipfile.ZipFile(destination, "w") as z:
     z.writestr(
@@ -57,6 +61,11 @@ with zipfile.ZipFile(destination, "w") as z:
     )
     z.writestr(
         "state/legacy.par", payload, compress_type=zipfile.ZIP_DEFLATED
+    )
+    z.writestr(
+        "payload/future-opaque.bin",
+        b"future\x00opaque\xffpayload",
+        compress_type=zipfile.ZIP_DEFLATED,
     )
 PY
 
@@ -75,6 +84,7 @@ echo 'ok 3 - legacy/archive outputs match'
 
 pexec $RUNCOLORSCREEN adjust-par "$archive" || exit 1
 python3 - "$archive" <<'PY' || exit 1
+import json
 import sys
 import zipfile
 
@@ -83,6 +93,15 @@ if not zipfile.is_zipfile(path):
     raise SystemExit("adjust-par replaced archive with plain text")
 with zipfile.ZipFile(path, "r") as z:
     payload = z.read("state/legacy.par")
+    manifest = json.loads(z.read("manifest.json"))
+    future_payload = z.read("payload/future-opaque.bin")
+if manifest.get("future_optional") != {
+    "owner": "future-writer",
+    "value": 17,
+}:
+    raise SystemExit("adjust-par dropped unknown optional manifest data")
+if future_payload != b"future\x00opaque\xffpayload":
+    raise SystemExit("adjust-par dropped or changed opaque future payload")
 if b"colorscreen_qt_metadata_version: 1\n" not in payload:
     raise SystemExit("adjust-par dropped Qt metadata version")
 if b"profile_spot: 0.25 0.5\n" not in payload:
@@ -90,7 +109,7 @@ if b"profile_spot: 0.25 0.5\n" not in payload:
 if not payload.endswith(b"colorscreen_qt_metadata_end\n"):
     raise SystemExit("adjust-par truncated Qt metadata")
 PY
-echo 'ok 4 - adjust-par preserves archive and trailing metadata'
+echo 'ok 4 - adjust-par preserves archive, metadata and unknown entries'
 
 pexec $RUNCOLORSCREEN render --mode original --geometry scan \
   --output-profile=original "$srcdir/checkerboard.tif" "$archive" \
