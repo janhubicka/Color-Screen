@@ -251,7 +251,8 @@ Implementation status in the alpha tree:
   commit, recovery-format metadata and transactional workspace smoke are the
   current integration step;
 - CLI read parity is being validated separately;
-- automatic image-sidecar discovery still deliberately prefers legacy `.par`;
+- automatic image-sidecar discovery now prefers `.cspar` when present and
+  falls back to legacy `.par`; it never merges both;
 - new Save As remains legacy-first until CLI parity plus Unicode/cross-platform
   archive fixtures are green.
 
@@ -260,8 +261,8 @@ Remaining rollout sequence:
 1. Merge Qt and CLI read parity after their focused matrices are green.
 2. Add Unicode-path fixtures on Windows, macOS and Linux and verify GUI/CLI
    interpretation of the same archives.
-3. Decide whether automatic sidecar discovery should prefer `.cspar` over
-   `.par` when both exist, and cover that precedence transactionally.
+3. Merge archive-first sidecar discovery (`.cspar` then `.par`) after its
+   image-load transaction smoke is green.
 4. Make `.cspar` the default for new saves while retaining explicit legacy
    `.par` export.
 5. Migrate high-value structured sections and dense payloads incrementally.
