@@ -11,6 +11,7 @@
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
+#include <filesystem>
 #include <limits>
 #include <map>
 #include <set>
@@ -28,6 +29,49 @@ constexpr uint64_t legacy_csp_max_size = UINT64_C (512) * 1024 * 1024;
 constexpr zip_int64_t archive_max_entries = 128;
 constexpr int json_max_depth = 32;
 constexpr size_t json_max_nodes = 8192;
+
+/* Open UTF-8 host path NAME for binary reading.
+
+   libzip's host-path API already uses UTF-8. Plain CSP dispatch must follow the
+   same public filename contract; on Windows fopen() alone would instead use the
+   active narrow code page.  */
+FILE *
+open_utf8_binary_read (const char *name)
+{
+  if (!name)
+    return nullptr;
+#ifdef _WIN32
+  try
+    {
+      const std::filesystem::path path = std::filesystem::u8path (name);
+      return _wfopen (path.c_str (), L"rb");
+    }
+  catch (...)
+    {
+      errno = EINVAL;
+      return nullptr;
+    }
+#else
+  return fopen (name, "rb");
+#endif
+}
+
+/* Remove UTF-8 host path NAME without throwing while cleaning a failed write. */
+void
+remove_utf8_path (const char *name)
+{
+  if (!name)
+    return;
+  try
+    {
+      std::error_code ignored;
+      std::filesystem::remove (std::filesystem::u8path (name), ignored);
+    }
+  catch (...)
+    {
+      /* Best-effort staging cleanup must never replace the real diagnostic. */
+    }
+}
 
 /* Minimal JSON value used only by the parameter-archive manifest parser.  */
 struct json_value
@@ -861,7 +905,7 @@ parameter_archive_signature_p (const char *name)
 {
   if (!name)
     return false;
-  FILE *file = fopen (name, "rb");
+  FILE *file = open_utf8_binary_read (name);
   if (!file)
     return false;
   unsigned char signature[4];
@@ -891,7 +935,7 @@ open_parameter_payload (const char *name, bool *is_archive, std::string *error)
 
   if (!parameter_archive_signature_p (name))
     {
-      FILE *file = fopen (name, "rb");
+      FILE *file = open_utf8_binary_read (name);
       if (!file)
         archive_fail (error, std::string ("could not open parameter file: ")
                                  + std::strerror (errno));
@@ -1081,7 +1125,7 @@ write_parameter_archive (const char *name, const std::string &legacy_csp,
   if (!ok)
     {
       zip_discard (archive);
-      std::remove (name);
+      remove_utf8_path (name);
       return false;
     }
 
@@ -1091,7 +1135,7 @@ write_parameter_archive (const char *name, const std::string &legacy_csp,
          handle before removing the caller's staging file.  */
       std::string message = zip_strerror (archive);
       zip_discard (archive);
-      std::remove (name);
+      remove_utf8_path (name);
       return archive_fail (
           error, "could not finalize parameter archive: " + message);
     }
