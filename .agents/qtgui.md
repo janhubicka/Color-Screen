@@ -86,7 +86,8 @@ each document has independent:
   directory. A fresh target defaults to Archive; an explicit loaded or suggested
   legacy target remains LegacyCsp. Never let a suggested parameter filename
   become an overwrite target without an explicit save/load transition. An
-  established target must preserve its loaded format on ordinary Save. Legacy CSP writes stage the complete FILE*
+  established target must preserve
+  its loaded format on ordinary Save. Legacy CSP writes stage the complete FILE*
   payload through `qtgui_io::saveStdioAtomically()`; `.cspar` writes serialize
   the complete CSP+Qt payload first and pass it, together with the UTF-8 target
   path, to libcolorscreen's `write_parameter_payload_file()`. That shared core
@@ -1075,15 +1076,15 @@ To maintain consistency across different UI actions, use the following standardi
   (dialogs, Recent, drag/drop) parses the complete core + Qt metadata payload
   into a private default `ParameterState`, then publishes state and adopts the
   detected LegacyCsp/Archive target format only on success. Image-sidecar
-  discovery remains legacy `.par` for now; a valid sidecar is staged privately,
-  may supply the demosaic choice used to decode the image, and is published only
-  after the associated image load succeeds. If live ParameterState changes while
-  loading, those edits win and the sidecar remains only a suggested target.
-  When no image sidecar exists, the natural Save-As suggestion is now
-  `<image>.cspar`; an existing/declined legacy `.par` sidecar retains
-  LegacyCsp identity. Open/parse failure must leave live parameters, calibration
-  provenance, parameter target/format, Undo index and clean state untouched.
-  Failure
+  discovery prefers `<image>.cspar` when it exists and otherwise falls back to
+  legacy `<image>.par`; it never merges both. A chosen sidecar is staged
+  privately, may supply the demosaic choice used to decode the image, and is
+  published only after the associated image load succeeds. When no sidecar
+  exists, the natural Save-As suggestion is now `<image>.cspar`; an existing or
+  declined legacy `.par` sidecar retains LegacyCsp identity. Declined, invalid
+  or stale-completion sidecars remain at most format-aware Save-As suggestions.
+  Open/parse failure must leave live parameters, calibration provenance,
+  parameter target/format, Undo index and clean state untouched. Failure
   reporting is a parent-owned asynchronous `ParameterLoadFailureDialog`, not a
   nested static error box. On successful explicit load, clear stale
   calibration/session provenance, reset Undo/dirty state, and refresh the UI
