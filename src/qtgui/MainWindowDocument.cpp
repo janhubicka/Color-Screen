@@ -153,20 +153,16 @@ bool saveParameterPayloadAtomically(
     version = QStringLiteral(PACKAGE_VERSION);
   const QByteArray versionBytes = version.toUtf8();
 
-  return qtgui_io::savePathAtomically(
-      path,
-      [payload = std::move(payload), versionBytes](
-          const QString &stagedPath, QString *writerError) {
-        std::string archiveError;
-        const QByteArray stagedName = stagedPath.toUtf8();
-        const bool written = colorscreen::write_parameter_archive(
-            stagedName.constData(), payload, versionBytes.constData(),
-            &archiveError);
-        if (!written && writerError)
-          *writerError = QString::fromUtf8(archiveError);
-        return written;
-      },
-      error);
+  std::string archiveError;
+  const QByteArray targetName = path.toUtf8();
+  const bool written = colorscreen::write_parameter_payload_file(
+      targetName.constData(), payload, true, versionBytes.constData(),
+      &archiveError);
+  if (!written && error)
+    *error = QString::fromUtf8(archiveError);
+  else if (written && error)
+    error->clear();
+  return written;
 }
 
 /** Atomically replace a small UTF-8 recovery metadata file. */
