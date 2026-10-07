@@ -2,6 +2,8 @@
    Copyright (C) 2014-2026 Jan Hubicka
    This file is part of Color-Screen.  */
 
+#include <cerrno>
+#include <cstring>
 #include <string>
 #include <string_view>
 #include <charconv>
@@ -43,10 +45,13 @@ static bool
 load_parameter_filename (const char *filename, scr_to_img_parameters *param,
                          scr_detect_parameters *dparam,
                          render_parameters *rparam,
-                         solver_parameters *sparam, std::string *error)
+                         solver_parameters *sparam, std::string *error,
+                         bool *is_archive = nullptr,
+                         std::string *trailing_payload = nullptr)
 {
   std::string open_error;
-  FILE *in = open_parameter_payload (filename, nullptr, &open_error);
+  bool archive = false;
+  FILE *in = open_parameter_payload (filename, &archive, &open_error);
   if (!in)
     {
       if (error)
@@ -57,14 +62,160 @@ load_parameter_filename (const char *filename, scr_to_img_parameters *param,
   const char *parse_error = nullptr;
   const bool loaded
       = load_csp (in, param, dparam, rparam, sparam, &parse_error);
-  fclose (in);
   if (!loaded)
     {
+      fclose (in);
       if (error)
         *error = parse_error ? parse_error : "invalid parameter data";
       return false;
     }
 
+  std::string trailing;
+  if (trailing_payload)
+    {
+      char buffer[64 * 1024];
+      while (true)
+        {
+          const size_t count = fread (buffer, 1, sizeof (buffer), in);
+          if (count)
+            trailing.append (buffer, count);
+          if (count < sizeof (buffer))
+            {
+              if (ferror (in))
+                {
+                  fclose (in);
+                  if (error)
+                    *error = "failed reading trailing parameter metadata";
+                  return false;
+                }
+              break;
+            }
+        }
+    }
+  fclose (in);
+
+  if (is_archive)
+    *is_archive = archive;
+  if (trailing_payload)
+    *trailing_payload = std::move (trailing);
+  if (error)
+    error->clear ();
+  return true;
+}
+
+/* Return whether FILENAME explicitly asks for the archive format.  */
+static bool
+parameter_archive_suffix_p (const char *filename)
+{
+  if (!filename)
+    return false;
+  std::string_view name (filename);
+  constexpr std::string_view suffix = ".cspar";
+  if (name.size () < suffix.size ())
+    return false;
+  name.remove_prefix (name.size () - suffix.size ());
+  for (size_t i = 0; i < suffix.size (); ++i)
+    {
+      const unsigned char a = (unsigned char)name[i];
+      const unsigned char b = (unsigned char)suffix[i];
+      if ((a >= 'A' && a <= 'Z' ? a - 'A' + 'a' : a) != b)
+        return false;
+    }
+  return true;
+}
+
+/* Serialize one CLI parameter state, preserving any unowned trailing metadata
+   from the base file verbatim after the new CSP end marker.  */
+static bool
+serialize_parameter_payload (const scr_to_img_parameters *param,
+                             const scr_detect_parameters *dparam,
+                             const render_parameters *rparam,
+                             const solver_parameters *sparam,
+                             const std::string &trailing,
+                             std::string *payload, std::string *error)
+{
+  FILE *staged = std::tmpfile ();
+  if (!staged)
+    {
+      if (error)
+        *error = std::string ("could not create temporary parameter payload: ")
+                 + std::strerror (errno);
+      return false;
+    }
+
+  bool ok = save_csp (staged, param, dparam, rparam, sparam);
+  if (ok && !trailing.empty ()
+      && fwrite (trailing.data (), 1, trailing.size (), staged)
+             != trailing.size ())
+    ok = false;
+  if (ok && fflush (staged) != 0)
+    ok = false;
+  if (ok && fseek (staged, 0, SEEK_SET) != 0)
+    ok = false;
+
+  std::string result;
+  char buffer[64 * 1024];
+  while (ok)
+    {
+      const size_t count = fread (buffer, 1, sizeof (buffer), staged);
+      if (count)
+        result.append (buffer, count);
+      if (count < sizeof (buffer))
+        {
+          if (ferror (staged))
+            ok = false;
+          break;
+        }
+    }
+  fclose (staged);
+
+  if (!ok || result.empty ())
+    {
+      if (error)
+        *error = "could not serialize complete parameter data";
+      return false;
+    }
+  if (payload)
+    *payload = std::move (result);
+  if (error)
+    error->clear ();
+  return true;
+}
+
+/* Save one CLI parameter target as legacy CSP or schema-v1 archive.  */
+static bool
+save_parameter_filename (const char *filename, bool archive,
+                         const scr_to_img_parameters *param,
+                         const scr_detect_parameters *dparam,
+                         const render_parameters *rparam,
+                         const solver_parameters *sparam,
+                         const std::string &trailing, std::string *error)
+{
+  std::string payload;
+  if (!serialize_parameter_payload (param, dparam, rparam, sparam, trailing,
+                                    &payload, error))
+    return false;
+
+  if (archive)
+    return write_parameter_archive (filename, payload, PACKAGE_VERSION, error);
+
+  FILE *out = fopen (filename, "wb");
+  if (!out)
+    {
+      if (error)
+        *error = std::string ("could not open parameter output: ")
+                 + std::strerror (errno);
+      return false;
+    }
+  const bool ok
+      = fwrite (payload.data (), 1, payload.size (), out) == payload.size ()
+        && fflush (out) == 0 && fclose (out) == 0;
+  if (!ok)
+    {
+      if (error)
+        *error = "could not write complete parameter output";
+      return false;
+    }
   if (error)
     error->clear ();
   return true;
@@ -1173,6 +1324,8 @@ autodetect (int argc, char **argv)
       fprintf (stderr, "Can not load %s: %s\n", infname, error);
       return 1;
     }
+  bool input_archive = false;
+  std::string input_trailing;
   if (cspname)
     {
       if (verbose)
@@ -1183,7 +1336,8 @@ autodetect (int argc, char **argv)
         }
       std::string parameter_error;
       if (!load_parameter_filename (cspname, &param, &dparam, &rparam,
-                                    &solver_param, &parameter_error))
+                                    &solver_param, &parameter_error,
+                                    &input_archive, &input_trailing))
         {
           progress.pause_stdout ();
           fprintf (stderr, "Can not load %s: %s\n", cspname,
@@ -1296,19 +1450,16 @@ autodetect (int argc, char **argv)
       printf ("Saving %s\n", outname);
       progress.resume_stdout ();
     }
-  FILE *out = fopen (outname, "wt");
-  if (!out)
+  std::string save_error;
+  if (!save_parameter_filename (
+          outname, parameter_archive_suffix_p (outname), &param, &dparam,
+          &rparam, &solver_param, input_trailing, &save_error))
     {
       progress.pause_stdout ();
-      perror (outname);
+      fprintf (stderr, "Cannot save %s: %s\n", outname,
+               save_error.c_str ());
       return 1;
     }
-  if (!save_csp (out, &param, &dparam, &rparam, &solver_param))
-    {
-      fprintf (stderr, "saving failed\n");
-      return 1;
-    }
-  fclose (out);
   return 0;
 }
 
@@ -1654,9 +1805,12 @@ analyze_scanner_blur (int argc, char **argv)
       printf ("Loading color screen parameters: %s\n", cspname);
       progress.resume_stdout ();
     }
+  bool input_archive = false;
+  std::string input_trailing;
   std::string parameter_error;
   if (!load_parameter_filename (cspname, &param, &dparam, &rparam,
-                                &solver_param, &parameter_error))
+                                &solver_param, &parameter_error,
+                                &input_archive, &input_trailing))
     {
       progress.pause_stdout ();
       fprintf (stderr, "Cannot load %s: %s\n", cspname,
@@ -1722,29 +1876,29 @@ analyze_scanner_blur (int argc, char **argv)
 	  }
     }
 
+  const bool explicit_parameter_output = outcspname != nullptr;
   if (!outcspname)
     outcspname = cspname;
+  const bool output_archive =
+      explicit_parameter_output ? parameter_archive_suffix_p (outcspname)
+                                : input_archive;
   progress.set_task ("writing parameters", 1);
-  FILE *out = fopen (outcspname, "wt");
   if (verbose)
     {
       progress.pause_stdout ();
       printf ("Saving color screen parameters: %s\n", outcspname);
       progress.resume_stdout ();
     }
-  if (!out)
+  std::string save_error;
+  if (!save_parameter_filename (outcspname, output_archive, &param, &dparam,
+                                &rparam, &solver_param, input_trailing,
+                                &save_error))
     {
       progress.pause_stdout ();
-      perror (outcspname);
+      fprintf (stderr, "Cannot save %s: %s\n", outcspname,
+               save_error.c_str ());
       return 1;
     }
-  if (!save_csp (out, &param, &dparam, &rparam, &solver_param))
-    {
-      progress.pause_stdout ();
-      fprintf (stderr, "Cannot save %s\n", outcspname);
-      return 1;
-    }
-  fclose (out);
   if (outtifname)
   {
     if (!scan.stitch)
@@ -4163,6 +4317,8 @@ do_adjust_par (int argc, char **argv)
   render_parameters rparam;
   scr_detect_parameters dparam;
   struct solver_parameters solver_param;
+  bool input_archive = false;
+  std::string input_trailing;
   if (cspname)
     {
       if (verbose)
@@ -4171,7 +4327,8 @@ do_adjust_par (int argc, char **argv)
 	}
       std::string parameter_error;
       if (!load_parameter_filename (cspname, &param, &dparam, &rparam,
-                                    &solver_param, &parameter_error))
+                                    &solver_param, &parameter_error,
+                                    &input_archive, &input_trailing))
 	{
 	  fprintf (stderr, "Can not load %s: %s\n", cspname,
                    parameter_error.c_str ());
@@ -4193,24 +4350,25 @@ do_adjust_par (int argc, char **argv)
 	  return 1;
 	}
     }
+  const bool explicit_parameter_output = outcspname != nullptr;
   if (!outcspname)
     outcspname = cspname;
+  const bool output_archive =
+      explicit_parameter_output ? parameter_archive_suffix_p (outcspname)
+                                : input_archive;
   if (verbose)
     {
       printf ("Saving color screen parameters: %s\n", outcspname);
     }
-  FILE *out = fopen (outcspname, "wt");
-  if (!out)
+  std::string save_error;
+  if (!save_parameter_filename (outcspname, output_archive, &param, &dparam,
+                                &rparam, &solver_param, input_trailing,
+                                &save_error))
     {
-      perror (outcspname);
+      fprintf (stderr, "Cannot save %s: %s\n", outcspname,
+               save_error.c_str ());
       return 1;
     }
-  if (!save_csp (out, &param, &dparam, &rparam, &solver_param))
-    {
-      fprintf (stderr, "saving failed\n");
-      return 1;
-    }
-  fclose (out);
   return 0;
 }
 
