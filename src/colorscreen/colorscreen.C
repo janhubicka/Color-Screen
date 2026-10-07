@@ -182,7 +182,8 @@ serialize_parameter_payload (const scr_to_img_parameters *param,
   return true;
 }
 
-/* Save one CLI parameter target as legacy CSP or schema-v1 archive.  */
+/* Atomically save one CLI parameter target as legacy CSP or schema-v1
+   archive through libcolorscreen's sibling-staging writer. */
 static bool
 save_parameter_filename (const char *filename, bool archive,
                          const scr_to_img_parameters *param,
