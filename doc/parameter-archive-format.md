@@ -153,17 +153,20 @@ private temporary file when an existing library API requires a `FILE *`.
 
 ## Atomic writes
 
-GUI saves retain the existing failure contract:
+All frontends retain the same failure contract:
 
-1. build the complete archive in a private staging file;
-2. close/finalize the ZIP successfully;
-3. atomically replace the user target with `QSaveFile` and direct-write
-   fallback disabled;
-4. on any serialization, archive, copy, or commit failure, leave an older target
+1. serialize the complete parameter payload before replacement;
+2. build/finalize the archive in a sibling staging file on the target
+   filesystem;
+3. atomically replace the target only after successful archive finalization;
+4. on any serialization, archive, or replacement failure, leave an older target
    byte-for-byte intact.
 
-Core/CLI writers that do not use Qt must likewise write a sibling/private
-temporary file and rename only after successful archive finalization.
+The shared `write_parameter_payload_file()` implementation provides this
+UTF-8-path contract for archive and core/CLI legacy writes, using POSIX
+`rename()` or Windows `MoveFileExW(...REPLACE_EXISTING|WRITE_THROUGH)`.
+Qt uses the same core primitive for archives; its existing `QSaveFile` bridge
+remains appropriate for GUI-only FILE*/text recovery and legacy-save paths.
 
 ## Legacy compatibility
 
