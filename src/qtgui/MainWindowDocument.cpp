@@ -153,11 +153,13 @@ bool saveParameterPayloadAtomically(
     version = QStringLiteral(PACKAGE_VERSION);
   const QByteArray versionBytes = version.toUtf8();
 
+  const colorscreen::parameter_archive_render_overrides renderOverrides =
+      colorscreen::parameter_archive_render_overrides_from(render);
   std::string archiveError;
   const QByteArray targetName = path.toUtf8();
   const bool written = colorscreen::write_parameter_payload_file(
       targetName.constData(), payload, true, versionBytes.constData(),
-      &archiveError);
+      &archiveError, &renderOverrides);
   if (!written && error)
     *error = QString::fromUtf8(archiveError);
   else if (written && error)
@@ -183,9 +185,10 @@ bool loadParameterPayload(
 
   std::string openError;
   bool archive = false;
+  colorscreen::parameter_archive_manifest archiveManifest;
   const QByteArray encodedPath = path.toUtf8();
   FILE *f = colorscreen::open_parameter_payload(
-      encodedPath.constData(), &archive, &openError);
+      encodedPath.constData(), &archive, &openError, &archiveManifest);
   if (!f) {
     if (error) {
       const QString detail = QString::fromUtf8(openError);
@@ -217,6 +220,10 @@ bool loadParameterPayload(
                    : errorDetail;
     return false;
   }
+
+  if (archive)
+    colorscreen::apply_parameter_archive_render_overrides(
+        archiveManifest.render_overrides, &loadedState.rparams);
 
   *state = std::move(loadedState);
   if (spotResults)
