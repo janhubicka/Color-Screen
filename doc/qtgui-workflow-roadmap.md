@@ -626,10 +626,13 @@ specialist stages.
 ## Implementation status and remaining alpha sequence
 
 The current alpha baseline implements the original Phase A hardening, the Phase B
-workflow summaries/terminology, and the core Phase C module grammar. Treat those
-sections below as maintained invariants rather than a backlog. Remaining alpha
-work should finish the GUI roadmap and its regression coverage before the
-project/parameter file format is redesigned.
+workflow summaries/terminology, Phase C module grammar, Phase D navigation
+consolidation, and Phase E presets/provenance. Treat those sections below as
+maintained invariants rather than a backlog. Phase F now has the versioned
+`.cspar` container, cross-platform core/CLI/GUI read-write paths, archive-first
+sidecars, and archive-default new saves merged. Remaining alpha work is the
+structured-state migration inside that container, equivalent crash-recovery
+coverage for archive recovery, and field testing of the finished workflow.
 
 ### Phase A — robustness hardening (implemented foundation; keep green)
 
@@ -752,25 +755,37 @@ project/parameter file format is redesigned.
   curve or darkroom values, Sharpness Use measured MTF resets to the fitted
   model, and Image Layer Use simulated RGB resets to the native channel source.
 
-### Phase D — navigation consolidation
+### Phase D — navigation consolidation (implemented foundation)
 
-- use field observations to decide whether nine tabs should become five workflow
-  stages;
-- preserve all specialized panels behind those stages;
-- keep New View/detach semantics unchanged while changing inspector navigation.
+The inspector now exposes five workflow stages — Capture, Process, Register,
+Reconstruct, and Color — while retaining all nine specialist panels and their
+stable semantic keys. Programmatic **Open stage** navigation, saved active-panel
+state, hidden-panel fallback, detached views, and New View all continue to use
+the original document/view ownership model. Keep the five-stage grouping under
+alpha field observation; changing it again should be driven by operator evidence,
+not by generic editor conventions.
 
-### Phase E — presets/provenance
+### Phase E — presets/provenance (implemented foundation)
 
-- scoped capture/process/reconstruction/output presets;
-- provenance for measured/fitted/default values;
-- optional reproducibility report useful for archival workflows.
+Named application presets are explicitly scoped to Capture, Process,
+Reconstruction, or Color and never copy image-specific geometry, crop/tile
+state, flat-field/adaptive grids, fitted profile evidence, or measured MTF
+curves across documents. Process presets clear incompatible screen-bound
+evidence atomically when they change the historical screen type. Geometry,
+flat-field, MTF/adaptive sharpening, and profile results expose current/stale
+provenance in their owning modules, and **Save Reproducibility Report** exports
+the current workflow/provenance summary together with an exact parameter
+payload. Keep expanding provenance only where a concrete saved/measured/fitted
+distinction remains ambiguous to operators.
 
 ### Phase F — project/parameter format modernization
 
-Do this only after the GUI work above is complete, while the application still
-carries an alpha version. The current CSP/`.par` reader must remain available
-for backwards compatibility, but new files should move to an explicitly
-versioned structured schema rather than extending the ad-hoc keyword stream.
+This work is now in progress while the application intentionally remains
+`2.0alpha`. The current CSP/`.par` reader remains available indefinitely for
+backwards compatibility. New parameter saves use the versioned `.cspar`
+container by default, while explicit legacy `.par` export remains available.
+The remaining migration is inside the archive: move state from the legacy mirror
+to explicitly structured sections without extending the ad-hoc keyword stream.
 
 The format decision is now a libzip-backed `.cspar` archive with a UTF-8
 JSON manifest; see [the parameter archive format](parameter-archive-format.md).
@@ -803,8 +818,9 @@ Whichever syntax/container is chosen, the schema is the compatibility contract:
   unknown-key tolerance, and migration of every historical default whose
   semantics changed.
 
-Only after that migration and the remaining alpha GUI work are complete should
-the project be considered for a beta version.
+Only after the structured migration, archive-recovery parity, sanitizer/build
+gate, and remaining alpha field testing are complete should the project be
+considered for a beta version.
 
 ## Questions to answer during alpha field testing
 
@@ -822,7 +838,7 @@ Do not guess these from generic Lightroom conventions.  Observe museum operators
   Color-Screen?
 - What is the most common point at which an operator is unsure what to do next?
 
-Answers should drive the remaining alpha regrouping.  The application is specialized
+Answers should validate or revise the implemented alpha grouping.  The application is specialized
 enough that copying another editor's panel order verbatim would be less standard,
 not more: the standard behaviour to borrow is consistency, reversibility,
 feedback and clear stage ownership.
