@@ -9388,6 +9388,61 @@ write_parameter_archive_fixture (
   return true;
 }
 
+/* Read one archive fixture entry exactly as uncompressed bytes. */
+static bool
+read_parameter_archive_fixture_entry (const std::string &name,
+                                      const char *entry_name,
+                                      std::string *contents)
+{
+  if (!entry_name || !contents)
+    return false;
+
+  int error_code = 0;
+  zip_t *archive = zip_open (name.c_str (), ZIP_RDONLY, &error_code);
+  if (!archive)
+    return false;
+
+  zip_stat_t stat;
+  zip_stat_init (&stat);
+  if (zip_stat (archive, entry_name, 0, &stat) != 0
+      || !(stat.valid & ZIP_STAT_SIZE)
+      || stat.size > (zip_uint64_t)std::numeric_limits<size_t>::max ())
+    {
+      zip_discard (archive);
+      return false;
+    }
+
+  zip_file_t *file = zip_fopen (archive, entry_name, 0);
+  if (!file)
+    {
+      zip_discard (archive);
+      return false;
+    }
+
+  std::string result ((size_t)stat.size, '\0');
+  size_t offset = 0;
+  bool ok = true;
+  while (offset < result.size ())
+    {
+      const zip_int64_t count
+          = zip_fread (file, result.data () + offset, result.size () - offset);
+      if (count <= 0)
+        {
+          ok = false;
+          break;
+        }
+      offset += (size_t)count;
+    }
+  if (zip_fclose (file) != 0)
+    ok = false;
+  zip_discard (archive);
+
+  if (!ok || offset != result.size ())
+    return false;
+  *contents = std::move (result);
+  return true;
+}
+
 /* Verify schema-v1 parameter archives and hostile-input rejection. */
 static bool
 test_parameter_archive ()
@@ -9699,6 +9754,65 @@ test_parameter_archive ()
                     {{"state/legacy.par", legacy}}, true))
     return false;
 
+  // An editor that understands only the legacy payload must not destroy
+  // optional manifest state or opaque future entries when saving an archive it
+  // loaded. The manifest is preserved byte-for-byte and only legacy_csp changes.
+  const std::string preserve_path
+      = parameter_archive_test_path ("preserve-unknown");
+  const std::string preserve_manifest
+      = "{\n"
+        "  \"format\": \"org.colorscreen.parameters\",\n"
+        "  \"schema_version\": 1,\n"
+        "  \"state\": {\"legacy_csp\": \"state/legacy.par\"},\n"
+        "  \"payloads\": [],\n"
+        "  \"future_optional\": {\"owner\": \"future\", \"value\": 17}\n"
+        "}\n";
+  const std::string future_bytes ("future\0opaque\xffpayload", 21);
+  if (!write_parameter_archive_fixture (
+          preserve_path, preserve_manifest,
+          {{"state/legacy.par", legacy},
+           {"payload/future-opaque.bin", future_bytes}}))
+    {
+      fprintf (stderr, "Could not create archive-preservation fixture\n");
+      return false;
+    }
+
+  const std::string rewritten_legacy
+      = "screen_alignment_version: 1\n"
+        "gamma: 1.900000\n"
+        "screen_alignment_end\n";
+  if (!rewrite_parameter_archive_payload_file (
+          preserve_path.c_str (), preserve_path.c_str (), rewritten_legacy,
+          &error))
+    {
+      fprintf (stderr, "Archive-preserving rewrite failed: %s\n",
+               error.c_str ());
+      std::remove (preserve_path.c_str ());
+      return false;
+    }
+
+  std::string preserved_manifest_bytes;
+  std::string preserved_future_bytes;
+  loaded.clear ();
+  parsed = {};
+  if (!read_parameter_archive_fixture_entry (
+          preserve_path, "manifest.json", &preserved_manifest_bytes)
+      || !read_parameter_archive_fixture_entry (
+          preserve_path, "payload/future-opaque.bin", &preserved_future_bytes)
+      || preserved_manifest_bytes != preserve_manifest
+      || preserved_future_bytes != future_bytes
+      || !read_parameter_archive (preserve_path.c_str (), &loaded, &parsed,
+                                  &error)
+      || loaded != rewritten_legacy)
+    {
+      fprintf (stderr,
+               "Archive-preserving rewrite changed optional manifest/data: %s\n",
+               error.c_str ());
+      std::remove (preserve_path.c_str ());
+      return false;
+    }
+  std::remove (preserve_path.c_str ());
+
   const std::string future_manifest
       = "{"
         "\"format\":\"org.colorscreen.parameters\","
@@ -9721,6 +9835,46 @@ test_parameter_archive ()
                     {{"state/legacy.par", legacy}}, false,
                     "unsupported required parameter archive feature"))
     return false;
+
+  const std::string feature_rewrite_path
+      = parameter_archive_test_path ("required-feature-rewrite");
+  if (!write_parameter_archive_fixture (
+          feature_rewrite_path, feature_manifest,
+          {{"state/legacy.par", legacy}}))
+    return false;
+  error.clear ();
+  if (rewrite_parameter_archive_payload_file (
+          feature_rewrite_path.c_str (), feature_rewrite_path.c_str (),
+          rewritten_legacy, &error)
+      || error.find ("unsupported required parameter archive feature")
+             == std::string::npos)
+    {
+      fprintf (stderr,
+               "Archive rewrite accepted unsupported required feature: %s\n",
+               error.c_str ());
+      std::remove (feature_rewrite_path.c_str ());
+      return false;
+    }
+  loaded.clear ();
+  parsed = {};
+  if (read_parameter_archive (feature_rewrite_path.c_str (), &loaded, &parsed,
+                              nullptr)
+      || loaded != legacy)
+    {
+      // The reader must still reject the required feature. Verify the actual
+      // payload remained unchanged through the fixture helper instead.
+      std::string untouched_legacy;
+      if (!read_parameter_archive_fixture_entry (
+              feature_rewrite_path, "state/legacy.par", &untouched_legacy)
+          || untouched_legacy != legacy)
+        {
+          fprintf (stderr,
+                   "Rejected required-feature rewrite changed source archive\n");
+          std::remove (feature_rewrite_path.c_str ());
+          return false;
+        }
+    }
+  std::remove (feature_rewrite_path.c_str ());
 
   const std::string wrong_format
       = "{"
