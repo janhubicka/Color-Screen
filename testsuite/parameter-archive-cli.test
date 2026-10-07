@@ -103,6 +103,7 @@ echo 'ok 3 - legacy/archive outputs match'
 
 pexec $RUNCOLORSCREEN adjust-par "$archive" || exit 1
 python3 - "$archive" <<'PY' || exit 1
+import json
 import sys
 import zipfile
 
