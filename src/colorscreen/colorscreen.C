@@ -76,16 +76,15 @@ windows_utf8_argv (std::vector<std::string> *storage,
           ok = false;
           break;
         }
-      std::string converted ((size_t)bytes - 1, '\0');
-      if (bytes > 1
-          && WideCharToMultiByte (CP_UTF8, WC_ERR_INVALID_CHARS, wide_argv[i],
-                                  -1, converted.data (), bytes, nullptr,
-                                  nullptr)
-                 <= 0)
+      std::string converted ((size_t)bytes, '\0');
+      if (WideCharToMultiByte (CP_UTF8, WC_ERR_INVALID_CHARS, wide_argv[i], -1,
+                               converted.data (), bytes, nullptr, nullptr)
+          <= 0)
         {
           ok = false;
           break;
         }
+      converted.resize ((size_t)bytes - 1);
       storage->push_back (std::move (converted));
     }
   LocalFree (wide_argv);
