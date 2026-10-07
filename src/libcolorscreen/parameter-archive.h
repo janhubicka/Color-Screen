@@ -15,12 +15,12 @@ struct parameter_archive_manifest
   std::string legacy_csp_path;
 };
 
-/* Return true if NAME starts with a ZIP signature and may therefore be a
-   Color-Screen parameter archive.  This is only format dispatch; callers must
-   still validate the archive with read_parameter_archive.  */
+/* Return true if UTF-8 host path NAME starts with a ZIP signature and may
+   therefore be a Color-Screen parameter archive. This is only format dispatch;
+   callers must still validate the archive with read_parameter_archive. */
 DLL_PUBLIC bool parameter_archive_signature_p (const char *name);
 
-/* Open NAME as a parameter payload stream.
+/* Open UTF-8 host path NAME as a parameter payload stream.
 
    Plain CSP text is opened directly. A ZIP signature is treated as a
    Color-Screen archive and its validated schema-v1 legacy payload is copied to
@@ -30,7 +30,7 @@ DLL_PUBLIC bool parameter_archive_signature_p (const char *name);
 DLL_PUBLIC FILE *open_parameter_payload (const char *name, bool *is_archive,
                                          std::string *error);
 
-/* Read and validate parameter archive NAME.
+/* Read and validate parameter archive at UTF-8 host path NAME.
 
    On success copy the schema-v1 legacy CSP payload to LEGACY_CSP and, when
    non-null, parsed manifest information to MANIFEST.  ERROR receives a
@@ -41,7 +41,7 @@ read_parameter_archive (const char *name, std::string *legacy_csp,
                         parameter_archive_manifest *manifest,
                         std::string *error);
 
-/* Write one schema-v1 archive to NAME.
+/* Write one schema-v1 archive to UTF-8 host path NAME.
 
    LEGACY_CSP is the complete CSP/Qt payload to place in state/legacy.par.
    GENERATOR_VERSION is informational and may be null.  NAME is a staging
