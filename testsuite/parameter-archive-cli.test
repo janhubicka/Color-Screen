@@ -11,6 +11,23 @@ fi
 echo 1..5
 . $srcdir/defs.sh
 
+# Dynamic MinGW builds are normally launched through libtool's POSIX wrapper.
+# That wrapper adds a second MSYS -> native exec boundary and can replace
+# characters outside the active Windows code page before the real executable's
+# UTF-16 command-line recovery runs. Exercise the installed-program semantics
+# directly when the libtool binary exists, while keeping its build-tree DLL
+# dependency discoverable.
+case `uname -s 2>/dev/null` in
+  MINGW*|MSYS*)
+    real_colorscreen="$top_builddir/src/colorscreen/.libs/colorscreen.exe"
+    if test -x "$real_colorscreen"; then
+      PATH="$top_builddir/src/libcolorscreen/.libs:$PATH"
+      export PATH
+      RUNCOLORSCREEN="$WRAP$real_colorscreen --verbose-tasks"
+    fi
+    ;;
+esac
+
 archive=$(python3 -X utf8 - <<'PY'
 print("out-parameter-\u017elu\u0165ou\u010dk\u00fd-\u6d4b\u8bd5.cspar")
 PY
