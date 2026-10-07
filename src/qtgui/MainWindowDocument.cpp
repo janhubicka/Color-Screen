@@ -153,20 +153,16 @@ bool saveParameterPayloadAtomically(
     version = QStringLiteral(PACKAGE_VERSION);
   const QByteArray versionBytes = version.toUtf8();
 
-  return qtgui_io::savePathAtomically(
-      path,
-      [payload = std::move(payload), versionBytes](
-          const QString &stagedPath, QString *writerError) {
-        std::string archiveError;
-        const QByteArray stagedName = stagedPath.toUtf8();
-        const bool written = colorscreen::write_parameter_archive(
-            stagedName.constData(), payload, versionBytes.constData(),
-            &archiveError);
-        if (!written && writerError)
-          *writerError = QString::fromUtf8(archiveError);
-        return written;
-      },
-      error);
+  std::string archiveError;
+  const QByteArray targetName = path.toUtf8();
+  const bool written = colorscreen::write_parameter_payload_file(
+      targetName.constData(), payload, true, versionBytes.constData(),
+      &archiveError);
+  if (!written && error)
+    *error = QString::fromUtf8(archiveError);
+  else if (written && error)
+    error->clear();
+  return written;
 }
 
 /** Atomically replace a small UTF-8 recovery metadata file. */
@@ -1359,11 +1355,10 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
 
   // Prefer the new archive sidecar when both formats are present; never
   // merge archive and legacy sidecars. Retain legacy .par fallback and
-  // legacy-first suggestions until the
-  // archive rollout gate is complete. The question is presentation state of
-  // this exact image-load generation: never enter a nested event loop, and
-  // never let an obsolete prompt launch decoding after a newer Open/Reload
-  // request has taken ownership.
+  // legacy-first suggestions until the archive rollout gate is complete. The
+  // question is presentation state of this exact image-load generation: never
+  // enter a nested event loop, and never let an obsolete prompt launch decoding
+  // after a newer Open/Reload request has taken ownership.
   if (!suppressParamPrompt) {
     const QFileInfo fileInfo(requestedImageFile);
     const QString base =
@@ -1371,8 +1366,7 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
     const QString archiveFile = base + QStringLiteral(".cspar");
     const QString legacyFile = base + QStringLiteral(".par");
     const bool haveArchive = QFile::exists(archiveFile);
-    const QString sidecarFile =
-        haveArchive ? archiveFile : legacyFile;
+    const QString sidecarFile = haveArchive ? archiveFile : legacyFile;
     const bool haveSidecar = haveArchive || QFile::exists(legacyFile);
 
     if (haveSidecar) {
@@ -1392,8 +1386,7 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
           question, &QMessageBox::finished, this,
           [this, question, sidecarFile, haveArchive, sidecarStaging,
            loadGeneration, startImageRead](int result) {
-            const bool ownsPrompt =
-                m_imageLoad.sidecarPrompt == question;
+            const bool ownsPrompt = m_imageLoad.sidecarPrompt == question;
             if (ownsPrompt)
               m_imageLoad.sidecarPrompt.clear();
             if (!ownsPrompt || m_closeLifecycle.closing() ||
@@ -1416,8 +1409,7 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
                 showParameterLoadFailure(this, loadError);
               } else {
                 sidecarStaging->state = std::move(sidecarState);
-                sidecarStaging->spotResults =
-                    std::move(sidecarSpotResults);
+                sidecarStaging->spotResults = std::move(sidecarSpotResults);
                 sidecarStaging->loadedPath = sidecarFile;
                 sidecarStaging->loadedArchive = sidecarArchive;
               }

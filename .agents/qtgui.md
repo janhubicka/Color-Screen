@@ -86,14 +86,16 @@ each document has independent:
   directory. Never let a suggested parameter filename become an overwrite target
   without an explicit save/load transition. An established target must preserve
   its loaded format on ordinary Save. Legacy CSP writes stage the complete FILE*
-  payload through `qtgui_io::saveStdioAtomically()`; `.cspar` writes let libzip
-  finalize a private staging path and then commit those finished bytes through
-  `qtgui_io::savePathAtomically()`. Both use `QSaveFile` with direct-write
-  fallback disabled, so a failed serializer/write/commit leaves any previous
-  usable target unchanged. Recovery parameters intentionally remain an internal
-  legacy CSP payload for now, while recovery metadata preserves the user's
-  Archive/Legacy target identity. Keep atomic-file smoke coverage for both
-  FILE*- and path-backed serializers.
+  payload through `qtgui_io::saveStdioAtomically()`; `.cspar` writes serialize
+  the complete CSP+Qt payload first and pass it, together with the UTF-8 target
+  path, to libcolorscreen's `write_parameter_payload_file()`. That shared core
+  writer finalizes a sibling staging file and atomically replaces the target
+  using the platform-native rename primitive already exercised by core Unicode
+  and failure-preservation tests. A failed serializer/write/replace must leave
+  any previous usable target unchanged. Recovery parameters intentionally remain
+  an internal legacy CSP payload for now, while recovery metadata preserves the
+  user's Archive/Legacy target identity. Keep the lightweight QSaveFile smoke
+  for legacy/recovery writes; archive atomicity belongs to the core test group.
 
 Workspace geometry, image/parameter file-dialog directory history, and
 recent-file lists remain application preferences in `QSettings`; they are not
