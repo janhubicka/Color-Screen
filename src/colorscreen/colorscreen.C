@@ -255,12 +255,17 @@ save_parameter_filename (const char *filename, bool archive,
                          const scr_detect_parameters *dparam,
                          const render_parameters *rparam,
                          const solver_parameters *sparam,
-                         const std::string &trailing, std::string *error)
+                         const std::string &trailing, std::string *error,
+                         const char *preserve_source_archive = nullptr)
 {
   std::string payload;
   if (!serialize_parameter_payload (param, dparam, rparam, sparam, trailing,
                                     &payload, error))
     return false;
+
+  if (archive && preserve_source_archive)
+    return rewrite_parameter_archive_payload_file (
+        preserve_source_archive, filename, payload, error);
 
   return write_parameter_payload_file (filename, payload, archive,
                                        PACKAGE_VERSION, error);
@@ -1369,6 +1374,7 @@ autodetect (int argc, char **argv)
       fprintf (stderr, "Can not load %s: %s\n", infname, error);
       return 1;
     }
+  bool input_archive = false;
   std::string input_trailing;
   if (cspname)
     {
@@ -1380,8 +1386,8 @@ autodetect (int argc, char **argv)
         }
       std::string parameter_error;
       if (!load_parameter_filename (cspname, &param, &dparam, &rparam,
-                                    &solver_param, &parameter_error, nullptr,
-                                    &input_trailing))
+                                    &solver_param, &parameter_error,
+                                    &input_archive, &input_trailing))
         {
           progress.pause_stdout ();
           fprintf (stderr, "Can not load %s: %s\n", cspname,
@@ -1495,9 +1501,11 @@ autodetect (int argc, char **argv)
       progress.resume_stdout ();
     }
   std::string save_error;
+  const bool output_archive = parameter_archive_suffix_p (outname);
   if (!save_parameter_filename (
-          outname, parameter_archive_suffix_p (outname), &param, &dparam,
-          &rparam, &solver_param, input_trailing, &save_error))
+          outname, output_archive, &param, &dparam, &rparam, &solver_param,
+          input_trailing, &save_error,
+          output_archive && input_archive ? cspname : nullptr))
     {
       progress.pause_stdout ();
       fprintf (stderr, "Cannot save %s: %s\n", outname,
@@ -1934,9 +1942,10 @@ analyze_scanner_blur (int argc, char **argv)
       progress.resume_stdout ();
     }
   std::string save_error;
-  if (!save_parameter_filename (outcspname, output_archive, &param, &dparam,
-                                &rparam, &solver_param, input_trailing,
-                                &save_error))
+  if (!save_parameter_filename (
+          outcspname, output_archive, &param, &dparam, &rparam, &solver_param,
+          input_trailing, &save_error,
+          output_archive && input_archive ? cspname : nullptr))
     {
       progress.pause_stdout ();
       fprintf (stderr, "Cannot save %s: %s\n", outcspname,
@@ -4405,9 +4414,10 @@ do_adjust_par (int argc, char **argv)
       printf ("Saving color screen parameters: %s\n", outcspname);
     }
   std::string save_error;
-  if (!save_parameter_filename (outcspname, output_archive, &param, &dparam,
-                                &rparam, &solver_param, input_trailing,
-                                &save_error))
+  if (!save_parameter_filename (
+          outcspname, output_archive, &param, &dparam, &rparam, &solver_param,
+          input_trailing, &save_error,
+          output_archive && input_archive ? cspname : nullptr))
     {
       fprintf (stderr, "Cannot save %s: %s\n", outcspname,
                save_error.c_str ());
