@@ -132,7 +132,8 @@ bool saveParameterPayloadAtomically(
     const colorscreen::scr_detect_parameters *detect,
     const colorscreen::render_parameters &render,
     const colorscreen::solver_parameters &solver,
-    const std::vector<colorscreen::point_t> &profileSpots, QString *error) {
+    const std::vector<colorscreen::point_t> &profileSpots, QString *error,
+    const QString &preserveSourceArchive = QString()) {
   if (!archive) {
     return qtgui_io::saveStdioAtomically(
         path,
@@ -155,9 +156,16 @@ bool saveParameterPayloadAtomically(
 
   std::string archiveError;
   const QByteArray targetName = path.toUtf8();
-  const bool written = colorscreen::write_parameter_payload_file(
-      targetName.constData(), payload, true, versionBytes.constData(),
-      &archiveError);
+  bool written = false;
+  if (!preserveSourceArchive.isEmpty()) {
+    const QByteArray sourceName = preserveSourceArchive.toUtf8();
+    written = colorscreen::rewrite_parameter_archive_payload_file(
+        sourceName.constData(), targetName.constData(), payload, &archiveError);
+  } else {
+    written = colorscreen::write_parameter_payload_file(
+        targetName.constData(), payload, true, versionBytes.constData(),
+        &archiveError);
+  }
   if (!written && error)
     *error = QString::fromUtf8(archiveError);
   else if (written && error)
@@ -332,10 +340,12 @@ bool MainWindow::saveParametersToFile(const QString &fileName) {
   const bool archive = format == ParameterFileState::Format::Archive;
   const bool hasRgb = m_scan && m_scan->has_rgb();
   QString error;
+  const QString preserveSourceArchive =
+      preservingCurrentTarget && archive ? m_parameterFile.path : QString();
   if (!saveParameterPayloadAtomically(
           absoluteFileName, archive, m_scrToImgParams,
           hasRgb ? &m_detectParams : nullptr, m_rparams, m_solverParams,
-          m_profileSpots, &error)) {
+          m_profileSpots, &error, preserveSourceArchive)) {
     // The write result is synchronous because closeEvent needs it immediately,
     // but its explanation must not enter a nested event loop while close/save
     // policy is still on the stack. Veto the close first and let Qt present the
