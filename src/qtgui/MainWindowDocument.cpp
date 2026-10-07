@@ -1357,8 +1357,9 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
         watcher->setFuture(future);
   };
 
-  // Prefer the new archive sidecar when both formats are present, while
-  // retaining legacy .par fallback and legacy-first suggestions until the
+  // Prefer the new archive sidecar when both formats are present; never
+  // merge archive and legacy sidecars. Retain legacy .par fallback and
+  // legacy-first suggestions until the
   // archive rollout gate is complete. The question is presentation state of
   // this exact image-load generation: never enter a nested event loop, and
   // never let an obsolete prompt launch decoding after a newer Open/Reload
