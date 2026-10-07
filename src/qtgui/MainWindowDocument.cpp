@@ -1725,21 +1725,33 @@ void MainWindow::saveRecoveryState() {
     return;
 
   const QDir directory(m_recoveryDir);
-  saveRecoveryTextAtomically(
-      directory.filePath(QStringLiteral("recovery_image.txt")),
-      m_currentImageFile);
-
   const QString paramsPath =
-      directory.filePath(QStringLiteral("recovery_params.par"));
+      directory.filePath(QStringLiteral("recovery_params.cspar"));
   const bool hasRgb = m_scan->has_rgb();
   QString paramsError;
   if (!saveParameterPayloadAtomically(
-          paramsPath, false, m_scrToImgParams,
+          paramsPath, true, m_scrToImgParams,
           hasRgb ? &m_detectParams : nullptr, m_rparams, m_solverParams,
           m_profileSpots, &paramsError)) {
+    // Preserve the previous usable recovery snapshot and its image/target
+    // metadata rather than publishing metadata for a snapshot we did not save.
     qWarning() << "Could not atomically save recovery parameters to" << paramsPath
                << paramsError;
+    return;
   }
+
+  // A newly complete archive supersedes the old per-document legacy snapshot.
+  // Remove it only after archive commit succeeds, so an interrupted migration
+  // can still restore the older snapshot.
+  const QString oldParamsPath =
+      directory.filePath(QStringLiteral("recovery_params.par"));
+  if (QFile::exists(oldParamsPath) && !QFile::remove(oldParamsPath))
+    qWarning() << "Could not remove superseded recovery parameters"
+               << oldParamsPath;
+
+  saveRecoveryTextAtomically(
+      directory.filePath(QStringLiteral("recovery_image.txt")),
+      m_currentImageFile);
 
   const QString meta =
       m_parameterFile.path + QLatin1Char('\n') +
@@ -1759,9 +1771,11 @@ void MainWindow::saveRecoveryState() {
 }
 
 /** Restore this document from its private recovery payload.
-   Restores the saved dirty flag when present; legacy payloads are treated as
-   modified because they may contain edits never written to the user's .par
-   file. Returns false only when the directory contains no usable data.  */
+
+   Prefer complete .cspar snapshots, falling back to old .par snapshots only
+   when no archive exists. Parse transactionally, preserve structured render
+   values, and keep invalid/incomplete recoveries dirty. Returns false only
+   when the directory contains no usable recovery reference. */
 bool MainWindow::restoreRecoveryState() {
   if (m_recoveryDir.isEmpty())
     return false;
@@ -1769,8 +1783,11 @@ bool MainWindow::restoreRecoveryState() {
   const QDir directory(m_recoveryDir);
   const QString imagePath =
       directory.filePath(QStringLiteral("recovery_image.txt"));
-  const QString paramsPath =
+  const QString archivePath =
+      directory.filePath(QStringLiteral("recovery_params.cspar"));
+  const QString legacyPath =
       directory.filePath(QStringLiteral("recovery_params.par"));
+  const QString paramsPath = QFile::exists(archivePath) ? archivePath : legacyPath;
   if (!QFile::exists(imagePath) && !QFile::exists(paramsPath))
     return false;
 
@@ -1785,42 +1802,34 @@ bool MainWindow::restoreRecoveryState() {
         tr("The recovered image reference could not be read."));
   }
 
+  bool parametersRecovered = false;
   if (QFile::exists(paramsPath)) {
-    FILE *f = fopen(paramsPath.toUtf8().constData(), "r");
-    if (!f) {
+    // A present archive is authoritative. Never silently fall back to an
+    // obsolete .par if the archive is corrupt: that would recover stale state.
+    // The shared loader parses into private defaults, validates the full ZIP
+    // manifest and Qt postamble, then applies required structured render state.
+    ParameterState recoveredState;
+    std::vector<colorscreen::color_match> recoveredSpotResults;
+    bool recoveredArchive = false;
+    QString loadError;
+    if (!loadParameterPayload(paramsPath, &recoveredState,
+                              &recoveredSpotResults, &recoveredArchive,
+                              &loadError)) {
       recoveryWarnings.push_back(
-          tr("The recovered parameter payload could not be opened. "
-             "No recovered parameters were applied."));
+          loadError.isEmpty()
+              ? tr("The recovered parameter payload is invalid. "
+                   "No recovered parameters were applied.")
+              : tr("The recovered parameter payload is invalid: %1\n"
+                   "No recovered parameters were applied.")
+                    .arg(loadError));
     } else {
-      // load_csp merges into its outputs. Parse into private temporaries so a
-      // truncated/corrupt recovery file can never partially mutate live state.
-      ParameterState recoveredState;
-      std::vector<colorscreen::color_match> recoveredSpotResults;
-      const char *error = nullptr;
-      const bool loaded = colorscreen::load_csp_with_profile_spots(
-          f, &recoveredState.scrToImg, &recoveredState.detect,
-          &recoveredState.rparams, &recoveredState.solver, &error,
-          &recoveredState.profileSpots, &recoveredSpotResults);
-      const QString errorDetail =
-          error ? QString::fromUtf8(error) : QString();
-      fclose(f);
-
-      if (!loaded || !errorDetail.isEmpty()) {
-        recoveryWarnings.push_back(
-            errorDetail.isEmpty()
-                ? tr("The recovered parameter payload is invalid. "
-                     "No recovered parameters were applied.")
-                : tr("The recovered parameter payload is invalid: %1\n"
-                     "No recovered parameters were applied.")
-                      .arg(errorDetail));
-      } else {
-        m_scrToImgParams = std::move(recoveredState.scrToImg);
-        m_detectParams = std::move(recoveredState.detect);
-        m_rparams = std::move(recoveredState.rparams);
-        m_solverParams = std::move(recoveredState.solver);
-        m_profileSpots = std::move(recoveredState.profileSpots);
-        m_profileCalibration.spotResults = std::move(recoveredSpotResults);
-      }
+      m_scrToImgParams = std::move(recoveredState.scrToImg);
+      m_detectParams = std::move(recoveredState.detect);
+      m_rparams = std::move(recoveredState.rparams);
+      m_solverParams = std::move(recoveredState.solver);
+      m_profileSpots = std::move(recoveredState.profileSpots);
+      m_profileCalibration.spotResults = std::move(recoveredSpotResults);
+      parametersRecovered = true;
     }
   }
 
@@ -1848,6 +1857,11 @@ bool MainWindow::restoreRecoveryState() {
     if (!dirtyFlag.isEmpty())
       m_recoveryDirty = (dirtyFlag == QLatin1String("1"));
   }
+
+  // A failed or missing parameter recovery cannot certify a clean user
+  // document even if older metadata says the original save was clean.
+  if (!parametersRecovered)
+    m_recoveryDirty = true;
 
   if (!imageToLoad.isEmpty() && QFile::exists(imageToLoad)) {
     loadFile(imageToLoad, true);
