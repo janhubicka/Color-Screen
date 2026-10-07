@@ -713,11 +713,16 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
         const QString staleLegacyPath =
             QDir(corruptDirectory)
                 .filePath(QStringLiteral("recovery_params.par"));
-        if (!QFile::copy(legacyPath, staleLegacyPath)) {
+        QFile staleLegacyFile(staleLegacyPath);
+        if (!staleLegacyFile.open(
+                QIODevice::WriteOnly | QIODevice::Truncate) ||
+            staleLegacyFile.write(legacyBytes) != legacyBytes.size() ||
+            !staleLegacyFile.flush()) {
           fail(QStringLiteral(
               "Recovery corruption smoke could not create fallback trap"));
           return;
         }
+        staleLegacyFile.close();
 
         auto *corruptProbe = new MainWindow(corruptDirectory);
         corruptProbe->hide();
