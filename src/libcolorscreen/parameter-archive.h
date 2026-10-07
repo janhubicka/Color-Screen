@@ -64,6 +64,22 @@ write_parameter_payload_file (const char *name, const std::string &payload,
                               bool archive, const char *generator_version,
                               std::string *error);
 
+/* Atomically rewrite an existing supported archive while preserving every
+   other archive entry and manifest byte.
+
+   SOURCE_NAME names the archive whose optional/unknown content is authoritative.
+   TARGET_NAME may be the same path or a new path. Only the manifest-selected
+   legacy CSP entry is replaced by PAYLOAD; manifest.json and every other entry
+   are copied from the validated source archive. This is the safe path for
+   editors that loaded an archive and are saving derived parameter changes.
+   Unsupported schema versions/required features are rejected before any target
+   replacement. */
+DLL_PUBLIC bool
+rewrite_parameter_archive_payload_file (const char *source_name,
+                                        const char *target_name,
+                                        const std::string &payload,
+                                        std::string *error);
+
 }
 
 #endif
