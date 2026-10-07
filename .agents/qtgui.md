@@ -1074,10 +1074,11 @@ To maintain consistency across different UI actions, use the following standardi
   (dialogs, Recent, drag/drop) parses the complete core + Qt metadata payload
   into a private default `ParameterState`, then publishes state and adopts the
   detected LegacyCsp/Archive target format only on success. Image-sidecar
-  discovery remains legacy `.par` for now; a valid sidecar is staged privately,
-  may supply the demosaic choice used to decode the image, and is published only
-  after the associated image load succeeds. If live ParameterState changes while
-  loading, those edits win and the sidecar remains only a suggested target.
+  discovery prefers `<image>.cspar` when it exists and otherwise falls back to
+  legacy `<image>.par`; it never merges both. A chosen sidecar is staged
+  privately, may supply the demosaic choice used to decode the image, and is
+  published only after the associated image load succeeds. Declined, invalid or
+  stale-completion sidecars remain at most format-aware Save-As suggestions.
   Open/parse failure must leave live parameters, calibration provenance,
   parameter target/format, Undo index and clean state untouched. Failure
   reporting is a parent-owned asynchronous `ParameterLoadFailureDialog`, not a

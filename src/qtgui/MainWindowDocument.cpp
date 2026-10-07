@@ -945,7 +945,7 @@ void MainWindow::maybeOfferInitialSetupGuide(
   dialog->open();
 }
 
-/** Load an image file and optionally its associated .par parameter file.
+/** Load an image file and optionally its associated parameter sidecar.
    If SUPPRESSPARAMPROMPT is false, the optional sidecar decision is presented
    asynchronously and owned by this image-load generation. An accepted sidecar
    is parsed into private staging state and may guide image decoding, but is
@@ -971,6 +971,7 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
     QString loadedPath;
     bool loadedArchive = false;
     QString suggestedPath;
+    bool suggestedArchive = false;
     std::optional<ParameterState> baseline;
   };
   auto sidecarStaging = std::make_shared<SidecarLoadStaging>();
@@ -1127,14 +1128,22 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
                         m_renderTypeParams.type =
                             colorscreen::render_type_interpolated;
                     } else {
-                      m_parameterFile.setSuggested(sidecarStaging->loadedPath);
+                      m_parameterFile.setSuggested(
+                          sidecarStaging->loadedPath,
+                          sidecarStaging->loadedArchive
+                              ? ParameterFileState::Format::Archive
+                              : ParameterFileState::Format::LegacyCsp);
                       inspectorStatusBar()->showMessage(
                           tr("Image loaded; sidecar parameters were not applied "
                              "because settings changed while the image was loading."),
                           6000);
                     }
                   } else if (!sidecarStaging->suggestedPath.isEmpty()) {
-                    m_parameterFile.setSuggested(sidecarStaging->suggestedPath);
+                    m_parameterFile.setSuggested(
+                        sidecarStaging->suggestedPath,
+                        sidecarStaging->suggestedArchive
+                            ? ParameterFileState::Format::Archive
+                            : ParameterFileState::Format::LegacyCsp);
                   }
                 }
 
@@ -1344,19 +1353,28 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
         watcher->setFuture(future);
   };
 
-  // Check for .par file (only if not suppressed, e.g., during recovery).
-  // The question is presentation state of this exact image-load generation:
-  // never enter a nested event loop, and never let an obsolete prompt launch
-  // decoding after a newer Open/Reload request has taken ownership.
+  // Prefer the new archive sidecar when both formats are present; never
+  // merge archive and legacy sidecars. Retain legacy .par fallback and
+  // legacy-first suggestions until the archive rollout gate is complete. The
+  // question is presentation state of this exact image-load generation: never
+  // enter a nested event loop, and never let an obsolete prompt launch decoding
+  // after a newer Open/Reload request has taken ownership.
   if (!suppressParamPrompt) {
-    QFileInfo fileInfo(requestedImageFile);
-    const QString parFile =
-        fileInfo.path() + "/" + fileInfo.completeBaseName() + ".par";
+    const QFileInfo fileInfo(requestedImageFile);
+    const QString base =
+        fileInfo.path() + "/" + fileInfo.completeBaseName();
+    const QString archiveFile = base + QStringLiteral(".cspar");
+    const QString legacyFile = base + QStringLiteral(".par");
+    const bool haveArchive = QFile::exists(archiveFile);
+    const QString sidecarFile = haveArchive ? archiveFile : legacyFile;
+    const bool haveSidecar = haveArchive || QFile::exists(legacyFile);
 
-    if (QFile::exists(parFile)) {
+    if (haveSidecar) {
       auto *question = new QMessageBox(
           QMessageBox::Question, tr("Load Parameters?"),
-          tr("A parameter file was found for this image. Do you want to load it?"),
+          tr("A parameter file was found for this image:\n%1\n\n"
+             "Do you want to load it?")
+              .arg(QFileInfo(sidecarFile).fileName()),
           QMessageBox::Yes | QMessageBox::No, this);
       question->setObjectName(QStringLiteral("ImageSidecarLoadPrompt"));
       question->setDefaultButton(QMessageBox::Yes);
@@ -1366,10 +1384,9 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
 
       connect(
           question, &QMessageBox::finished, this,
-          [this, question, parFile, sidecarStaging, loadGeneration,
-           startImageRead](int result) {
-            const bool ownsPrompt =
-                m_imageLoad.sidecarPrompt == question;
+          [this, question, sidecarFile, haveArchive, sidecarStaging,
+           loadGeneration, startImageRead](int result) {
+            const bool ownsPrompt = m_imageLoad.sidecarPrompt == question;
             if (ownsPrompt)
               m_imageLoad.sidecarPrompt.clear();
             if (!ownsPrompt || m_closeLifecycle.closing() ||
@@ -1381,32 +1398,36 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
               std::vector<colorscreen::color_match> sidecarSpotResults;
               bool sidecarArchive = false;
               QString loadError;
-              if (!loadParameterPayload(parFile, &sidecarState,
+              if (!loadParameterPayload(sidecarFile, &sidecarState,
                                         &sidecarSpotResults, &sidecarArchive,
                                         &loadError)) {
-                // Parsing failed, so the file is at most a later Save-As
-                // suggestion. Publish that suggestion only if the image opens.
-                sidecarStaging->suggestedPath = parFile;
+                // Parsing failed, so the named sidecar is at most a later
+                // Save-As suggestion. Publish that suggestion only if the
+                // image itself opens successfully.
+                sidecarStaging->suggestedPath = sidecarFile;
+                sidecarStaging->suggestedArchive = haveArchive;
                 showParameterLoadFailure(this, loadError);
               } else {
                 sidecarStaging->state = std::move(sidecarState);
-                sidecarStaging->spotResults =
-                    std::move(sidecarSpotResults);
-                sidecarStaging->loadedPath = parFile;
+                sidecarStaging->spotResults = std::move(sidecarSpotResults);
+                sidecarStaging->loadedPath = sidecarFile;
                 sidecarStaging->loadedArchive = sidecarArchive;
               }
             } else {
-              // Declining (or closing) the optional question keeps the natural
-              // sidecar name only as a later Save-As suggestion.
-              sidecarStaging->suggestedPath = parFile;
+              // Declining the optional question retains the chosen existing
+              // sidecar only as a format-aware Save-As suggestion.
+              sidecarStaging->suggestedPath = sidecarFile;
+              sidecarStaging->suggestedArchive = haveArchive;
             }
 
             startImageRead();
           });
       question->open();
     } else {
-      // No parameter file exists - stage the natural Save-As filename.
-      sidecarStaging->suggestedPath = parFile;
+      // No sidecar exists. Keep the legacy-first Save-As suggestion until the
+      // rollout gate deliberately changes the default.
+      sidecarStaging->suggestedPath = legacyFile;
+      sidecarStaging->suggestedArchive = false;
       startImageRead();
     }
   } else {

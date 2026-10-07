@@ -251,17 +251,18 @@ Implementation status in the alpha tree:
   content-signature dispatch, UTF-8 host-path handling, and the cross-platform
   atomic replacement primitive are merged;
 - Qt archive Open/Save As, format-preserving ordinary Save, recovery-format
-  metadata, and transactional workspace smoke are the current integration step;
-  that smoke uses a Czech/CJK Unicode `.cspar` filename on every Qt CI platform;
+  metadata, and transactional workspace smoke are merged; that smoke uses a
+  Czech/CJK Unicode `.cspar` filename on every Qt CI platform;
 - CLI read/write parity is being validated separately with the same Unicode
   archive-name class and format-preserving atomic rewrite coverage;
-- archive-first image-sidecar discovery (`.cspar` then legacy `.par`, never
-  both) is staged separately on top of the Qt integration;
-- new Save As remains legacy-first until those frontend matrices are green.
+- this branch makes automatic image-sidecar discovery prefer `.cspar` when
+  present and otherwise fall back to legacy `.par`; it never merges both;
+- new Save As remains legacy-first until CLI parity and this sidecar matrix are
+  green.
 
 Remaining rollout sequence:
 
-1. Merge Qt and CLI archive parity after their focused matrices are green.
+1. Merge CLI archive parity after its focused matrix is green.
 2. Merge archive-first sidecar discovery after its image-load transaction smoke
    is green.
 3. Make `.cspar` the default for new saves while retaining explicit legacy
