@@ -163,10 +163,36 @@ All frontends retain the same failure contract:
    byte-for-byte intact.
 
 The shared `write_parameter_payload_file()` implementation provides this
-UTF-8-path contract for archive and core/CLI legacy writes, using POSIX
+UTF-8-path contract for fresh archive and core/CLI legacy writes, using POSIX
 `rename()` or Windows `MoveFileExW(...REPLACE_EXISTING|WRITE_THROUGH)`.
-Qt uses the same core primitive for archives; its existing `QSaveFile` bridge
-remains appropriate for GUI-only FILE*/text recovery and legacy-save paths.
+`rewrite_parameter_archive_payload_file()` uses the same sibling-staging
+replacement contract when editing an existing archive. Qt uses these core
+primitives for archives; its existing `QSaveFile` bridge remains appropriate
+for GUI-only FILE*/text recovery and legacy-save paths.
+
+## Forward-preserving archive edits
+
+A reader may ignore unknown optional manifest keys, but an editor must not turn
+"ignored" into "deleted". When a frontend loads a supported archive and saves a
+derived archive from that same source, it must use the archive-preserving rewrite
+path:
+
+- validate the source archive, schema version and required features first;
+- preserve `manifest.json` bytes unchanged;
+- preserve the uncompressed contents of every archive entry other than the
+  manifest-selected legacy CSP entry;
+- replace only that legacy CSP entry;
+- reject unsupported required features before creating a replacement target.
+
+The implementation copies non-legacy entries through libzip's compressed-source
+path so dense future payloads do not need to be inflated into application
+memory. ZIP timestamps, comments and compression choices are container metadata,
+not schema state; future Color-Screen features must put required information in
+the manifest or entry contents rather than depending on opaque ZIP metadata.
+
+Fresh Save As to a new archive is intentionally different: it creates a fresh
+archive from the current document and must not inherit unknown entries from an
+unrelated file merely because the destination path already exists.
 
 ## Legacy compatibility
 
@@ -220,16 +246,18 @@ Absent fields receive defaults defined by the schema version, not whatever
 default happens to be compiled into a later application. A migration that
 changes a historical default must materialize the old semantic value explicitly.
 
-## Testing gate
+## Archive regression gate
 
-Before `.cspar` becomes the default user save format, CI must cover:
+The default has moved to `.cspar`; the following remain permanent CI
+requirements:
 
 - legacy `.par` import;
 - archive v1 write/read round trip for representative full ParameterState;
 - Qt profile-spot metadata round trip;
 - deterministic manifest output for equal logical state;
-- unknown optional-key tolerance;
-- unknown required-feature rejection;
+- unknown optional-key tolerance and byte-preserving rewrite of optional
+  manifest data/opaque entries;
+- unknown required-feature rejection before any archive rewrite;
 - newer schema-version rejection;
 - malformed/truncated ZIP and manifest failures;
 - duplicate/path-traversal/oversized-entry rejection;
@@ -247,24 +275,24 @@ user Save As supports `.cspar`.
 
 Implementation status in the alpha tree:
 
-- the strict schema-v1 libzip/manifest core, hostile-input coverage, shared
-  content-signature dispatch, UTF-8 host-path handling, and the cross-platform
-  atomic replacement primitive are merged;
-- Qt archive Open/Save As, format-preserving ordinary Save, recovery-format
-  metadata, and transactional Unicode workspace smoke are merged;
-- CLI read/write parity, Unicode Windows argv handling, format-preserving atomic
-  rewrite, and the Czech/CJK archive fixture are merged;
-- automatic image-sidecar discovery now prefers `.cspar` and falls back to
-  legacy `.par`, never merging both;
-- this branch makes genuinely new Save As/no-sidecar targets default to
-  `.cspar`; established Archive/Legacy targets remain format-preserving.
+- schema-v1 libzip/JSON infrastructure, hostile-input validation, UTF-8 host
+  paths and cross-platform atomic replacement are merged;
+- Qt and CLI both read/write `.cspar`, preserve physical format for established
+  targets, and exercise Czech/CJK Unicode archive filenames in CI;
+- archive-first image sidecars and the `.cspar` default for genuinely new
+  parameter targets are merged; explicit legacy `.par` remains available;
+- this step makes edits of an existing supported archive forward-preserving:
+  optional manifest bytes and opaque entries survive while only
+  `state/legacy.par` is replaced.
 
-Remaining rollout sequence:
+Remaining sequence:
 
-1. Merge this archive-default switch while retaining explicit legacy `.par`
-   export.
-2. Migrate high-value structured sections and dense payloads incrementally.
+1. Migrate high-value structured sections incrementally, using optional mirrors
+   first and an explicit schema/required-feature transition before any section
+   becomes authoritative over `state/legacy.par`.
+2. Move dense geometry/correction data to typed payload entries where it brings
+   a real size/precision benefit.
 3. Keep crash recovery on its internal legacy payload until archive recovery has
    equivalent unclean-shutdown coverage.
-4. Only after the structured migration and the remaining alpha gate are green,
+4. Only after the structured migration and remaining alpha gate are green,
    advance the product version toward beta.
