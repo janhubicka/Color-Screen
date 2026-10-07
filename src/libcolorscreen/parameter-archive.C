@@ -1165,6 +1165,37 @@ add_archive_entry (zip_t *archive, const char *name, const std::string &content,
 
 }
 
+/* Return authoritative structured archive values missing from legacy CSP. */
+parameter_archive_render_overrides
+parameter_archive_render_overrides_from (const render_parameters &rparam)
+{
+  parameter_archive_render_overrides result;
+  result.present = true;
+  result.ignore_infrared = rparam.ignore_infrared;
+  result.demosaiced_scaling = rparam.demosaiced_scaling;
+  result.observer_whitepoint = rparam.observer_whitepoint;
+  result.output_profile = rparam.output_profile;
+  result.output_gamma = rparam.output_gamma;
+  result.gamut_warning = rparam.gamut_warning;
+  return result;
+}
+
+/* Apply structured archive values after the legacy CSP mirror was parsed. */
+void
+apply_parameter_archive_render_overrides (
+    const parameter_archive_render_overrides &overrides,
+    render_parameters *rparam)
+{
+  if (!rparam || !overrides.present)
+    return;
+  rparam->ignore_infrared = overrides.ignore_infrared;
+  rparam->demosaiced_scaling = overrides.demosaiced_scaling;
+  rparam->observer_whitepoint = overrides.observer_whitepoint;
+  rparam->output_profile = overrides.output_profile;
+  rparam->output_gamma = overrides.output_gamma;
+  rparam->gamut_warning = overrides.gamut_warning;
+}
+
 /* Return true when NAME begins with one of the standard ZIP signatures.  */
 bool
 parameter_archive_signature_p (const char *name)
