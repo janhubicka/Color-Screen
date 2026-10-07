@@ -52,6 +52,18 @@ DLL_PUBLIC bool
 write_parameter_archive (const char *name, const std::string &legacy_csp,
                          const char *generator_version, std::string *error);
 
+/* Atomically replace UTF-8 host path NAME with PAYLOAD.
+
+   When ARCHIVE is true, PAYLOAD becomes state/legacy.par in a schema-v1
+   archive; otherwise PAYLOAD is written as a legacy parameter file verbatim.
+   GENERATOR_VERSION is used only for archive manifests and is ignored for a
+   legacy payload. A complete sibling staging file is finalized before
+   replacement, so a failed write never truncates an older usable target. */
+DLL_PUBLIC bool
+write_parameter_payload_file (const char *name, const std::string &payload,
+                              bool archive, const char *generator_version,
+                              std::string *error);
+
 }
 
 #endif
