@@ -14,6 +14,9 @@
 #endif
 #ifdef WIN32
 #include <io.h>
+#define NOMINMAX
+#include <windows.h>
+#include <shellapi.h>
 #define F_OK 0
 #define access _access
 #endif
@@ -37,6 +40,69 @@ using namespace colorscreen;
 static bool verbose = false;
 static bool verbose_tasks = false;
 const char *binname;
+
+#ifdef WIN32
+/* Reconstruct argv from the native UTF-16 Windows command line.
+
+   The narrow CRT argv uses the active ANSI code page and therefore destroys
+   filenames outside that code page before any UTF-8-aware file helper sees
+   them. Keep the rest of the CLI's long-standing char** interface, but make
+   those strings UTF-8 on Windows. */
+static bool
+windows_utf8_argv (std::vector<std::string> *storage,
+                   std::vector<char *> *utf8_argv)
+{
+  if (!storage || !utf8_argv)
+    return false;
+
+  int wide_argc = 0;
+  LPWSTR *wide_argv = CommandLineToArgvW (GetCommandLineW (), &wide_argc);
+  if (!wide_argv || wide_argc <= 0)
+    return false;
+
+  storage->clear ();
+  utf8_argv->clear ();
+  storage->reserve ((size_t)wide_argc);
+  utf8_argv->reserve ((size_t)wide_argc + 1);
+
+  bool ok = true;
+  for (int i = 0; i < wide_argc; ++i)
+    {
+      const int bytes
+          = WideCharToMultiByte (CP_UTF8, WC_ERR_INVALID_CHARS, wide_argv[i],
+                                 -1, nullptr, 0, nullptr, nullptr);
+      if (bytes <= 0)
+        {
+          ok = false;
+          break;
+        }
+      std::string converted ((size_t)bytes - 1, '\0');
+      if (bytes > 1
+          && WideCharToMultiByte (CP_UTF8, WC_ERR_INVALID_CHARS, wide_argv[i],
+                                  -1, converted.data (), bytes, nullptr,
+                                  nullptr)
+                 <= 0)
+        {
+          ok = false;
+          break;
+        }
+      storage->push_back (std::move (converted));
+    }
+  LocalFree (wide_argv);
+
+  if (!ok || storage->size () != (size_t)wide_argc)
+    {
+      storage->clear ();
+      utf8_argv->clear ();
+      return false;
+    }
+
+  for (std::string &argument : *storage)
+    utf8_argv->push_back (argument.data ());
+  utf8_argv->push_back (nullptr);
+  return true;
+}
+#endif
 
 /* Load one user-supplied parameter filename through the shared legacy/archive
    dispatch, then parse the ordinary CSP payload.  This keeps every CLI command
@@ -4803,6 +4869,16 @@ do_slanted_edge (int argc, char **argv)
 int
 main (int argc, char **argv)
 {
+#ifdef WIN32
+  std::vector<std::string> utf8_argv_storage;
+  std::vector<char *> utf8_argv;
+  if (windows_utf8_argv (&utf8_argv_storage, &utf8_argv))
+    {
+      argc = (int)utf8_argv_storage.size ();
+      argv = utf8_argv.data ();
+    }
+#endif
+
   binname = argv[0];
   int ret = 0;
   argv++;
