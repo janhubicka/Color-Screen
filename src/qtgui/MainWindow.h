@@ -1013,7 +1013,7 @@ private:
 
     QString path;
     bool suggested = false;
-    Format format = Format::LegacyCsp;
+    Format format = Format::Archive;
 
     void setLoaded(const QString &fileName,
                    Format fileFormat = Format::LegacyCsp) {
