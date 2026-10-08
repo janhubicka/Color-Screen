@@ -3054,6 +3054,33 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
           return;
         }
 
+        // A legacy CSP target has no image-area field. Refuse a lossy Save As
+        // without changing the user's active archive target or live state.
+        const QString lossyLegacy =
+            persistenceDir.filePath(QStringLiteral("workspace-lossy.par"));
+        const QString beforeLossyPath = second->m_parameterFile.path;
+        if (second->saveParametersToFile(lossyLegacy) ||
+            QFile::exists(lossyLegacy) ||
+            second->m_parameterFile.path != beforeLossyPath ||
+            second->documentStateSnapshot() != archiveState) {
+          fail(QStringLiteral(
+              "Legacy save silently discarded the photographic image area"));
+          return;
+        }
+        QMessageBox *lossySaveWarning =
+            second->findChild<QMessageBox *>(
+                QStringLiteral("ParameterSaveFailureDialog"));
+        if (!lossySaveWarning ||
+            !lossySaveWarning->text().contains(
+                QStringLiteral("cannot preserve the photographic image area"))) {
+          if (lossySaveWarning)
+            lossySaveWarning->close();
+          fail(QStringLiteral(
+              "Lossy legacy save did not explain how to preserve image bounds"));
+          return;
+        }
+        lossySaveWarning->close();
+
         ParameterState archiveMutation = archiveState;
         archiveMutation.rparams.saturation += 0.11;
         archiveMutation.profileSpots.clear();
