@@ -843,6 +843,38 @@ parse_geometry_final_frame (const json_value &object,
   return true;
 }
 
+/* Parse saved solver inputs that do not exist in the legacy CSP mirror. */
+bool
+parse_solver_options (const json_value &object,
+                      parameter_archive_solver_options *result,
+                      std::string *error)
+{
+  if (!result || object.type != json_value::kind::object)
+    return archive_fail (error, "state.solver_options must be an object");
+
+  const json_value *weighted = object_member (object, "weighted");
+  const json_value *center = object_member (object, "center");
+  if (!weighted || weighted->type != json_value::kind::boolean
+      || !center || center->type != json_value::kind::array
+      || center->array_value.size () != 2)
+    return archive_fail (error,
+                         "state.solver_options is missing a required typed field");
+
+  double x = 0, y = 0;
+  if (!json_finite_double (center->array_value[0], &x)
+      || !json_finite_double (center->array_value[1], &y))
+    return archive_fail (error, "invalid numeric state.solver_options value");
+  const coord_t cx = (coord_t)x;
+  const coord_t cy = (coord_t)y;
+  if (!my_isfinite (cx) || !my_isfinite (cy))
+    return archive_fail (error, "invalid numeric state.solver_options value");
+
+  result->present = true;
+  result->weighted = weighted->boolean_value;
+  result->center = { cx, cy };
+  return true;
+}
+
 /* Format VALUE as locale-independent finite JSON number text. */
 std::string
 json_number (double value)
@@ -1070,6 +1102,7 @@ parse_manifest (
 
   bool render_overrides_feature = false;
   bool geometry_final_frame_feature = false;
+  bool solver_options_feature = false;
   std::set<std::string> required_feature_names;
   const json_value *features = object_member (root, "required_features");
   if (features)
@@ -1087,6 +1120,8 @@ parse_manifest (
             render_overrides_feature = true;
           else if (feature.text == "geometry-final-frame-v1")
             geometry_final_frame_feature = true;
+          else if (feature.text == "solver-options-v1")
+            solver_options_feature = true;
           else
             return archive_fail (
                 error, "unsupported required parameter archive feature: "
@@ -1133,6 +1168,18 @@ parse_manifest (
                                       &parsed_geometry_final_frame, error))
     return false;
 
+  const json_value *solver_options
+      = object_member (*state, "solver_options");
+  if (solver_options && !solver_options_feature)
+    return archive_fail (error, "state.solver_options requires solver-options-v1");
+  if (solver_options_feature && !solver_options)
+    return archive_fail (error, "solver-options-v1 requires state.solver_options");
+
+  parameter_archive_solver_options parsed_solver_options;
+  if (solver_options_feature
+      && !parse_solver_options (*solver_options, &parsed_solver_options, error))
+    return false;
+
   if (!validate_payloads (object_member (root, "payloads"), entries, error))
     return false;
 
@@ -1142,6 +1189,7 @@ parse_manifest (
       manifest->legacy_csp_path = legacy->text;
       manifest->render_overrides = parsed_render_overrides;
       manifest->geometry_final_frame = parsed_geometry_final_frame;
+      manifest->solver_options = parsed_solver_options;
     }
   return true;
 }
@@ -1270,6 +1318,29 @@ apply_parameter_archive_geometry_final_frame (
     return;
   param->final_angle = frame.final_angle;
   param->final_ratio = frame.final_ratio;
+}
+
+/* Create an authoritative supplement from the solver's live saved state. */
+parameter_archive_solver_options
+parameter_archive_solver_options_from (const solver_parameters &sparam)
+{
+  parameter_archive_solver_options result;
+  result.present = true;
+  result.weighted = sparam.weighted;
+  result.center = sparam.center;
+  return result;
+}
+
+/* Apply the validated solver configuration after the CSP mirror. */
+void
+apply_parameter_archive_solver_options (
+    const parameter_archive_solver_options &options,
+    solver_parameters *sparam)
+{
+  if (!sparam || !options.present)
+    return;
+  sparam->weighted = options.weighted;
+  sparam->center = options.center;
 }
 
 /* Return true when NAME begins with one of the standard ZIP signatures.  */
@@ -1462,7 +1533,8 @@ write_parameter_archive (
     const char *name, const std::string &legacy_csp,
     const char *generator_version, std::string *error,
     const parameter_archive_render_overrides *render_overrides,
-    const parameter_archive_geometry_final_frame *geometry_final_frame)
+    const parameter_archive_geometry_final_frame *geometry_final_frame,
+    const parameter_archive_solver_options *solver_options)
 {
   if (error)
     error->clear ();
@@ -1501,20 +1573,34 @@ write_parameter_archive (
           || geometry_final_frame->final_ratio <= 0))
     return archive_fail (error, "invalid structured geometry final frame");
 
+  const bool structured_solver = solver_options && solver_options->present;
+  if (structured_solver
+      && (!my_isfinite (solver_options->center.x)
+          || !my_isfinite (solver_options->center.y)))
+    return archive_fail (error, "invalid structured solver options");
+
   std::string manifest
       = "{\n"
         "  \"format\": \"org.colorscreen.parameters\",\n"
         "  \"schema_version\": 1,\n";
-  if (structured_render || structured_geometry)
+  if (structured_render || structured_geometry || structured_solver)
     {
-      manifest += "  \"required_features\": [";
+      std::string features;
       if (structured_render)
-        manifest += "\"render-overrides-v1\"";
-      if (structured_render && structured_geometry)
-        manifest += ", ";
+        features += "\"render-overrides-v1\"";
       if (structured_geometry)
-        manifest += "\"geometry-final-frame-v1\"";
-      manifest += "],\n";
+        {
+          if (!features.empty ())
+            features += ", ";
+          features += "\"geometry-final-frame-v1\"";
+        }
+      if (structured_solver)
+        {
+          if (!features.empty ())
+            features += ", ";
+          features += "\"solver-options-v1\"";
+        }
+      manifest += "  \"required_features\": [" + features + "],\n";
     }
   manifest
       += "  \"generator\": {\n"
@@ -1565,6 +1651,17 @@ write_parameter_archive (
                 + json_number (geometry_final_frame->final_ratio)
                 + "\n"
                   "    }";
+  if (structured_solver)
+    manifest += ",\n"
+                "    \"solver_options\": {\n"
+                "      \"weighted\": "
+                + std::string (solver_options->weighted ? "true" : "false")
+                + ",\n"
+                  "      \"center\": ["
+                + json_number (solver_options->center.x) + ", "
+                + json_number (solver_options->center.y)
+                + "]\n"
+                  "    }";
   manifest += "\n  },\n"
               "  \"payloads\": []\n"
               "}\n";
@@ -1607,7 +1704,8 @@ write_parameter_payload_file (
     const char *name, const std::string &payload, bool archive,
     const char *generator_version, std::string *error,
     const parameter_archive_render_overrides *render_overrides,
-    const parameter_archive_geometry_final_frame *geometry_final_frame)
+    const parameter_archive_geometry_final_frame *geometry_final_frame,
+    const parameter_archive_solver_options *solver_options)
 {
   if (error)
     error->clear ();
@@ -1634,7 +1732,8 @@ write_parameter_payload_file (
   if (archive)
     written = write_parameter_archive (staging_utf8.c_str (), payload,
                                        generator_version, error,
-                                       render_overrides, geometry_final_frame);
+                                       render_overrides, geometry_final_frame,
+                                       solver_options);
   else
     {
       FILE *out = open_utf8_binary_write (staging_utf8.c_str ());
