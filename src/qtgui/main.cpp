@@ -683,8 +683,9 @@ bool colorSectionPreferencesSmoke() {
           return fail(QStringLiteral(
               "Digital Capture image actions stayed disabled after image load"));
 
-        // Selecting an inner photograph is a real saved edit, whereas clearing
-        // its bounds must restore the outer crop without changing it.
+        // Section-folding smoke must not make real document edits. Verify
+        // enabling/disabling the Clear action from saved state here; its
+        // click/Undo behaviour belongs in the separate document-action smoke.
         const auto oldObjectCrop = state.rparams.scan_crop;
         state.rparams.image_area = colorscreen::int_optional_image_area(
             colorscreen::int_image_area(2, 3, 16, 17));
@@ -692,30 +693,12 @@ bool colorSectionPreferencesSmoke() {
         if (!clearImageArea->isEnabled())
           return fail(QStringLiteral(
               "Clear image area stayed disabled with a saved photograph"));
-        const int editsBeforeClear = documentEdits;
-        applyExplicitEdit = true;
-        // The probe intentionally tests an inspector that can be folded and
-        // not shown as a top-level window. Emit the button's regular clicked
-        // signal synchronously rather than relying on platform widget-event
-        // delivery while its entire section may be hidden.
-        const bool invoked = QMetaObject::invokeMethod(
-            clearImageArea, "clicked", Qt::DirectConnection, Q_ARG(bool, false));
-        if (!invoked || state.rparams.image_area.set ||
-            !(state.rparams.scan_crop == oldObjectCrop) ||
-            documentEdits != editsBeforeClear + 1)
-          return fail(QStringLiteral(
-              "Clear image area failed its atomic saved-state action "
-              "(set=%1, crop same=%2, edits=%3, expected=%4, enabled=%5)")
-                          .arg(state.rparams.image_area.set)
-                          .arg(state.rparams.scan_crop == oldObjectCrop)
-                          .arg(documentEdits)
-                          .arg(editsBeforeClear + 1)
-                          .arg(clearImageArea->isEnabled()));
-        applyExplicitEdit = false;
+        state.rparams.image_area.set = false;
         capture->updateUI();
-        if (clearImageArea->isEnabled())
+        if (clearImageArea->isEnabled()
+            || !(state.rparams.scan_crop == oldObjectCrop))
           return fail(QStringLiteral(
-              "Clear image area remained enabled after resetting bounds"));
+              "Clear image-area applicability did not follow saved state"));
 
         captureImage.reset();
         capture->updateUI();
