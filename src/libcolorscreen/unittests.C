@@ -6646,6 +6646,39 @@ test_image_area ()
       ok = false;
     }
 
+  /* Final-screen output must transform only the inner photographic area
+     while retaining the original full-map shift for sampling. */
+  geom.type = Dufay;
+  geom.center = { (coord_t)100, (coord_t)120 };
+  geom.coordinate1 = { (coord_t)8, (coord_t)0 };
+  geom.coordinate2 = { (coord_t)0, (coord_t)8 };
+  scr_to_img map;
+  if (!map.set_parameters (geom, scan))
+    {
+      printf ("FAILED: could not establish screen export test map\n");
+      ok = false;
+    }
+  else
+    {
+      const int_image_area full_range (
+          map.get_final_range (scan.width, scan.height));
+      const int_image_area photo_range (
+          map.get_final_range (image_area (inner)));
+      render_to_file_params final_out;
+      final_out.geometry = render_to_file_params::screen_geometry;
+      if (!complete_rendered_file_parameters (rt, geom, scan, &final_out,
+                                               &state)
+          || final_out.width != (int)(photo_range.width / final_out.xstep)
+          || final_out.height != (int)(photo_range.height / final_out.ystep)
+          || final_out.start
+                 != point_t { (coord_t)(photo_range.x - full_range.x),
+                              (coord_t)(photo_range.y - full_range.y) })
+        {
+          printf ("FAILED: final-plane photographic bounds or origin incorrect\n");
+          ok = false;
+        }
+    }
+
   return ok;
 }
 
