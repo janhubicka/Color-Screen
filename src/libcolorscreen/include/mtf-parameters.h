@@ -396,7 +396,7 @@ struct mtf_parameters
   /* Return diffraction-limited circular-pupil MTF magnitude at PIXEL_FREQ.  */
   pure_attr double lens_diffraction_mtf (double pixel_freq, double wavelength_nm) const;
   /* Return the legacy approximate defocus factor at PIXEL_FREQ.  */
-  pure_attr double hopkins_defocus_mtf (double pixel_freq) const;
+  pure_attr double hopkins_defocus_mtf (double pixel_freq, double wavelength_nm) const;
   /* Return exact signed circular-pupil defocus OTF factor at PIXEL_FREQ.  */
   pure_attr double lens_defocus_otf (double pixel_freq, double wavelength_nm) const;
   /* Return magnitude of the exact circular-pupil defocus factor at
