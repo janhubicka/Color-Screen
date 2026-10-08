@@ -3917,7 +3917,7 @@ test_mtf_physical_model ()
   for (int i = 0; i <= 100; i++)
     {
       const double frequency = i / 200.0;
-      const double contrast = legacy_source.system_mtf (frequency, test_mtf_wavelength (legacy_source)) * 100;
+      const double contrast = legacy_source.system_mtf (frequency, 650) * 100;
       legacy_red_first.add_value (frequency, contrast);
       legacy_red_second.add_value (frequency, contrast);
     }
@@ -4053,13 +4053,14 @@ test_mtf_physical_model ()
   authoritative_input.measured_mtf_idx = 0;
   mtf_parameters authoritative_result;
   const char *authoritative_error = nullptr;
+  double authoritative_fitted_wavelength_nm = 0;
   const double authoritative_objective
       = authoritative_result.estimate_parameters (
           authoritative_input, fixed_zero_options, nullptr, nullptr,
-          &authoritative_error, 0);
+          &authoritative_error, 0, 0, &authoritative_fitted_wavelength_nm);
   if (authoritative_error || authoritative_objective < 0
       || authoritative_objective > 1e-8
-      || test_mtf_wavelength (authoritative_result) != 750
+      || authoritative_fitted_wavelength_nm != 750
       || authoritative_result.measurements[0].wavelength != 750
       || authoritative_result.model != mtf_model::physical_diffraction
       || authoritative_result.measured_mtf_idx != -1)
@@ -4068,7 +4069,7 @@ test_mtf_physical_model ()
                "Authoritative measurement wavelength or model activation "
                "failed: wavelength %g stored %g model %i selected %i "
                "objective %g%s%s\n",
-               test_mtf_wavelength (authoritative_result),
+               authoritative_fitted_wavelength_nm,
                authoritative_result.measurements[0].wavelength,
                (int)authoritative_result.model,
                authoritative_result.measured_mtf_idx,
