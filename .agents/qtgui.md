@@ -95,8 +95,9 @@ each document has independent:
   using the platform-native rename primitive already exercised by core Unicode
   and failure-preservation tests. A failed serializer/write/replace must leave
   any previous usable target unchanged. Archive state includes independently
-  negotiated `render-overrides-v1` and `geometry-final-frame-v1` sections:
-  legacy CSP does not represent the final screen-coordinate angle/axis ratio.
+  negotiated `render-overrides-v1`, `geometry-final-frame-v1` and
+  `solver-options-v1` sections: legacy CSP does not represent the final
+  screen-coordinate frame or the solver's weighting/reference centre.
   Read those supplements only after the full legacy and manifest validation
   succeeds; preserve them on ordinary Save, Save As, CLI rewrites and private
   recovery. Private recovery parameters use
