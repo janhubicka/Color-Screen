@@ -313,6 +313,49 @@ void startWorkspaceChurnSmoke(ColorScreenApplication &app,
           return;
         }
 
+        // Gamut warning and output colourspace are per-canvas preview
+        // settings. They must not dirty the shared document or leak between
+        // ordinary views of the same photograph.
+        const ParameterState colorViewBaseline =
+            first->documentStateSnapshot();
+        first->m_imageWidget->setViewGamutWarning(true);
+        view->imageWidget()->setViewOutputProfile(
+            colorscreen::render_parameters::output_profile_xyz);
+        first->syncInspectorViewActions();
+        if (first->m_imageWidget->viewGamutWarning() != true ||
+            view->imageWidget()->viewGamutWarning() != false ||
+            first->m_imageWidget->viewOutputProfile() !=
+                colorscreen::render_parameters::output_profile_sRGB ||
+            view->imageWidget()->viewOutputProfile() !=
+                colorscreen::render_parameters::output_profile_xyz ||
+            first->documentStateSnapshot() != colorViewBaseline ||
+            first->m_gamutWarningAction->isChecked() ||
+            !first->m_viewOutputProfileActions[
+                colorscreen::render_parameters::output_profile_xyz]->isChecked()) {
+          fail(QStringLiteral(
+              "View-local display options affected a sibling or document state"));
+          return;
+        }
+        workspace->activateDocument(first);
+        first->syncInspectorViewActions();
+        if (!first->m_gamutWarningAction->isChecked() ||
+            !first->m_viewOutputProfileActions[
+                colorscreen::render_parameters::output_profile_sRGB]->isChecked()) {
+          fail(QStringLiteral(
+              "Shared View menu did not track the primary image canvas"));
+          return;
+        }
+        first->m_imageWidget->setViewGamutWarning(false);
+        workspace->activateView(view);
+        view->imageWidget()->setViewOutputProfile(
+            colorscreen::render_parameters::output_profile_sRGB);
+        first->syncInspectorViewActions();
+        if (first->documentStateSnapshot() != colorViewBaseline) {
+          fail(QStringLiteral(
+              "Restoring view-local display settings changed saved parameters"));
+          return;
+        }
+
         // Canvas-edit shortcuts must not consume text typed into the borrowed
         // inspector. The shared actions are scoped to ImageWidget descendants
         // and installed on both the primary and ordinary peer canvases.
