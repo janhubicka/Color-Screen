@@ -441,7 +441,7 @@ test_finetune_helpers ()
   coord_t useful_limit = 0;
   const coord_t screen_frequency = (coord_t)0.12;
   if (!finetune_useful_defocus_limit (focus_mtf, screen_frequency,
-                                      (coord_t)0.05, 20, &useful_limit)
+                                      (coord_t)0.05, 20, &useful_limit, test_mtf_wavelength (focus_mtf))
       || useful_limit <= 0 || useful_limit >= 20)
     {
       fprintf (stderr, "Useful physical-focus range was not detected\n");
@@ -460,7 +460,7 @@ test_finetune_helpers ()
   if (in_focus >= 0.999
       || finetune_useful_defocus_limit (
           focus_mtf, screen_frequency, (in_focus + (coord_t)0.999) / 2,
-          20, &useful_limit))
+          20, &useful_limit, test_mtf_wavelength (focus_mtf)))
     {
       fprintf (stderr, "Unusable in-focus MTF was not rejected\n");
       return false;
