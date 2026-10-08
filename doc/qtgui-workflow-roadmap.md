@@ -789,8 +789,13 @@ to explicitly structured sections without extending the ad-hoc keyword stream.
 
 The format decision is now a libzip-backed `.cspar` archive with a UTF-8
 JSON manifest; see [the parameter archive format](parameter-archive-format.md).
-Versioned required features now preserve both render values missing from legacy
-CSP and the final screen-coordinate angle/axis ratio of the registered image.
+Versioned required features now preserve render settings absent from legacy
+CSP, the final screen-coordinate angle and axis ratio, and the separate
+photographic bounding rectangle within the full physical-object crop.
+Capture's `Crop object` may retain binding tape, mount and borders while
+`Select image area` stores the actual picture's bounds. The saved inner region
+controls default export dimensions and the area used by image analyses, but
+never erases the surrounding object from the scan canvas.
 Older alpha archive readers reject unknown authoritative features rather than
 accepting a file whose final geometry they would silently change.
 JSON is deliberately used as the strict manifest syntax because it is also valid
