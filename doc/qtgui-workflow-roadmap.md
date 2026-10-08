@@ -849,3 +849,17 @@ Answers should validate or revise the implemented alpha grouping.  The applicati
 enough that copying another editor's panel order verbatim would be less standard,
 not more: the standard behaviour to borrow is consistency, reversibility,
 feedback and clear stage ownership.
+
+#### View-specific colour presentation and file output
+
+Gamut warnings and the output colourspace displayed by the preview are
+view-local, as for other image editors: one restored photograph can have
+independent ordinary peer canvases. The document-owned View menu follows the
+active inspector, and rendering snapshots use these values without changing
+`ParameterState`, undo history or sibling views. File exports have a separate
+explicit output-profile selector (initialized from the active view). For format
+compatibility, the legacy `render-overrides-v1` archive decoder/writer is kept
+until a later negotiated revision removes non-calibration presentation fields
+from the manifest. The user-requested MTF scalar wavelength cleanup is a
+separate numerical/CLI API migration and retains all saved channel spectral
+metadata.
