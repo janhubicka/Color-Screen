@@ -2338,9 +2338,6 @@ mtf_parameters::estimate_parameters_internal (
 
   if (physical && !explicit_options)
     {
-      wavelength = par.wavelength > 0
-                       ? par.wavelength
-                       : solver.get_wavelength (0, solver.start);
       wavelengths = par.wavelengths;
       for (int channel = 0; channel < 4; channel++)
         if (solver.channel_wavelength_estimated_p (channel))
@@ -2353,9 +2350,13 @@ mtf_parameters::estimate_parameters_internal (
       defocus = solver.get_defocus (first_measurement, solver.start);
       blur_diameter
           = solver.get_blur_diameter (first_measurement, solver.start);
-      if (physical && explicit_options)
-        wavelength = solver.first_wavelength (solver.start);
+      if (physical && fitted_wavelength_nm)
+        *fitted_wavelength_nm = solver.first_wavelength (solver.start);
     }
+  if (physical && fitted_wavelength_nm && !(*fitted_wavelength_nm > 0))
+    *fitted_wavelength_nm = solver.first_wavelength (solver.start);
+  const double report_wavelength_nm
+      = physical ? solver.first_wavelength (solver.start) : wavelength_nm;
   const double final_objective = solver.objfunc (solver.start);
 
   if (flags & estimate_verbose)
@@ -2383,7 +2384,7 @@ mtf_parameters::estimate_parameters_internal (
           return -1;
         }
       if (fprintf (f, "frequency\tmeasured MTF\t") < 0
-          || !print_csv_header (f))
+          || !print_csv_header (f, report_wavelength_nm))
         {
           if (error)
             *error = "write error in CSV file";
@@ -2401,10 +2402,12 @@ mtf_parameters::estimate_parameters_internal (
           fitted_curve.measured_mtf_idx = -1;
           fitted_curve.model = physical ? mtf_model::physical_diffraction
                                         : mtf_model::empirical_fallback;
+          const double curve_wavelength_nm
+              = physical
+                    ? solver.get_wavelength (measurement_index, solver.start)
+                    : report_wavelength_nm;
           if (physical)
             {
-              fitted_curve.wavelength
-                  = solver.get_wavelength (measurement_index, solver.start);
               fitted_curve.defocus
                   = solver.get_defocus (measurement_index, solver.start);
             }
@@ -2420,14 +2423,14 @@ mtf_parameters::estimate_parameters_internal (
                            "%.17g\t%.12g\t%.12g\t%.12g\t%.12g\t%.12g\t"
                            "%.12g\t%.12g\t%.12g\t%.12g\n",
                            freq, contrast,
-                           fitted_curve.lens_diffraction_mtf (freq) * 100,
-                           fitted_curve.lens_defocus_mtf (freq) * 100,
-                           fitted_curve.stokseth_defocus_mtf (freq) * 100,
+                           fitted_curve.lens_diffraction_mtf (freq, curve_wavelength_nm) * 100,
+                           fitted_curve.lens_defocus_mtf (freq, curve_wavelength_nm) * 100,
+                           fitted_curve.stokseth_defocus_mtf (freq, curve_wavelength_nm) * 100,
                            gaussian_blur_mtf (freq, fitted_curve.sigma) * 100,
                            fitted_curve.halo_mtf (freq) * 100,
-                           fitted_curve.lens_mtf (freq) * 100,
+                           fitted_curve.lens_mtf (freq, curve_wavelength_nm) * 100,
                            fitted_curve.sensor_mtf (freq) * 100,
-                           fitted_curve.system_mtf (freq) * 100)
+                           fitted_curve.system_mtf (freq, curve_wavelength_nm) * 100)
                   < 0)
                 {
                   if (error)
