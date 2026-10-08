@@ -11,12 +11,15 @@
 namespace colorscreen
 {
 struct image_data;
+/* Persistent geometry solver inputs: registration points and selected
+   optimization policy. Local homography weighting is chosen by the operation
+   performing a fit, rather than recorded as part of document parameters.  */
 struct solver_parameters
 {
   DLL_PUBLIC_EXP
   solver_parameters ()
       : points (), optimize_lens (true), lens_center_distance (0),
-        optimize_tilt (true), weighted (false), center ({0, 0})
+        optimize_tilt (true)
   {
   }
   DLL_PUBLIC_EXP void
@@ -25,7 +28,6 @@ struct solver_parameters
     optimize_lens = other.optimize_lens;
     lens_center_distance = other.lens_center_distance;
     optimize_tilt = other.optimize_tilt;
-    weighted = other.weighted;
   }
   DLL_PUBLIC_EXP ~solver_parameters () {}
 
@@ -142,11 +144,6 @@ struct solver_parameters
   coord_t lens_center_distance;
   /* If true, image tilt is auto-optimized.  */
   bool optimize_tilt;
-  /* If true then weights of points are set according to the
-     distance to center.x and center.y.   */
-  bool weighted;
-  point_t center;
-
   size_t
   n_points () const
   {
@@ -217,8 +214,6 @@ struct solver_parameters
     return optimize_lens == other.optimize_lens &&
            lens_center_distance == other.lens_center_distance &&
            optimize_tilt == other.optimize_tilt &&
-           weighted == other.weighted &&
-           center == other.center &&
            points == other.points;
   }
   bool operator!= (const solver_parameters &other) const
