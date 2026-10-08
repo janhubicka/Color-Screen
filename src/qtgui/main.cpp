@@ -693,7 +693,7 @@ bool colorSectionPreferencesSmoke() {
         if (!clearImageArea->isEnabled())
           return fail(QStringLiteral(
               "Clear image area stayed disabled with a saved photograph"));
-        state.rparams.image_area.set = false;
+        state.rparams.image_area = colorscreen::int_optional_image_area();
         capture->updateUI();
         if (clearImageArea->isEnabled()
             || !(state.rparams.scan_crop == oldObjectCrop))
