@@ -3886,7 +3886,8 @@ test_mtf_physical_model ()
       mtf_parameters estimated;
       const char *error = nullptr;
       const double objective
-          = estimated.estimate_parameters (input, nullptr, nullptr, &error, 0);
+          = estimated.estimate_parameters (
+                input, nullptr, nullptr, &error, 0, 750);
       if (error || objective < 0 || objective > 1e-8
           || test_mtf_wavelength (estimated) != 750
           || estimated.wavelengths != input.wavelengths)
@@ -3961,7 +3962,7 @@ test_mtf_physical_model ()
   const char *fixed_zero_error = nullptr;
   const double fixed_zero_objective = fixed_zero_result.estimate_parameters (
       fixed_zero_input, fixed_zero_options, nullptr, nullptr,
-      &fixed_zero_error, 0);
+      &fixed_zero_error, 0, 750);
   if (fixed_zero_error || fixed_zero_objective <= 0.1
       || fixed_zero_result.sigma != 0 || fixed_zero_result.defocus != 0)
     {
@@ -3983,7 +3984,7 @@ test_mtf_physical_model ()
       fixed_zero_input, free_core_options, nullptr, nullptr,
       &free_core_error,
       mtf_parameters::estimate_use_nmsimplex
-          | mtf_parameters::estimate_use_multifit);
+          | mtf_parameters::estimate_use_multifit, 750);
   if (free_core_error || free_core_objective < 0
       || free_core_objective >= fixed_zero_objective * 0.01)
     {
@@ -4187,7 +4188,7 @@ test_mtf_physical_model ()
   invalid_metadata.f_stop = 0;
   const char *validation_error = nullptr;
   if (mtf_parameters::validate_estimation_options (
-          invalid_metadata, fixed_zero_options, &validation_error))
+          invalid_metadata, fixed_zero_options, &validation_error, 750))
     {
       fprintf (stderr, "Missing fixed f-number was accepted\n");
       ok = false;
@@ -4195,7 +4196,7 @@ test_mtf_physical_model ()
   mtf_estimation_options fitted_f_stop_options = fixed_zero_options;
   fitted_f_stop_options.optimize_f_stop = true;
   if (!mtf_parameters::validate_estimation_options (
-          invalid_metadata, fitted_f_stop_options, &validation_error))
+          invalid_metadata, fitted_f_stop_options, &validation_error, 750))
     {
       fprintf (stderr, "Optimized missing f-number was rejected: %s\n",
                validation_error ? validation_error : "unknown error");
@@ -4235,7 +4236,7 @@ test_mtf_physical_model ()
                          | mtf_parameters::estimate_use_multifit
                          | mtf_parameters::estimate_halo;
   const double halo_objective = halo_estimated.estimate_parameters (
-      halo_input, nullptr, nullptr, &halo_error, halo_flags);
+      halo_input, nullptr, nullptr, &halo_error, halo_flags, 750);
   if (halo_error || halo_objective < 0 || halo_objective > 1e-8
       || std::abs (halo_estimated.halo_fraction - source.halo_fraction) > 2e-4
       || std::abs (halo_estimated.halo_sigma - source.halo_sigma) > 0.01)
