@@ -59,7 +59,7 @@ payload += (
 manifest = {
     "format": "org.colorscreen.parameters",
     "schema_version": 1,
-    "required_features": ["render-overrides-v1", "geometry-final-frame-v1"],
+    "required_features": ["render-overrides-v1", "geometry-final-frame-v1", "solver-options-v1"],
     "generator": {
         "application": "Color-Screen testsuite",
         "version": "2.0alpha",
@@ -67,6 +67,7 @@ manifest = {
     "state": {
         "legacy_csp": "state/legacy.par",
         "geometry_final_frame": {"final_angle": 108.375, "final_ratio": 0.803158},
+        "solver_options": {"weighted": True, "center": [125.25, -82.5]},
         "render_overrides": {
             "ignore_infrared": False,
             "demosaiced_scaling": "nearest",
@@ -121,6 +122,11 @@ if "geometry-final-frame-v1" not in manifest.get("required_features", []):
 geometry = manifest.get("state", {}).get("geometry_final_frame", {})
 if geometry != {"final_angle": 108.375, "final_ratio": 0.803158}:
     raise SystemExit("adjust-par changed the authoritative final geometry frame")
+if "solver-options-v1" not in manifest.get("required_features", []):
+    raise SystemExit("adjust-par dropped structured solver feature")
+solver_options = manifest.get("state", {}).get("solver_options", {})
+if solver_options != {"weighted": True, "center": [125.25, -82.5]}:
+    raise SystemExit("adjust-par changed solver weighting or reference center")
 overrides = manifest.get("state", {}).get("render_overrides", {})
 if overrides.get("demosaiced_scaling") != "nearest":
     raise SystemExit("adjust-par did not preserve structured render state")
