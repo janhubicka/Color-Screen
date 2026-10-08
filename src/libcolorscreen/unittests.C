@@ -9443,6 +9443,87 @@ test_parameter_archive ()
     }
   std::remove (roundtrip.c_str ());
 
+  // Fields absent from the legacy CSP mirror must round-trip through one
+  // explicitly required structured feature rather than being silently lost.
+  render_parameters structured_source;
+  structured_source.ignore_infrared = true;
+  structured_source.demosaiced_scaling = render_parameters::lanczos3_scaling;
+  structured_source.observer_whitepoint = xy_t (0.3127, 0.3290);
+  structured_source.output_profile = render_parameters::output_profile_xyz;
+  structured_source.output_gamma = 1.8;
+  structured_source.gamut_warning = true;
+  const parameter_archive_render_overrides structured_overrides
+      = parameter_archive_render_overrides_from (structured_source);
+  const std::string structured
+      = parameter_archive_test_path ("render-overrides");
+  std::remove (structured.c_str ());
+  error.clear ();
+  if (!write_parameter_archive (structured.c_str (), legacy,
+                                "2.0alpha-structured", &error,
+                                &structured_overrides))
+    {
+      fprintf (stderr, "Structured parameter archive writer failed: %s\n",
+               error.c_str ());
+      return false;
+    }
+  loaded.clear ();
+  parsed = {};
+  if (!read_parameter_archive (structured.c_str (), &loaded, &parsed, &error)
+      || loaded != legacy || !parsed.render_overrides.present
+      || parsed.render_overrides.ignore_infrared
+             != structured_source.ignore_infrared
+      || parsed.render_overrides.demosaiced_scaling
+             != structured_source.demosaiced_scaling
+      || parsed.render_overrides.observer_whitepoint
+             != structured_source.observer_whitepoint
+      || parsed.render_overrides.output_profile
+             != structured_source.output_profile
+      || parsed.render_overrides.output_gamma
+             != structured_source.output_gamma
+      || parsed.render_overrides.gamut_warning
+             != structured_source.gamut_warning)
+    {
+      fprintf (stderr, "Structured parameter archive round trip failed: %s\n",
+               error.c_str ());
+      std::remove (structured.c_str ());
+      return false;
+    }
+
+  parameter_archive_manifest opened_manifest;
+  opened_archive = false;
+  payload_stream = open_parameter_payload (
+      structured.c_str (), &opened_archive, &error, &opened_manifest);
+  if (!payload_stream || !opened_archive
+      || !opened_manifest.render_overrides.present)
+    {
+      fprintf (stderr, "Structured payload opener lost manifest state: %s\n",
+               error.c_str ());
+      if (payload_stream)
+        fclose (payload_stream);
+      std::remove (structured.c_str ());
+      return false;
+    }
+  fclose (payload_stream);
+
+  render_parameters structured_target;
+  apply_parameter_archive_render_overrides (
+      opened_manifest.render_overrides, &structured_target);
+  if (structured_target.ignore_infrared
+          != structured_source.ignore_infrared
+      || structured_target.demosaiced_scaling
+             != structured_source.demosaiced_scaling
+      || structured_target.observer_whitepoint
+             != structured_source.observer_whitepoint
+      || structured_target.output_profile != structured_source.output_profile
+      || structured_target.output_gamma != structured_source.output_gamma
+      || structured_target.gamut_warning != structured_source.gamut_warning)
+    {
+      fprintf (stderr, "Structured render overrides did not apply exactly\n");
+      std::remove (structured.c_str ());
+      return false;
+    }
+  std::remove (structured.c_str ());
+
   const std::string plain = parameter_archive_test_path ("plain");
   {
     FILE *file = fopen (plain.c_str (), "wb");
@@ -9720,6 +9801,84 @@ test_parameter_archive ()
   if (!expect_read ("required-feature", feature_manifest,
                     {{"state/legacy.par", legacy}}, false,
                     "unsupported required parameter archive feature"))
+    return false;
+
+  const std::string render_section_without_feature
+      = "{"
+        "\"format\":\"org.colorscreen.parameters\","
+        "\"schema_version\":1,"
+        "\"state\":{"
+          "\"legacy_csp\":\"state/legacy.par\","
+          "\"render_overrides\":{"
+            "\"ignore_infrared\":true,"
+            "\"demosaiced_scaling\":\"nearest\","
+            "\"observer_whitepoint\":[0.3127,0.329],"
+            "\"output_profile\":\"XYZ\","
+            "\"output_gamma\":1.8,"
+            "\"gamut_warning\":true"
+          "}"
+        "}"
+        "}";
+  if (!expect_read ("render-without-feature", render_section_without_feature,
+                    {{"state/legacy.par", legacy}}, false,
+                    "requires render-overrides-v1"))
+    return false;
+
+  const std::string render_feature_without_section
+      = "{"
+        "\"format\":\"org.colorscreen.parameters\","
+        "\"schema_version\":1,"
+        "\"required_features\":[\"render-overrides-v1\"],"
+        "\"state\":{\"legacy_csp\":\"state/legacy.par\"}"
+        "}";
+  if (!expect_read ("render-feature-without-section",
+                    render_feature_without_section,
+                    {{"state/legacy.par", legacy}}, false,
+                    "requires state.render_overrides"))
+    return false;
+
+  const std::string invalid_render_enum
+      = "{"
+        "\"format\":\"org.colorscreen.parameters\","
+        "\"schema_version\":1,"
+        "\"required_features\":[\"render-overrides-v1\"],"
+        "\"state\":{"
+          "\"legacy_csp\":\"state/legacy.par\","
+          "\"render_overrides\":{"
+            "\"ignore_infrared\":false,"
+            "\"demosaiced_scaling\":\"future-kernel\","
+            "\"observer_whitepoint\":[0.3127,0.329],"
+            "\"output_profile\":\"sRGB\","
+            "\"output_gamma\":-1,"
+            "\"gamut_warning\":false"
+          "}"
+        "}"
+        "}";
+  if (!expect_read ("render-invalid-enum", invalid_render_enum,
+                    {{"state/legacy.par", legacy}}, false,
+                    "unknown state.render_overrides demosaiced_scaling"))
+    return false;
+
+  const std::string invalid_render_numeric
+      = "{"
+        "\"format\":\"org.colorscreen.parameters\","
+        "\"schema_version\":1,"
+        "\"required_features\":[\"render-overrides-v1\"],"
+        "\"state\":{"
+          "\"legacy_csp\":\"state/legacy.par\","
+          "\"render_overrides\":{"
+            "\"ignore_infrared\":false,"
+            "\"demosaiced_scaling\":\"default\","
+            "\"observer_whitepoint\":[0.9,0.9],"
+            "\"output_profile\":\"sRGB\","
+            "\"output_gamma\":0,"
+            "\"gamut_warning\":false"
+          "}"
+        "}"
+        "}";
+  if (!expect_read ("render-invalid-numeric", invalid_render_numeric,
+                    {{"state/legacy.par", legacy}}, false,
+                    "invalid numeric state.render_overrides"))
     return false;
 
   const std::string wrong_format

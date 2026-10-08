@@ -480,11 +480,14 @@ void startWorkspaceChurnSmoke(ColorScreenApplication &app,
             !reportBytes.contains(QByteArray("\"format_version\": 1")) ||
             !reportBytes.contains(QByteArray("\"workflow\"")) ||
             !reportBytes.contains(QByteArray("\"provenance\"")) ||
+            !reportBytes.contains(QByteArray("\"render_overrides\"")) ||
+            !reportBytes.contains(
+                QByteArray("\"demosaiced_scaling\"")) ||
             !reportBytes.contains(QByteArray("screen_alignment_version: 1")) ||
             !reportBytes.contains(
                 QByteArray("colorscreen_qt_metadata_version: 1"))) {
           fail(QStringLiteral(
-              "Reproducibility report lost metadata or exact parameter payload"));
+              "Reproducibility report lost structured metadata or legacy payload"));
           return;
         }
         if (first->m_parameterFile.path != reportParameterPath ||
@@ -3003,6 +3006,19 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
                                "\u6D4B\u8BD5.cspar"));
         ParameterState archiveState = savedSecondState;
         archiveState.rparams.saturation += 0.07;
+        // These saved fields deliberately have no legacy CSP keywords. A
+        // complete archive round trip therefore proves render-overrides-v1 is
+        // authoritative rather than merely re-reading the legacy mirror.
+        archiveState.rparams.ignore_infrared =
+            !archiveState.rparams.ignore_infrared;
+        archiveState.rparams.demosaiced_scaling =
+            colorscreen::render_parameters::lanczos3_scaling;
+        archiveState.rparams.observer_whitepoint =
+            colorscreen::xy_t(0.3127, 0.3290);
+        archiveState.rparams.output_profile =
+            colorscreen::render_parameters::output_profile_xyz;
+        archiveState.rparams.output_gamma = 1.8;
+        archiveState.rparams.gamut_warning = true;
         second->applySharedDocumentState(
             archiveState, QStringLiteral("Archive persistence smoke edit"));
         if (!second->isDocumentModified() ||

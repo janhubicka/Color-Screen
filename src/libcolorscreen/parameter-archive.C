@@ -9,15 +9,19 @@
 #include <atomic>
 #include <cerrno>
 #include <cstdint>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
 #include <filesystem>
 #include <exception>
 #include <fcntl.h>
+#include <iomanip>
 #include <limits>
+#include <locale>
 #include <map>
 #include <set>
+#include <sstream>
 #include <string>
 #include <system_error>
 #include <utility>
@@ -715,6 +719,106 @@ json_uint64 (const json_value &number, uint64_t *value)
   return true;
 }
 
+/* Convert strict JSON NUMBER to one finite double. */
+bool
+json_finite_double (const json_value &number, double *value)
+{
+  if (!value || number.type != json_value::kind::number
+      || number.text.empty ())
+    return false;
+  char *end = nullptr;
+  errno = 0;
+  const double parsed = std::strtod (number.text.c_str (), &end);
+  if (errno == ERANGE || !end || *end || !std::isfinite (parsed))
+    return false;
+  *value = parsed;
+  return true;
+}
+
+/* Parse authoritative render fields not represented by the legacy CSP mirror. */
+bool
+parse_render_overrides (const json_value &object,
+                        parameter_archive_render_overrides *result,
+                        std::string *error)
+{
+  if (!result || object.type != json_value::kind::object)
+    return archive_fail (error, "state.render_overrides must be an object");
+
+  const json_value *ignore = object_member (object, "ignore_infrared");
+  const json_value *scaling = object_member (object, "demosaiced_scaling");
+  const json_value *whitepoint = object_member (object, "observer_whitepoint");
+  const json_value *profile = object_member (object, "output_profile");
+  const json_value *gamma = object_member (object, "output_gamma");
+  const json_value *gamut = object_member (object, "gamut_warning");
+
+  if (!ignore || ignore->type != json_value::kind::boolean
+      || !scaling || scaling->type != json_value::kind::string
+      || !whitepoint || whitepoint->type != json_value::kind::array
+      || whitepoint->array_value.size () != 2
+      || !profile || profile->type != json_value::kind::string
+      || !gamma || gamma->type != json_value::kind::number
+      || !gamut || gamut->type != json_value::kind::boolean)
+    return archive_fail (
+        error, "state.render_overrides is missing a required typed field");
+
+  parameter_archive_render_overrides parsed;
+  parsed.present = true;
+  parsed.ignore_infrared = ignore->boolean_value;
+  parsed.gamut_warning = gamut->boolean_value;
+
+  bool scaling_found = false;
+  for (int i = 0; i < (int)render_parameters::max_demosaiced_scaling; ++i)
+    if (scaling->text
+        == render_parameters::demosaiced_scaling_names[i].name)
+      {
+        parsed.demosaiced_scaling
+            = (render_parameters::demosaiced_scaling_t)i;
+        scaling_found = true;
+        break;
+      }
+  if (!scaling_found)
+    return archive_fail (error,
+                         "unknown state.render_overrides demosaiced_scaling");
+
+  bool profile_found = false;
+  for (int i = 0; i < (int)render_parameters::output_profile_max; ++i)
+    if (profile->text == render_parameters::output_profile_names[i])
+      {
+        parsed.output_profile = (render_parameters::output_profile_t)i;
+        profile_found = true;
+        break;
+      }
+  if (!profile_found)
+    return archive_fail (error,
+                         "unknown state.render_overrides output_profile");
+
+  double white_x = 0;
+  double white_y = 0;
+  double output_gamma = 0;
+  if (!json_finite_double (whitepoint->array_value[0], &white_x)
+      || !json_finite_double (whitepoint->array_value[1], &white_y)
+      || white_x < 0 || white_y <= 0 || white_x + white_y > 1
+      || !json_finite_double (*gamma, &output_gamma)
+      || (output_gamma != -1 && output_gamma <= 0))
+    return archive_fail (error,
+                         "invalid numeric state.render_overrides value");
+
+  parsed.observer_whitepoint = xy_t (white_x, white_y);
+  parsed.output_gamma = output_gamma;
+  *result = parsed;
+  return true;
+}
+
+/* Format VALUE as locale-independent finite JSON number text. */
+std::string
+json_number (double value)
+{
+  std::ostringstream stream;
+  stream.imbue (std::locale::classic ());
+  stream << std::setprecision (17) << value;
+  return stream.str ();
+}
+
 /* Return true when PATH is a safe relative ZIP entry path.  */
 bool
 safe_archive_path (const std::string &path)
@@ -930,6 +1034,8 @@ parse_manifest (
   if (version != 1)
     return archive_fail (error, "unsupported parameter archive schema version");
 
+  bool render_overrides_feature = false;
+  std::set<std::string> required_feature_names;
   const json_value *features = object_member (root, "required_features");
   if (features)
     {
@@ -939,9 +1045,15 @@ parse_manifest (
         {
           if (feature.type != json_value::kind::string || feature.text.empty ())
             return archive_fail (error, "invalid required parameter feature");
-          return archive_fail (error,
-                               "unsupported required parameter archive feature: "
-                                   + feature.text);
+          if (!required_feature_names.insert (feature.text).second)
+            return archive_fail (error,
+                                 "duplicate required parameter archive feature");
+          if (feature.text == "render-overrides-v1")
+            render_overrides_feature = true;
+          else
+            return archive_fail (
+                error, "unsupported required parameter archive feature: "
+                           + feature.text);
         }
     }
 
@@ -954,6 +1066,21 @@ parse_manifest (
   if (entries.find (legacy->text) == entries.end ())
     return archive_fail (error, "parameter archive is missing its legacy CSP state");
 
+  const json_value *render_overrides
+      = object_member (*state, "render_overrides");
+  if (render_overrides && !render_overrides_feature)
+    return archive_fail (
+        error, "state.render_overrides requires render-overrides-v1");
+  if (render_overrides_feature && !render_overrides)
+    return archive_fail (
+        error, "render-overrides-v1 requires state.render_overrides");
+
+  parameter_archive_render_overrides parsed_render_overrides;
+  if (render_overrides_feature
+      && !parse_render_overrides (*render_overrides, &parsed_render_overrides,
+                                  error))
+    return false;
+
   if (!validate_payloads (object_member (root, "payloads"), entries, error))
     return false;
 
@@ -961,6 +1088,7 @@ parse_manifest (
     {
       manifest->schema_version = (int)version;
       manifest->legacy_csp_path = legacy->text;
+      manifest->render_overrides = parsed_render_overrides;
     }
   return true;
 }
@@ -1037,6 +1165,37 @@ add_archive_entry (zip_t *archive, const char *name, const std::string &content,
 
 }
 
+/* Return authoritative structured archive values missing from legacy CSP. */
+parameter_archive_render_overrides
+parameter_archive_render_overrides_from (const render_parameters &rparam)
+{
+  parameter_archive_render_overrides result;
+  result.present = true;
+  result.ignore_infrared = rparam.ignore_infrared;
+  result.demosaiced_scaling = rparam.demosaiced_scaling;
+  result.observer_whitepoint = rparam.observer_whitepoint;
+  result.output_profile = rparam.output_profile;
+  result.output_gamma = rparam.output_gamma;
+  result.gamut_warning = rparam.gamut_warning;
+  return result;
+}
+
+/* Apply structured archive values after the legacy CSP mirror was parsed. */
+void
+apply_parameter_archive_render_overrides (
+    const parameter_archive_render_overrides &overrides,
+    render_parameters *rparam)
+{
+  if (!rparam || !overrides.present)
+    return;
+  rparam->ignore_infrared = overrides.ignore_infrared;
+  rparam->demosaiced_scaling = overrides.demosaiced_scaling;
+  rparam->observer_whitepoint = overrides.observer_whitepoint;
+  rparam->output_profile = overrides.output_profile;
+  rparam->output_gamma = overrides.output_gamma;
+  rparam->gamut_warning = overrides.gamut_warning;
+}
+
 /* Return true when NAME begins with one of the standard ZIP signatures.  */
 bool
 parameter_archive_signature_p (const char *name)
@@ -1059,12 +1218,15 @@ parameter_archive_signature_p (const char *name)
 
 /* Open plain CSP or one validated archive payload as a FILE*.  */
 FILE *
-open_parameter_payload (const char *name, bool *is_archive, std::string *error)
+open_parameter_payload (const char *name, bool *is_archive, std::string *error,
+                        parameter_archive_manifest *manifest)
 {
   if (error)
     error->clear ();
   if (is_archive)
     *is_archive = false;
+  if (manifest)
+    *manifest = {};
   if (!name)
     {
       archive_fail (error, "invalid parameter filename");
@@ -1081,7 +1243,7 @@ open_parameter_payload (const char *name, bool *is_archive, std::string *error)
     }
 
   std::string payload;
-  if (!read_parameter_archive (name, &payload, nullptr, error))
+  if (!read_parameter_archive (name, &payload, manifest, error))
     return nullptr;
 
   FILE *file = std::tmpfile ();
@@ -1220,8 +1382,10 @@ read_parameter_archive (const char *name, std::string *legacy_csp,
 
 /* Write one schema-v1 parameter archive to staging path NAME.  */
 bool
-write_parameter_archive (const char *name, const std::string &legacy_csp,
-                         const char *generator_version, std::string *error)
+write_parameter_archive (
+    const char *name, const std::string &legacy_csp,
+    const char *generator_version, std::string *error,
+    const parameter_archive_render_overrides *render_overrides)
 {
   if (error)
     error->clear ();
@@ -1232,21 +1396,74 @@ write_parameter_archive (const char *name, const std::string &legacy_csp,
   if (!valid_utf8 (version))
     return archive_fail (error, "parameter archive generator version is not UTF-8");
 
+  const bool structured_render
+      = render_overrides && render_overrides->present;
+  if (structured_render)
+    {
+      const auto scaling = render_overrides->demosaiced_scaling;
+      const auto profile = render_overrides->output_profile;
+      const double white_x = render_overrides->observer_whitepoint.x;
+      const double white_y = render_overrides->observer_whitepoint.y;
+      const double output_gamma = render_overrides->output_gamma;
+      if ((int)scaling < 0
+          || scaling >= render_parameters::max_demosaiced_scaling
+          || (int)profile < 0 || profile >= render_parameters::output_profile_max
+          || !std::isfinite (white_x) || !std::isfinite (white_y)
+          || white_x < 0 || white_y <= 0 || white_x + white_y > 1
+          || !std::isfinite (output_gamma)
+          || (output_gamma != -1 && output_gamma <= 0))
+        return archive_fail (error,
+                             "invalid structured render override values");
+    }
+
   std::string manifest
       = "{\n"
         "  \"format\": \"org.colorscreen.parameters\",\n"
-        "  \"schema_version\": 1,\n"
-        "  \"generator\": {\n"
-        "    \"application\": \"Color-Screen\",\n"
-        "    \"version\": \""
-        + json_escape (version)
-        + "\"\n"
-          "  },\n"
-          "  \"state\": {\n"
-          "    \"legacy_csp\": \"state/legacy.par\"\n"
-          "  },\n"
-          "  \"payloads\": []\n"
-          "}\n";
+        "  \"schema_version\": 1,\n";
+  if (structured_render)
+    manifest += "  \"required_features\": [\"render-overrides-v1\"],\n";
+  manifest
+      += "  \"generator\": {\n"
+         "    \"application\": \"Color-Screen\",\n"
+         "    \"version\": \""
+         + json_escape (version)
+         + "\"\n"
+           "  },\n"
+           "  \"state\": {\n"
+           "    \"legacy_csp\": \"state/legacy.par\"";
+  if (structured_render)
+    {
+      manifest
+          += ",\n"
+             "    \"render_overrides\": {\n"
+             "      \"ignore_infrared\": "
+             + std::string (render_overrides->ignore_infrared ? "true" : "false")
+             + ",\n"
+               "      \"demosaiced_scaling\": \""
+             + json_escape (
+                 render_parameters::demosaiced_scaling_names
+                     [(int)render_overrides->demosaiced_scaling]
+                         .name)
+             + "\",\n"
+               "      \"observer_whitepoint\": ["
+             + json_number (render_overrides->observer_whitepoint.x) + ", "
+             + json_number (render_overrides->observer_whitepoint.y)
+             + "],\n"
+               "      \"output_profile\": \""
+             + json_escape (render_parameters::output_profile_names
+                                [(int)render_overrides->output_profile])
+             + "\",\n"
+               "      \"output_gamma\": "
+             + json_number (render_overrides->output_gamma)
+             + ",\n"
+               "      \"gamut_warning\": "
+             + std::string (render_overrides->gamut_warning ? "true" : "false")
+             + "\n"
+               "    }";
+    }
+  manifest += "\n  },\n"
+              "  \"payloads\": []\n"
+              "}\n";
 
   int open_error = 0;
   zip_t *archive = zip_open (name, ZIP_CREATE | ZIP_TRUNCATE, &open_error);
@@ -1282,9 +1499,10 @@ write_parameter_archive (const char *name, const std::string &legacy_csp,
 
 /* Atomically replace one legacy or archive parameter payload. */
 bool
-write_parameter_payload_file (const char *name, const std::string &payload,
-                              bool archive, const char *generator_version,
-                              std::string *error)
+write_parameter_payload_file (
+    const char *name, const std::string &payload, bool archive,
+    const char *generator_version, std::string *error,
+    const parameter_archive_render_overrides *render_overrides)
 {
   if (error)
     error->clear ();
@@ -1310,7 +1528,8 @@ write_parameter_payload_file (const char *name, const std::string &payload,
 
   if (archive)
     written = write_parameter_archive (staging_utf8.c_str (), payload,
-                                       generator_version, error);
+                                       generator_version, error,
+                                       render_overrides);
   else
     {
       FILE *out = open_utf8_binary_write (staging_utf8.c_str ());

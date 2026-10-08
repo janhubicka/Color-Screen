@@ -39,10 +39,12 @@ payload/...
 ```
 
 `manifest.json` is mandatory. `state/legacy.par` is mandatory in schema
-version 1 and contains the complete CSP plus Qt metadata payload that the current
-application would otherwise write to `.par`. It provides an exact migration
-floor while the structured schema is introduced and lets old core semantics be
-validated byte-for-byte against the archive reader.
+version 1 and contains the complete **legacy-format** CSP plus Qt metadata
+payload that the application would otherwise write to `.par`. It provides an
+exact compatibility/migration floor and lets old core semantics be validated
+byte-for-byte. Fields that legacy CSP cannot represent are authoritative only in
+required structured manifest features; readers apply those after parsing the
+legacy mirror.
 
 Dense arrays may be moved to typed `payload/` entries as the structured state
 grows. A writer must never put large meshes/correction grids into enormous JSON
@@ -59,12 +61,21 @@ Schema version 1 begins with:
 {
   "format": "org.colorscreen.parameters",
   "schema_version": 1,
+  "required_features": ["render-overrides-v1"],
   "generator": {
     "application": "Color-Screen",
     "version": "2.0alpha"
   },
   "state": {
-    "legacy_csp": "state/legacy.par"
+    "legacy_csp": "state/legacy.par",
+    "render_overrides": {
+      "ignore_infrared": false,
+      "demosaiced_scaling": "default",
+      "observer_whitepoint": [0.3457, 0.3585],
+      "output_profile": "sRGB",
+      "output_gamma": -1,
+      "gamut_warning": false
+    }
   },
   "payloads": []
 }
@@ -90,14 +101,14 @@ Readers distinguish three cases:
 3. known supported version — parse required members, ignore unknown optional
    keys, and reject malformed values.
 
-Future manifests may contain:
+Schema v1 currently defines one required feature:
 
-```json
-"required_features": ["structured-render-v2", "mesh-f64le-v1"]
-```
+- `render-overrides-v1`: `state.render_overrides` is present and
+  authoritative for the saved render fields that legacy CSP cannot represent.
 
-An unknown required feature is a hard error even when the integer schema version
-is otherwise recognized. Unknown optional keys and optional payload entries are
+Future manifests may add other independently negotiated features, for example a
+typed mesh payload. An unknown required feature is a hard error even when the
+integer schema version is otherwise recognized. Unknown optional keys and optional payload entries are
 ignored. This lets independent optional provenance grow without making every
 addition a format bump.
 
@@ -188,12 +199,33 @@ cross-platform core/CLI/GUI round-trip fixtures were established. Explicit
 legacy `.par` export remains available, and an established target always
 preserves its loaded/chosen format on ordinary Save.
 
-## Structured migration after version 1
+## Structured migration within schema version 1
 
-Version 1 intentionally creates the durable container/versioning boundary before
-reimplementing every historical CSP keyword. Subsequent work can migrate
-individual domains into manifest sections while retaining `state/legacy.par`
-as a compatibility mirror until all readers use the structured representation.
+Schema version 1 creates the durable container/versioning boundary. Independent
+required features can then migrate state incrementally without bumping the whole
+schema merely because one domain gains an authoritative structured
+representation.
+
+The first migration is `render-overrides-v1`. It exists specifically for six
+persistent `render_parameters` fields that legacy CSP has no keyword for:
+
+- `ignore_infrared`;
+- `demosaiced_scaling`;
+- `observer_whitepoint`;
+- `output_profile`;
+- `output_gamma`;
+- `gamut_warning`.
+
+A reader that understands the feature parses the legacy CSP mirror first and
+then applies these six validated structured values. A reader that does not
+understand the feature must reject the archive. A manifest containing
+`state.render_overrides` without declaring the feature is invalid, as is a
+manifest declaring the feature without the complete structured object. This
+prevents silent data loss in older alpha readers.
+
+Subsequent work can migrate additional domains into manifest sections while
+retaining `state/legacy.par` as a compatibility mirror until all relevant
+state has a structured representation.
 
 Candidate sections are:
 
@@ -258,8 +290,10 @@ Implementation status in the alpha tree:
   rewrite, and the Czech/CJK archive fixture are merged;
 - automatic image-sidecar discovery now prefers `.cspar` and falls back to
   legacy `.par`, never merging both;
-- this branch makes genuinely new Save As/no-sidecar targets default to
-  `.cspar`; established Archive/Legacy targets remain format-preserving.
+- genuinely new Save As/no-sidecar targets now default to `.cspar`;
+  established Archive/Legacy targets remain format-preserving;
+- `render-overrides-v1` is the first authoritative structured-state feature,
+  closing the known legacy-CSP gap for six saved render fields.
 
 Remaining rollout sequence:
 

@@ -14,7 +14,7 @@ echo 1..5
 # Dynamic MinGW builds are normally launched through libtool's POSIX wrapper.
 # That wrapper adds a second MSYS -> native exec boundary and can replace
 # characters outside the active Windows code page before the real executable's
-# UTF-16 command-line recovery runs.  Exercise the installed-program semantics
+# UTF-16 command-line recovery runs. Exercise the installed-program semantics
 # directly when the libtool binary exists, while keeping its build-tree DLL
 # dependency discoverable.
 case `uname -s 2>/dev/null` in
@@ -59,11 +59,22 @@ payload += (
 manifest = {
     "format": "org.colorscreen.parameters",
     "schema_version": 1,
+    "required_features": ["render-overrides-v1"],
     "generator": {
         "application": "Color-Screen testsuite",
         "version": "2.0alpha",
     },
-    "state": {"legacy_csp": "state/legacy.par"},
+    "state": {
+        "legacy_csp": "state/legacy.par",
+        "render_overrides": {
+            "ignore_infrared": False,
+            "demosaiced_scaling": "nearest",
+            "observer_whitepoint": [0.3457, 0.3585],
+            "output_profile": "sRGB",
+            "output_gamma": -1,
+            "gamut_warning": False,
+        },
+    },
     "payloads": [],
 }
 with zipfile.ZipFile(destination, "w") as z:
@@ -92,6 +103,7 @@ echo 'ok 3 - legacy/archive outputs match'
 
 pexec $RUNCOLORSCREEN adjust-par "$archive" || exit 1
 python3 - "$archive" <<'PY' || exit 1
+import json
 import sys
 import zipfile
 
@@ -100,6 +112,12 @@ if not zipfile.is_zipfile(path):
     raise SystemExit("adjust-par replaced archive with plain text")
 with zipfile.ZipFile(path, "r") as z:
     payload = z.read("state/legacy.par")
+    manifest = json.loads(z.read("manifest.json"))
+if "render-overrides-v1" not in manifest.get("required_features", []):
+    raise SystemExit("adjust-par dropped structured render feature")
+overrides = manifest.get("state", {}).get("render_overrides", {})
+if overrides.get("demosaiced_scaling") != "nearest":
+    raise SystemExit("adjust-par did not preserve structured render state")
 if b"colorscreen_qt_metadata_version: 1\n" not in payload:
     raise SystemExit("adjust-par dropped Qt metadata version")
 if b"profile_spot: 0.25 0.5\n" not in payload:
