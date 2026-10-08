@@ -103,8 +103,23 @@ Readers distinguish three cases:
 
 Schema v1 currently defines one required feature:
 
-- `render-overrides-v1`: `state.render_overrides` is present and
-  authoritative for the saved render fields that legacy CSP cannot represent.
+- `render-overrides-v1`: `state.render_overrides` is present. Four
+  reconstruction inputs absent from legacy CSP remain authoritative:
+  `ignore_infrared`, `demosaiced_scaling`, `observer_whitepoint`, and
+  `output_gamma`. The original schema also requires typed `output_profile`
+  and `gamut_warning` compatibility keys; current readers validate them but
+  do not apply them to document state.
+
+As of the per-view ownership migration, preview `output_profile` and
+`gamut_warning` are view-local choices, and a file export chooses its own
+output colourspace in the Render dialog. New schema-v1 archives **must still
+write** the historical compatibility keys as `"output_profile":"sRGB"` and
+`"gamut_warning":false` so older v1 readers accept the manifest; those
+values are placeholders, not reconstruction settings. An older archive with
+nondefault values remains valid and readable, but its historical display
+choices do not overwrite a new viewer or explicit export configuration.
+The independent output-gamma and observer-whitepoint values still affect
+reconstruction and remain persistent.
 
 Future manifests may add other independently negotiated features, for example a
 typed mesh payload. An unknown required feature is a hard error even when the
