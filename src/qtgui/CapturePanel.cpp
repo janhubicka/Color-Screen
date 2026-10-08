@@ -836,8 +836,7 @@ void CapturePanel::setupUi()
         [this]() {
           applyChange([](ParameterState &state) {
               state.rparams.image_area.set = false;
-          }, tr("Clear photographic image area"),
-          QStringLiteral("capture.image_area"));
+          }, tr("Clear photographic image area"));
         },
         [this](const ParameterState &state) {
           return m_imageGetter() != nullptr && state.rparams.image_area.set;
