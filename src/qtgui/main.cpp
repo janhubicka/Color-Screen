@@ -674,6 +674,27 @@ bool colorSectionPreferencesSmoke() {
           return fail(QStringLiteral(
               "Digital Capture image actions stayed disabled after image load"));
 
+        // Selecting an inner photograph is a real saved edit, whereas clearing
+        // its bounds must restore the outer crop without changing it.
+        const auto oldObjectCrop = state.rparams.scan_crop;
+        state.rparams.image_area = colorscreen::int_optional_image_area(
+            colorscreen::int_image_area(2, 3, 16, 17));
+        capture->updateUI();
+        if (!clearImageArea->isEnabled())
+          return fail(QStringLiteral(
+              "Clear image area stayed disabled with a saved photograph"));
+        const int editsBeforeClear = documentEdits;
+        clearImageArea->click();
+        if (state.rparams.image_area.set ||
+            !(state.rparams.scan_crop == oldObjectCrop) ||
+            documentEdits != editsBeforeClear + 1)
+          return fail(QStringLiteral(
+              "Clear image area failed its atomic saved-state action"));
+        capture->updateUI();
+        if (clearImageArea->isEnabled())
+          return fail(QStringLiteral(
+              "Clear image area remained enabled after resetting bounds"));
+
         captureImage.reset();
         capture->updateUI();
         if (measureResolution->isEnabled() || cropButton->isEnabled() ||
