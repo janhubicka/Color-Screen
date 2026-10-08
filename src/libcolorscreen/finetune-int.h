@@ -110,7 +110,7 @@ finetune_interpolate_screen_mult (screen &dst, const screen &lower,
 bool finetune_useful_defocus_limit (mtf_parameters params,
                                     coord_t pixel_frequency,
                                     coord_t minimum_mtf, coord_t hard_max,
-                                    coord_t *limit);
+                                    coord_t *limit, double wavelength_nm = 0);
 
 /* Find the first nonnegative compact fallback blur diameter at which PARAMS'
    system MTF at PIXEL_FREQUENCY drops to MINIMUM_MTF.  Search no farther than
@@ -120,7 +120,7 @@ bool finetune_useful_blur_diameter_limit (mtf_parameters params,
                                           coord_t pixel_frequency,
                                           coord_t minimum_mtf,
                                           coord_t hard_max,
-                                          coord_t *limit);
+                                          coord_t *limit, double wavelength_nm = 0);
 
 /* Find the fit-quality cutoff that retains RETAIN_RATIO of the most reliable
    successful RESULTS.  Failed and non-finite results are ignored.  */
