@@ -1190,3 +1190,28 @@ inspect, and fit recommendations before detection finishes. The marker stores a
 weak progress identity; an older coordinate-stage completion therefore cannot
 clear the newer point-discovery stage after handoff. Completion/cancellation
 restores the ordinary state-derived recommendation.
+
+### View-local display colours (2.0alpha)
+
+The preview gamut-warning overlay and display output colourspace belong to each
+`ImageWidget`, not to the shared document's `ParameterState` or Undo stack.
+The document may have multiple simultaneous image views displaying different
+colourspaces or gamut diagnostics. At the rendering boundary,
+`ImageWidget::requestRender()` takes the numerical document snapshot and
+then overrides only the rendering request's `gamut_warning` and
+`output_profile` with that view's selected values. The renderer and profile
+pipeline still consume `render_parameters` as their *operation arguments*;
+that type does not imply that every member is a persisted image-calibration
+input. The document-owned View menu tracks the currently inspected ordinary
+view through `syncInspectorViewActions()`. Export-to-file chooses its own
+output profile in the Render dialog; the active view's profile is only the
+initial suggestion, not a mutation of the saved document.
+
+Existing `render-overrides-v1` archives still contain legacy output-profile
+and gamut keys. Older readers need these required fields, so do not break the
+format handshake merely to omit them. A later distinct schema feature can
+remove these non-calibration values from persisted documents while preserving
+v1 read compatibility. Production GUI display already ignores v1 legacy
+values for view-local presentation. The numeric output gamma, tone curve and
+process-colour calibration remain separate concerns and must not be reclassified
+without auditing their dependencies.
