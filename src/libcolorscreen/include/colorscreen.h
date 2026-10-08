@@ -238,12 +238,14 @@ render_screen_tile(tile_parameters &tile, scr_type type,
 nodiscard_attr DLL_PUBLIC bool
 complete_rendered_file_parameters(render_type_parameters &rtparams,
                                   scr_to_img_parameters &param,
-                                  image_data &scan, render_to_file_params *p);
+                                  image_data &scan, render_to_file_params *p,
+                                  const render_parameters *saved = nullptr);
 nodiscard_attr DLL_PUBLIC bool
 complete_rendered_file_parameters(render_type_parameters *rtparams,
                                   scr_to_img_parameters *param,
                                   image_data *scan, stitch_project *stitch,
-                                  render_to_file_params *p);
+                                  render_to_file_params *p,
+                                  const render_parameters *saved = nullptr);
 DLL_PUBLIC rgbdata get_linearized_pixel(const image_data &img,
                                         render_parameters &rparam, int x, int y,
                                         int range = 4,
