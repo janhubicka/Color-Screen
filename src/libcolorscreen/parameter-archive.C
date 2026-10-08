@@ -1174,9 +1174,13 @@ parameter_archive_render_overrides_from (const render_parameters &rparam)
   result.ignore_infrared = rparam.ignore_infrared;
   result.demosaiced_scaling = rparam.demosaiced_scaling;
   result.observer_whitepoint = rparam.observer_whitepoint;
-  result.output_profile = rparam.output_profile;
+  /* Schema v1 requires these compatibility keys, but displayed output
+     colourspace and gamut diagnostics now belong to individual views or
+     explicit file-render requests. Do not serialize a transient display
+     choice as if it were a reconstruction parameter. */
+  result.output_profile = render_parameters::output_profile_sRGB;
   result.output_gamma = rparam.output_gamma;
-  result.gamut_warning = rparam.gamut_warning;
+  result.gamut_warning = false;
   return result;
 }
 
@@ -1191,9 +1195,11 @@ apply_parameter_archive_render_overrides (
   rparam->ignore_infrared = overrides.ignore_infrared;
   rparam->demosaiced_scaling = overrides.demosaiced_scaling;
   rparam->observer_whitepoint = overrides.observer_whitepoint;
-  rparam->output_profile = overrides.output_profile;
+  /* Old v1 archives may contain nondefault view settings. Validate their
+     typed representation during parsing, but do not restore them into
+     document reconstruction state: current view/export configuration owns
+     output colourspace and gamut warnings independently. */
   rparam->output_gamma = overrides.output_gamma;
-  rparam->gamut_warning = overrides.gamut_warning;
 }
 
 /* Return true when NAME begins with one of the standard ZIP signatures.  */
