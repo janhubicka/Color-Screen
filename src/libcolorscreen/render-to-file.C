@@ -34,11 +34,21 @@ const property_t render_to_file_params::geometry_names []  = {
     SCAN - source scan data.
     STITCH - stitch project data (if any).
     P - output rendering to file parameters.
+    SAVED - optional document state with a photographic image-area boundary.
     Returns true on success.  */
 bool
-complete_rendered_file_parameters (render_type_parameters *rtparams, scr_to_img_parameters * param, image_data *scan, stitch_project *stitch, render_to_file_params *p)
+complete_rendered_file_parameters (render_type_parameters *rtparams, scr_to_img_parameters * param, image_data *scan, stitch_project *stitch, render_to_file_params *p, const render_parameters *saved)
 {
   render_parameters rparam;
+  // The outer scan_crop frames the physical object. When the user has marked
+  // an inner photographic image, use that inner rectangle as the default file
+  // bounding box without changing the editor's object-crop presentation.
+  const bool bounded = scan && !scan->stitch && !stitch && saved
+                       && saved->image_area.set;
+  const int_image_area photographic_bounds = bounded
+      ? saved->get_image_area (scan->width, scan->height)
+      : int_image_area (0, 0, scan ? scan->width : 0,
+                        scan ? scan->height : 0);
   if (scan && scan->stitch)
     {
       stitch = scan->stitch;
@@ -68,6 +78,23 @@ complete_rendered_file_parameters (render_type_parameters *rtparams, scr_to_img_
 	  render.compute_final_range ();
 	  render_width = render.get_final_width ();
 	  render_height = render.get_final_height ();
+	  if (bounded)
+	    {
+	      scr_to_img map;
+	      if (!map.set_parameters (*param, *scan))
+	        return false;
+	      const int_image_area full_range (
+	          map.get_final_range (scan->width, scan->height));
+	      const int_image_area image_range (
+	          map.get_final_range (image_area (photographic_bounds)));
+	      if (image_range.empty_p ())
+	        return false;
+	      render_width = image_range.width;
+	      render_height = image_range.height;
+	      if (p->start.x == 0 && p->start.y == 0)
+	        p->start = { (coord_t)(image_range.x - full_range.x),
+	                     (coord_t)(image_range.y - full_range.y) };
+	    }
 	  if (!p->pixel_size)
 	    {
 	      p->pixel_size = render.pixel_size ();
@@ -166,24 +193,29 @@ complete_rendered_file_parameters (render_type_parameters *rtparams, scr_to_img_
     }
   else
     {
+      const coord_t region_width = (coord_t)photographic_bounds.width;
+      const coord_t region_height = (coord_t)photographic_bounds.height;
+      if (bounded && p->start.x == 0 && p->start.y == 0)
+	p->start = { (coord_t)photographic_bounds.x,
+	             (coord_t)photographic_bounds.y };
       if (!p->xstep)
 	p->xstep = p->ystep = 1 / p->scale;
       if (!p->width && !p->height)
 	{
-	  p->width = scan->width / p->xstep;
-	  p->height = scan->height / p->ystep;
+	  p->width = region_width / p->xstep;
+	  p->height = region_height / p->ystep;
 	}
       else if (!p->width && p->height)
 	{
-	  double new_step = (double)scan->height / p->height;
+	  double new_step = region_height / p->height;
 	  p->xstep = p->ystep = new_step;
-	  p->width = (int)(scan->width / new_step + 0.5);
+	  p->width = (int)(region_width / new_step + 0.5);
 	}
       else if (p->width && !p->height)
 	{
-	  double new_step = (double)scan->width / p->width;
+	  double new_step = region_width / p->width;
 	  p->xstep = p->ystep = new_step;
-	  p->height = (int)(scan->height / new_step + 0.5);
+	  p->height = (int)(region_height / new_step + 0.5);
 	}
       if (!p->antialias)
 	{
@@ -205,9 +237,10 @@ complete_rendered_file_parameters (render_type_parameters *rtparams, scr_to_img_
 
 /** Complete rendering parameters (wrapper).  */
 bool
-complete_rendered_file_parameters (render_type_parameters &rtparams, scr_to_img_parameters & param, image_data &scan, render_to_file_params *p)
+complete_rendered_file_parameters (render_type_parameters &rtparams, scr_to_img_parameters & param, image_data &scan, render_to_file_params *p, const render_parameters *saved)
 {
-  return complete_rendered_file_parameters (&rtparams, &param, &scan, nullptr, p);
+  return complete_rendered_file_parameters (&rtparams, &param, &scan, nullptr,
+                                            p, saved);
 }
 
 /** Main entry point for rendering an image to a file.
@@ -304,7 +337,8 @@ render_to_file (image_data & scan, scr_to_img_parameters & param,
     }
 
   /* Initialize rendering engine.  */
-  if (!complete_rendered_file_parameters (rtparam, param, scan, &rfparams))
+  if (!complete_rendered_file_parameters (rtparam, param, scan, &rfparams,
+                                           &in_rparam))
     {
       *error = "Precomputation failed (out of memory)";
       if (free_profile)
