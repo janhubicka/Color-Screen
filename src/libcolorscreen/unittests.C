@@ -9412,7 +9412,8 @@ test_parameter_archive ()
       || !read_parameter_archive (roundtrip.c_str (), &loaded, &parsed, &error)
       || loaded != legacy || parsed.schema_version != 1
       || parsed.legacy_csp_path != "state/legacy.par"
-      || parsed.geometry_final_frame.present)
+      || parsed.geometry_final_frame.present
+      || parsed.solver_options.present)
     {
       fprintf (stderr, "Parameter archive round trip failed: %s\n",
                error.c_str ());
@@ -9460,13 +9461,19 @@ test_parameter_archive ()
   structured_geometry.final_ratio = 0.803158;
   const parameter_archive_geometry_final_frame geometry_frame
       = parameter_archive_geometry_final_frame_from (structured_geometry);
+  solver_parameters structured_solver;
+  structured_solver.weighted = true;
+  structured_solver.center = { 125.25, -82.5 };
+  const parameter_archive_solver_options solver_options
+      = parameter_archive_solver_options_from (structured_solver);
   const std::string structured
       = parameter_archive_test_path ("render-overrides");
   std::remove (structured.c_str ());
   error.clear ();
   if (!write_parameter_archive (structured.c_str (), legacy,
                                 "2.0alpha-structured", &error,
-                                &structured_overrides, &geometry_frame))
+                                &structured_overrides, &geometry_frame,
+                                &solver_options))
     {
       fprintf (stderr, "Structured parameter archive writer failed: %s\n",
                error.c_str ());
@@ -9492,7 +9499,10 @@ test_parameter_archive ()
       || parsed.geometry_final_frame.final_angle
              != structured_geometry.final_angle
       || parsed.geometry_final_frame.final_ratio
-             != structured_geometry.final_ratio)
+             != structured_geometry.final_ratio
+      || !parsed.solver_options.present
+      || parsed.solver_options.weighted != structured_solver.weighted
+      || parsed.solver_options.center != structured_solver.center)
     {
       fprintf (stderr, "Structured parameter archive round trip failed: %s\n",
                error.c_str ());
@@ -9506,7 +9516,8 @@ test_parameter_archive ()
       structured.c_str (), &opened_archive, &error, &opened_manifest);
   if (!payload_stream || !opened_archive
       || !opened_manifest.render_overrides.present
-      || !opened_manifest.geometry_final_frame.present)
+      || !opened_manifest.geometry_final_frame.present
+      || !opened_manifest.solver_options.present)
     {
       fprintf (stderr, "Structured payload opener lost manifest state: %s\n",
                error.c_str ());
@@ -9541,6 +9552,16 @@ test_parameter_archive ()
       || geometry_target.final_ratio != structured_geometry.final_ratio)
     {
       fprintf (stderr, "Structured geometry final frame did not apply exactly\n");
+      std::remove (structured.c_str ());
+      return false;
+    }
+  solver_parameters solver_target;
+  apply_parameter_archive_solver_options (
+      opened_manifest.solver_options, &solver_target);
+  if (solver_target.weighted != structured_solver.weighted
+      || solver_target.center != structured_solver.center)
+    {
+      fprintf (stderr, "Structured solver options did not apply exactly\n");
       std::remove (structured.c_str ());
       return false;
     }
@@ -9975,6 +9996,51 @@ test_parameter_archive ()
   if (!expect_read ("geometry-incomplete", incomplete_geometry,
                     {{"state/legacy.par", legacy}}, false,
                     "missing a required typed field"))
+    return false;
+
+  // Saved solver inputs are optional only when the entire negotiated feature
+  // is absent. Never silently accept or partially merge an invalid section.
+  const std::string solver_section_without_feature = R"({
+    "format": "org.colorscreen.parameters", "schema_version": 1,
+    "state": {"legacy_csp":"state/legacy.par",
+              "solver_options":{"weighted":true,"center":[125.25,-82.5]}}
+  })";
+  if (!expect_read ("solver-without-feature", solver_section_without_feature,
+                    {{"state/legacy.par", legacy}}, false,
+                    "requires solver-options-v1"))
+    return false;
+
+  const std::string solver_feature_without_section = R"({
+    "format": "org.colorscreen.parameters", "schema_version": 1,
+    "required_features":["solver-options-v1"],
+    "state":{"legacy_csp":"state/legacy.par"}
+  })";
+  if (!expect_read ("solver-feature-without-section",
+                    solver_feature_without_section,
+                    {{"state/legacy.par", legacy}}, false,
+                    "requires state.solver_options"))
+    return false;
+
+  const std::string invalid_solver_type = R"({
+    "format": "org.colorscreen.parameters", "schema_version": 1,
+    "required_features":["solver-options-v1"],
+    "state":{"legacy_csp":"state/legacy.par",
+             "solver_options":{"weighted":"true","center":[125.25,-82.5]}}
+  })";
+  if (!expect_read ("solver-invalid-type", invalid_solver_type,
+                    {{"state/legacy.par", legacy}}, false,
+                    "missing a required typed field"))
+    return false;
+
+  const std::string invalid_solver_center = R"({
+    "format": "org.colorscreen.parameters", "schema_version": 1,
+    "required_features":["solver-options-v1"],
+    "state":{"legacy_csp":"state/legacy.par",
+             "solver_options":{"weighted":true,"center":[1e999,-82.5]}}
+  })";
+  if (!expect_read ("solver-invalid-center", invalid_solver_center,
+                    {{"state/legacy.par", legacy}}, false,
+                    "invalid numeric state.solver_options"))
     return false;
 
   const std::string wrong_format
