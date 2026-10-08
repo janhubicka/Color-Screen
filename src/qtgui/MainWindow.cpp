@@ -2591,6 +2591,23 @@ void MainWindow::createMenus() {
           &MainWindow::onGamutWarningToggled);
   m_viewMenu->addAction(m_gamutWarningAction);
 
+  // Display colourspace belongs to the inspected canvas, not the document.
+  QMenu *displayProfileMenu = m_viewMenu->addMenu(tr("Display colourspace"));
+  for (int i = 0; i < (int)colorscreen::render_parameters::output_profile_max;
+       ++i) {
+    QAction *action = displayProfileMenu->addAction(
+        QString::fromUtf8(colorscreen::render_parameters::output_profile_names[i]));
+    action->setCheckable(true);
+    m_viewOutputProfileActions[i] = action;
+    connect(action, &QAction::triggered, this, [this, i]() {
+      if (ImageWidget *view = inspectorImageWidget()) {
+        view->setViewOutputProfile(
+            static_cast<colorscreen::render_parameters::output_profile_t>(i));
+        syncInspectorViewActions();
+      }
+    });
+  }
+
   m_viewMenu->addSeparator();
 
   m_rotateLeftAction = m_viewMenu->addAction("Rotate &Left");
@@ -2935,6 +2952,18 @@ void MainWindow::syncInspectorViewActions() {
     m_mirrorAction->setToolTip(finalCoordinates
         ? tr("Mirror the final-coordinate image; saved in the parameter file")
         : tr("Mirror the digital scan horizontally"));
+  }
+  if (m_gamutWarningAction) {
+    const QSignalBlocker blocker(m_gamutWarningAction);
+    m_gamutWarningAction->setChecked(image->viewGamutWarning());
+  }
+  for (int i = 0; i < (int)colorscreen::render_parameters::output_profile_max;
+       ++i) {
+    QAction *action = m_viewOutputProfileActions[i];
+    if (!action)
+      continue;
+    const QSignalBlocker blocker(action);
+    action->setChecked((int)image->viewOutputProfile() == i);
   }
 }
 
@@ -4694,20 +4723,11 @@ void MainWindow::updateRegistrationGroupVisibility() {
     m_panAction->setChecked(true);
 }
 
-/** Toggle the gamut warning overlay.
-   When enabled, out-of-gamut colors are highlighted in the rendered image.
-   Updates m_rparams.gamut_warning and triggers a re-render.  */
+/** Toggle the gamut diagnostic only in the currently inspected view.
+    Neither sibling views nor the document's saved color parameters change. */
 void MainWindow::onGamutWarningToggled(bool checked) {
-  if (m_rparams.gamut_warning != checked) {
-    m_rparams.gamut_warning = checked;
-
-    // Trigger update
-    if (m_scan) {
-      m_imageWidget->updateParameters(&m_rparams, &m_scrToImgParams,
-                                      &m_detectParams, &m_renderTypeParams,
-                                      &m_solverParams);
-    }
-  }
+  if (ImageWidget *view = inspectorImageWidget())
+    view->setViewGamutWarning(checked);
 }
 
 // Crash Recovery Methods
@@ -6091,8 +6111,11 @@ void MainWindow::onRender() {
 
     // Keep the settings dialog parent-owned and asynchronous too. The render
     // request snapshots document + dialog state only after explicit acceptance.
+    colorscreen::render_parameters previewParams = m_rparams;
+    if (ImageWidget *view = inspectorImageWidget())
+      previewParams.output_profile = view->viewOutputProfile();
     auto *dialog = new RenderDialog(
-        m_renderTypeParams, m_rparams, m_scrToImgParams, m_scan.get(),
+        m_renderTypeParams, previewParams, m_scrToImgParams, m_scan.get(),
         outputPath, isDng, this);
     dialog->setObjectName(QStringLiteral("RenderSettingsDialog"));
     dialog->setAttribute(Qt::WA_DeleteOnClose);
