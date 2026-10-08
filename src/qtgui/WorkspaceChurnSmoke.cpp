@@ -482,6 +482,7 @@ void startWorkspaceChurnSmoke(ColorScreenApplication &app,
             !reportBytes.contains(QByteArray("\"provenance\"")) ||
             !reportBytes.contains(QByteArray("\"render_overrides\"")) ||
             !reportBytes.contains(QByteArray("\"geometry_final_frame\"")) ||
+            !reportBytes.contains(QByteArray("\"image_area\"")) ||
             !reportBytes.contains(QByteArray("\"final_ratio\"")) ||
             !reportBytes.contains(
                 QByteArray("\"demosaiced_scaling\"")) ||
@@ -3008,6 +3009,11 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
                                "\u6D4B\u8BD5.cspar"));
         ParameterState archiveState = savedSecondState;
         archiveState.rparams.saturation += 0.07;
+        // The inner photographic region must survive independently of the
+        // outer physical-object crop (the latter may include binding tape).
+        archiveState.rparams.image_area =
+            colorscreen::int_optional_image_area(
+                colorscreen::int_image_area(1, 1, 4, 4));
         // These two final-image geometry values are not in legacy CSP.
         archiveState.scrToImg.final_angle = 108.375;
         archiveState.scrToImg.final_ratio = 0.803158;
