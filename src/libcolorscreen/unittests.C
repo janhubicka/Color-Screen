@@ -1194,7 +1194,7 @@ test_finetune_focus_screen_cache ()
       physical[c].scanner_mtf.model = mtf_model::physical_diffraction;
       physical[c].scanner_mtf.scan_dpi = 4000;
       physical[c].scanner_mtf.f_stop = 8;
-      physical[c].scanner_mtf.wavelength = 550;
+      test_set_mtf_wavelength (physical[c].scanner_mtf, 550);
       physical[c].scanner_mtf.pixel_pitch = 3.76;
       physical[c].scanner_mtf.sensor_fill_factor = 1;
       physical[c].scanner_mtf_scale = (luminosity_t)0.12;
@@ -1206,7 +1206,8 @@ test_finetune_focus_screen_cache ()
   bool physical_transfer_cache_hit = true;
   std::shared_ptr<const mtf_focus_transfer> prepared_transfer
       = mtf_focus_transfer::get (physical[0].scanner_mtf,
-                                 &physical_transfer_cache_hit);
+                                  test_mtf_wavelength (physical[0].scanner_mtf),
+                                  &physical_transfer_cache_hit);
   if (!prepared_transfer || physical_transfer_cache_hit)
     {
       fprintf (stderr, "Physical focus-transfer cache miss was not recorded\n");
