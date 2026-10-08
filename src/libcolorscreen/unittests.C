@@ -6580,6 +6580,72 @@ test_image_area ()
       ok = false;
     }
 
+  /* The outer crop describes the physical object, including binding tape;
+     IMAGE_AREA independently bounds its photographic content. */
+  render_parameters state;
+  state.scan_crop = int_optional_image_area (
+      int_image_area (10, 20, 580, 360));
+  state.image_area = int_optional_image_area (
+      int_image_area (40, 50, 120, 90));
+  const int_image_area outer = state.get_scan_crop (600, 400);
+  const int_image_area inner = state.get_image_area (600, 400);
+  if (outer != int_image_area (10, 20, 580, 360)
+      || inner != int_image_area (40, 50, 120, 90))
+    {
+      printf ("FAILED: physical object crop and photograph bounds conflated\\n");
+      ok = false;
+    }
+
+  state.image_area.set = false;
+  if (state.get_image_area (600, 400) != outer)
+    {
+      printf ("FAILED: unset image area did not fall back to object crop\\n");
+      ok = false;
+    }
+  state.image_area = int_optional_image_area (
+      int_image_area (570, 360, 40, 40));
+  if (state.get_image_area (600, 400)
+      != int_image_area (570, 360, 20, 20))
+    {
+      printf ("FAILED: image area not intersected with physical object\\n");
+      ok = false;
+    }
+  state.image_area = int_optional_image_area (
+      int_image_area (590, 390, 10, 10));
+  if (state.get_image_area (600, 400) != outer)
+    {
+      printf ("FAILED: disjoint inner area did not fall back to object crop\\n");
+      ok = false;
+    }
+
+  /* Export defaults crop to the inner photographic rectangle without
+     modifying the editor's outer physical-object crop. */
+  state.image_area = int_optional_image_area (inner);
+  image_data scan;
+  if (!scan.set_dimensions (600, 400, true, false))
+    return false;
+  scr_to_img_parameters geom;
+  render_type_parameters rt;
+  rt.type = render_type_original;
+  render_to_file_params out;
+  out.geometry = render_to_file_params::scan_geometry;
+  if (!complete_rendered_file_parameters (rt, geom, scan, &out, &state)
+      || out.width != inner.width || out.height != inner.height
+      || out.start != point_t (inner.x, inner.y))
+    {
+      printf ("FAILED: scan-plane file bounds ignored the photograph area\\n");
+      ok = false;
+    }
+  render_to_file_params original;
+  original.geometry = render_to_file_params::scan_geometry;
+  if (!complete_rendered_file_parameters (rt, geom, scan, &original)
+      || original.width != 600 || original.height != 400
+      || original.start != point_t (0, 0))
+    {
+      printf ("FAILED: legacy unbounded file export changed dimensions\\n");
+      ok = false;
+    }
+
   return ok;
 }
 
