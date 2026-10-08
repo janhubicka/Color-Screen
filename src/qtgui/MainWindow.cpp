@@ -1023,8 +1023,7 @@ void MainWindow::setupUi() {
       state.rparams.image_area = colorscreen::int_optional_image_area(
           colorscreen::int_image_area(imageRect.x(), imageRect.y(),
                                       imageRect.width(), imageRect.height()));
-      changeParameters(state, tr("Set photographic image area"),
-                       QStringLiteral("capture.image_area"));
+      changeParameters(state, tr("Set photographic image area"));
     });
   });
   connect(m_capturePanel, &CapturePanel::measureRequested, this,
