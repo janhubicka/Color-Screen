@@ -3058,10 +3058,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
             colorscreen::render_parameters::lanczos3_scaling;
         archiveState.rparams.observer_whitepoint =
             colorscreen::xy_t(0.3127, 0.3290);
-        archiveState.rparams.output_profile =
-            colorscreen::render_parameters::output_profile_xyz;
         archiveState.rparams.output_gamma = 1.8;
-        archiveState.rparams.gamut_warning = true;
         second->applySharedDocumentState(
             archiveState, QStringLiteral("Archive persistence smoke edit"));
         if (!second->isDocumentModified() ||
