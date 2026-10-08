@@ -2962,6 +2962,27 @@ void ImageWidget::exploreTick() {
   }
 }
 
+/** Change the gamut-warning overlay for this view only.
+    The data sent to the background renderer is a snapshot, so adjusting a
+    view never mutates persistent calibration parameters or sibling views. */
+void ImageWidget::setViewGamutWarning(bool enabled) {
+  if (m_viewGamutWarning == enabled)
+    return;
+  m_viewGamutWarning = enabled;
+  requestRender();
+}
+
+/** Change this viewport's output colour space without editing the document. */
+void ImageWidget::setViewOutputProfile(
+    colorscreen::render_parameters::output_profile_t profile) {
+  if (profile < colorscreen::render_parameters::output_profile_sRGB ||
+      profile >= colorscreen::render_parameters::output_profile_max ||
+      m_viewOutputProfile == profile)
+    return;
+  m_viewOutputProfile = profile;
+  requestRender();
+}
+
 // Request a new render job (non-blocking)
 /**
  * @brief Requests a new asynchronous render of the image tile.
@@ -2991,6 +3012,9 @@ void ImageWidget::requestRender() {
     data.h = reqH;
     data.coordinateSpace = (int)m_coordinateSpace;
     data.params = *m_rparams;
+    // These are view-level rendering choices, never document parameter edits.
+    data.params.gamut_warning = m_viewGamutWarning;
+    data.params.output_profile = m_viewOutputProfile;
     data.scrToImg = m_scrToImg ? *m_scrToImg
                                : colorscreen::scr_to_img_parameters();
     data.scrDetect = m_scrDetect ? *m_scrDetect
