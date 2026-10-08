@@ -6589,23 +6589,23 @@ test_image_area ()
       int_image_area (40, 50, 120, 90));
   const int_image_area outer = state.get_scan_crop (600, 400);
   const int_image_area inner = state.get_image_area (600, 400);
-  if (outer != int_image_area (10, 20, 580, 360)
-      || inner != int_image_area (40, 50, 120, 90))
+  if (!(outer == int_image_area (10, 20, 580, 360))
+      || !(inner == int_image_area (40, 50, 120, 90)))
     {
       printf ("FAILED: physical object crop and photograph bounds conflated\\n");
       ok = false;
     }
 
   state.image_area.set = false;
-  if (state.get_image_area (600, 400) != outer)
+  if (!(state.get_image_area (600, 400) == outer))
     {
       printf ("FAILED: unset image area did not fall back to object crop\\n");
       ok = false;
     }
   state.image_area = int_optional_image_area (
       int_image_area (570, 360, 40, 40));
-  if (state.get_image_area (600, 400)
-      != int_image_area (570, 360, 20, 20))
+  if (!(state.get_image_area (600, 400)
+          == int_image_area (570, 360, 20, 20)))
     {
       printf ("FAILED: image area not intersected with physical object\\n");
       ok = false;
