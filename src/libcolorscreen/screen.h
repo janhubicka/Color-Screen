@@ -4,6 +4,7 @@
 
 #ifndef SCREEN_H
 #define SCREEN_H
+#include <array>
 #include <memory>
 #include "include/color.h"
 #include "include/scr-to-img.h"
@@ -121,7 +122,8 @@ public:
                                       sharpen_parameters *sharpen[3],
                                       bool anticipate_sharpening,
                                       bool parallel = true,
-                                      screen_filter_profile *profile = nullptr);
+                                      screen_filter_profile *profile = nullptr,
+                                      std::array<double, 3> wavelengths_nm = {});
   /* Prepare the source-side Fourier state of THIS for repeated periodic
      capture filtering.  The resulting SOURCE is immutable and may be shared
      by multiple threads.  PROFILE, when nonnull, records the three forward
@@ -140,7 +142,8 @@ public:
   initialize_with_sharpen_parameters (
       const screen_filter_source &source,
       sharpen_parameters *sharpen[3], bool anticipate_sharpening,
-      bool parallel = true, screen_filter_profile *profile = nullptr);
+      bool parallel = true, screen_filter_profile *profile = nullptr,
+      std::array<double, 3> wavelengths_nm = {});
   /* Apply one scalar transfer formed as the normalized weighted sum of
      three native scanner/capture-channel transfers to every process-primary
      spectrum in SOURCE.  CAPTURE_WEIGHTS are effective scalar coefficients
@@ -154,7 +157,8 @@ public:
       const screen_filter_source &source,
       sharpen_parameters *capture[3], rgbdata capture_weights,
       bool anticipate_sharpening, bool parallel = true,
-      screen_filter_profile *profile = nullptr);
+      screen_filter_profile *profile = nullptr,
+      std::array<double, 3> wavelengths_nm = {});
   /* Initialize screen to the dufaycolor screen plate.  */
   void dufay (coord_t red_strip_width, coord_t green_strip_width);
   void strip (coord_t first_strip_width, coord_t second_strip_width, int color1, int color2, int color3);
