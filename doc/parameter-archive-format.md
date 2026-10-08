@@ -61,7 +61,7 @@ Schema version 1 begins with:
 {
   "format": "org.colorscreen.parameters",
   "schema_version": 1,
-  "required_features": ["render-overrides-v1"],
+  "required_features": ["render-overrides-v1", "geometry-final-frame-v1"],
   "generator": {
     "application": "Color-Screen",
     "version": "2.0alpha"
@@ -75,6 +75,10 @@ Schema version 1 begins with:
       "output_profile": "sRGB",
       "output_gamma": -1,
       "gamut_warning": false
+    },
+    "geometry_final_frame": {
+      "final_angle": 90,
+      "final_ratio": 1
     }
   },
   "payloads": []
@@ -101,10 +105,12 @@ Readers distinguish three cases:
 3. known supported version — parse required members, ignore unknown optional
    keys, and reject malformed values.
 
-Schema v1 currently defines one required feature:
+Schema v1 currently defines two independently negotiated required features:
 
 - `render-overrides-v1`: `state.render_overrides` is present and
   authoritative for the saved render fields that legacy CSP cannot represent.
+- `geometry-final-frame-v1`: `state.geometry_final_frame` supplies the
+  authoritative final-image frame angle and axis ratio absent from legacy CSP.
 
 Future manifests may add other independently negotiated features, for example a
 typed mesh payload. An unknown required feature is a hard error even when the
@@ -223,6 +229,16 @@ understand the feature must reject the archive. A manifest containing
 manifest declaring the feature without the complete structured object. This
 prevents silent data loss in older alpha readers.
 
+The second feature, `geometry-final-frame-v1`, records two persistent
+`scr_to_img_parameters` values ignored by the legacy CSP serializer:
+`final_angle` (the angle of the final screen-coordinate axes, in degrees) and
+`final_ratio` (their positive axis ratio). Both must be finite numbers and the
+ratio must be strictly positive. A feature without the complete section or a
+section without the feature is invalid. An archive without this feature retains
+the original CSP/default behavior; it is not silently assigned a new final
+geometry frame. CLI `adjust-par`, Qt document saves, reproducibility reports
+and crash-recovery snapshots must all preserve non-default values.
+
 Subsequent work can migrate additional domains into manifest sections while
 retaining `state/legacy.par` as a compatibility mirror until all relevant
 state has a structured representation.
@@ -271,6 +287,8 @@ The default-save gate below is now implemented and must remain green in CI:
 - transactional GUI load failure with no state/dirty/target mutation;
 - atomic save failure preserving an older archive;
 - CLI and GUI reading the same fixtures;
+- structured render and final-frame geometry feature round trips, mismatch
+  rejection, invalid numeric rejection, CLI rewrite and crash-recovery parity;
 - Windows, macOS and Linux filenames containing Unicode.
 
 Private crash recovery now uses `recovery_params.cspar` with the same
@@ -296,7 +314,9 @@ Implementation status in the alpha tree:
 - genuinely new Save As/no-sidecar targets now default to `.cspar`;
   established Archive/Legacy targets remain format-preserving;
 - `render-overrides-v1` is the first authoritative structured-state feature,
-  closing the known legacy-CSP gap for six saved render fields.
+  closing the known legacy-CSP gap for six saved render fields;
+- this branch adds `geometry-final-frame-v1`, covering two final-image
+  geometry fields missing from the legacy mirror.
 
 Remaining rollout sequence:
 
