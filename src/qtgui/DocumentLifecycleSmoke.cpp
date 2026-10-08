@@ -526,6 +526,9 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
           // otherwise silently lose.
           ParameterState fixture = first->documentStateSnapshot();
           fixture.rparams.gamma = 2.0;
+          fixture.rparams.image_area =
+              colorscreen::int_optional_image_area(
+                  colorscreen::int_image_area(1, 1, 4, 4));
           fixture.scrToImg.final_angle = 108.375;
           fixture.scrToImg.final_ratio = 0.803158;
           fixture.rparams.ignore_infrared = true;
@@ -609,6 +612,8 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
                 state->recoveryExpectedImage ||
             recovered.rparams.scan_mirror !=
                 expected.rparams.scan_mirror ||
+            !(recovered.rparams.image_area ==
+              expected.rparams.image_area) ||
             recovered.scrToImg.final_angle !=
                 expected.scrToImg.final_angle ||
             recovered.scrToImg.final_ratio !=
