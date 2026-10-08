@@ -803,7 +803,7 @@ public:
              ? homography::solve_vertical_strips
              : 0)
             | homography::solve_rotation,
-        m_param.scanner_type, &map, m_sparam.center, &chi, transformed);
+        m_param.scanner_type, &map, { 0, 0 }, &chi, transformed);
     if (chisq)
       {
         if (!(chi >= 0 && chi < bad_value))
@@ -873,10 +873,10 @@ simple_solver (scr_to_img_parameters *param, const image_data &img_data,
 {
   if (progress)
     progress->set_task ("determining geometry by linear regression", 1);
-  return solver (param, img_data, sparam.points.read (), sparam.center,
-
-                 (sparam.weighted ? homography::solve_image_weights : 0),
-                 true);
+  /* Ordinary registration uses an unweighted global fit. Mesh reconstruction
+     instead chooses its own center and weighted flags locally for each mesh
+     point in compute_img_to_scr_mesh_point/compute_mesh_point.  */
+  return solver (param, img_data, sparam.points.read (), { 0, 0 }, 0, true);
 }
 
 
@@ -979,11 +979,10 @@ solver_impl (scr_to_img_parameters *param, const image_data &img_data,
     }
   if (progress)
     progress->set_task ("optimizing perspective correction", 1);
-  return solver (param, img_data, sparam.points.read (), sparam.center,
-
-                 (sparam.weighted ? homography::solve_image_weights : 0)
-                     | (optimize_rotation ? homography::solve_rotation : 0),
-                 true);
+  /* A global geometry solve must not inherit mesh-local homography weights.
+     The center is ignored when no weight flag is selected.  */
+  return solver (param, img_data, sparam.points.read (), { 0, 0 },
+                 optimize_rotation ? homography::solve_rotation : 0, true);
 }
 
 coord_t
