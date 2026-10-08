@@ -4215,8 +4215,7 @@ do_mtf (int argc, char **argv)
     rparam.sharpen.scanner_mtf.blur_diameter = blur_diameter;
   if (pixel_pitch_set)
     rparam.sharpen.scanner_mtf.pixel_pitch = pixel_pitch;
-  if (wavelength_set)
-    rparam.sharpen.scanner_mtf.wavelength = wavelength;
+  // A CLI wavelength is request-local, never serialized to saved parameters.
   if (f_stop_set)
     rparam.sharpen.scanner_mtf.f_stop = f_stop;
   if (defocus_set)
@@ -4263,8 +4262,10 @@ do_mtf (int argc, char **argv)
 	  progress.resume_stdout ();
 	  return 1;
 	}
+      double fitted_wavelength_nm = 0;
       double sqsum = estimated.estimate_parameters (
-          rparam.sharpen.scanner_mtf, csvname, &progress, &error, flags);
+          rparam.sharpen.scanner_mtf, csvname, &progress, &error, flags,
+          wavelength_set ? wavelength : 0, &fitted_wavelength_nm);
       if (error)
 	{
           progress.pause_stdout ();
@@ -4294,7 +4295,7 @@ do_mtf (int argc, char **argv)
       printf ("scanner_mtf_pixel_pitch_um: %.17g\n", estimated.pixel_pitch);
       printf ("scanner_mtf_sensor_fill_factor: %.17g\n",
               estimated.sensor_fill_factor);
-      printf ("scanner_mtf_wavelength_nm: %.17g\n", estimated.wavelength);
+      printf ("scanner_mtf_wavelength_nm: %.17g\n", fitted_wavelength_nm);
       printf ("scanner_mtf_channel_wavelengths_nm: %.17g %.17g %.17g "
               "%.17g\n",
               estimated.wavelengths[0], estimated.wavelengths[1],
@@ -4304,7 +4305,7 @@ do_mtf (int argc, char **argv)
       printf ("scan_dpi: %.17g\n", estimated.scan_dpi);
       if (psfname2 && verbose)
 	  printf ("Saving estimated PSF to tiff file: %s\n", psfname2);
-      if (psfname2 && !estimated.save_psf (NULL, psfname2, &error))
+      if (psfname2 && !estimated.save_psf (fitted_wavelength_nm, NULL, psfname2, &error))
 	{
 	  fprintf (stderr, "Matched PSF saving failed: %s\n", error);
 	  progress.resume_stdout ();
@@ -4320,7 +4321,8 @@ do_mtf (int argc, char **argv)
 	  printf ("Saving CSV file: %s\n", csvname);
           progress.resume_stdout ();
 	}
-      if (!rparam.sharpen.scanner_mtf.write_table (csvname, &error))
+      if (!rparam.sharpen.scanner_mtf.write_table (
+               wavelength_set ? wavelength : 550, csvname, &error))
 	{
           progress.pause_stdout ();
 	  fprintf (stderr, "CSV saving failed: %s\n", error);
@@ -4333,7 +4335,9 @@ do_mtf (int argc, char **argv)
     printf ("Saving PSF to tiff file: %s\n", psfname);
     progress.resume_stdout ();
   }
-  if (psfname && !rparam.sharpen.scanner_mtf.save_psf (NULL, psfname, &error))
+  if (psfname && !rparam.sharpen.scanner_mtf.save_psf (
+                         wavelength_set ? wavelength : 550, NULL,
+                         psfname, &error))
     {
       progress.pause_stdout ();
       fprintf (stderr, "PSF saving failed: %s\n", error);
