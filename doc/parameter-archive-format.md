@@ -61,7 +61,7 @@ Schema version 1 begins with:
 {
   "format": "org.colorscreen.parameters",
   "schema_version": 1,
-  "required_features": ["render-overrides-v1", "geometry-final-frame-v1"],
+  "required_features": ["render-overrides-v1", "geometry-final-frame-v1", "image-area-v1"],
   "generator": {
     "application": "Color-Screen",
     "version": "2.0alpha"
@@ -79,6 +79,10 @@ Schema version 1 begins with:
     "geometry_final_frame": {
       "final_angle": 90,
       "final_ratio": 1
+    },
+    "image_area": {
+      "enabled": false,
+      "rect": [0, 0, 0, 0]
     }
   },
   "payloads": []
@@ -105,12 +109,15 @@ Readers distinguish three cases:
 3. known supported version — parse required members, ignore unknown optional
    keys, and reject malformed values.
 
-Schema v1 currently defines two independently negotiated required features:
+Schema v1 currently defines three independently negotiated required features:
 
 - `render-overrides-v1`: `state.render_overrides` is present and
   authoritative for the saved render fields that legacy CSP cannot represent.
 - `geometry-final-frame-v1`: `state.geometry_final_frame` supplies the
   authoritative final-image frame angle and axis ratio absent from legacy CSP.
+- `image-area-v1`: `state.image_area` is the separately selected bounding
+  rectangle of photographic content, distinct from the physical-object crop
+  and absent from legacy CSP.
 
 Future manifests may add other independently negotiated features, for example a
 typed mesh payload. An unknown required feature is a hard error even when the
@@ -239,6 +246,22 @@ the original CSP/default behavior; it is not silently assigned a new final
 geometry frame. CLI `adjust-par`, Qt document saves, reproducibility reports
 and crash-recovery snapshots must all preserve non-default values.
 
+The third feature, `image-area-v1`, separates the physical **object crop**
+(`render_parameters::scan_crop`) from the inner **photographic image area**
+(`render_parameters::image_area`). A museum scan may show mounting paper,
+binding tape, plate borders or handwritten marks within the object crop. The
+image area instead bounds the actual picture. It is stored as
+`{ "enabled": true|false, "rect": [x,y,width,height] }`, using unrotated scan
+pixel coordinates, a nonnegative integer origin, and positive dimensions when
+enabled. The rectangle may not overflow signed 32-bit pixel coordinates.
+Disabled means `[0,0,0,0]`. Readers must reject malformed values, missing
+or undeclared required sections, and unknown required features. Old archives
+without `image-area-v1` retain the legacy behavior without a separate inner
+rectangle. The Qt editor draws the image area's boundary while continuing to
+show the complete object crop; export size defaults to the inner image bounds
+when selected, including through the final-screen transform. Saving an active
+inner area to legacy `.par` is refused rather than silently discarding it.
+
 Subsequent work can migrate additional domains into manifest sections while
 retaining `state/legacy.par` as a compatibility mirror until all relevant
 state has a structured representation.
@@ -315,8 +338,10 @@ Implementation status in the alpha tree:
   established Archive/Legacy targets remain format-preserving;
 - `render-overrides-v1` is the first authoritative structured-state feature,
   closing the known legacy-CSP gap for six saved render fields;
-- this branch adds `geometry-final-frame-v1`, covering two final-image
-  geometry fields missing from the legacy mirror.
+- `geometry-final-frame-v1` preserves two final-image geometry fields
+  missing from the legacy mirror;
+- this stacked branch adds `image-area-v1` for the independently selectable
+  photographic area within the outer object crop.
 
 Remaining rollout sequence:
 
