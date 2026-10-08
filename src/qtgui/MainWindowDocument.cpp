@@ -158,11 +158,13 @@ bool saveParameterPayloadAtomically(
       colorscreen::parameter_archive_render_overrides_from(render);
   const colorscreen::parameter_archive_geometry_final_frame geometryFrame =
       colorscreen::parameter_archive_geometry_final_frame_from(scrToImg);
+  const colorscreen::parameter_archive_solver_options solverOptions =
+      colorscreen::parameter_archive_solver_options_from(solver);
   std::string archiveError;
   const QByteArray targetName = path.toUtf8();
   const bool written = colorscreen::write_parameter_payload_file(
       targetName.constData(), payload, true, versionBytes.constData(),
-      &archiveError, &renderOverrides, &geometryFrame);
+      &archiveError, &renderOverrides, &geometryFrame, &solverOptions);
   if (!written && error)
     *error = QString::fromUtf8(archiveError);
   else if (written && error)
@@ -229,6 +231,8 @@ bool loadParameterPayload(
         archiveManifest.render_overrides, &loadedState.rparams);
     colorscreen::apply_parameter_archive_geometry_final_frame(
         archiveManifest.geometry_final_frame, &loadedState.scrToImg);
+    colorscreen::apply_parameter_archive_solver_options(
+        archiveManifest.solver_options, &loadedState.solver);
   }
 
   *state = std::move(loadedState);
