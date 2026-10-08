@@ -9701,6 +9701,34 @@ test_parameter_archive ()
       }
   }
 
+  // A malformed structured geometry value must fail before replacement,
+  // just like an invalid ZIP generator name or an I/O failure.
+  parameter_archive_geometry_final_frame invalid_frame = geometry_frame;
+  invalid_frame.final_ratio = 0;
+  error.clear ();
+  if (write_parameter_payload_file (atomic_target.c_str (), legacy, true,
+                                    "2.0alpha-geometry", &error,
+                                    nullptr, &invalid_frame)
+      || error.find ("invalid structured geometry final frame")
+             == std::string::npos)
+    {
+      fprintf (stderr, "Invalid geometry unexpectedly replaced archive target\n");
+      remove_unicode (atomic_target);
+      return false;
+    }
+  {
+    std::ifstream preserved (std::filesystem::u8path (atomic_target),
+                             std::ios::binary);
+    std::string bytes ((std::istreambuf_iterator<char> (preserved)),
+                       std::istreambuf_iterator<char> ());
+    if (bytes != "stable-old-target")
+      {
+        fprintf (stderr, "Invalid geometry write changed old target\n");
+        remove_unicode (atomic_target);
+        return false;
+      }
+  }
+
   error.clear ();
   if (!write_parameter_payload_file (atomic_target.c_str (), legacy, true,
                                      "2.0alpha-atomic", &error))
