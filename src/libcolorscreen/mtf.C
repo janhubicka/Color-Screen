@@ -2223,10 +2223,13 @@ double
 mtf_parameters::estimate_parameters (mtf_parameters &par,
                                      const char *write_table,
                                      progress_info *progress,
-                                     const char **error, int flags)
+                                     const char **error, int flags,
+                                     double wavelength_nm,
+                                     double *fitted_wavelength_nm)
 {
   return estimate_parameters_internal (par, nullptr, write_table, progress,
-                                       error, flags);
+                                       error, flags, wavelength_nm,
+                                       fitted_wavelength_nm);
 }
 
 /* Fit this object to measurements in PAR using explicit free-variable
@@ -2237,10 +2240,13 @@ mtf_parameters::estimate_parameters (mtf_parameters &par,
                                      const mtf_estimation_options &options,
                                      const char *write_table,
                                      progress_info *progress,
-                                     const char **error, int flags)
+                                     const char **error, int flags,
+                                     double wavelength_nm,
+                                     double *fitted_wavelength_nm)
 {
   return estimate_parameters_internal (par, &options, write_table, progress,
-                                       error, flags);
+                                       error, flags, wavelength_nm,
+                                       fitted_wavelength_nm);
 }
 
 /* Fit this object to measurements in PAR.  EXPLICIT_OPTIONS is null only for
@@ -2252,16 +2258,19 @@ double
 mtf_parameters::estimate_parameters_internal (
     mtf_parameters &par, const mtf_estimation_options *explicit_options,
     const char *write_table, progress_info *progress, const char **error,
-    int flags)
+    int flags, double wavelength_nm, double *fitted_wavelength_nm)
 {
+  if (fitted_wavelength_nm)
+    *fitted_wavelength_nm = 0;
   if (error)
     *error = nullptr;
 
   const mtf_estimation_options options
       = explicit_options ? *explicit_options
-                         : legacy_estimation_options (par, flags);
+                         : legacy_estimation_options (par, flags, wavelength_nm);
   if (explicit_options
-      && !validate_estimation_options (par, options, error))
+      && !validate_estimation_options (par, options, error,
+                                       wavelength_nm))
     return -1;
 
   /* Retain the useful historical diagnostic for compatibility callers.  The
@@ -2277,7 +2286,7 @@ mtf_parameters::estimate_parameters_internal (
   *this = par;
   mtf_solver solver (par, par.measurements, options, progress,
                      flags & estimate_verbose_solving,
-                     explicit_options == nullptr);
+                     explicit_options == nullptr, wavelength_nm);
   if (solver.num_values () > 0)
     {
       /* Pure defocus is even around the in-focus starting point, so its first
