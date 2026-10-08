@@ -100,6 +100,7 @@ struct screen_table_params
   scr_type type = Joly;
   coord_t red_strip_width = (coord_t)0.0, green_strip_width = (coord_t)0.0;
   sharpen_parameters sharpen = {};
+  double wavelength_nm = 0;
 
   /* Return true if this structure is equal to O.  */
   bool
@@ -110,7 +111,8 @@ struct screen_table_params
            && green_strip_width == o.green_strip_width
 	   && sharpen.scanner_mtf_scale == o.sharpen.scanner_mtf_scale
 	   && (!sharpen.scanner_mtf_scale || sharpen.scanner_mtf == o.sharpen.scanner_mtf)
-           && sharpen == o.sharpen;
+           && sharpen == o.sharpen
+           && wavelength_nm == o.wavelength_nm;
   }
 };
 
@@ -119,7 +121,8 @@ std::unique_ptr<screen_table>
 get_new_screen_table (struct screen_table_params &p, progress_info *progress)
 {
   auto s = std::make_unique<screen_table> (p.param, p.type, p.red_strip_width,
-                                       p.green_strip_width, p.sharpen, progress);
+                                       p.green_strip_width, p.sharpen,
+                                        p.wavelength_nm, progress);
   if (!s->valid_p () || (progress && progress->cancelled ()))
     return nullptr;
   return s;
@@ -183,7 +186,7 @@ screen_table::screen_table (scanner_blur_correction_parameters *param,
                             scr_type type, luminosity_t red_strip_width,
                             luminosity_t green_strip_width,
 			    const sharpen_parameters &sharpen,
-                            progress_info *progress)
+                            double wavelength_nm, progress_info *progress)
     : m_id (lru_caches::get ()), m_width (param->get_width ()),
       m_height (param->get_height ()),
       m_sampling (
@@ -198,7 +201,7 @@ screen_table::screen_table (scanner_blur_correction_parameters *param,
   if (progress)
     progress->set_task ("computing screen table", m_width * m_height);
   std::atomic<bool> failed (false);
-#pragma omp parallel for default(none) shared(progress,sharpen,failed) collapse(2)    \
+#pragma omp parallel for default(none) shared(progress,sharpen,failed,wavelength_nm) collapse(2)    \
     shared(param, s)
   for (int y = 0; y < m_height; y++)
     for (int x = 0; x < m_width; x++)
@@ -220,7 +223,9 @@ screen_table::screen_table (scanner_blur_correction_parameters *param,
 	      sp.scanner_mtf.defocus = param->get_correction (x, y);
 	      sharpen_parameters *vv[3] = {&sp, &sp, &sp};
 	      if (!m_screen_table[y * m_width + x]
-                       .initialize_with_sharpen_parameters (s, vv, false))
+                       .initialize_with_sharpen_parameters (
+                           s, vv, false, true, nullptr,
+                           {wavelength_nm, wavelength_nm, wavelength_nm}))
                 failed.store (true, std::memory_order_relaxed);
 	      break;
 	    }
@@ -230,7 +235,9 @@ screen_table::screen_table (scanner_blur_correction_parameters *param,
 	      sp.scanner_mtf.blur_diameter = param->get_correction (x, y);
 	      sharpen_parameters *vv[3] = {&sp, &sp, &sp};
 	      if (!m_screen_table[y * m_width + x]
-                       .initialize_with_sharpen_parameters (s, vv, false))
+                       .initialize_with_sharpen_parameters (
+                           s, vv, false, true, nullptr,
+                           {wavelength_nm, wavelength_nm, wavelength_nm}))
                 failed.store (true, std::memory_order_relaxed);
 	      break;
 	    }
@@ -372,7 +379,8 @@ render_to_scr::compute_screen_table (progress_info *progress)
   screen_table_params p
       = { m_params.scanner_blur_correction.get (),
           m_params.scanner_blur_correction->id, m_scr_to_img.get_type (),
-          m_params.red_strip_width, m_params.green_strip_width, {} };
+          m_params.red_strip_width, m_params.green_strip_width, {},
+          m_params.get_image_layer_wavelength (&m_img) };
   if (m_params.scanner_blur_correction->get_mode () != scanner_blur_correction_parameters::blur_radius)
     {
       p.sharpen = m_params.get_image_layer_sharpen_parameters (&m_img);
