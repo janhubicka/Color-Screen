@@ -2391,8 +2391,13 @@ screen::initialize_with_weighted_capture_transfer (
 
   for (int c = 0; c < 3; ++c)
     if (!(my_isfinite (wavelengths_nm[c]) && wavelengths_nm[c] > 0))
-      wavelengths_nm[c]
-          = capture[c]->scanner_mtf.get_channel_wavelength (c);
+      {
+        /* Zero-weight channels may legitimately have no capture parameters;
+           they are skipped below, not dereferenced for spectral defaults. */
+        wavelengths_nm[c]
+            = capture[c] ? capture[c]->scanner_mtf.get_channel_wavelength (c)
+                         : 550;
+      }
 
   for (int c = 0; c < 3; c++)
     {
