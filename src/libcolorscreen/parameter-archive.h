@@ -3,6 +3,7 @@
 #include "include/dllpublic.h"
 #include "include/render-parameters.h"
 #include "include/scr-to-img-parameters.h"
+#include "include/solver-parameters.h"
 
 #include <cstdio>
 #include <string>
@@ -59,6 +60,28 @@ apply_parameter_archive_geometry_final_frame (
     const parameter_archive_geometry_final_frame &frame,
     scr_to_img_parameters *param);
 
+/* Solver inputs omitted by the legacy CSP format.
+
+   A solver-options-v1 manifest section must store both the image-weighting
+   choice and its reference center. Absent features do not alter the existing
+   legacy defaults. */
+struct parameter_archive_solver_options
+{
+  bool present = false;
+  bool weighted = false;
+  point_t center = { 0, 0 };
+};
+
+/* Extract saved solver options from SPARAM. */
+DLL_PUBLIC parameter_archive_solver_options
+parameter_archive_solver_options_from (const solver_parameters &sparam);
+
+/* Apply a fully validated archive supplement to SPARAM. */
+DLL_PUBLIC void
+apply_parameter_archive_solver_options (
+    const parameter_archive_solver_options &options,
+    solver_parameters *sparam);
+
 /* Parsed compatibility information from a Color-Screen parameter archive.  */
 struct parameter_archive_manifest
 {
@@ -66,6 +89,7 @@ struct parameter_archive_manifest
   std::string legacy_csp_path;
   parameter_archive_render_overrides render_overrides;
   parameter_archive_geometry_final_frame geometry_final_frame;
+  parameter_archive_solver_options solver_options;
 };
 
 /* Return true if UTF-8 host path NAME starts with a ZIP signature and may
@@ -107,7 +131,8 @@ write_parameter_archive (
     const char *name, const std::string &legacy_csp,
     const char *generator_version, std::string *error,
     const parameter_archive_render_overrides *render_overrides = nullptr,
-    const parameter_archive_geometry_final_frame *geometry_final_frame = nullptr);
+    const parameter_archive_geometry_final_frame *geometry_final_frame = nullptr,
+    const parameter_archive_solver_options *solver_options = nullptr);
 
 /* Atomically replace UTF-8 host path NAME with PAYLOAD.
 
@@ -121,7 +146,8 @@ write_parameter_payload_file (
     const char *name, const std::string &payload, bool archive,
     const char *generator_version, std::string *error,
     const parameter_archive_render_overrides *render_overrides = nullptr,
-    const parameter_archive_geometry_final_frame *geometry_final_frame = nullptr);
+    const parameter_archive_geometry_final_frame *geometry_final_frame = nullptr,
+    const parameter_archive_solver_options *solver_options = nullptr);
 
 }
 
