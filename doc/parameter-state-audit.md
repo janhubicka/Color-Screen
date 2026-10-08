@@ -25,11 +25,50 @@ Do not automatically migrate every member into `.cspar`.
 
 | Field or API | Evidence in the current tree | Suggested action |
 | --- | --- | --- |
-| `render_parameters::image_area` | Declared as a second optional crop in `render-parameters.h` and read by `get_image_area()`. No assignment or CSP serialization was found in the current tree; the getter falls back to the real saved `scan_crop` when unset. The getter affects focus, finetune and screen pixel-size calculations. | **High priority: verify external use, then consider removal.** Prefer one saved scan crop and explicit *per-analysis* ROIs. Do not simply drop the getter without checking those callers. |
-| `render_parameters::tile_adjustment::{x,y}` | The tile array is indexed by row/column and has separately saved width/height. These per-element coordinate bytes are defaulted to zero, not initialized by `set_tile_adjustments_dimensions()`, not compared in `tile_adjustment::operator==`, and not written in CSP. | **Likely dead metadata.** Remove the per-element bytes after a final search of external callers. Keep the tile grid dimensions and real exposure/dark/blur/enabled adjustments. |
-| `solver_parameters::copy_without_points()` and `solver_mesh(..., sparam2, smap, ...)` | The mesh routine copies lens/tilt optimisation policy to a scratch `solver_parameters`, but local mesh fitting retrieves nearby points from `screen_map` and performs its own weighted homography. Those copied policy flags are not consumed by the mesh point fitter. | **API/implementation simplification candidate.** Check all mesh callers and remove redundant parameter copying (potentially the unused `sparam2` argument) in a separate patch; preserve the point-neighbour selection and weighting. |
-| `render_parameters::demosaic` | The member is documented as an image-loading choice, not a rendering computation. It is saved because reopening a camera RAW requires the selected demosaicer. | **Not obsolete.** Consider a future `capture_parameters` grouping; do not remove the value or stop persisting it. |
-| `render_parameters::gamut_warning` | A display/render diagnostic toggle that deliberately highlights out-of-gamut pixels; it is currently document-owned and stored as a structured render override. | **Product decision only.** Could eventually be a per-view overlay preference, but it currently changes rendered pixels. Keep existing persistence until view-versus-document semantics are explicitly chosen. |
+| `render_parameters::image_area` | Independent photographic-image bounding area, distinct from the physical-object crop. Used by focus/finetune and pixel-size estimation but not represented in legacy CSP. | **Keep and expose in GUI**, with versioned archive persistence; `scan_crop` may include bindings and tapes. |
+| `render_parameters::tile_adjustment::{x,y}` | The adjustment array is indexed by row/column and stores dimensions; per-element bytes were not initialized, compared or saved. | **Removed in this branch**, retaining real tile adjustment values. |
+| `solver_parameters::copy_without_points()` and `solver_mesh(..., sparam2, smap, ...)` | Mesh code copies lens/tilt policy to a scratch `solver_parameters`, but the local fit uses nearby points and its own weighted homography. | **Deferred at user's request.** No saving impact; leave the API alone for now. |
+| `render_parameters::demosaic` | An image-loading choice, rather than a rendering step. Correctly persisted so RAW capture can be reopened with the same demosaicer. | **Keep unchanged** in this alpha. |
+| `render_parameters::gamut_warning` | A rendering diagnostic currently shared across the document and persisted in the structured override. | **Plan per-view ownership**, without changing existing behaviour until view-local render state and compatibility are tested. |
+
+## MTF persistence audit: separate real values from bookkeeping
+
+The inspection compares `src/libcolorscreen/include/mtf-parameters.h` with
+the actual `save_csp()` and `load_csp()` in
+`src/libcolorscreen/loadsave.C`. Absence of a legacy `.par` keyword is a
+reason to investigate ownership, **not** automatic grounds for removal.
+
+| Field(s) | Legacy `.par` and active code | Decision |
+| --- | --- | --- |
+| `mtf_parameters::wavelength` (scalar) | **Not saved** as an independent global wavelength. Runtime channel specialization, finetune and CLI one-off model evaluation assign it; persistent native channel wavelengths and measurement wavelengths are separate. | **Candidate for runtime-only extraction.** Verify numerical equivalence and CLI semantics before removing or changing this member. |
+| `mtf_parameters::wavelengths[4]` | Saved via `scanner_mtf_channel_wavelengths_nm`; used by the GUI and physical model. | **Keep persistent.** |
+| `model`, `sigma`, `halo_fraction`, `halo_sigma`, `blur_diameter`, `defocus`, `f_stop`, `pixel_pitch`, `sensor_fill_factor`, `scan_dpi` | Explicit `scanner_mtf_*` and `scan_dpi` keys persist them; they affect analytical/modelled sharpening. | **Keep persistent.** |
+| `measured_mtf_idx`, curve list and its frequency/contrast/uncertainty samples | Serialized; selected curves and uncertainties affect deconvolution and numerical fitting. | **Keep persistent.** |
+| `mtf_measurement::{channel,image_layer,wavelength,same_capture,name}` | Stored measurement identity, channel-domain, spectral and capture-group metadata. | **Keep measurement metadata.** |
+| `mtf_measurement::{source_filename,source_width,source_height,roi,edge_p1,edge_p2}` | Source path/dimensions, image ROI and edge coordinates are **already saved** when available. Permit revisiting the measured location and checking provenance. | **Keep provenance**; consider splitting its storage type from model coefficients in future, but not deleting it. |
+| `mtf_measurement::{edge_angle,edge_fit_rms,edge_contrast,edge_snr,phase_coverage}` | Saved as `scanner_mtf_measurement_edge_quality` when spatial metadata exists. Measurements of reliability rather than user tuning controls. | **Keep as measured evidence.** |
+| `mtf_estimation_options` | Separate per-fit request structure supplied by the GUI, **not** embedded in `mtf_parameters`. | **Already appropriately separated.** |
+| `mtf_parameters::computed_mtf` | Nested return-value containing derived chart/CSV curves, **not** an embedded parameter member. | **Already appropriately separated.** |
+
+**Follow-up:** check that the scalar `mtf_parameters::wavelength` can be passed
+as an operation-local specialization without losing CLI overrides or changing
+existing physical-model fits. The fact that other measurement provenance was
+originally considered bookkeeping is insufficient to remove it: most of it
+is explicitly saved and used by the GUI.
+
+## Confirmed user decisions for the next GUI work
+
+- `scan_crop` frames the entire **physical object**, including binding tape
+  and borders. `image_area` is a separately selected rectangle identifying
+  the **photographic image** and its reconstruction/analysis bounds. It must be
+  exposed in the Capture GUI and kept in the archive.
+- `tile_adjustment::{x,y}` have been removed; tile index and grid dimensions
+  already determine position.
+- Defer `copy_without_points()`, which has no impact on saving.
+- Keep `demosaic` in its current structure.
+- `gamut_warning` should probably become **per-view**; confirm how each view
+  requests its renderer before changing document ownership or saved-state
+  compatibility.
 
 ## Fields checked and intentionally retained
 
