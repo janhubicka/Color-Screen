@@ -474,9 +474,15 @@ bool colorSectionPreferencesSmoke() {
   const ParameterState initialState = state;
   int documentEdits = 0;
   auto getState = [&state]() { return state; };
-  auto setState = [&state, &documentEdits](const ParameterState &next,
-                                          const QString &, const QString &) {
-    state = next;
+  bool applyExplicitEdit = false;
+  auto setState = [&state, &documentEdits, &applyExplicitEdit](
+                      const ParameterState &next, const QString &,
+                      const QString &) {
+    // The section-folding probe deliberately counts accidental setter calls
+    // without applying their state. Only its explicit Clear-area action is a
+    // document-edit test and therefore publishes the supplied parameters.
+    if (applyExplicitEdit)
+      state = next;
     ++documentEdits;
   };
   auto noImage = []() { return std::shared_ptr<colorscreen::image_data>(); };
@@ -687,6 +693,7 @@ bool colorSectionPreferencesSmoke() {
           return fail(QStringLiteral(
               "Clear image area stayed disabled with a saved photograph"));
         const int editsBeforeClear = documentEdits;
+        applyExplicitEdit = true;
         // The probe intentionally tests an inspector that can be folded and
         // not shown as a top-level window. Emit the button's regular clicked
         // signal synchronously rather than relying on platform widget-event
@@ -704,6 +711,7 @@ bool colorSectionPreferencesSmoke() {
                           .arg(documentEdits)
                           .arg(editsBeforeClear + 1)
                           .arg(clearImageArea->isEnabled()));
+        applyExplicitEdit = false;
         capture->updateUI();
         if (clearImageArea->isEnabled())
           return fail(QStringLiteral(
