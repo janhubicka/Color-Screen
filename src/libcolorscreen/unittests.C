@@ -3356,11 +3356,9 @@ test_mtf_physical_model ()
       ok = false;
     }
   render_parameters default_render;
-  if (default_render.get_sharpen_parameters_for_channel (3, true)
-              .scanner_mtf.wavelength
+  if (default_render.get_sharpen_wavelength_for_channel (3, true)
           != 750
-      || default_render.get_sharpen_parameters_for_channel (3, false)
-                 .scanner_mtf.wavelength
+      || default_render.get_sharpen_wavelength_for_channel (3, false)
              != 550)
     {
       fprintf (stderr, "Render channel specialization lost scalar defaults\n");
@@ -3386,8 +3384,7 @@ test_mtf_physical_model ()
       || domain_render.get_image_layer_sharpen_parameters (nullptr)
                  .scanner_mtf.measured_mtf_idx
              != 0
-      || domain_render.get_image_layer_sharpen_parameters (nullptr)
-                 .scanner_mtf.wavelength
+      || domain_render.get_image_layer_wavelength (nullptr)
              != 575)
     {
       fprintf (stderr, "Image-layer measured MTF leaked into native RGB\n");
@@ -6664,7 +6661,7 @@ test_channel_sharpening ()
       const sharpen_parameters channel_sharpen
           = params.get_sharpen_parameters_for_channel (channel);
       if (channel_sharpen.scanner_mtf.measured_mtf_idx != channel
-          || channel_sharpen.scanner_mtf.wavelength
+          || params.get_sharpen_wavelength_for_channel (channel)
                  != params.sharpen.scanner_mtf.wavelengths[channel])
         {
           fprintf (stderr,
@@ -6676,7 +6673,7 @@ test_channel_sharpening ()
   const sharpen_parameters ir_sharpen
       = params.get_sharpen_parameters_for_channel (3);
   if (ir_sharpen.scanner_mtf.measured_mtf_idx != -1
-      || ir_sharpen.scanner_mtf.wavelength != 850)
+      || params.get_sharpen_wavelength_for_channel (3) != 850)
     {
       fprintf (stderr,
                "Missing IR measurement did not fall back to the IR model\n");
@@ -6696,8 +6693,7 @@ test_channel_sharpening ()
       || onehot_specialization.get_image_layer_sharpen_parameters (&img)
                  .scanner_mtf.measured_mtf_idx
              != 1
-      || onehot_specialization.get_image_layer_sharpen_parameters (&img)
-                 .scanner_mtf.wavelength
+      || onehot_specialization.get_image_layer_wavelength (&img)
              != onehot_specialization.sharpen.scanner_mtf.wavelengths[1])
     {
       fprintf (stderr, "One-hot image layer did not inherit green MTF\n");
