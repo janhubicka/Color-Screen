@@ -656,20 +656,28 @@ bool colorSectionPreferencesSmoke() {
             QStringLiteral("CaptureMeasureResolutionButton"));
         auto *cropButton = capture->findChild<QPushButton *>(
             QStringLiteral("CaptureCropButton"));
-        if (!measureResolution || !cropButton || measureResolution->isEnabled() ||
-            cropButton->isEnabled())
+        auto *imageAreaButton = capture->findChild<QPushButton *>(
+            QStringLiteral("CaptureImageAreaButton"));
+        auto *clearImageArea = capture->findChild<QPushButton *>(
+            QStringLiteral("CaptureClearImageAreaButton"));
+        if (!measureResolution || !cropButton || !imageAreaButton ||
+            !clearImageArea || measureResolution->isEnabled() ||
+            cropButton->isEnabled() || imageAreaButton->isEnabled() ||
+            clearImageArea->isEnabled())
           return fail(QStringLiteral(
               "Digital Capture image actions were enabled without an image"));
 
         captureImage = std::make_shared<colorscreen::image_data>();
         capture->updateUI();
-        if (!measureResolution->isEnabled() || !cropButton->isEnabled())
+        if (!measureResolution->isEnabled() || !cropButton->isEnabled() ||
+            !imageAreaButton->isEnabled() || clearImageArea->isEnabled())
           return fail(QStringLiteral(
               "Digital Capture image actions stayed disabled after image load"));
 
         captureImage.reset();
         capture->updateUI();
-        if (measureResolution->isEnabled() || cropButton->isEnabled())
+        if (measureResolution->isEnabled() || cropButton->isEnabled() ||
+            imageAreaButton->isEnabled() || clearImageArea->isEnabled())
           return fail(QStringLiteral(
               "Digital Capture image actions did not follow image lifetime"));
       }
