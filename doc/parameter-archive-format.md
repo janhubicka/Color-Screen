@@ -61,7 +61,7 @@ Schema version 1 begins with:
 {
   "format": "org.colorscreen.parameters",
   "schema_version": 1,
-  "required_features": ["render-overrides-v1", "geometry-final-frame-v1"],
+  "required_features": ["render-overrides-v1", "geometry-final-frame-v1", "solver-options-v1"],
   "generator": {
     "application": "Color-Screen",
     "version": "2.0alpha"
@@ -79,6 +79,10 @@ Schema version 1 begins with:
     "geometry_final_frame": {
       "final_angle": 90,
       "final_ratio": 1
+    },
+    "solver_options": {
+      "weighted": false,
+      "center": [0, 0]
     }
   },
   "payloads": []
@@ -105,12 +109,14 @@ Readers distinguish three cases:
 3. known supported version — parse required members, ignore unknown optional
    keys, and reject malformed values.
 
-Schema v1 currently defines two independently negotiated required features:
+Schema v1 currently defines three independently negotiated required features:
 
 - `render-overrides-v1`: `state.render_overrides` is present and
   authoritative for the saved render fields that legacy CSP cannot represent.
 - `geometry-final-frame-v1`: `state.geometry_final_frame` supplies the
   authoritative final-image frame angle and axis ratio absent from legacy CSP.
+- `solver-options-v1`: `state.solver_options` supplies the weighted-fitting
+  option and solver reference centre absent from legacy CSP.
 
 Future manifests may add other independently negotiated features, for example a
 typed mesh payload. An unknown required feature is a hard error even when the
@@ -239,6 +245,16 @@ the original CSP/default behavior; it is not silently assigned a new final
 geometry frame. CLI `adjust-par`, Qt document saves, reproducibility reports
 and crash-recovery snapshots must all preserve non-default values.
 
+The third feature, `solver-options-v1`, stores the `solver_parameters`
+`weighted` Boolean and `center` image-coordinate pair. Both values are solver
+inputs, not the detected screen centre or registration control points.
+The centre consists of two finite numbers. Missing/mistyped members and
+feature/section mismatches are errors. Earlier archives retain the solver's
+original defaults (unweighted fitting, centre at the origin); the feature
+prevents a newer file from silently reverting a user's solver choices when
+opened by an older reader. Archive rewrites, Qt parameter saves, crash recovery
+and reproducibility reports all preserve the same values.
+
 Subsequent work can migrate additional domains into manifest sections while
 retaining `state/legacy.par` as a compatibility mirror until all relevant
 state has a structured representation.
@@ -315,8 +331,10 @@ Implementation status in the alpha tree:
   established Archive/Legacy targets remain format-preserving;
 - `render-overrides-v1` is the first authoritative structured-state feature,
   closing the known legacy-CSP gap for six saved render fields;
-- this branch adds `geometry-final-frame-v1`, covering two final-image
-  geometry fields missing from the legacy mirror.
+- `geometry-final-frame-v1` covers two final-image geometry fields missing
+  from the legacy mirror;
+- this stacked branch adds `solver-options-v1`, closing the separate
+  weighting/reference-centre persistence gap.
 
 Remaining rollout sequence:
 
