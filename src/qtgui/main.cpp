@@ -474,8 +474,11 @@ bool colorSectionPreferencesSmoke() {
   const ParameterState initialState = state;
   int documentEdits = 0;
   auto getState = [&state]() { return state; };
-  auto setState = [&documentEdits](const ParameterState &, const QString &,
-                                  const QString &) { ++documentEdits; };
+  auto setState = [&state, &documentEdits](const ParameterState &next,
+                                          const QString &, const QString &) {
+    state = next;
+    ++documentEdits;
+  };
   auto noImage = []() { return std::shared_ptr<colorscreen::image_data>(); };
   std::shared_ptr<colorscreen::image_data> captureImage;
   auto getCaptureImage = [&captureImage]() { return captureImage; };
