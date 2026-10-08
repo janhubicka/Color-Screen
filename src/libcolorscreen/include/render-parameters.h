@@ -445,6 +445,11 @@ struct render_parameters
   DLL_PUBLIC sharpen_parameters
   get_sharpen_parameters_for_channel (int channel, bool has_rgb = true) const;
 
+  /* Resolve the effective wavelength for native CHANNEL as a call-site
+     argument; this value is not part of persistent scanner parameters. */
+  DLL_PUBLIC double
+  get_sharpen_wavelength_for_channel (int channel, bool has_rgb = true) const;
+
   /* Return capture sharpening specialized for the scalar image layer.  This
      selects scalar/image-layer measured data and the effective visible/IR
      wavelength without treating process-primary or scanner RGB indexes as the
