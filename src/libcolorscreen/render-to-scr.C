@@ -25,6 +25,7 @@ struct screen_params
   coord_t red_strip_width = (coord_t)0.0, green_strip_width = (coord_t)0.0;
   bool anticipate_sharpening = false;
   sharpen_parameters sharpen = {};
+  double wavelength_nm = 0;
 
   /* Return true if this structure is equal to O.  */
   bool
@@ -33,6 +34,7 @@ struct screen_params
     return t == o.t && preview == o.preview 
 	   && anticipate_sharpening == o.anticipate_sharpening
 	   && sharpen == o.sharpen
+           && wavelength_nm == o.wavelength_nm
 	   /* We also blur, so we need to compare MTF if used.  */
 	   && sharpen.scanner_mtf_scale == o.sharpen.scanner_mtf_scale
 	   && (!sharpen.scanner_mtf_scale || sharpen.scanner_mtf == o.sharpen.scanner_mtf)
@@ -78,7 +80,8 @@ get_new_screen (struct screen_params &p, progress_info *progress)
       sharpen_parameters *vv[3] = {&p.sharpen, &p.sharpen, &p.sharpen};
       blurred->empty ();
       if (!blurred->initialize_with_sharpen_parameters (
-              *s, vv, p.anticipate_sharpening))
+              *s, vv, p.anticipate_sharpening, true, nullptr,
+              {p.wavelength_nm, p.wavelength_nm, p.wavelength_nm}))
         return nullptr;
     }
   else
@@ -341,9 +344,13 @@ render_to_scr::get_screen (enum scr_type t, bool preview,
 			   const sharpen_parameters &sharpen,
                            coord_t red_strip_width, coord_t green_strip_width,
                            progress_info *progress, uint64_t *id,
-                           screen_sampling *sampling, bool *cache_hit)
+                           screen_sampling *sampling, bool *cache_hit,
+                           double wavelength_nm)
 {
-  screen_params p = { t, preview, red_strip_width, green_strip_width, anticipate_sharpening, sharpen};
+  if (!(my_isfinite (wavelength_nm) && wavelength_nm > 0))
+    wavelength_nm = sharpen.scanner_mtf.get_channel_wavelength (3, false);
+  screen_params p = { t, preview, red_strip_width, green_strip_width,
+                      anticipate_sharpening, sharpen, wavelength_nm };
   if (sampling)
     *sampling = screen_sampling_for_capture_transfer (
         sharpen, screen_uses_capture_mtf_p (sharpen));
@@ -626,7 +633,8 @@ render_screen_tile (tile_parameters &tile, scr_type type,
     }
   std::shared_ptr<screen> scr = render_to_scr::get_screen (
       type, false, anticipate_sharpening, sp, rparam.red_strip_width,
-      rparam.green_strip_width, progress);
+      rparam.green_strip_width, progress, nullptr, nullptr, nullptr,
+      rparam.get_image_layer_wavelength (nullptr));
 
   /* Periodic inverse-filter construction handles the deconvolution modes.
      Unsharp Mask is instead the same linear FIR operation used by image
