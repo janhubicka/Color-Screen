@@ -543,6 +543,14 @@ bool MainWindow::saveReproducibilityReportToFile(const QString &fileName,
                             state.scrToImg.final_ratio);
   metadata.insert(QStringLiteral("geometry_final_frame"), geometryFinalFrame);
 
+  QJsonObject solverOptions;
+  solverOptions.insert(QStringLiteral("weighted"), state.solver.weighted);
+  QJsonArray solverCenter;
+  solverCenter.append(state.solver.center.x);
+  solverCenter.append(state.solver.center.y);
+  solverOptions.insert(QStringLiteral("center"), solverCenter);
+  metadata.insert(QStringLiteral("solver_options"), solverOptions);
+
   metadata.insert(QStringLiteral("workflow"), workflow);
   metadata.insert(QStringLiteral("provenance"), provenance);
 
@@ -554,7 +562,7 @@ bool MainWindow::saveReproducibilityReportToFile(const QString &fileName,
   const QByteArray payloadMarker =
       QByteArrayLiteral(
           "\n# Legacy-compatible Color-Screen parameter payload follows.\n"
-          "# Structured-only render and final geometry values are in JSON metadata.\n"
+          "# Structured-only render, geometry and solver values are in JSON metadata.\n"
           "# The legacy payload starts at the next screen_alignment_version line.\n");
 
   const QString absoluteFileName = QFileInfo(fileName).absoluteFilePath();
