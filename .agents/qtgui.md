@@ -95,8 +95,14 @@ each document has independent:
   using the platform-native rename primitive already exercised by core Unicode
   and failure-preservation tests. A failed serializer/write/replace must leave
   any previous usable target unchanged. Archive state includes independently
-  negotiated `render-overrides-v1` and `geometry-final-frame-v1` sections:
-  legacy CSP does not represent the final screen-coordinate angle/axis ratio.
+  negotiated `render-overrides-v1`, `geometry-final-frame-v1`, and
+  `image-area-v1` sections: legacy CSP does not represent the final
+  screen-coordinate frame or the independently selected photographic bounds.
+  The source's `scan_crop` is the physical-object crop (including mounting
+  tapes and borders), while `image_area` is the inner photograph. The editor
+  keeps the object visible, and default file output uses the inner bounding
+  region when active. Direct legacy `.par` export with an active image area
+  must be refused rather than silently losing that document input.
   Read those supplements only after the full legacy and manifest validation
   succeeds; preserve them on ordinary Save, Save As, CLI rewrites and private
   recovery. Private recovery parameters use
