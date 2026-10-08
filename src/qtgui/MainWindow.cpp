@@ -6385,8 +6385,8 @@ void MainWindow::onMeasureMtfRequested(bool checked) {
       if (!currentMtf.measurements.empty()
           && currentMtf.measurements.back().wavelength > 0)
         defaults.wavelength = currentMtf.measurements.back().wavelength;
-      else if (currentMtf.wavelength > 0)
-        defaults.wavelength = currentMtf.wavelength;
+      // No document-level scalar MTF wavelength: the dialog takes its
+      // reference from native channels or actual measured curves.
     }
 
     auto *dialog = new SlantedEdgeDialog(
