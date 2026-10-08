@@ -409,7 +409,10 @@ struct render_parameters
   bool scan_mirror = false;
   /* Crop of scan (in image coordinates).  */
   int_optional_image_area scan_crop;
-  /* Area of scan containing the actual image (no bordrs).  */
+  /* Photographic image boundary inside the physical-object scan crop.
+     Unlike SCAN_CROP, which may include mounting/binding tapes and borders,
+     IMAGE_AREA bounds the image content for analysis and reconstruction.
+     An unset area falls back to the entire selected physical-object crop. */
   int_optional_image_area image_area;
   
   /* Parameters for backlight correction.
@@ -960,18 +963,18 @@ struct render_parameters
       return img;
     return intersection;
   }
-  /* Return crop of the scan in image coordinates.
-     IMG_WIDTH and IMG_HEIGHT are dimensions of the image.  */
+  /* Return the photographic image boundary inside the physical-object crop.
+     IMG_WIDTH and IMG_HEIGHT are the unrotated scan dimensions. A missing or
+     disjoint inner area falls back to the object crop; never use tape/outside
+     pixels for the bounding area when a valid inner selection exists.  */
   pure_attr int_image_area
   get_image_area (int img_width, int img_height) const
   {
-    int_image_area img (0, 0, img_width, img_height);
+    const int_image_area outer = get_scan_crop (img_width, img_height);
     if (!image_area.set)
-      return get_scan_crop (img_width, img_height);
-    int_image_area intersection = image_area.intersect (img);
-    if (intersection.empty_p ())
-      return img;
-    return intersection;
+      return outer;
+    const int_image_area intersection = image_area.intersect (outer);
+    return intersection.empty_p () ? outer : intersection;
   }
 
   /* Return true if reconstruction of CAPTURE_TYPE uses a historical additive
