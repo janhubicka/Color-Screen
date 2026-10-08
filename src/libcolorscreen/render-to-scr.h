@@ -272,7 +272,8 @@ public:
                              progress_info *progress = NULL,
                              uint64_t *id = NULL,
                              screen_sampling *sampling = NULL,
-                             bool *cache_hit = NULL);
+                             bool *cache_hit = NULL,
+                             double wavelength_nm = 0);
 
   /* Release screen S.  */
   static void release_screen (screen *s);
