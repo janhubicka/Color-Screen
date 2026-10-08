@@ -9846,6 +9846,34 @@ test_parameter_archive ()
       }
   }
 
+  /* Reject unusable photographic bounds without touching an existing
+     archive target; the validation must run before committing staged bytes. */
+  parameter_archive_image_area bad_image_area = photographic_bounds;
+  bad_image_area.area.width = -1;
+  error.clear ();
+  if (write_parameter_payload_file (atomic_target.c_str (), legacy, true,
+                                    "2.0alpha-bad-image-area", &error,
+                                    nullptr, nullptr, &bad_image_area)
+      || error.find ("invalid structured photographic image area")
+             == std::string::npos)
+    {
+      fprintf (stderr, "Invalid image area unexpectedly replaced target\\n");
+      remove_unicode (atomic_target);
+      return false;
+    }
+  {
+    std::ifstream preserved (std::filesystem::u8path (atomic_target),
+                             std::ios::binary);
+    std::string bytes ((std::istreambuf_iterator<char> (preserved)),
+                       std::istreambuf_iterator<char> ());
+    if (bytes != "stable-old-target")
+      {
+        fprintf (stderr, "Invalid image-area write changed old target\\n");
+        remove_unicode (atomic_target);
+        return false;
+      }
+  }
+
   error.clear ();
   if (!write_parameter_payload_file (atomic_target.c_str (), legacy, true,
                                      "2.0alpha-atomic", &error))
