@@ -145,6 +145,9 @@ load_parameter_filename (const char *filename, scr_to_img_parameters *param,
       if (param)
         apply_parameter_archive_geometry_final_frame (
             archive_manifest.geometry_final_frame, param);
+      if (sparam)
+        apply_parameter_archive_solver_options (
+            archive_manifest.solver_options, sparam);
     }
 
   std::string trailing;
@@ -288,9 +291,16 @@ save_parameter_filename (const char *filename, bool archive,
       geometry_frame = parameter_archive_geometry_final_frame_from (*param);
       structured_geometry = &geometry_frame;
     }
+  parameter_archive_solver_options solver_options;
+  const parameter_archive_solver_options *structured_solver = nullptr;
+  if (archive && sparam)
+    {
+      solver_options = parameter_archive_solver_options_from (*sparam);
+      structured_solver = &solver_options;
+    }
   return write_parameter_payload_file (filename, payload, archive,
                                        PACKAGE_VERSION, error, structured,
-                                       structured_geometry);
+                                       structured_geometry, structured_solver);
 }
 
 static enum subhelp {
