@@ -1844,16 +1844,16 @@ mtf::get_mtf (const mtf_parameters &mtfp, double wavelength_nm,
 }
 
 bool
-mtf_parameters::save_psf (progress_info *progress, const char *write_table,
-                          const char **error) const
+mtf_parameters::save_psf (double wavelength_nm, progress_info *progress,
+                          const char *write_table, const char **error) const
 {
-  mtf mtf (*this);
+  mtf mtf (*this, wavelength_nm);
   return mtf.precompute_psf (progress, true, write_table, error);
 }
 
 /* Write the shared component-curve header to F.  */
 bool
-mtf_parameters::print_csv_header (FILE *f) const
+mtf_parameters::print_csv_header (FILE *f, double wavelength_nm) const
 {
   return fprintf (
              f,
@@ -1862,7 +1862,7 @@ mtf_parameters::print_csv_header (FILE *f) const
              "%.10gmm\tlegacy Bessel defocus\tcore sigma=%.8gpx\thalo "
              "component fraction %.8g sigma %.8gpx\tlens\tsensor fill factor "
              "%.8g\tsystem\n",
-             f_stop, effective_f_stop (), wavelength, magnification (),
+             f_stop, effective_f_stop (), wavelength_nm, magnification (),
              pixel_pitch, defocus, sigma, halo_fraction, halo_sigma,
              sensor_fill_factor)
          >= 0;
@@ -1871,7 +1871,8 @@ mtf_parameters::print_csv_header (FILE *f) const
 /* Write model component curves to WRITE_TABLE and report errors through
    ERROR.  */
 bool
-mtf_parameters::write_table (const char *write_table, const char **error) const
+mtf_parameters::write_table (double wavelength_nm, const char *write_table,
+                             const char **error) const
 {
   if (write_table)
     {
@@ -1882,7 +1883,7 @@ mtf_parameters::write_table (const char *write_table, const char **error) const
             *error = "failed to open output file";
           return false;
         }
-      if (fprintf (f, "frequency\t") < 0 || !print_csv_header (f))
+      if (fprintf (f, "frequency\t") < 0 || !print_csv_header (f, wavelength_nm))
         {
           if (error)
             *error = "write error";
@@ -1895,13 +1896,13 @@ mtf_parameters::write_table (const char *write_table, const char **error) const
           if (fprintf (f,
                        "%.17g\t%.12g\t%.12g\t%.12g\t%.12g\t%.12g\t"
                        "%.12g\t%.12g\t%.12g\n",
-                       freq, lens_diffraction_mtf (freq) * 100,
-                       lens_defocus_mtf (freq) * 100,
-                       stokseth_defocus_mtf (freq) * 100,
+                       freq, lens_diffraction_mtf (freq, wavelength_nm) * 100,
+                       lens_defocus_mtf (freq, wavelength_nm) * 100,
+                       stokseth_defocus_mtf (freq, wavelength_nm) * 100,
                        gaussian_blur_mtf (freq, sigma) * 100,
-                       halo_mtf (freq) * 100, lens_mtf (freq) * 100,
+                       halo_mtf (freq) * 100, lens_mtf (freq, wavelength_nm) * 100,
                        sensor_mtf (freq) * 100,
-                       system_mtf (freq) * 100)
+                       system_mtf (freq, wavelength_nm) * 100)
               < 0)
             {
               if (error)
@@ -1923,7 +1924,7 @@ mtf_parameters::write_table (const char *write_table, const char **error) const
 /* Return STEPS uniformly sampled component curves over zero to one cycle per
    pixel.  An empty result is returned for nonpositive STEPS.  */
 mtf_parameters::computed_mtf
-mtf_parameters::compute_curves (int steps) const
+mtf_parameters::compute_curves (int steps, double wavelength_nm) const
 {
   computed_mtf result;
   if (steps <= 0)
@@ -1942,16 +1943,16 @@ mtf_parameters::compute_curves (int steps) const
   for (int i = 0; i < steps; i++)
     {
       double freq = steps == 1 ? 0.0 : i / (double)(steps - 1);
-      result.lens_diffraction_mtf.push_back (lens_diffraction_mtf (freq));
-      result.lens_defocus_mtf.push_back (lens_defocus_mtf (freq));
+      result.lens_diffraction_mtf.push_back (lens_diffraction_mtf (freq, wavelength_nm));
+      result.lens_defocus_mtf.push_back (lens_defocus_mtf (freq, wavelength_nm));
       result.stokseth_defocus_mtf.push_back (
-          stokseth_defocus_mtf (freq));
+          stokseth_defocus_mtf (freq, wavelength_nm));
       result.gaussian_blur_mtf.push_back (gaussian_blur_mtf (freq, sigma));
       result.halo_mtf.push_back (halo_mtf (freq));
-      result.lens_mtf.push_back (lens_mtf (freq));
+      result.lens_mtf.push_back (lens_mtf (freq, wavelength_nm));
       result.sensor_mtf.push_back (sensor_mtf (freq));
-      result.system_otf.push_back (system_otf (freq));
-      result.system_mtf.push_back (system_mtf (freq));
+      result.system_otf.push_back (system_otf (freq, wavelength_nm));
+      result.system_mtf.push_back (system_mtf (freq, wavelength_nm));
       result.hopkins_blur_mtf.push_back (
           circular_blur_mtf (freq, blur_diameter));
     }
