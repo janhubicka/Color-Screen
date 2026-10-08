@@ -689,7 +689,13 @@ bool colorSectionPreferencesSmoke() {
             !(state.rparams.scan_crop == oldObjectCrop) ||
             documentEdits != editsBeforeClear + 1)
           return fail(QStringLiteral(
-              "Clear image area failed its atomic saved-state action"));
+              "Clear image area failed its atomic saved-state action "
+              "(set=%1, crop same=%2, edits=%3, expected=%4, enabled=%5)")
+                          .arg(state.rparams.image_area.set)
+                          .arg(state.rparams.scan_crop == oldObjectCrop)
+                          .arg(documentEdits)
+                          .arg(editsBeforeClear + 1)
+                          .arg(clearImageArea->isEnabled()));
         capture->updateUI();
         if (clearImageArea->isEnabled())
           return fail(QStringLiteral(
