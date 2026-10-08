@@ -26,7 +26,7 @@ class screen_table
 public:
   /* Initialize screen table for PARAM, TYPE, DUFAY_RED_STRIP_WIDTH, DUFAY_RED_STRIP_HEIGHT and SHARPEN.
      Update PROGRESS.  */
-  screen_table (scanner_blur_correction_parameters *param, scr_type type, luminosity_t dufay_red_strip_width, luminosity_t dufay_red_strip_height, const sharpen_parameters &sharpen, progress_info *progress);
+  screen_table (scanner_blur_correction_parameters *param, scr_type type, luminosity_t dufay_red_strip_width, luminosity_t dufay_red_strip_height, const sharpen_parameters &sharpen, double wavelength_nm, progress_info *progress);
   
   /* Return screen at X, Y.  */
   pure_attr screen &get_screen (int x, int y)
