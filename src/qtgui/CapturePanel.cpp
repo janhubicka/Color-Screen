@@ -835,7 +835,7 @@ void CapturePanel::setupUi()
         tr("Image area"), tr("Clear image area"),
         [this]() {
           applyChange([](ParameterState &state) {
-              state.rparams.image_area.set = false;
+              state.rparams.image_area = colorscreen::int_optional_image_area();
           }, tr("Clear photographic image area"));
         },
         [this](const ParameterState &state) {
