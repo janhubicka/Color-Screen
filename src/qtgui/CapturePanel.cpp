@@ -812,12 +812,56 @@ void CapturePanel::setupUi()
         createDetachableSection("Backlight", m_backlightWidget);
     addWidgetRow(backlightSection);
     
+    // The outer crop frames the physical object, including mounting and tape.
+    // The independently saved image area bounds only photographic content.
     m_cropBtn = addToggleButtonParameter(
-        "Crop image", "Change crop",
+        tr("Crop object"), tr("Change object crop"),
         [this](bool) { emit cropRequested(); }, nullptr,
         [this](const ParameterState &) { return m_imageGetter() != nullptr; },
-        tr("Select or replace the crop on the loaded image."));
+        tr("Frame the whole physical object, including its binding tapes, "
+           "mount and borders. This is not the photographic image area."));
     m_cropBtn->setObjectName(QStringLiteral("CaptureCropButton"));
+
+    auto *imageAreaButton = addButtonParameter(
+        tr("Photographic image area"), tr("Select image area"),
+        [this]() { emit imageAreaRequested(); },
+        [this](const ParameterState &) { return m_imageGetter() != nullptr; },
+        tr("Draw the actual photograph inside the object crop. This rectangle "
+           "bounds reconstruction and image-area analyses without removing "
+           "visible tape or borders from the outer object crop."));
+    imageAreaButton->setObjectName(QStringLiteral("CaptureImageAreaButton"));
+
+    auto *clearImageArea = addButtonParameter(
+        tr("Image area"), tr("Clear image area"),
+        [this]() {
+          applyChange([](ParameterState &state) {
+              state.rparams.image_area.set = false;
+          }, tr("Clear photographic image area"),
+          QStringLiteral("capture.image_area"));
+        },
+        [this](const ParameterState &state) {
+          return m_imageGetter() != nullptr && state.rparams.image_area.set;
+        },
+        tr("Use the object crop as the photographic image area again."));
+    clearImageArea->setObjectName(QStringLiteral("CaptureClearImageAreaButton"));
+
+    m_imageAreaStatus = new QLabel(this);
+    m_imageAreaStatus->setObjectName(QStringLiteral("CaptureImageAreaStatus"));
+    m_imageAreaStatus->setWordWrap(true);
+    addWidgetRow(m_imageAreaStatus);
+    m_widgetStateUpdaters.push_back([this]() {
+      if (!m_imageAreaStatus)
+        return;
+      const ParameterState state = m_stateGetter();
+      const auto &area = state.rparams.image_area;
+      if (!area.set)
+        m_imageAreaStatus->setText(
+            tr("Image area: object crop (no separate photographic bounds)."));
+      else
+        m_imageAreaStatus->setText(
+            tr("Image area: x=%1, y=%2, %3 × %4 px")
+                .arg(area.x).arg(area.y).arg(area.width).arg(area.height));
+    });
     
     // Initial update
     updateInfoLabels(m_stateGetter());
