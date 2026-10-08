@@ -171,7 +171,6 @@ void applyCaptureScope(ParameterState *target, const ParameterState &source)
     const auto &srcMtf = src.sharpen.scanner_mtf;
     dstMtf.scan_dpi = srcMtf.scan_dpi;
     dstMtf.f_stop = srcMtf.f_stop;
-    dstMtf.wavelength = srcMtf.wavelength;
     dstMtf.wavelengths = srcMtf.wavelengths;
     dstMtf.pixel_pitch = srcMtf.pixel_pitch;
     dstMtf.sensor_fill_factor = srcMtf.sensor_fill_factor;
