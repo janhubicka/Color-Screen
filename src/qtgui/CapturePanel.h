@@ -25,6 +25,8 @@ public:
 
 signals:
     void cropRequested();
+    /** Select an inner photographic-image bounding rectangle on the scan. */
+    void imageAreaRequested();
     void measureRequested();
     void flatFieldRequested();
 
@@ -78,6 +80,7 @@ private:
     class QLabel *m_flatFieldStatusLabel = nullptr;
     QString m_flatFieldCalibrationStatus;
     class QPushButton *m_cropBtn = nullptr;
+    class QLabel *m_imageAreaStatus = nullptr;
 };
 
 #endif // CAPTURE_PANEL_H
