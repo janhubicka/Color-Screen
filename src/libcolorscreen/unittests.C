@@ -6592,14 +6592,14 @@ test_image_area ()
   if (!(outer == int_image_area (10, 20, 580, 360))
       || !(inner == int_image_area (40, 50, 120, 90)))
     {
-      printf ("FAILED: physical object crop and photograph bounds conflated\\n");
+      printf ("FAILED: physical object crop and photograph bounds conflated\n");
       ok = false;
     }
 
   state.image_area.set = false;
   if (!(state.get_image_area (600, 400) == outer))
     {
-      printf ("FAILED: unset image area did not fall back to object crop\\n");
+      printf ("FAILED: unset image area did not fall back to object crop\n");
       ok = false;
     }
   state.image_area = int_optional_image_area (
@@ -6607,14 +6607,14 @@ test_image_area ()
   if (!(state.get_image_area (600, 400)
           == int_image_area (570, 360, 20, 20)))
     {
-      printf ("FAILED: image area not intersected with physical object\\n");
+      printf ("FAILED: image area not intersected with physical object\n");
       ok = false;
     }
   state.image_area = int_optional_image_area (
       int_image_area (590, 390, 10, 10));
-  if (state.get_image_area (600, 400) != outer)
+  if (!(state.get_image_area (600, 400) == outer))
     {
-      printf ("FAILED: disjoint inner area did not fall back to object crop\\n");
+      printf ("FAILED: disjoint inner area did not fall back to object crop\n");
       ok = false;
     }
 
@@ -6631,18 +6631,18 @@ test_image_area ()
   out.geometry = render_to_file_params::scan_geometry;
   if (!complete_rendered_file_parameters (rt, geom, scan, &out, &state)
       || out.width != inner.width || out.height != inner.height
-      || out.start != point_t (inner.x, inner.y))
+      || out.start != point_t { (coord_t)inner.x, (coord_t)inner.y })
     {
-      printf ("FAILED: scan-plane file bounds ignored the photograph area\\n");
+      printf ("FAILED: scan-plane file bounds ignored the photograph area\n");
       ok = false;
     }
   render_to_file_params original;
   original.geometry = render_to_file_params::scan_geometry;
   if (!complete_rendered_file_parameters (rt, geom, scan, &original)
       || original.width != 600 || original.height != 400
-      || original.start != point_t (0, 0))
+      || original.start != point_t { 0, 0 })
     {
-      printf ("FAILED: legacy unbounded file export changed dimensions\\n");
+      printf ("FAILED: legacy unbounded file export changed dimensions\n");
       ok = false;
     }
 
