@@ -196,7 +196,8 @@ circular_pupil_defocus_factor (double q, double edge_phase)
    narrow-band setting supplies a positive finite wavelength.  */
 static double
 measurement_wavelength (const mtf_parameters &params,
-                        const mtf_measurement &measurement)
+                        const mtf_measurement &measurement,
+                        double request_wavelength_nm)
 {
   if (my_isfinite (measurement.wavelength) && measurement.wavelength > 0)
     return measurement.wavelength;
@@ -204,8 +205,8 @@ measurement_wavelength (const mtf_parameters &params,
       && my_isfinite (params.wavelengths[measurement.channel])
       && params.wavelengths[measurement.channel] > 0)
     return params.wavelengths[measurement.channel];
-  if (my_isfinite (params.wavelength) && params.wavelength > 0)
-    return params.wavelength;
+  if (my_isfinite (request_wavelength_nm) && request_wavelength_nm > 0)
+    return request_wavelength_nm;
   return 0;
 }
 
@@ -248,8 +249,9 @@ public:
               const std::vector<mtf_measurement> &measured,
               const mtf_estimation_options &options,
               progress_info *progress, bool verbose,
-              bool legacy_channel_wavelengths)
+              bool legacy_channel_wavelengths, double request_wavelength_nm)
       : m_measurements (measured), m_params (params), m_options (options),
+        m_request_wavelength_nm (request_wavelength_nm),
         m_progress (progress), be_verbose (verbose), start_vec (),
         fit_weights (), start (nullptr), diffraction (false),
         m_legacy_channel_wavelengths (legacy_channel_wavelengths), nvalues (0),
@@ -635,7 +637,8 @@ public:
   double
   fixed_wavelength (size_t measurement) const
   {
-    return measurement_wavelength (m_params, m_measurements[measurement]);
+    return measurement_wavelength (m_params, m_measurements[measurement],
+                                   m_request_wavelength_nm);
   }
 
   /* Return true when wavelength of MEASUREMENT is represented by a free
@@ -705,7 +708,7 @@ public:
              + legacy_channel_wavelength_ranges[2 * c];
     if (m_params.wavelengths[c] > 0)
       return m_params.wavelengths[c];
-    return m_params.wavelength;
+    return m_request_wavelength_nm;
   }
 
   /* Return a representative wavelength for the fitted physical model.  The
@@ -718,7 +721,7 @@ public:
          measurement++)
       if (measurement_included_p (measurement))
         return get_wavelength (measurement, vals);
-    return m_params.wavelength;
+    return m_request_wavelength_nm;
   }
 
   /* Return marked f-number from optimization vector VALS.  */
@@ -795,7 +798,7 @@ public:
 	    continue;
 	  }
 	auto &measurement = m_measurements[m];
-	p.wavelength = get_wavelength (m, vals);
+	const double curve_wavelength_nm = get_wavelength (m, vals);
 	if (diffraction)
 	  p.defocus = get_defocus (m, vals);
 	else
@@ -813,7 +816,7 @@ public:
 	    /* A slanted-edge measurement contains MTF magnitude only.  Fit it to
 	       the magnitude of the complete signed physical OTF; the analytical
 	       model, not the measurement, supplies the sign after a phase reversal.  */
-	    const double predicted_otf = p.system_otf (freq);
+	    const double predicted_otf = p.system_otf (freq, curve_wavelength_nm);
 	    double contrast2 = my_fabs (predicted_otf) * 100;
 	    const double residual = contrast - contrast2;
 	    const double weighted_residual = residual * fit_weights[m][i];
@@ -838,7 +841,7 @@ public:
 	            "blur_diameter %f, sqsum %f\n",
 	            m, p.sensor_fill_factor, p.f_stop,
 	            p.effective_f_stop (), p.sigma, p.halo_fraction,
-	            p.halo_sigma, p.wavelength, p.defocus,
+	            p.halo_sigma, curve_wavelength_nm, p.defocus,
 	            p.blur_diameter, msum);
 	    if (m_progress)
 	      m_progress->resume_stdout ();
@@ -874,6 +877,7 @@ public:
   const std::vector <mtf_measurement> &m_measurements;
   mtf_parameters m_params;
   mtf_estimation_options m_options;
+  double m_request_wavelength_nm;
   progress_info *m_progress;
   bool be_verbose;
   std::vector<double> start_vec;
@@ -1984,7 +1988,7 @@ physical_estimation_model_p (const mtf_parameters &par,
 bool
 mtf_parameters::validate_estimation_options (
     const mtf_parameters &par, const mtf_estimation_options &options,
-    const char **error)
+    const char **error, double wavelength_nm)
 {
   if (error)
     *error = nullptr;
@@ -2053,7 +2057,7 @@ mtf_parameters::validate_estimation_options (
           if (options.optimize_measurement_wavelength_p (measurement))
             {
               const double initial_wavelength
-                  = measurement_wavelength (par, value);
+                  = measurement_wavelength (par, value, wavelength_nm);
               if (initial_wavelength > 0
                   && (initial_wavelength < fitted_wavelength_min_nm
                       || initial_wavelength > fitted_wavelength_max_nm))
@@ -2062,7 +2066,7 @@ mtf_parameters::validate_estimation_options (
               variables++;
               fitted_wavelengths++;
             }
-          else if (measurement_wavelength (par, value) > 0)
+          else if (measurement_wavelength (par, value, wavelength_nm) > 0)
             fixed_wavelengths++;
           else
             return fail ("every selected physical MTF measurement needs a "
@@ -2176,7 +2180,8 @@ mtf_parameters::validate_estimation_options (
    interface.  This helper exists only for source compatibility; new callers,
    especially the GUI, should construct MTF_ESTIMATION_OPTIONS directly.  */
 static mtf_estimation_options
-legacy_estimation_options (const mtf_parameters &par, int flags)
+legacy_estimation_options (const mtf_parameters &par, int flags,
+                           double wavelength_nm)
 {
   mtf_estimation_options options;
   options.model = mtf_model::automatic_legacy;
@@ -2203,7 +2208,8 @@ legacy_estimation_options (const mtf_parameters &par, int flags)
       for (size_t measurement = 0; measurement < par.measurements.size ();
            measurement++)
         options.optimize_measurement_wavelengths[measurement]
-            = measurement_wavelength (par, par.measurements[measurement]) <= 0;
+            = measurement_wavelength (par, par.measurements[measurement],
+                                    wavelength_nm) <= 0;
     }
   else
     options.optimize_blur_diameter
