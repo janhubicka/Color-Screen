@@ -2094,13 +2094,15 @@ bool scopedPresetSmoke() {
   const auto retainedColorModel = target.rparams.color_model;
   const auto retainedProfileRed = target.rparams.profiled_red;
   const auto retainedColorSpots = target.profileSpots;
+  const auto retainedDisplayProfile = target.rparams.output_profile;
+  const bool retainedGamutWarning = target.rparams.gamut_warning;
   if (!qtgui_presets::apply(colorPreset, &target, &clearedRegistration,
                             &error) ||
       target.rparams.white_balance != source.rparams.white_balance ||
       target.rparams.observer_whitepoint != source.rparams.observer_whitepoint ||
-      target.rparams.output_profile != source.rparams.output_profile ||
+      target.rparams.output_profile != retainedDisplayProfile ||
       target.rparams.output_gamma != source.rparams.output_gamma ||
-      target.rparams.gamut_warning != source.rparams.gamut_warning ||
+      target.rparams.gamut_warning != retainedGamutWarning ||
       target.rparams.output_tone_curve_control_points !=
           source.rparams.output_tone_curve_control_points ||
       target.rparams.color_model != retainedColorModel ||
