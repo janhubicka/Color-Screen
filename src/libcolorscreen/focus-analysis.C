@@ -156,9 +156,11 @@ fit_system_mtf (const render_parameters &rparam, const image_data &img,
           mtf.blur_diameter = fit.scanner_mtf_blur_diameter;
         }
     }
-  if (!(flags & finetune_bw) && img.has_rgb ())
-    mtf.wavelength = 550;
-  const coord_t value = mtf.system_mtf (frequency);
+  const double wavelength_nm
+      = (flags & finetune_bw)
+          ? rparam.get_image_layer_wavelength (&img)
+          : 550;
+  const coord_t value = mtf.system_mtf (frequency, wavelength_nm);
   return my_isfinite (value) ? value : (coord_t)-1;
 }
 
@@ -267,14 +269,16 @@ multistart_joint_focus_fit (
           = (fparams.flags & finetune_bw)
                 ? rparam.get_image_layer_sharpen_parameters (&img).scanner_mtf
                 : rparam.sharpen.scanner_mtf;
-      if (!(fparams.flags & finetune_bw) && img.has_rgb ())
-        focus_mtf.wavelength = 550;
+      const double wavelength_nm
+          = (fparams.flags & finetune_bw)
+              ? rparam.get_image_layer_wavelength (&img)
+              : 550;
       const coord_t frequency = process_screen_frequency (param, img);
       coord_t useful_limit = 0;
       if (frequency > 0
           && finetune_useful_defocus_limit (
               focus_mtf, frequency, (coord_t)0.05, (coord_t)20,
-              &useful_limit)
+              &useful_limit, wavelength_nm)
           && useful_limit > cold_epsilon)
         {
           static constexpr coord_t fractions[]
@@ -336,14 +340,16 @@ multistart_joint_focus_fit (
                       .get_image_layer_sharpen_parameters (&img)
                       .scanner_mtf
                 : scalar[0].rparam.sharpen.scanner_mtf;
-      if (!(fparams.flags & finetune_bw) && img.has_rgb ())
-        stage_mtf.wavelength = 550;
+      const double wavelength_nm
+          = (fparams.flags & finetune_bw)
+              ? rparam.get_image_layer_wavelength (&img)
+              : 550;
       const coord_t frequency = process_screen_frequency (param, img);
       coord_t useful_limit = 0;
       if (frequency > 0
           && finetune_useful_defocus_limit (
               stage_mtf, frequency, (coord_t)0.05, (coord_t)20,
-              &useful_limit)
+              &useful_limit, wavelength_nm)
           && useful_limit > cold_focus_epsilon)
         {
           struct staged_seed
