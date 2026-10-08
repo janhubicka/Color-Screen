@@ -9477,11 +9477,10 @@ test_parameter_archive ()
       || parsed.render_overrides.observer_whitepoint
              != structured_source.observer_whitepoint
       || parsed.render_overrides.output_profile
-             != structured_source.output_profile
+             != render_parameters::output_profile_sRGB
       || parsed.render_overrides.output_gamma
              != structured_source.output_gamma
-      || parsed.render_overrides.gamut_warning
-             != structured_source.gamut_warning)
+      || parsed.render_overrides.gamut_warning != false)
     {
       fprintf (stderr, "Structured parameter archive round trip failed: %s\n",
                error.c_str ());
@@ -9514,15 +9513,61 @@ test_parameter_archive ()
              != structured_source.demosaiced_scaling
       || structured_target.observer_whitepoint
              != structured_source.observer_whitepoint
-      || structured_target.output_profile != structured_source.output_profile
+      || structured_target.output_profile
+             != render_parameters::output_profile_sRGB
       || structured_target.output_gamma != structured_source.output_gamma
-      || structured_target.gamut_warning != structured_source.gamut_warning)
+      || structured_target.gamut_warning)
     {
       fprintf (stderr, "Structured render overrides did not apply exactly\n");
       std::remove (structured.c_str ());
       return false;
     }
   std::remove (structured.c_str ());
+
+  /* Older v1 writers emitted view-local gamut/profile values as part of
+     render-overrides-v1. Keep accepting those typed keys, but applying the
+     archive must not modify display/output choices owned by each view. */
+  parameter_archive_render_overrides old_display = structured_overrides;
+  old_display.output_profile = render_parameters::output_profile_xyz;
+  old_display.gamut_warning = true;
+  const std::string historical
+      = parameter_archive_test_path ("historical-view-settings");
+  std::remove (historical.c_str ());
+  error.clear ();
+  if (!write_parameter_archive (historical.c_str (), legacy,
+                                "2.0alpha-historical", &error, &old_display))
+    {
+      fprintf (stderr, "Historical view-compatibility archive write failed: %s\\n",
+               error.c_str ());
+      return false;
+    }
+  parameter_archive_manifest old_manifest;
+  std::string old_payload;
+  if (!read_parameter_archive (historical.c_str (), &old_payload,
+                               &old_manifest, &error)
+      || !old_manifest.render_overrides.present
+      || old_manifest.render_overrides.output_profile
+             != render_parameters::output_profile_xyz
+      || !old_manifest.render_overrides.gamut_warning)
+    {
+      fprintf (stderr, "Historical schema-v1 view keys are not readable: %s\\n",
+               error.c_str ());
+      std::remove (historical.c_str ());
+      return false;
+    }
+  render_parameters old_target;
+  apply_parameter_archive_render_overrides (old_manifest.render_overrides,
+                                           &old_target);
+  if (old_target.output_profile != render_parameters::output_profile_sRGB
+      || old_target.gamut_warning
+      || old_target.output_gamma != structured_source.output_gamma
+      || old_target.ignore_infrared != structured_source.ignore_infrared)
+    {
+      fprintf (stderr, "Historical view flags polluted document state\\n");
+      std::remove (historical.c_str ());
+      return false;
+    }
+  std::remove (historical.c_str ());
 
   const std::string plain = parameter_archive_test_path ("plain");
   {
