@@ -975,8 +975,6 @@ void ImageViewWindow::onMeasureMtfRequested(bool checked) {
     if (!currentMtf.measurements.empty() &&
         currentMtf.measurements.back().wavelength > 0)
       defaults.wavelength = currentMtf.measurements.back().wavelength;
-    else if (currentMtf.wavelength > 0)
-      defaults.wavelength = currentMtf.wavelength;
   }
 
   auto *dialog = new SlantedEdgeDialog(
