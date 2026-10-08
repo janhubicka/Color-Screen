@@ -180,7 +180,8 @@ static bool
 finetune_useful_scalar_limit (mtf_parameters params,
                               coord_t pixel_frequency,
                               coord_t minimum_mtf, coord_t hard_max,
-                              SetValue set_value, coord_t *limit)
+                              SetValue set_value, coord_t *limit,
+                              double wavelength_nm)
 {
   if (!limit || !my_isfinite (pixel_frequency) || pixel_frequency <= 0
       || !my_isfinite (minimum_mtf) || minimum_mtf <= 0
@@ -188,7 +189,7 @@ finetune_useful_scalar_limit (mtf_parameters params,
     return false;
 
   set_value (params, 0);
-  const coord_t in_focus = params.system_mtf (pixel_frequency);
+  const coord_t in_focus = params.system_mtf (pixel_frequency, wavelength_nm);
   if (!my_isfinite (in_focus) || in_focus <= minimum_mtf)
     return false;
 
@@ -199,7 +200,7 @@ finetune_useful_scalar_limit (mtf_parameters params,
       const coord_t t = (coord_t)i / samples;
       const coord_t value = hard_max * t * t;
       set_value (params, value);
-      const coord_t current_mtf = params.system_mtf (pixel_frequency);
+      const coord_t current_mtf = params.system_mtf (pixel_frequency, wavelength_nm);
       if (!my_isfinite (current_mtf))
         return false;
       if (current_mtf <= minimum_mtf)
@@ -212,7 +213,7 @@ finetune_useful_scalar_limit (mtf_parameters params,
             {
               const coord_t middle = (low + high) * (coord_t)0.5;
               set_value (params, middle);
-              const coord_t middle_mtf = params.system_mtf (pixel_frequency);
+              const coord_t middle_mtf = params.system_mtf (pixel_frequency, wavelength_nm);
               if (!my_isfinite (middle_mtf))
                 return false;
               if (middle_mtf > minimum_mtf)
@@ -234,13 +235,14 @@ bool
 finetune_useful_defocus_limit (mtf_parameters params,
                                coord_t pixel_frequency,
                                coord_t minimum_mtf, coord_t hard_max,
-                               coord_t *limit)
+                               coord_t *limit, double wavelength_nm)
 {
   if (!params.simulate_diffraction_p ())
     return false;
   return finetune_useful_scalar_limit (
       params, pixel_frequency, minimum_mtf, hard_max,
-      [] (mtf_parameters &p, coord_t value) { p.defocus = value; }, limit);
+      [] (mtf_parameters &p, coord_t value) { p.defocus = value; }, limit,
+      wavelength_nm);
 }
 
 /* Find the first useful metadata-free compact-blur boundary.  */
@@ -248,14 +250,14 @@ bool
 finetune_useful_blur_diameter_limit (mtf_parameters params,
                                      coord_t pixel_frequency,
                                      coord_t minimum_mtf, coord_t hard_max,
-                                     coord_t *limit)
+                                     coord_t *limit, double wavelength_nm)
 {
   if (params.simulate_diffraction_p () || params.use_measured_mtf ())
     return false;
   return finetune_useful_scalar_limit (
       params, pixel_frequency, minimum_mtf, hard_max,
       [] (mtf_parameters &p, coord_t value) { p.blur_diameter = value; },
-      limit);
+      limit, wavelength_nm);
 }
 
 /* Classify one completed fit for use by adaptive blur/focus reduction.  Do
@@ -2786,9 +2788,6 @@ public:
         sp[0].scanner_mtf.defocus = defocus.red;
         sp[1].scanner_mtf.defocus = defocus.green;
         sp[2].scanner_mtf.defocus = defocus.blue;
-        if (!tiles[0].color.empty ())
-          for (int c = 0; c < 3; c++)
-            sp[c].scanner_mtf.wavelength = sp[c].scanner_mtf.get_channel_wavelength(c);
       }
     else
       {
@@ -6983,7 +6982,9 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
       if (sharpen_param.deconvolution_p ())
         {
           std::shared_ptr<mtf> cur_mtf
-              = mtf::get_mtf (sharpen_param.scanner_mtf, nullptr);
+              = mtf::get_mtf (sharpen_param.scanner_mtf,
+                              sharpen_param.scanner_mtf.get_channel_wavelength (1),
+                              nullptr);
           if (!cur_mtf || !cur_mtf->precompute ())
             return false;
           ext = cur_mtf->psf_size (sharpen_param.scanner_mtf_scale);
