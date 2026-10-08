@@ -809,6 +809,40 @@ parse_render_overrides (const json_value &object,
   return true;
 }
 
+/* Parse a final geometry frame that legacy CSP does not represent. */
+bool
+parse_geometry_final_frame (const json_value &object,
+                            parameter_archive_geometry_final_frame *result,
+                            std::string *error)
+{
+  if (!result || object.type != json_value::kind::object)
+    return archive_fail (error, "state.geometry_final_frame must be an object");
+
+  const json_value *angle = object_member (object, "final_angle");
+  const json_value *ratio = object_member (object, "final_ratio");
+  if (!angle || angle->type != json_value::kind::number
+      || !ratio || ratio->type != json_value::kind::number)
+    return archive_fail (
+        error, "state.geometry_final_frame is missing a required typed field");
+
+  double angle_value = 0, ratio_value = 0;
+  if (!json_finite_double (*angle, &angle_value)
+      || !json_finite_double (*ratio, &ratio_value))
+    return archive_fail (error,
+                         "invalid numeric state.geometry_final_frame value");
+  const coord_t final_angle = (coord_t)angle_value;
+  const coord_t final_ratio = (coord_t)ratio_value;
+  if (!my_isfinite (final_angle) || !my_isfinite (final_ratio)
+      || final_ratio <= 0)
+    return archive_fail (error,
+                         "invalid numeric state.geometry_final_frame value");
+
+  result->present = true;
+  result->final_angle = final_angle;
+  result->final_ratio = final_ratio;
+  return true;
+}
+
 /* Format VALUE as locale-independent finite JSON number text. */
 std::string
 json_number (double value)
@@ -1035,6 +1069,7 @@ parse_manifest (
     return archive_fail (error, "unsupported parameter archive schema version");
 
   bool render_overrides_feature = false;
+  bool geometry_final_frame_feature = false;
   std::set<std::string> required_feature_names;
   const json_value *features = object_member (root, "required_features");
   if (features)
@@ -1050,6 +1085,8 @@ parse_manifest (
                                  "duplicate required parameter archive feature");
           if (feature.text == "render-overrides-v1")
             render_overrides_feature = true;
+          else if (feature.text == "geometry-final-frame-v1")
+            geometry_final_frame_feature = true;
           else
             return archive_fail (
                 error, "unsupported required parameter archive feature: "
@@ -1081,6 +1118,21 @@ parse_manifest (
                                   error))
     return false;
 
+  const json_value *geometry_final_frame
+      = object_member (*state, "geometry_final_frame");
+  if (geometry_final_frame && !geometry_final_frame_feature)
+    return archive_fail (
+        error, "state.geometry_final_frame requires geometry-final-frame-v1");
+  if (geometry_final_frame_feature && !geometry_final_frame)
+    return archive_fail (
+        error, "geometry-final-frame-v1 requires state.geometry_final_frame");
+
+  parameter_archive_geometry_final_frame parsed_geometry_final_frame;
+  if (geometry_final_frame_feature
+      && !parse_geometry_final_frame (*geometry_final_frame,
+                                      &parsed_geometry_final_frame, error))
+    return false;
+
   if (!validate_payloads (object_member (root, "payloads"), entries, error))
     return false;
 
@@ -1089,6 +1141,7 @@ parse_manifest (
       manifest->schema_version = (int)version;
       manifest->legacy_csp_path = legacy->text;
       manifest->render_overrides = parsed_render_overrides;
+      manifest->geometry_final_frame = parsed_geometry_final_frame;
     }
   return true;
 }
@@ -1194,6 +1247,29 @@ apply_parameter_archive_render_overrides (
   rparam->output_profile = overrides.output_profile;
   rparam->output_gamma = overrides.output_gamma;
   rparam->gamut_warning = overrides.gamut_warning;
+}
+
+/* Extract the final frame from PARAM without changing other geometry. */
+parameter_archive_geometry_final_frame
+parameter_archive_geometry_final_frame_from (const scr_to_img_parameters &param)
+{
+  parameter_archive_geometry_final_frame frame;
+  frame.present = true;
+  frame.final_angle = param.final_angle;
+  frame.final_ratio = param.final_ratio;
+  return frame;
+}
+
+/* Apply only the final-frame fields represented by FRAME. */
+void
+apply_parameter_archive_geometry_final_frame (
+    const parameter_archive_geometry_final_frame &frame,
+    scr_to_img_parameters *param)
+{
+  if (!param || !frame.present)
+    return;
+  param->final_angle = frame.final_angle;
+  param->final_ratio = frame.final_ratio;
 }
 
 /* Return true when NAME begins with one of the standard ZIP signatures.  */
@@ -1385,7 +1461,8 @@ bool
 write_parameter_archive (
     const char *name, const std::string &legacy_csp,
     const char *generator_version, std::string *error,
-    const parameter_archive_render_overrides *render_overrides)
+    const parameter_archive_render_overrides *render_overrides,
+    const parameter_archive_geometry_final_frame *geometry_final_frame)
 {
   if (error)
     error->clear ();
@@ -1416,12 +1493,29 @@ write_parameter_archive (
                              "invalid structured render override values");
     }
 
+  const bool structured_geometry
+      = geometry_final_frame && geometry_final_frame->present;
+  if (structured_geometry
+      && (!my_isfinite (geometry_final_frame->final_angle)
+          || !my_isfinite (geometry_final_frame->final_ratio)
+          || geometry_final_frame->final_ratio <= 0))
+    return archive_fail (error, "invalid structured geometry final frame");
+
   std::string manifest
       = "{\n"
         "  \"format\": \"org.colorscreen.parameters\",\n"
         "  \"schema_version\": 1,\n";
-  if (structured_render)
-    manifest += "  \"required_features\": [\"render-overrides-v1\"],\n";
+  if (structured_render || structured_geometry)
+    {
+      manifest += "  \"required_features\": [";
+      if (structured_render)
+        manifest += "\"render-overrides-v1\"";
+      if (structured_render && structured_geometry)
+        manifest += ", ";
+      if (structured_geometry)
+        manifest += "\"geometry-final-frame-v1\"";
+      manifest += "],\n";
+    }
   manifest
       += "  \"generator\": {\n"
          "    \"application\": \"Color-Screen\",\n"
@@ -1461,6 +1555,16 @@ write_parameter_archive (
              + "\n"
                "    }";
     }
+  if (structured_geometry)
+    manifest += ",\n"
+                "    \"geometry_final_frame\": {\n"
+                "      \"final_angle\": "
+                + json_number (geometry_final_frame->final_angle)
+                + ",\n"
+                  "      \"final_ratio\": "
+                + json_number (geometry_final_frame->final_ratio)
+                + "\n"
+                  "    }";
   manifest += "\n  },\n"
               "  \"payloads\": []\n"
               "}\n";
@@ -1502,7 +1606,8 @@ bool
 write_parameter_payload_file (
     const char *name, const std::string &payload, bool archive,
     const char *generator_version, std::string *error,
-    const parameter_archive_render_overrides *render_overrides)
+    const parameter_archive_render_overrides *render_overrides,
+    const parameter_archive_geometry_final_frame *geometry_final_frame)
 {
   if (error)
     error->clear ();
@@ -1529,7 +1634,7 @@ write_parameter_payload_file (
   if (archive)
     written = write_parameter_archive (staging_utf8.c_str (), payload,
                                        generator_version, error,
-                                       render_overrides);
+                                       render_overrides, geometry_final_frame);
   else
     {
       FILE *out = open_utf8_binary_write (staging_utf8.c_str ());
