@@ -521,10 +521,19 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
         }
 
         if (!state->recoveryStarted) {
-          // Make the payload exercise a stable scalar and the profile-spot
-          // extension in addition to the already-dirty mirror edit.
+          // Exercise ordinary legacy state, the Qt profile-spot postamble,
+          // and every new structured render field that a .par recovery would
+          // otherwise silently lose.
           ParameterState fixture = first->documentStateSnapshot();
           fixture.rparams.gamma = 2.0;
+          fixture.rparams.ignore_infrared = true;
+          fixture.rparams.demosaiced_scaling =
+              colorscreen::render_parameters::lanczos3_scaling;
+          fixture.rparams.observer_whitepoint = colorscreen::xy_t(0.34, 0.35);
+          fixture.rparams.output_profile =
+              colorscreen::render_parameters::output_profile_xyz;
+          fixture.rparams.output_gamma = 1.85;
+          fixture.rparams.gamut_warning = true;
           fixture.profileSpots.push_back({1.25, -2.5});
           first->applySharedDocumentState(
               fixture, QStringLiteral("Recovery round-trip fixture"));
@@ -553,7 +562,7 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
           const QDir recoveryDirectory(state->recoveryProbeDirectory);
           for (const QString &name :
                {QStringLiteral("recovery_image.txt"),
-                QStringLiteral("recovery_params.par"),
+                QStringLiteral("recovery_params.cspar"),
                 QStringLiteral("recovery_params_meta.txt")}) {
             if (!QFile::exists(recoveryDirectory.filePath(name))) {
               fail(QStringLiteral(
@@ -599,6 +608,18 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
             recovered.rparams.scan_mirror !=
                 expected.rparams.scan_mirror ||
             recovered.rparams.gamma != 2.0 ||
+            recovered.rparams.ignore_infrared !=
+                expected.rparams.ignore_infrared ||
+            recovered.rparams.demosaiced_scaling !=
+                expected.rparams.demosaiced_scaling ||
+            recovered.rparams.observer_whitepoint !=
+                expected.rparams.observer_whitepoint ||
+            recovered.rparams.output_profile !=
+                expected.rparams.output_profile ||
+            recovered.rparams.output_gamma !=
+                expected.rparams.output_gamma ||
+            recovered.rparams.gamut_warning !=
+                expected.rparams.gamut_warning ||
             !profileSpotMatches ||
             QFileInfo(probe->m_parameterFile.path).absoluteFilePath() !=
                 state->recoveryExpectedParameterPath ||
@@ -612,10 +633,77 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
         delete probe;
         state->recoveryProbe = nullptr;
 
-        // Corrupt the otherwise-valid payload late in its Qt metadata and make
-        // sure recovery fails transactionally. The old implementation parsed
-        // directly into live members, so a late failure could leave a partially
-        // recovered geometry/render state behind.
+        // Extract the archive's exact legacy mirror for a backward-compatible
+        // old-session recovery test. A legacy-only directory must remain usable
+        // after this migration.
+        const QString validParams =
+            QDir(state->recoveryProbeDirectory)
+                .filePath(QStringLiteral("recovery_params.cspar"));
+        std::string legacyPayload;
+        std::string archiveError;
+        if (!colorscreen::read_parameter_archive(
+                validParams.toUtf8().constData(), &legacyPayload, nullptr,
+                &archiveError)) {
+          fail(QStringLiteral("Recovery smoke could not extract legacy mirror: %1")
+                   .arg(QString::fromStdString(archiveError)));
+          return;
+        }
+        const QByteArray legacyBytes(legacyPayload.data(),
+                                     static_cast<qsizetype>(legacyPayload.size()));
+        const QString legacyDirectory =
+            state->temporaryDirectory->filePath(QStringLiteral("recovery-legacy"));
+        if (!QDir().mkpath(legacyDirectory)) {
+          fail(QStringLiteral("Recovery legacy compatibility directory failed"));
+          return;
+        }
+        const QString legacyPath =
+            QDir(legacyDirectory).filePath(QStringLiteral("recovery_params.par"));
+        QFile legacyFile(legacyPath);
+        if (!legacyFile.open(QIODevice::WriteOnly | QIODevice::Truncate) ||
+            legacyFile.write(legacyBytes) != legacyBytes.size() ||
+            !legacyFile.flush()) {
+          fail(QStringLiteral("Recovery legacy compatibility fixture failed"));
+          return;
+        }
+        legacyFile.close();
+
+        // Deliberately claim the original user archive was clean. A recovered
+        // legacy-only snapshot cannot preserve the new structured fields and
+        // therefore must still be marked dirty.
+        const QString legacyMetaPath =
+            QDir(legacyDirectory)
+                .filePath(QStringLiteral("recovery_params_meta.txt"));
+        const QByteArray legacyMeta =
+            QByteArray("legacy-target.cspar\n0\n0\narchive\n");
+        QFile legacyMetaFile(legacyMetaPath);
+        if (!legacyMetaFile.open(QIODevice::WriteOnly | QIODevice::Truncate) ||
+            legacyMetaFile.write(legacyMeta) != legacyMeta.size() ||
+            !legacyMetaFile.flush()) {
+          fail(QStringLiteral(
+              "Recovery legacy compatibility metadata fixture failed"));
+          return;
+        }
+        legacyMetaFile.close();
+
+        auto *legacyProbe = new MainWindow(legacyDirectory);
+        legacyProbe->hide();
+        const bool legacyRestored = legacyProbe->restoreRecoveryState();
+        const ParameterState legacyState = legacyProbe->documentStateSnapshot();
+        if (!legacyRestored || legacyState.rparams.gamma != 2.0 ||
+            legacyState.profileSpots != state->recoveryExpectedState.profileSpots ||
+            legacyProbe->m_parameterFile.format !=
+                MainWindow::ParameterFileState::Format::Archive ||
+            !legacyProbe->isDocumentModified()) {
+          delete legacyProbe;
+          fail(QStringLiteral(
+              "Recovery migration lost compatibility with legacy-only snapshots"));
+          return;
+        }
+        delete legacyProbe;
+
+        // Truncate the new archive, while leaving a valid but stale legacy
+        // snapshot alongside it. The corrupt archive must never cause an
+        // implicit fallback to that older state.
         const QString corruptDirectory =
             state->temporaryDirectory->filePath(
                 QStringLiteral("recovery-corrupt"));
@@ -624,30 +712,38 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
               "Recovery corruption smoke could not create its payload directory"));
           return;
         }
-        const QString validParams =
-            QDir(state->recoveryProbeDirectory)
-                .filePath(QStringLiteral("recovery_params.par"));
-        QByteArray corruptPayload = readFile(validParams);
-        const QByteArray endMarker("colorscreen_qt_metadata_end");
-        const qsizetype markerOffset = corruptPayload.lastIndexOf(endMarker);
-        if (markerOffset <= 0) {
-          fail(QStringLiteral(
-              "Recovery corruption smoke could not find Qt metadata end marker"));
+        const QByteArray completeArchive = readFile(validParams);
+        if (completeArchive.size() < 16) {
+          fail(QStringLiteral("Recovery archive fixture is unexpectedly small"));
           return;
         }
-        corruptPayload.truncate(markerOffset);
+        QByteArray corruptPayload = completeArchive;
+        corruptPayload.truncate(corruptPayload.size() / 2);
         const QString corruptParams =
             QDir(corruptDirectory)
-                .filePath(QStringLiteral("recovery_params.par"));
+                .filePath(QStringLiteral("recovery_params.cspar"));
         QFile corruptFile(corruptParams);
         if (!corruptFile.open(QIODevice::WriteOnly | QIODevice::Truncate) ||
             corruptFile.write(corruptPayload) != corruptPayload.size() ||
             !corruptFile.flush()) {
           fail(QStringLiteral(
-              "Recovery corruption smoke could not write truncated payload"));
+              "Recovery corruption smoke could not write truncated archive"));
           return;
         }
         corruptFile.close();
+        const QString staleLegacyPath =
+            QDir(corruptDirectory)
+                .filePath(QStringLiteral("recovery_params.par"));
+        QFile staleLegacyFile(staleLegacyPath);
+        if (!staleLegacyFile.open(
+                QIODevice::WriteOnly | QIODevice::Truncate) ||
+            staleLegacyFile.write(legacyBytes) != legacyBytes.size() ||
+            !staleLegacyFile.flush()) {
+          fail(QStringLiteral(
+              "Recovery corruption smoke could not create fallback trap"));
+          return;
+        }
+        staleLegacyFile.close();
 
         auto *corruptProbe = new MainWindow(corruptDirectory);
         corruptProbe->hide();
@@ -663,15 +759,17 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
             corruptProbe->findChild<QMessageBox *>(
                 QStringLiteral("RecoveryWarningDialog"));
         if (corruptProbe->documentStateSnapshot() != corruptBaseline ||
-            !QFile::exists(corruptParams) || !recoveryWarning ||
+            !corruptProbe->isDocumentModified() ||
+            !QFile::exists(corruptParams) ||
+            !QFile::exists(staleLegacyPath) || !recoveryWarning ||
             !recoveryWarning->text().contains(
                 QStringLiteral("No recovered parameters were applied"))) {
           if (recoveryWarning)
             recoveryWarning->close();
           delete corruptProbe;
           fail(QStringLiteral(
-              "Corrupt recovery payload partially mutated document state or "
-              "lost its warning/payload"));
+              "Corrupt archive partially mutated state, adopted stale legacy "
+              "data, or lost its warning/payload"));
           return;
         }
         recoveryWarning->close();
@@ -724,17 +822,17 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
         }
         const QByteArray archivePayload = archivePayloadFile.readAll();
         archivePayloadFile.close();
-        std::string archiveError;
+        std::string sidecarArchiveError;
         if (!colorscreen::write_parameter_archive(
                 missingArchiveSidecarPath.toUtf8().constData(),
                 std::string(archivePayload.constData(),
                             static_cast<size_t>(archivePayload.size())),
-                "document-lifecycle-smoke", &archiveError)) {
+                "document-lifecycle-smoke", &sidecarArchiveError)) {
           delete loadProbe;
           state->recoveryProbe = nullptr;
           fail(QStringLiteral(
                    "Image-load failure smoke could not create archive sidecar: %1")
-                   .arg(QString::fromUtf8(archiveError)));
+                   .arg(QString::fromUtf8(sidecarArchiveError)));
           return;
         }
 

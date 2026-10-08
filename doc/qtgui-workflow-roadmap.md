@@ -794,6 +794,13 @@ YAML 1.2 while avoiding a new YAML parser dependency in libcolorscreen and the
 CLI. General YAML tags, anchors/aliases, merge keys and implicit scalar typing
 therefore never enter the compatibility surface.
 
+Crash recovery also uses the versioned `.cspar` container for private
+snapshots, rather than silently dropping structured-only render settings through
+an internal `.par` file. Legacy recovery snapshots still load when no archive
+exists; corrupt archives are reported without falling back to stale legacy
+data. The document-lifecycle smoke covers structured values, old snapshots and
+partial/corrupt recovery. This remains an alpha validation gate.
+
 The archive keeps ordinary settings/provenance human-readable while allowing
 dense geometry meshes, scanner-blur correction grids and sampled curves to live
 in typed binary payload entries rather than enormous text arrays. The manifest
