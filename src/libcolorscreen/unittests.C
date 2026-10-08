@@ -9412,7 +9412,8 @@ test_parameter_archive ()
       || !read_parameter_archive (roundtrip.c_str (), &loaded, &parsed, &error)
       || loaded != legacy || parsed.schema_version != 1
       || parsed.legacy_csp_path != "state/legacy.par"
-      || parsed.geometry_final_frame.present)
+      || parsed.geometry_final_frame.present
+      || parsed.image_area.present)
     {
       fprintf (stderr, "Parameter archive round trip failed: %s\n",
                error.c_str ());
@@ -9460,13 +9461,18 @@ test_parameter_archive ()
   structured_geometry.final_ratio = 0.803158;
   const parameter_archive_geometry_final_frame geometry_frame
       = parameter_archive_geometry_final_frame_from (structured_geometry);
+  structured_source.image_area = int_optional_image_area (
+      int_image_area (36, 47, 801, 540));
+  const parameter_archive_image_area photographic_bounds
+      = parameter_archive_image_area_from (structured_source);
   const std::string structured
       = parameter_archive_test_path ("render-overrides");
   std::remove (structured.c_str ());
   error.clear ();
   if (!write_parameter_archive (structured.c_str (), legacy,
                                 "2.0alpha-structured", &error,
-                                &structured_overrides, &geometry_frame))
+                                &structured_overrides, &geometry_frame,
+                                &photographic_bounds))
     {
       fprintf (stderr, "Structured parameter archive writer failed: %s\n",
                error.c_str ());
@@ -9492,7 +9498,9 @@ test_parameter_archive ()
       || parsed.geometry_final_frame.final_angle
              != structured_geometry.final_angle
       || parsed.geometry_final_frame.final_ratio
-             != structured_geometry.final_ratio)
+             != structured_geometry.final_ratio
+      || !parsed.image_area.present
+      || !(parsed.image_area.area == structured_source.image_area))
     {
       fprintf (stderr, "Structured parameter archive round trip failed: %s\n",
                error.c_str ());
@@ -9506,7 +9514,8 @@ test_parameter_archive ()
       structured.c_str (), &opened_archive, &error, &opened_manifest);
   if (!payload_stream || !opened_archive
       || !opened_manifest.render_overrides.present
-      || !opened_manifest.geometry_final_frame.present)
+      || !opened_manifest.geometry_final_frame.present
+      || !opened_manifest.image_area.present)
     {
       fprintf (stderr, "Structured payload opener lost manifest state: %s\n",
                error.c_str ());
@@ -9541,6 +9550,15 @@ test_parameter_archive ()
       || geometry_target.final_ratio != structured_geometry.final_ratio)
     {
       fprintf (stderr, "Structured geometry final frame did not apply exactly\n");
+      std::remove (structured.c_str ());
+      return false;
+    }
+  render_parameters image_area_target;
+  apply_parameter_archive_image_area (opened_manifest.image_area,
+                                      &image_area_target);
+  if (!(image_area_target.image_area == structured_source.image_area))
+    {
+      fprintf (stderr, "Photographic image bounds did not apply exactly\n");
       std::remove (structured.c_str ());
       return false;
     }
@@ -9975,6 +9993,72 @@ test_parameter_archive ()
   if (!expect_read ("geometry-incomplete", incomplete_geometry,
                     {{"state/legacy.par", legacy}}, false,
                     "missing a required typed field"))
+    return false;
+
+  // Do not silently drop the inner photographic bounds or allow a rectangle
+  // with invalid dimensions/coordinates to escape archive validation.
+  const std::string image_area_without_feature = R"({
+    "format":"org.colorscreen.parameters","schema_version":1,
+    "state":{"legacy_csp":"state/legacy.par",
+             "image_area":{"enabled":true,"rect":[36,47,801,540]}}
+  })";
+  if (!expect_read ("image-area-without-feature", image_area_without_feature,
+                    {{"state/legacy.par", legacy}}, false,
+                    "requires image-area-v1"))
+    return false;
+
+  const std::string image_area_missing_section = R"({
+    "format":"org.colorscreen.parameters","schema_version":1,
+    "required_features":["image-area-v1"],
+    "state":{"legacy_csp":"state/legacy.par"}
+  })";
+  if (!expect_read ("image-area-missing-section", image_area_missing_section,
+                    {{"state/legacy.par", legacy}}, false,
+                    "requires state.image_area"))
+    return false;
+
+  const std::string image_area_bad_shape = R"({
+    "format":"org.colorscreen.parameters","schema_version":1,
+    "required_features":["image-area-v1"],
+    "state":{"legacy_csp":"state/legacy.par",
+             "image_area":{"enabled":true,"rect":[36,47,801]}}
+  })";
+  if (!expect_read ("image-area-bad-shape", image_area_bad_shape,
+                    {{"state/legacy.par", legacy}}, false,
+                    "requires typed enabled and rect"))
+    return false;
+
+  const std::string image_area_negative = R"({
+    "format":"org.colorscreen.parameters","schema_version":1,
+    "required_features":["image-area-v1"],
+    "state":{"legacy_csp":"state/legacy.par",
+             "image_area":{"enabled":true,"rect":[-1,47,801,540]}}
+  })";
+  if (!expect_read ("image-area-negative", image_area_negative,
+                    {{"state/legacy.par", legacy}}, false,
+                    "invalid integer state.image_area rectangle"))
+    return false;
+
+  const std::string image_area_overflow = R"({
+    "format":"org.colorscreen.parameters","schema_version":1,
+    "required_features":["image-area-v1"],
+    "state":{"legacy_csp":"state/legacy.par",
+             "image_area":{"enabled":true,"rect":[2147483640,47,801,540]}}
+  })";
+  if (!expect_read ("image-area-overflow", image_area_overflow,
+                    {{"state/legacy.par", legacy}}, false,
+                    "invalid state.image_area bounds"))
+    return false;
+
+  const std::string image_area_disabled_nonzero = R"({
+    "format":"org.colorscreen.parameters","schema_version":1,
+    "required_features":["image-area-v1"],
+    "state":{"legacy_csp":"state/legacy.par",
+             "image_area":{"enabled":false,"rect":[36,47,801,540]}}
+  })";
+  if (!expect_read ("image-area-disabled-nonzero", image_area_disabled_nonzero,
+                    {{"state/legacy.par", legacy}}, false,
+                    "invalid state.image_area bounds"))
     return false;
 
   const std::string wrong_format
