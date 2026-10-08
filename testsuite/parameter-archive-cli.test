@@ -59,7 +59,7 @@ payload += (
 manifest = {
     "format": "org.colorscreen.parameters",
     "schema_version": 1,
-    "required_features": ["render-overrides-v1", "geometry-final-frame-v1"],
+    "required_features": ["render-overrides-v1", "geometry-final-frame-v1", "image-area-v1"],
     "generator": {
         "application": "Color-Screen testsuite",
         "version": "2.0alpha",
@@ -67,6 +67,7 @@ manifest = {
     "state": {
         "legacy_csp": "state/legacy.par",
         "geometry_final_frame": {"final_angle": 108.375, "final_ratio": 0.803158},
+        "image_area": {"enabled": True, "rect": [1, 1, 4, 4]},
         "render_overrides": {
             "ignore_infrared": False,
             "demosaiced_scaling": "nearest",
@@ -121,6 +122,11 @@ if "geometry-final-frame-v1" not in manifest.get("required_features", []):
 geometry = manifest.get("state", {}).get("geometry_final_frame", {})
 if geometry != {"final_angle": 108.375, "final_ratio": 0.803158}:
     raise SystemExit("adjust-par changed the authoritative final geometry frame")
+if "image-area-v1" not in manifest.get("required_features", []):
+    raise SystemExit("adjust-par dropped photographic image-area feature")
+image_area = manifest.get("state", {}).get("image_area", {})
+if image_area != {"enabled": True, "rect": [1, 1, 4, 4]}:
+    raise SystemExit("adjust-par lost the photographic image bounds")
 overrides = manifest.get("state", {}).get("render_overrides", {})
 if overrides.get("demosaiced_scaling") != "nearest":
     raise SystemExit("adjust-par did not preserve structured render state")
