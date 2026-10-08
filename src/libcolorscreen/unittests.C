@@ -9750,6 +9750,32 @@ test_parameter_archive ()
       }
   }
 
+  parameter_archive_solver_options invalid_solver = solver_options;
+  invalid_solver.center.x = my_quiet_nan<coord_t> ();
+  error.clear ();
+  if (write_parameter_payload_file (atomic_target.c_str (), legacy, true,
+                                    "2.0alpha-invalid-solver", &error,
+                                    nullptr, nullptr, &invalid_solver)
+      || error.find ("invalid structured solver options")
+             == std::string::npos)
+    {
+      fprintf (stderr, "Invalid solver centre unexpectedly replaced target\n");
+      remove_unicode (atomic_target);
+      return false;
+    }
+  {
+    std::ifstream preserved (std::filesystem::u8path (atomic_target),
+                             std::ios::binary);
+    std::string bytes ((std::istreambuf_iterator<char> (preserved)),
+                       std::istreambuf_iterator<char> ());
+    if (bytes != "stable-old-target")
+      {
+        fprintf (stderr, "Invalid solver write changed old target\n");
+        remove_unicode (atomic_target);
+        return false;
+      }
+  }
+
   error.clear ();
   if (!write_parameter_payload_file (atomic_target.c_str (), legacy, true,
                                      "2.0alpha-atomic", &error))
