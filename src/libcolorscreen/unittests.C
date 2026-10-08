@@ -1223,6 +1223,30 @@ test_finetune_focus_screen_cache ()
       fprintf (stderr, "Physical focus-transfer state was not reused\n");
       return false;
     }
+  /* Effective wavelength is a cache-key argument, independent of the saved
+     MTF model.  An equal scanner model at a different wavelength must miss,
+     while repeated lookups for that new wavelength must hit. */
+  physical_transfer_cache_hit = true;
+  std::shared_ptr<const mtf_focus_transfer> alternate_transfer
+      = mtf_focus_transfer::get (comparison_parameters, 600,
+                                  &physical_transfer_cache_hit);
+  if (!alternate_transfer || physical_transfer_cache_hit
+      || alternate_transfer.get () == reused_transfer.get ())
+    {
+      fprintf (stderr, "Physical focus cache mixed different wavelengths\n");
+      return false;
+    }
+  physical_transfer_cache_hit = false;
+  std::shared_ptr<const mtf_focus_transfer> alternate_cached
+      = mtf_focus_transfer::get (comparison_parameters, 600,
+                                  &physical_transfer_cache_hit);
+  if (!alternate_cached || !physical_transfer_cache_hit
+      || alternate_cached.get () != alternate_transfer.get ())
+    {
+      fprintf (stderr, "Physical focus cache did not reuse equal wavelengths\n");
+      return false;
+    }
+
   precomputed_function<double> prepared_table;
   if (!reused_transfer->precompute (comparison_parameters.defocus,
                                     prepared_table))
