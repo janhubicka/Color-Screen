@@ -33,7 +33,7 @@ double effectiveMeasurementWavelength(
   if (measurement.channel >= 0 && measurement.channel < 4
       && parameters.wavelengths[measurement.channel] > 0)
     return parameters.wavelengths[measurement.channel];
-  return parameters.wavelength > 0 ? parameters.wavelength : 0.0;
+  return 0.0;
 }
 
 /** Return a translated name for CHANNEL.  */
