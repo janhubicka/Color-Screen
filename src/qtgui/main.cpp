@@ -684,8 +684,13 @@ bool colorSectionPreferencesSmoke() {
           return fail(QStringLiteral(
               "Clear image area stayed disabled with a saved photograph"));
         const int editsBeforeClear = documentEdits;
-        clearImageArea->click();
-        if (state.rparams.image_area.set ||
+        // The probe intentionally tests an inspector that can be folded and
+        // not shown as a top-level window. Emit the button's regular clicked
+        // signal synchronously rather than relying on platform widget-event
+        // delivery while its entire section may be hidden.
+        const bool invoked = QMetaObject::invokeMethod(
+            clearImageArea, "clicked", Qt::DirectConnection, Q_ARG(bool, false));
+        if (!invoked || state.rparams.image_area.set ||
             !(state.rparams.scan_crop == oldObjectCrop) ||
             documentEdits != editsBeforeClear + 1)
           return fail(QStringLiteral(
