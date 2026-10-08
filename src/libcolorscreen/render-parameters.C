@@ -193,9 +193,8 @@ render_parameters::get_sharpen_parameters_for_channel (int channel,
         }
   if (!(my_isfinite (wavelength) && wavelength > 0))
     wavelength = mtf.get_channel_wavelength (channel, has_rgb);
-  if (my_isfinite (wavelength) && wavelength > 0)
-    mtf.wavelength = wavelength;
-
+  /* Effective per-channel wavelength is supplied to optical evaluation
+     by the caller, not stored in the shared sharpening parameters. */
   return result;
 }
 
@@ -234,8 +233,8 @@ render_parameters::get_image_layer_sharpen_parameters (const image_data *img) co
       if (my_isfinite (measurement.wavelength) && measurement.wavelength > 0)
         wavelength = measurement.wavelength;
     }
-  if (my_isfinite (wavelength) && wavelength > 0)
-    result.scanner_mtf.wavelength = wavelength;
+  /* The physical wavelength is an argument of the optical transfer,
+     not a persisted property of this generic image-layer setting. */
   return result;
 }
 
