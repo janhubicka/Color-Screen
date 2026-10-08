@@ -484,16 +484,20 @@ render_screen_tile (tile_parameters &tile, scr_type type,
       if (rst == dot_spread_ir)
         {
           mtfs[0] = mtfs[1] = mtfs[2] = mtf::get_mtf (
-              rparam.get_sharpen_parameters_for_channel (3).scanner_mtf, NULL);
+              rparam.get_sharpen_parameters_for_channel (3).scanner_mtf,
+              rparam.get_sharpen_wavelength_for_channel (3), NULL);
         }
       else
         {
           mtfs[0] = mtf::get_mtf (
-              rparam.get_sharpen_parameters_for_channel (0).scanner_mtf, NULL);
+              rparam.get_sharpen_parameters_for_channel (0).scanner_mtf,
+              rparam.get_sharpen_wavelength_for_channel (0), NULL);
           mtfs[1] = mtf::get_mtf (
-              rparam.get_sharpen_parameters_for_channel (1).scanner_mtf, NULL);
+              rparam.get_sharpen_parameters_for_channel (1).scanner_mtf,
+              rparam.get_sharpen_wavelength_for_channel (1), NULL);
           mtfs[2] = mtf::get_mtf (
-              rparam.get_sharpen_parameters_for_channel (2).scanner_mtf, NULL);
+              rparam.get_sharpen_parameters_for_channel (2).scanner_mtf,
+              rparam.get_sharpen_wavelength_for_channel (2), NULL);
         }
       for (int i = 0; i < 3; i++)
         {
@@ -576,9 +580,8 @@ render_screen_tile (tile_parameters &tile, scr_type type,
       digital_usm_radius = sp.usm_radius * pixel_size;
       digital_usm_amount = sp.usm_amount;
       sp.scanner_mtf_scale *= pixel_size;
-      int img_layer_c = rparam.get_image_layer_channel(nullptr);
-      sp.scanner_mtf.wavelength =
-          sp.scanner_mtf.get_channel_wavelength(img_layer_c);
+      /* Image-layer wavelength is resolved by the transfer operation;
+         preview sharpening no longer mutates a stored scalar MTF field. */
       effective_mode = sp.get_mode ();
 
       /* The preview has three distinct stages:
