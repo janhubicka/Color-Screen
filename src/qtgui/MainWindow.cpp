@@ -5412,7 +5412,7 @@ void MainWindow::onAreaSelected(QRect area) {
       const colorscreen::int_image_area clipped =
           state.rparams.image_area.intersect(state.rparams.scan_crop);
       if (clipped.empty_p())
-        state.rparams.image_area.set = false;
+        state.rparams.image_area = colorscreen::int_optional_image_area();
       else
         state.rparams.image_area =
             colorscreen::int_optional_image_area(clipped);
