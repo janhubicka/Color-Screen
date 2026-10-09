@@ -30,7 +30,7 @@ Do not automatically migrate every member into `.cspar`.
 | `render_parameters::tile_adjustment::enabled` | Former Tiles checkbox and asynchronous readiness flag, never in legacy CSP. | **Removed in PR #535.** User visibility is a view-local render-request mask; physical readiness comes from loaded tile data and triggers no Undo/dirty change. Saved per-tile exposure, dark-point and blur remain untouched. |
 | `solver_parameters::copy_without_points()` and `solver_mesh(..., sparam2, smap, ...)` | Mesh code copies lens/tilt policy to a scratch `solver_parameters`, but the local fit uses nearby points and its own weighted homography. | **Deferred at user's request.** No saving impact; leave the API alone for now. |
 | `render_parameters::demosaic` | An image-loading choice, rather than a rendering step. Correctly persisted so RAW capture can be reopened with the same demosaicer. | **Keep unchanged** in this alpha. |
-| `render_parameters::output_profile` | Output colourspace selection, not a property of the scanned object. | **Moved to `render_output_parameters` in PR #535.** The View menu sets each display; Render to File chooses an export target. Historical v1 archives require a neutral typed key. |
+| `render_parameters::output_profile` | Output colourspace selection, not a property of the scanned object. | **Moved to `render_output_parameters` in PR #535.** The display defaults to sRGB without a profile chooser until monitor ICC/HDR support exists; Render to File chooses its own export target. Historical v1 archives require a neutral typed key. |
 | `render_parameters::gamut_warning` | View/render-only gamut diagnostic. | **Moved to `render_output_parameters` in PR #535.** Independent of saved calibration and Undo. Historical schema-v1 keys still validate. |
 
 ## Output-request ownership decision (2.0alpha)
@@ -46,8 +46,11 @@ member of `render_parameters` or saved `ParameterState`. It contains:
 - an optional grid-shaped enabled/disabled stitch-tile mask, defaulting to
   all tiles visible.
 
-The GUI View menu still selects the *display* profile and warning of the
-current canvas, and Render to File still exposes an explicit export profile.
+The GUI View menu retains the per-view gamut-warning diagnostic, but does
+not offer XYZ/source-RGB as an onscreen display profile: the current Qt canvas
+is 8-bit and labelled sRGB, so such a menu would misrepresent the pixels.
+Render to File still exposes an explicit export profile. The backend already
+accepts a per-request display profile for future monitor-managed output.
 These are presentation/export choices, not reconstruction settings. A future
 ICC-/wide-gamut/HDR-aware output pipeline should resolve the actual target
 display profile and transfer for each view (including 10/16-bit HDR surfaces),
