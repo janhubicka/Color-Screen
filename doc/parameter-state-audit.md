@@ -27,6 +27,7 @@ Do not automatically migrate every member into `.cspar`.
 | --- | --- | --- |
 | `render_parameters::image_area` | Independent photographic-image bounding area, distinct from the physical-object crop. Used by focus/finetune and pixel-size estimation but not represented in legacy CSP. | **Keep.** GUI selection and structured archive persistence are implemented and full-CI tested separately in PR #531 (stacked on #528); `scan_crop` may include bindings and tapes. |
 | `render_parameters::tile_adjustment::{x,y}` | The adjustment array is indexed by row/column and stores dimensions; per-element bytes were not initialized, compared or saved. | **Removed in this branch**, retaining real tile adjustment values. |
+| `render_parameters::tile_adjustment::enabled` | **User-facing** Tiles checkbox, used to select tiles in stitched rendering; not written by legacy CSP. The Qt background-loader also sets all tiles disabled before loading, then re-enables each successful tile as an Undoable document change. | **Unresolved ownership/round-trip bug, not obsolete.** Separate user visibility intent from runtime tile readiness before adding versioned archive persistence. A failed or slow tile load must not change saved visibility or dirty the document; deliberately disabled tiles must remain disabled when loading completes. |
 | `solver_parameters::copy_without_points()` and `solver_mesh(..., sparam2, smap, ...)` | Mesh code copies lens/tilt policy to a scratch `solver_parameters`, but the local fit uses nearby points and its own weighted homography. | **Deferred at user's request.** No saving impact; leave the API alone for now. |
 | `render_parameters::demosaic` | An image-loading choice, rather than a rendering step. Correctly persisted so RAW capture can be reopened with the same demosaicer. | **Keep unchanged** in this alpha. |
 | `render_parameters::output_profile` | View/display/output colourspace selection, not a property of the scanned object. Older schema-v1 `render-overrides-v1` manifests nonetheless require a typed field. | **Per-view/operation** in PR #533; PR #534 writes `sRGB` as the neutral schema-v1 compatibility value. Do not conflate this with the persistent output tone curve, gamma, or adapted whitepoint without a separate semantic decision. |
@@ -57,6 +58,28 @@ simulation, with wavelength-aware cache identities and preserved CLI override
 semantics. That PR has a green full test matrix. The fact that measurement
 provenance was originally considered bookkeeping is insufficient to remove it:
 most of it is explicitly saved and used by the GUI.
+
+## New stitched-tile lifecycle finding
+
+The Qt stitched-image open path called
+`set_tile_adjustments_dimensions(w,h)` even after sidecar parsing had
+populated a same-sized grid. That helper unconditionally cleared all tile
+exposures, dark points and per-tile scanner-blur corrections. The current
+branch now makes same-dimension calls idempotent, with a
+`stitch_tile_grid` regression group; genuine dimension changes still reset
+the grid.
+
+**Separate unresolved issue:** the legacy writer never persists
+`tile_adjustment::enabled`. This is not an algorithm-local scratch value:
+Tiles exposes it as an editable checkbox and the stitch renderer uses it.
+The GUI also temporarily drives this very same field from asynchronous
+tile-loading completion, creating Undo/dirty-state churn and overriding
+operator visibility choices. The renderer already distinguishes loaded tile
+images in its `tile_for_scr(..., only_loaded)` lookup. A subsequent change
+should give the loader its own readiness publication/generation mechanism
+and only then decide the versioned archive representation for persistent
+user-disabled tiles. It would be incorrect to serialize transient
+`enabled=false` values from a load in progress.
 
 ## Confirmed user decisions for the next GUI work
 
