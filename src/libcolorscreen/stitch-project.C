@@ -1330,7 +1330,7 @@ stitch_project::find_ranges (coord_t xmin, coord_t xmax, coord_t ymin, coord_t y
       {
 	int tx, ty;
 	point_t scr = common_scr_to_img.final_to_scr ({(coord_t)x, (coord_t)y});
-	if (!tile_for_scr (&rparam, scr.x, scr.y, &tx, &ty, true))
+	if (!tile_for_scr (nullptr, scr.x, scr.y, &tx, &ty, true))
 	  continue;
 	point_t timg = images[ty][tx].common_scr_to_img_scr (scr);
 	int i = ty * params.width + tx;
