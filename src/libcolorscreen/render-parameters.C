@@ -71,11 +71,6 @@ const property_t render_parameters::dye_balance_names []  = {
   { "neutral", "Neutral", "" },
   { "whitepoint", "Whitepoint", "" },
 };
-const char * render_parameters::output_profile_names [] = {
-  "sRGB",
-  "XYZ",
-  "original"
-};
 const property_t sharpen_parameters::sharpen_mode_names []  = {
   { "none", "None", "No sharpening." },
   { "unsharp-mask", "Unsharp mask", "Unsharp mask algorithm. Not precise but fast." },
@@ -936,7 +931,9 @@ render_parameters::get_rgb_to_xyz_matrix (const image_data *img, bool normalized
    IMG is the image being rendered.
    NORMALIZED_PATCHES is true if dyes are normalized.  */
 size_t
-render_parameters::get_icc_profile (void **buffer, image_data *img, bool normalized_patches)
+render_parameters::get_icc_profile (void **buffer, image_data *img,
+                                   bool normalized_patches,
+                                   luminosity_t output_gamma)
 {
   // TODO: Handle patch proportions right
   color_matrix dyes = get_rgb_to_xyz_matrix (img, normalized_patches, {1/3.0,1/3.0,1/3.0});
@@ -1580,7 +1577,6 @@ render_parameters::original_render_from (render_parameters &rparam, bool color, 
   tile_adjustments = rparam.tile_adjustments;
   tile_adjustments_width = rparam.tile_adjustments_width;
   tile_adjustments_height = rparam.tile_adjustments_height;
-  output_profile = rparam.output_profile;
   if (color)
     white_balance = rparam.white_balance;
   else
@@ -1593,7 +1589,6 @@ render_parameters::original_render_from (render_parameters &rparam, bool color, 
   sharpen = rparam.sharpen;
   screen_denoise = rparam.screen_denoise;
   demosaiced_denoise = rparam.demosaiced_denoise;
-  gamut_warning = rparam.gamut_warning;
 
   /* Copy setup of interpolated rendering algorithm.  */
   collection_quality = rparam.collection_quality;
