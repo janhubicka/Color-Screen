@@ -725,7 +725,6 @@ private:
   QAction *m_zoomFitAction;      // Added
 
   QAction *m_gamutWarningAction; // View-local display gamut diagnostic.
-  QAction *m_viewOutputProfileActions[3] = {nullptr, nullptr, nullptr};
   QAction *m_fullscreenAction;   // Fullscreen toggle
   QAction *m_lockRelativeCoordinatesAction; // Lock relative coords toggle
   QAction *m_optimizeCoordinatesAction; // Optimize coordinates button
