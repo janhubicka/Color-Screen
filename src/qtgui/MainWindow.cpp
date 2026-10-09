@@ -2621,22 +2621,10 @@ void MainWindow::createMenus() {
           &MainWindow::onGamutWarningToggled);
   m_viewMenu->addAction(m_gamutWarningAction);
 
-  // Display colourspace belongs to the inspected canvas, not the document.
-  QMenu *displayProfileMenu = m_viewMenu->addMenu(tr("Display colourspace"));
-  for (int i = 0; i < (int)colorscreen::render_output_parameters::output_profile_max;
-       ++i) {
-    QAction *action = displayProfileMenu->addAction(
-        QString::fromUtf8(colorscreen::render_output_parameters::output_profile_names[i]));
-    action->setCheckable(true);
-    m_viewOutputProfileActions[i] = action;
-    connect(action, &QAction::triggered, this, [this, i]() {
-      if (ImageWidget *view = inspectorImageWidget()) {
-        view->setViewOutputProfile(
-            static_cast<colorscreen::render_output_parameters::output_profile_t>(i));
-        syncInspectorViewActions();
-      }
-    });
-  }
+  // Onscreen output remains sRGB until display ICC profiles and high-bit-depth
+  // surfaces are supported. An XYZ/raw menu would mislabel those pixels as
+  // sRGB in the current QImage display path, so expose no profile choice here.
+  // The Render-to-File dialog still offers output profiles independently.
 
   m_viewMenu->addSeparator();
 
@@ -2986,14 +2974,6 @@ void MainWindow::syncInspectorViewActions() {
   if (m_gamutWarningAction) {
     const QSignalBlocker blocker(m_gamutWarningAction);
     m_gamutWarningAction->setChecked(image->viewGamutWarning());
-  }
-  for (int i = 0; i < (int)colorscreen::render_output_parameters::output_profile_max;
-       ++i) {
-    QAction *action = m_viewOutputProfileActions[i];
-    if (!action)
-      continue;
-    const QSignalBlocker blocker(action);
-    action->setChecked((int)image->viewOutputProfile() == i);
   }
   // The same shared inspector may be attached to a different ordinary view,
   // which has an independent stitched-tile visibility mask.
