@@ -1035,7 +1035,9 @@ std::vector <rgbdata>
 hd_y_to_rgb (render_parameters &rparam, int steps, luminosity_t miny, luminosity_t maxy, rgbdata patch_proportions, hd_axis_type axis_type)
 {
   out_color_adjustments a (256);
-  if (!a.precompute (rparam, nullptr, false, patch_proportions, nullptr))
+  render_output_parameters output;
+  if (!a.precompute (rparam, output, nullptr, false, patch_proportions,
+                     nullptr))
     return {};
   std::vector <rgbdata> data (steps);
   for (int i = 0 ; i < steps; i++)
