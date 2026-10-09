@@ -138,8 +138,8 @@ RenderDialog::RenderDialog(
   }
 
   auto *processingLabel = new QLabel(
-      tr("Uses the current photographic image area when one is selected; "
-         "otherwise the original output bounds. "
+      tr("Uses the selected photographic image area for cropping when available; "
+         "otherwise the document crop or original output bounds. "
          "No additional export-only sharpening is applied."),
       outputGroup);
   processingLabel->setObjectName(
