@@ -5591,9 +5591,11 @@ test_render_linearity ()
     {
       luminosity_t gamma = gammas[gamma_idx];
       rparam.gamma = gamma;
-      rparam.output_gamma = gamma;
-      rparam.output_profile = render_parameters::output_profile_original;
+      render_output_parameters output;
+      output.output_gamma = gamma;
+      output.output_profile = render_output_parameters::output_profile_original;
       render ren (img, rparam, 65535);
+      ren.set_output_parameters (output);
       if (!ren.precompute_all (PRECOMPUTE_IMAGE_LAYER, {1, 1, 1}, NULL))
 	return false;
       for (int i = 0; i < 65535; i++)
