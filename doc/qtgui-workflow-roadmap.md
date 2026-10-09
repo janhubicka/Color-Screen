@@ -859,16 +859,31 @@ enough that copying another editor's panel order verbatim would be less standard
 not more: the standard behaviour to borrow is consistency, reversibility,
 feedback and clear stage ownership.
 
-#### View-specific colour presentation and file output
+#### Per-render output colour management and stitched tile selection
 
-Gamut warnings and the output colourspace displayed by the preview are
-view-local, as for other image editors: one restored photograph can have
-independent ordinary peer canvases. The document-owned View menu follows the
-active inspector, and rendering snapshots use these values without changing
-`ParameterState`, undo history or sibling views. File exports have a separate
-explicit output-profile selector (initialized from the active view). For format
-compatibility, the legacy `render-overrides-v1` archive decoder/writer is kept
-until a later negotiated revision removes non-calibration presentation fields
-from the manifest. The user-requested MTF scalar wavelength cleanup is a
-separate numerical/CLI API migration and retains all saved channel spectral
-metadata.
+The saved photograph no longer contains `output_profile`,
+`output_gamma`, `gamut_warning`, or tile visibility. A separate
+`render_output_parameters` value, installed before renderer precomputation,
+defines one view/export's profile, transfer, gamut diagnostics and optional
+stitch-tile visibility mask. This makes it possible to render one document
+into several targets without Undo, save-file changes or cross-view leaks.
+Each view's gamut-warning toggle remains in View; an unsupported raw/XYZ
+display-profile menu is hidden until a real monitor ICC/HDR display path
+exists. The existing onscreen `QImage` is 8-bit sRGB.
+
+The Render-to-File dialog selects the export profile separately, while a
+chosen view's temporary tile visibility mask may seed that export. Actual
+background image-loading readiness is independent of user tile visibility and
+its notifications never change document calibration or dirty state.
+
+Schema-v1 compatibility still requires typed historical
+`output_profile`, `output_gamma`, and `gamut_warning` keys: current
+readers validate but ignore them, writers emit neutral sRGB/-1/false
+placeholders. Real saved structured values remain `ignore_infrared`,
+`demosaiced_scaling`, `observer_whitepoint`, the photographic bounds and
+final-frame geometry. The explicit MTF wavelength migration independently
+preserves all channel/measurement spectral metadata.
+
+Future true wide-gamut and HDR display support must negotiate output
+colourspace, transfer and framebuffer depth with the monitor rather than
+merely attach a different ICC label to RGB888 image data.
