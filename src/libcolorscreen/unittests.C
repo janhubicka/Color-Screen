@@ -10616,6 +10616,107 @@ test_raw_source_retention_contract ()
   return true;
 }
 
+/* Exercise real Bayer RAW decoding with independently requested methods.
+   The dedicated testsuite script sets COLORSCREEN_RAW_CACHE_TEST_FILE to
+   its tiny generated CFA DNG fixture. Ordinary direct 'unittests' runs need
+   no external image fixture; this group is inactive when it is absent. */
+static bool
+test_raw_source_variants ()
+{
+  const char *path = std::getenv ("COLORSCREEN_RAW_CACHE_TEST_FILE");
+  if (!path || !*path)
+    return true;
+
+  const char *error = nullptr;
+  image_data source;
+  if (!source.load (path, true, &error, nullptr, image_data::demosaic_linear)
+      || !source.has_unpacked_raw_source () || !source.has_rgb ())
+    {
+      fprintf (stderr, "Could not cache synthetic Bayer source: %s\n",
+               error ? error : "source not retained as Bayer RAW");
+      return false;
+    }
+  const image_data::pixel baseline = source.get_rgb_pixel (47, 61);
+
+  auto same_pixels = [] (const image_data &a, const image_data &b)
+    {
+      if (a.width != b.width || a.height != b.height
+          || a.has_rgb () != b.has_rgb ()
+          || a.has_grayscale_or_ir () != b.has_grayscale_or_ir ())
+        return false;
+      for (int y = 0; y < a.height; y++)
+        for (int x = 0; x < a.width; x++)
+          {
+            if (a.has_rgb ())
+              {
+                auto v = a.get_rgb_pixel (x, y);
+                auto w = b.get_rgb_pixel (x, y);
+                if (v.r != w.r || v.g != w.g || v.b != w.b)
+                  return false;
+              }
+            else if (a.get_pixel (x, y) != b.get_pixel (x, y))
+              return false;
+          }
+      return true;
+    };
+
+  for (image_data::demosaicing_t method :
+       {image_data::demosaic_AHD, image_data::demosaic_PPG,
+        image_data::demosaic_half, image_data::demosaic_linear})
+    {
+      error = nullptr;
+      std::shared_ptr<image_data> computed
+          = source.demosaiced_variant (method, &error);
+      if (!computed)
+        {
+          fprintf (stderr, "Reprocessing Bayer source failed for %i: %s\n",
+                   (int)method, error ? error : "unknown error");
+          return false;
+        }
+      error = nullptr;
+      std::shared_ptr<image_data> cached
+          = source.demosaiced_variant (method, &error);
+      if (cached != computed)
+        {
+          fprintf (stderr, "Repeated RAW variant did not hit cache for %i\n",
+                   (int)method);
+          return false;
+        }
+
+      image_data fresh;
+      error = nullptr;
+      if (!fresh.load (path, true, &error, nullptr, method)
+          || !same_pixels (*computed, fresh))
+        {
+          fprintf (stderr,
+                   "RAW cached %i differs from independent LibRaw decode: %s\n",
+                   (int)method, error ? error : "pixel/geometry mismatch");
+          return false;
+        }
+      if (!source.has_unpacked_raw_source ()
+          || !source.has_rgb ())
+        {
+          fprintf (stderr, "Variant request discarded original source\n");
+          return false;
+        }
+      const image_data::pixel after = source.get_rgb_pixel (47, 61);
+      if (baseline.r != after.r || baseline.g != after.g
+          || baseline.b != after.b)
+        {
+          fprintf (stderr, "Variant request mutated original pixels\n");
+          return false;
+        }
+    }
+  error = nullptr;
+  if (source.demosaiced_variant (image_data::demosaic_max, &error)
+      || !error)
+    {
+      fprintf (stderr, "Invalid RAW variant request was not rejected\n");
+      return false;
+    }
+  return true;
+}
+
 /* Verify conservative detection of monochromatic data that was initially
    rendered as RGB from a standard Bayer RAW file.  Channel gains/offsets and
    small noise are allowed; real chromatic structure, flat data and non-Bayer
@@ -10775,6 +10876,8 @@ main (int argc, char **argv)
       [] () { return test_stitch_tile_adjustment_grid (); } },
     { "raw_source_retention", "decoded source lifetime and non-RAW isolation tests",
       [] () { return test_raw_source_retention_contract (); } },
+    { "raw_source_variant", "cached Bayer RAW reprocessing tests",
+      [] () { return test_raw_source_variants (); } },
     { "channel_sharpening", "per-channel scanner sharpening tests",
       [] () { return test_channel_sharpening (); } },
     { "slanted_edge", "slanted edge MTF tests", [] () { return test_slanted_edge_mtf (); } },
