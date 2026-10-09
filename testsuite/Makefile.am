@@ -72,6 +72,7 @@ CLEANFILES              = slanted-edge-1.log \
                           out-parameter-archive.tif
 
 TESTS                   = unittests.test \
+                          raw-demosaic-cache.test \
                           parameter-archive-cli.test \
 			  dufaycolor_nikon_coolsan9000ED_4000DPI_raw.test  \
 			  dufaycolor_nikon_coolsan9000ED_4000DPI_raw-finetune.test \
