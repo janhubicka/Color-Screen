@@ -28,7 +28,7 @@ struct monochrome_bayer_analysis
 };
 
 /* Scanned image descriptor.  */
-class image_data
+class image_data : public std::enable_shared_from_this<image_data>
 {
 public:
   /* Specify spectra or XYZ coordinates of color dyes used in the process.  */
@@ -198,6 +198,19 @@ public:
   {
     return static_cast<bool> (m_unpacked_raw_source);
   }
+
+  /* Build or retrieve a demosaiced image variant from the retained unpacked
+     Bayer source without reopening or re-unpacking the RAW file. This method
+     is synchronous: frontends should call it on a worker and discard stale
+     results using their normal generation/cancellation discipline.
+     Completed variants own their own pixels and do not mutate this image.
+     At most a small number of variants are kept by the cache; callers may
+     hold returned images independently of later cache eviction. On failure
+     return null and set ERROR. A cache miss for an uncached source is not a
+     change to the supported RAW formats; callers may use the normal loader. */
+  DLL_PUBLIC std::shared_ptr<image_data>
+  demosaiced_variant (demosaicing_t method, const char **error,
+                      progress_info *progress = nullptr);
 
   pure_attr DLL_PUBLIC bool has_rgb () const;
   pure_attr DLL_PUBLIC bool has_grayscale_or_ir () const;
