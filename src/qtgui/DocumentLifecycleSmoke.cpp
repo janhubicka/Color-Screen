@@ -539,10 +539,10 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
           fixture.rparams.demosaiced_scaling =
               colorscreen::render_parameters::lanczos3_scaling;
           fixture.rparams.observer_whitepoint = colorscreen::xy_t(0.34, 0.35);
-          fixture.rparams.output_profile =
-              colorscreen::render_parameters::output_profile_xyz;
+          // View-only output colourspace and gamut overlays do not belong in
+          // a crash-recovery parameter snapshot. Recovery preserves actual
+          // reconstruction inputs, not a particular canvas presentation.
           fixture.rparams.output_gamma = 1.85;
-          fixture.rparams.gamut_warning = true;
           fixture.profileSpots.push_back({1.25, -2.5});
           first->applySharedDocumentState(
               fixture, QStringLiteral("Recovery round-trip fixture"));
@@ -629,12 +629,8 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
                 expected.rparams.demosaiced_scaling ||
             recovered.rparams.observer_whitepoint !=
                 expected.rparams.observer_whitepoint ||
-            recovered.rparams.output_profile !=
-                expected.rparams.output_profile ||
             recovered.rparams.output_gamma !=
                 expected.rparams.output_gamma ||
-            recovered.rparams.gamut_warning !=
-                expected.rparams.gamut_warning ||
             !profileSpotMatches ||
             QFileInfo(probe->m_parameterFile.path).absoluteFilePath() !=
                 state->recoveryExpectedParameterPath ||
