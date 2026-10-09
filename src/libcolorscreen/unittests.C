@@ -6580,6 +6580,105 @@ test_image_area ()
       ok = false;
     }
 
+  /* The outer crop describes the physical object, including binding tape;
+     IMAGE_AREA independently bounds its photographic content. */
+  render_parameters state;
+  state.scan_crop = int_optional_image_area (
+      int_image_area (10, 20, 580, 360));
+  state.image_area = int_optional_image_area (
+      int_image_area (40, 50, 120, 90));
+  const int_image_area outer = state.get_scan_crop (600, 400);
+  const int_image_area inner = state.get_image_area (600, 400);
+  if (!(outer == int_image_area (10, 20, 580, 360))
+      || !(inner == int_image_area (40, 50, 120, 90)))
+    {
+      printf ("FAILED: physical object crop and photograph bounds conflated\n");
+      ok = false;
+    }
+
+  state.image_area.set = false;
+  if (!(state.get_image_area (600, 400) == outer))
+    {
+      printf ("FAILED: unset image area did not fall back to object crop\n");
+      ok = false;
+    }
+  state.image_area = int_optional_image_area (
+      int_image_area (570, 360, 40, 40));
+  if (!(state.get_image_area (600, 400)
+          == int_image_area (570, 360, 20, 20)))
+    {
+      printf ("FAILED: image area not intersected with physical object\n");
+      ok = false;
+    }
+  state.image_area = int_optional_image_area (
+      int_image_area (590, 390, 10, 10));
+  if (!(state.get_image_area (600, 400) == outer))
+    {
+      printf ("FAILED: disjoint inner area did not fall back to object crop\n");
+      ok = false;
+    }
+
+  /* Export defaults crop to the inner photographic rectangle without
+     modifying the editor's outer physical-object crop. */
+  state.image_area = int_optional_image_area (inner);
+  image_data scan;
+  if (!scan.set_dimensions (600, 400, true, false))
+    return false;
+  scr_to_img_parameters geom;
+  render_type_parameters rt;
+  rt.type = render_type_original;
+  render_to_file_params out;
+  out.geometry = render_to_file_params::scan_geometry;
+  if (!complete_rendered_file_parameters (rt, geom, scan, &out, &state)
+      || out.width != inner.width || out.height != inner.height
+      || out.start != point_t { (coord_t)inner.x, (coord_t)inner.y })
+    {
+      printf ("FAILED: scan-plane file bounds ignored the photograph area\n");
+      ok = false;
+    }
+  render_to_file_params original;
+  original.geometry = render_to_file_params::scan_geometry;
+  if (!complete_rendered_file_parameters (rt, geom, scan, &original)
+      || original.width != 600 || original.height != 400
+      || original.start != point_t { 0, 0 })
+    {
+      printf ("FAILED: legacy unbounded file export changed dimensions\n");
+      ok = false;
+    }
+
+  /* Final-screen output must transform only the inner photographic area
+     while retaining the original full-map shift for sampling. */
+  geom.type = Dufay;
+  geom.center = { (coord_t)100, (coord_t)120 };
+  geom.coordinate1 = { (coord_t)8, (coord_t)0 };
+  geom.coordinate2 = { (coord_t)0, (coord_t)8 };
+  scr_to_img map;
+  if (!map.set_parameters (geom, scan))
+    {
+      printf ("FAILED: could not establish screen export test map\n");
+      ok = false;
+    }
+  else
+    {
+      const int_image_area full_range (
+          map.get_final_range (scan.width, scan.height));
+      const int_image_area photo_range (
+          map.get_final_range (image_area (inner)));
+      render_to_file_params final_out;
+      final_out.geometry = render_to_file_params::screen_geometry;
+      if (!complete_rendered_file_parameters (rt, geom, scan, &final_out,
+                                               &state)
+          || final_out.width != (int)(photo_range.width / final_out.xstep)
+          || final_out.height != (int)(photo_range.height / final_out.ystep)
+          || final_out.start
+                 != point_t { (coord_t)(photo_range.x - full_range.x),
+                              (coord_t)(photo_range.y - full_range.y) })
+        {
+          printf ("FAILED: final-plane photographic bounds or origin incorrect\n");
+          ok = false;
+        }
+    }
+
   return ok;
 }
 
@@ -9412,7 +9511,8 @@ test_parameter_archive ()
       || !read_parameter_archive (roundtrip.c_str (), &loaded, &parsed, &error)
       || loaded != legacy || parsed.schema_version != 1
       || parsed.legacy_csp_path != "state/legacy.par"
-      || parsed.geometry_final_frame.present)
+      || parsed.geometry_final_frame.present
+      || parsed.image_area.present)
     {
       fprintf (stderr, "Parameter archive round trip failed: %s\n",
                error.c_str ());
@@ -9460,13 +9560,18 @@ test_parameter_archive ()
   structured_geometry.final_ratio = 0.803158;
   const parameter_archive_geometry_final_frame geometry_frame
       = parameter_archive_geometry_final_frame_from (structured_geometry);
+  structured_source.image_area = int_optional_image_area (
+      int_image_area (36, 47, 801, 540));
+  const parameter_archive_image_area photographic_bounds
+      = parameter_archive_image_area_from (structured_source);
   const std::string structured
       = parameter_archive_test_path ("render-overrides");
   std::remove (structured.c_str ());
   error.clear ();
   if (!write_parameter_archive (structured.c_str (), legacy,
                                 "2.0alpha-structured", &error,
-                                &structured_overrides, &geometry_frame))
+                                &structured_overrides, &geometry_frame,
+                                &photographic_bounds))
     {
       fprintf (stderr, "Structured parameter archive writer failed: %s\n",
                error.c_str ());
@@ -9492,7 +9597,9 @@ test_parameter_archive ()
       || parsed.geometry_final_frame.final_angle
              != structured_geometry.final_angle
       || parsed.geometry_final_frame.final_ratio
-             != structured_geometry.final_ratio)
+             != structured_geometry.final_ratio
+      || !parsed.image_area.present
+      || !(parsed.image_area.area == structured_source.image_area))
     {
       fprintf (stderr, "Structured parameter archive round trip failed: %s\n",
                error.c_str ());
@@ -9506,7 +9613,8 @@ test_parameter_archive ()
       structured.c_str (), &opened_archive, &error, &opened_manifest);
   if (!payload_stream || !opened_archive
       || !opened_manifest.render_overrides.present
-      || !opened_manifest.geometry_final_frame.present)
+      || !opened_manifest.geometry_final_frame.present
+      || !opened_manifest.image_area.present)
     {
       fprintf (stderr, "Structured payload opener lost manifest state: %s\n",
                error.c_str ());
@@ -9541,6 +9649,15 @@ test_parameter_archive ()
       || geometry_target.final_ratio != structured_geometry.final_ratio)
     {
       fprintf (stderr, "Structured geometry final frame did not apply exactly\n");
+      std::remove (structured.c_str ());
+      return false;
+    }
+  render_parameters image_area_target;
+  apply_parameter_archive_image_area (opened_manifest.image_area,
+                                      &image_area_target);
+  if (!(image_area_target.image_area == structured_source.image_area))
+    {
+      fprintf (stderr, "Photographic image bounds did not apply exactly\n");
       std::remove (structured.c_str ());
       return false;
     }
@@ -9724,6 +9841,34 @@ test_parameter_archive ()
     if (bytes != "stable-old-target")
       {
         fprintf (stderr, "Invalid geometry write changed old target\n");
+        remove_unicode (atomic_target);
+        return false;
+      }
+  }
+
+  /* Reject unusable photographic bounds without touching an existing
+     archive target; the validation must run before committing staged bytes. */
+  parameter_archive_image_area bad_image_area = photographic_bounds;
+  bad_image_area.area.width = -1;
+  error.clear ();
+  if (write_parameter_payload_file (atomic_target.c_str (), legacy, true,
+                                    "2.0alpha-bad-image-area", &error,
+                                    nullptr, nullptr, &bad_image_area)
+      || error.find ("invalid structured photographic image area")
+             == std::string::npos)
+    {
+      fprintf (stderr, "Invalid image area unexpectedly replaced target\\n");
+      remove_unicode (atomic_target);
+      return false;
+    }
+  {
+    std::ifstream preserved (std::filesystem::u8path (atomic_target),
+                             std::ios::binary);
+    std::string bytes ((std::istreambuf_iterator<char> (preserved)),
+                       std::istreambuf_iterator<char> ());
+    if (bytes != "stable-old-target")
+      {
+        fprintf (stderr, "Invalid image-area write changed old target\\n");
         remove_unicode (atomic_target);
         return false;
       }
@@ -9975,6 +10120,72 @@ test_parameter_archive ()
   if (!expect_read ("geometry-incomplete", incomplete_geometry,
                     {{"state/legacy.par", legacy}}, false,
                     "missing a required typed field"))
+    return false;
+
+  // Do not silently drop the inner photographic bounds or allow a rectangle
+  // with invalid dimensions/coordinates to escape archive validation.
+  const std::string image_area_without_feature = R"({
+    "format":"org.colorscreen.parameters","schema_version":1,
+    "state":{"legacy_csp":"state/legacy.par",
+             "image_area":{"enabled":true,"rect":[36,47,801,540]}}
+  })";
+  if (!expect_read ("image-area-without-feature", image_area_without_feature,
+                    {{"state/legacy.par", legacy}}, false,
+                    "requires image-area-v1"))
+    return false;
+
+  const std::string image_area_missing_section = R"({
+    "format":"org.colorscreen.parameters","schema_version":1,
+    "required_features":["image-area-v1"],
+    "state":{"legacy_csp":"state/legacy.par"}
+  })";
+  if (!expect_read ("image-area-missing-section", image_area_missing_section,
+                    {{"state/legacy.par", legacy}}, false,
+                    "requires state.image_area"))
+    return false;
+
+  const std::string image_area_bad_shape = R"({
+    "format":"org.colorscreen.parameters","schema_version":1,
+    "required_features":["image-area-v1"],
+    "state":{"legacy_csp":"state/legacy.par",
+             "image_area":{"enabled":true,"rect":[36,47,801]}}
+  })";
+  if (!expect_read ("image-area-bad-shape", image_area_bad_shape,
+                    {{"state/legacy.par", legacy}}, false,
+                    "requires typed enabled and rect"))
+    return false;
+
+  const std::string image_area_negative = R"({
+    "format":"org.colorscreen.parameters","schema_version":1,
+    "required_features":["image-area-v1"],
+    "state":{"legacy_csp":"state/legacy.par",
+             "image_area":{"enabled":true,"rect":[-1,47,801,540]}}
+  })";
+  if (!expect_read ("image-area-negative", image_area_negative,
+                    {{"state/legacy.par", legacy}}, false,
+                    "invalid integer state.image_area rectangle"))
+    return false;
+
+  const std::string image_area_overflow = R"({
+    "format":"org.colorscreen.parameters","schema_version":1,
+    "required_features":["image-area-v1"],
+    "state":{"legacy_csp":"state/legacy.par",
+             "image_area":{"enabled":true,"rect":[2147483640,47,801,540]}}
+  })";
+  if (!expect_read ("image-area-overflow", image_area_overflow,
+                    {{"state/legacy.par", legacy}}, false,
+                    "invalid state.image_area bounds"))
+    return false;
+
+  const std::string image_area_disabled_nonzero = R"({
+    "format":"org.colorscreen.parameters","schema_version":1,
+    "required_features":["image-area-v1"],
+    "state":{"legacy_csp":"state/legacy.par",
+             "image_area":{"enabled":false,"rect":[36,47,801,540]}}
+  })";
+  if (!expect_read ("image-area-disabled-nonzero", image_area_disabled_nonzero,
+                    {{"state/legacy.par", legacy}}, false,
+                    "invalid state.image_area bounds"))
     return false;
 
   const std::string wrong_format

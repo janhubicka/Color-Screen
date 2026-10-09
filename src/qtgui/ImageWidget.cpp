@@ -430,6 +430,7 @@ void ImageWidget::paintEvent(QPaintEvent *event) {
     drawPointsOverlay(p);
     drawProfileSpots(p);
     drawFocusAreas(p);
+    drawPhotographicImageArea(p);
     drawMtfMeasurementOverlay(p);
     drawScreenCoordinateSystem(p);
     drawAreaSelection(p);
@@ -958,6 +959,32 @@ void ImageWidget::drawInteractionHint(QPainter &p,
   p.drawText(hintRect.translated(1, 1), flags, message);
   p.setPen(Qt::yellow);
   p.drawText(hintRect, flags, message);
+  p.restore();
+}
+
+/** Mark the content rectangle on the full physical-object scan canvas.
+    This is a guide, not a second view crop: binding tape and borders remain
+    visible until the user explicitly changes the outer object crop. */
+void ImageWidget::drawPhotographicImageArea(QPainter &p) {
+  if (!m_scan || !m_rparams || !m_rparams->image_area.set ||
+      m_coordinateSpace != colorscreen::render_scan_coordinates)
+    return;
+
+  const auto region =
+      m_rparams->get_image_area(m_scan->width, m_scan->height);
+  if (region.empty_p())
+    return;
+
+  const QPointF first = imageToWidget({(colorscreen::coord_t)region.x,
+                                       (colorscreen::coord_t)region.y});
+  const QPointF last = imageToWidget(
+      {(colorscreen::coord_t)(region.x + region.width),
+       (colorscreen::coord_t)(region.y + region.height)});
+  p.save();
+  p.setClipRect(rect());
+  p.setPen(QPen(palette().highlight().color(), 2.0, Qt::DashLine));
+  p.setBrush(Qt::NoBrush);
+  p.drawRect(QRectF(first, last).normalized());
   p.restore();
 }
 

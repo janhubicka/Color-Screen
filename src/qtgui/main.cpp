@@ -474,8 +474,17 @@ bool colorSectionPreferencesSmoke() {
   const ParameterState initialState = state;
   int documentEdits = 0;
   auto getState = [&state]() { return state; };
-  auto setState = [&documentEdits](const ParameterState &, const QString &,
-                                  const QString &) { ++documentEdits; };
+  bool applyExplicitEdit = false;
+  auto setState = [&state, &documentEdits, &applyExplicitEdit](
+                      const ParameterState &next, const QString &,
+                      const QString &) {
+    // The section-folding probe deliberately counts accidental setter calls
+    // without applying their state. Only its explicit Clear-area action is a
+    // document-edit test and therefore publishes the supplied parameters.
+    if (applyExplicitEdit)
+      state = next;
+    ++documentEdits;
+  };
   auto noImage = []() { return std::shared_ptr<colorscreen::image_data>(); };
   std::shared_ptr<colorscreen::image_data> captureImage;
   auto getCaptureImage = [&captureImage]() { return captureImage; };
@@ -656,20 +665,45 @@ bool colorSectionPreferencesSmoke() {
             QStringLiteral("CaptureMeasureResolutionButton"));
         auto *cropButton = capture->findChild<QPushButton *>(
             QStringLiteral("CaptureCropButton"));
-        if (!measureResolution || !cropButton || measureResolution->isEnabled() ||
-            cropButton->isEnabled())
+        auto *imageAreaButton = capture->findChild<QPushButton *>(
+            QStringLiteral("CaptureImageAreaButton"));
+        auto *clearImageArea = capture->findChild<QPushButton *>(
+            QStringLiteral("CaptureClearImageAreaButton"));
+        if (!measureResolution || !cropButton || !imageAreaButton ||
+            !clearImageArea || measureResolution->isEnabled() ||
+            cropButton->isEnabled() || imageAreaButton->isEnabled() ||
+            clearImageArea->isEnabled())
           return fail(QStringLiteral(
               "Digital Capture image actions were enabled without an image"));
 
         captureImage = std::make_shared<colorscreen::image_data>();
         capture->updateUI();
-        if (!measureResolution->isEnabled() || !cropButton->isEnabled())
+        if (!measureResolution->isEnabled() || !cropButton->isEnabled() ||
+            !imageAreaButton->isEnabled() || clearImageArea->isEnabled())
           return fail(QStringLiteral(
               "Digital Capture image actions stayed disabled after image load"));
 
+        // Section-folding smoke must not make real document edits. Verify
+        // enabling/disabling the Clear action from saved state here; its
+        // click/Undo behaviour belongs in the separate document-action smoke.
+        const auto oldObjectCrop = state.rparams.scan_crop;
+        state.rparams.image_area = colorscreen::int_optional_image_area(
+            colorscreen::int_image_area(2, 3, 16, 17));
+        capture->updateUI();
+        if (!clearImageArea->isEnabled())
+          return fail(QStringLiteral(
+              "Clear image area stayed disabled with a saved photograph"));
+        state.rparams.image_area = colorscreen::int_optional_image_area();
+        capture->updateUI();
+        if (clearImageArea->isEnabled()
+            || !(state.rparams.scan_crop == oldObjectCrop))
+          return fail(QStringLiteral(
+              "Clear image-area applicability did not follow saved state"));
+
         captureImage.reset();
         capture->updateUI();
-        if (measureResolution->isEnabled() || cropButton->isEnabled())
+        if (measureResolution->isEnabled() || cropButton->isEnabled() ||
+            imageAreaButton->isEnabled() || clearImageArea->isEnabled())
           return fail(QStringLiteral(
               "Digital Capture image actions did not follow image lifetime"));
       }

@@ -843,6 +843,44 @@ parse_geometry_final_frame (const json_value &object,
   return true;
 }
 
+/* Parse authoritative photographic bounds, distinct from the physical crop. */
+bool
+parse_image_area (const json_value &object,
+                  parameter_archive_image_area *result, std::string *error)
+{
+  if (!result || object.type != json_value::kind::object)
+    return archive_fail (error, "state.image_area must be an object");
+  const json_value *enabled = object_member (object, "enabled");
+  const json_value *rect = object_member (object, "rect");
+  if (!enabled || enabled->type != json_value::kind::boolean
+      || !rect || rect->type != json_value::kind::array
+      || rect->array_value.size () != 4)
+    return archive_fail (error, "state.image_area requires typed enabled and rect");
+
+  uint64_t values[4] = {};
+  const uint64_t limit = (uint64_t)std::numeric_limits<int>::max ();
+  for (int i = 0; i < 4; ++i)
+    if (!json_uint64 (rect->array_value[i], &values[i])
+        || values[i] > limit)
+      return archive_fail (error, "invalid integer state.image_area rectangle");
+
+  if (enabled->boolean_value
+      ? (values[2] == 0 || values[3] == 0
+         || values[0] > limit - values[2]
+         || values[1] > limit - values[3])
+      : (values[0] != 0 || values[1] != 0
+         || values[2] != 0 || values[3] != 0))
+    return archive_fail (error, "invalid state.image_area bounds");
+
+  parameter_archive_image_area parsed;
+  parsed.present = true;
+  if (enabled->boolean_value)
+    parsed.area = int_optional_image_area (int_image_area (
+        (int)values[0], (int)values[1], (int)values[2], (int)values[3]));
+  *result = parsed;
+  return true;
+}
+
 /* Format VALUE as locale-independent finite JSON number text. */
 std::string
 json_number (double value)
@@ -1070,6 +1108,7 @@ parse_manifest (
 
   bool render_overrides_feature = false;
   bool geometry_final_frame_feature = false;
+  bool image_area_feature = false;
   std::set<std::string> required_feature_names;
   const json_value *features = object_member (root, "required_features");
   if (features)
@@ -1087,6 +1126,8 @@ parse_manifest (
             render_overrides_feature = true;
           else if (feature.text == "geometry-final-frame-v1")
             geometry_final_frame_feature = true;
+          else if (feature.text == "image-area-v1")
+            image_area_feature = true;
           else
             return archive_fail (
                 error, "unsupported required parameter archive feature: "
@@ -1133,6 +1174,17 @@ parse_manifest (
                                       &parsed_geometry_final_frame, error))
     return false;
 
+  const json_value *image_area = object_member (*state, "image_area");
+  if (image_area && !image_area_feature)
+    return archive_fail (error, "state.image_area requires image-area-v1");
+  if (image_area_feature && !image_area)
+    return archive_fail (error, "image-area-v1 requires state.image_area");
+
+  parameter_archive_image_area parsed_image_area;
+  if (image_area_feature
+      && !parse_image_area (*image_area, &parsed_image_area, error))
+    return false;
+
   if (!validate_payloads (object_member (root, "payloads"), entries, error))
     return false;
 
@@ -1142,6 +1194,7 @@ parse_manifest (
       manifest->legacy_csp_path = legacy->text;
       manifest->render_overrides = parsed_render_overrides;
       manifest->geometry_final_frame = parsed_geometry_final_frame;
+      manifest->image_area = parsed_image_area;
     }
   return true;
 }
@@ -1270,6 +1323,26 @@ apply_parameter_archive_geometry_final_frame (
     return;
   param->final_angle = frame.final_angle;
   param->final_ratio = frame.final_ratio;
+}
+
+/* Extract saved image bounds independently from SCAN_CROP. */
+parameter_archive_image_area
+parameter_archive_image_area_from (const render_parameters &rparam)
+{
+  parameter_archive_image_area result;
+  result.present = true;
+  result.area = rparam.image_area;
+  return result;
+}
+
+/* Restore the photographic bounds only when the reader supports the feature. */
+void
+apply_parameter_archive_image_area (const parameter_archive_image_area &bounds,
+                                    render_parameters *rparam)
+{
+  if (!rparam || !bounds.present)
+    return;
+  rparam->image_area = bounds.area;
 }
 
 /* Return true when NAME begins with one of the standard ZIP signatures.  */
@@ -1462,7 +1535,8 @@ write_parameter_archive (
     const char *name, const std::string &legacy_csp,
     const char *generator_version, std::string *error,
     const parameter_archive_render_overrides *render_overrides,
-    const parameter_archive_geometry_final_frame *geometry_final_frame)
+    const parameter_archive_geometry_final_frame *geometry_final_frame,
+    const parameter_archive_image_area *image_area)
 {
   if (error)
     error->clear ();
@@ -1501,20 +1575,38 @@ write_parameter_archive (
           || geometry_final_frame->final_ratio <= 0))
     return archive_fail (error, "invalid structured geometry final frame");
 
+  const bool structured_image_area = image_area && image_area->present;
+  if (structured_image_area && image_area->area.set)
+    {
+      const int_optional_image_area &area = image_area->area;
+      const int limit = std::numeric_limits<int>::max ();
+      if (area.x < 0 || area.y < 0 || area.width <= 0 || area.height <= 0
+          || area.x > limit - area.width || area.y > limit - area.height)
+        return archive_fail (error, "invalid structured photographic image area");
+    }
+
   std::string manifest
       = "{\n"
         "  \"format\": \"org.colorscreen.parameters\",\n"
         "  \"schema_version\": 1,\n";
-  if (structured_render || structured_geometry)
+  if (structured_render || structured_geometry || structured_image_area)
     {
-      manifest += "  \"required_features\": [";
+      std::string features;
       if (structured_render)
-        manifest += "\"render-overrides-v1\"";
-      if (structured_render && structured_geometry)
-        manifest += ", ";
+        features += "\"render-overrides-v1\"";
       if (structured_geometry)
-        manifest += "\"geometry-final-frame-v1\"";
-      manifest += "],\n";
+        {
+          if (!features.empty ())
+            features += ", ";
+          features += "\"geometry-final-frame-v1\"";
+        }
+      if (structured_image_area)
+        {
+          if (!features.empty ())
+            features += ", ";
+          features += "\"image-area-v1\"";
+        }
+      manifest += "  \"required_features\": [" + features + "],\n";
     }
   manifest
       += "  \"generator\": {\n"
@@ -1565,6 +1657,22 @@ write_parameter_archive (
                 + json_number (geometry_final_frame->final_ratio)
                 + "\n"
                   "    }";
+  if (structured_image_area)
+    {
+      const int_optional_image_area &area = image_area->area;
+      manifest += ",\n"
+                  "    \"image_area\": {\n"
+                  "      \"enabled\": "
+                  + std::string (area.set ? "true" : "false")
+                  + ",\n"
+                    "      \"rect\": ["
+                  + std::to_string (area.set ? area.x : 0) + ", "
+                  + std::to_string (area.set ? area.y : 0) + ", "
+                  + std::to_string (area.set ? area.width : 0) + ", "
+                  + std::to_string (area.set ? area.height : 0)
+                  + "]\n"
+                    "    }";
+    }
   manifest += "\n  },\n"
               "  \"payloads\": []\n"
               "}\n";
@@ -1607,7 +1715,8 @@ write_parameter_payload_file (
     const char *name, const std::string &payload, bool archive,
     const char *generator_version, std::string *error,
     const parameter_archive_render_overrides *render_overrides,
-    const parameter_archive_geometry_final_frame *geometry_final_frame)
+    const parameter_archive_geometry_final_frame *geometry_final_frame,
+    const parameter_archive_image_area *image_area)
 {
   if (error)
     error->clear ();
@@ -1634,7 +1743,8 @@ write_parameter_payload_file (
   if (archive)
     written = write_parameter_archive (staging_utf8.c_str (), payload,
                                        generator_version, error,
-                                       render_overrides, geometry_final_frame);
+                                       render_overrides, geometry_final_frame,
+                                       image_area);
   else
     {
       FILE *out = open_utf8_binary_write (staging_utf8.c_str ());

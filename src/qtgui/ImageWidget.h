@@ -363,6 +363,8 @@ private:
   void drawPointsOverlay(QPainter &p);
   void drawProfileSpots(QPainter &p);
   void drawFocusAreas(QPainter &p);
+  /** Show saved photographic bounds without clipping the physical object. */
+  void drawPhotographicImageArea(QPainter &p);
   void drawMtfMeasurementOverlay(QPainter &p);
   void drawScreenCoordinateSystem(QPainter &p);
   void drawMeasurement(QPainter &p);

@@ -140,8 +140,12 @@ load_parameter_filename (const char *filename, scr_to_img_parameters *param,
   if (archive)
     {
       if (rparam)
-        apply_parameter_archive_render_overrides (
-            archive_manifest.render_overrides, rparam);
+        {
+          apply_parameter_archive_render_overrides (
+              archive_manifest.render_overrides, rparam);
+          apply_parameter_archive_image_area (archive_manifest.image_area,
+                                             rparam);
+        }
       if (param)
         apply_parameter_archive_geometry_final_frame (
             archive_manifest.geometry_final_frame, param);
@@ -269,6 +273,13 @@ save_parameter_filename (const char *filename, bool archive,
                          const solver_parameters *sparam,
                          const std::string &trailing, std::string *error)
 {
+  if (!archive && rparam && rparam->image_area.set)
+    {
+      if (error)
+        *error = "Legacy .par cannot preserve photographic image area; "
+                 "choose .cspar or clear the inner image bounds";
+      return false;
+    }
   std::string payload;
   if (!serialize_parameter_payload (param, dparam, rparam, sparam, trailing,
                                     &payload, error))
@@ -288,9 +299,16 @@ save_parameter_filename (const char *filename, bool archive,
       geometry_frame = parameter_archive_geometry_final_frame_from (*param);
       structured_geometry = &geometry_frame;
     }
+  parameter_archive_image_area image_area;
+  const parameter_archive_image_area *structured_image_area = nullptr;
+  if (archive && rparam)
+    {
+      image_area = parameter_archive_image_area_from (*rparam);
+      structured_image_area = &image_area;
+    }
   return write_parameter_payload_file (filename, payload, archive,
                                        PACKAGE_VERSION, error, structured,
-                                       structured_geometry);
+                                       structured_geometry, structured_image_area);
 }
 
 static enum subhelp {

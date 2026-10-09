@@ -117,7 +117,7 @@ QMessageBox *findMessageBox(const QString &title, QMessageBox *previousBox) {
 /** Click a known sequence of modal QMessageBox buttons as they appear.
 
     QFileDialog is intentionally not automated here.  The smoke establishes a
-    real current .par file first, so choosing Save exercises the ordinary
+    real current parameter file first, so choosing Save exercises the ordinary
     synchronous save path rather than a platform-native Save As dialog. */
 void queueDialogResponses(ColorScreenApplication &app,
                           std::vector<DialogResponse> responses) {
@@ -437,8 +437,12 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
       app.exit(documentLifecycleFailure);
       return;
     }
+    // The recovery fixture assigns a photographic image area to the first
+    // document.  Only .cspar can retain that field when Save is chosen from
+    // the unsaved-changes prompt.  Keep the peer on the legacy .par path to
+    // preserve its independent failure/atomic-save coverage.
     state->firstParameters = state->temporaryDirectory->filePath(
-        QStringLiteral("first.par"));
+        QStringLiteral("first.cspar"));
     state->secondParameters = state->temporaryDirectory->filePath(
         QStringLiteral("second.par"));
 
@@ -526,6 +530,9 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
           // otherwise silently lose.
           ParameterState fixture = first->documentStateSnapshot();
           fixture.rparams.gamma = 2.0;
+          fixture.rparams.image_area =
+              colorscreen::int_optional_image_area(
+                  colorscreen::int_image_area(1, 1, 4, 4));
           fixture.scrToImg.final_angle = 108.375;
           fixture.scrToImg.final_ratio = 0.803158;
           fixture.rparams.ignore_infrared = true;
@@ -609,6 +616,8 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
                 state->recoveryExpectedImage ||
             recovered.rparams.scan_mirror !=
                 expected.rparams.scan_mirror ||
+            !(recovered.rparams.image_area ==
+              expected.rparams.image_area) ||
             recovered.scrToImg.final_angle !=
                 expected.scrToImg.final_angle ||
             recovered.scrToImg.final_ratio !=
@@ -810,35 +819,17 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
                 QStringLiteral("missing-image-load.cspar"));
         QFile::remove(missingLegacySidecarPath);
         QFile::remove(missingArchiveSidecarPath);
-        if (!QFile::copy(state->firstParameters, missingLegacySidecarPath)) {
+        // The first document is now stored as an authoritative structured
+        // archive because its photographic image area cannot be represented
+        // in legacy CSP.  The second document retains a genuine legacy .par
+        // target.  Copy each in its native format: embedding a ZIP archive
+        // as the legacy.par entry of a second ZIP is not a valid sidecar.
+        if (!QFile::copy(state->secondParameters, missingLegacySidecarPath) ||
+            !QFile::copy(state->firstParameters, missingArchiveSidecarPath)) {
           delete loadProbe;
           state->recoveryProbe = nullptr;
           fail(QStringLiteral(
-              "Image-load failure smoke could not create a valid legacy sidecar"));
-          return;
-        }
-
-        QFile archivePayloadFile(state->firstParameters);
-        if (!archivePayloadFile.open(QIODevice::ReadOnly)) {
-          delete loadProbe;
-          state->recoveryProbe = nullptr;
-          fail(QStringLiteral(
-              "Image-load failure smoke could not read its sidecar payload"));
-          return;
-        }
-        const QByteArray archivePayload = archivePayloadFile.readAll();
-        archivePayloadFile.close();
-        std::string sidecarArchiveError;
-        if (!colorscreen::write_parameter_archive(
-                missingArchiveSidecarPath.toUtf8().constData(),
-                std::string(archivePayload.constData(),
-                            static_cast<size_t>(archivePayload.size())),
-                "document-lifecycle-smoke", &sidecarArchiveError)) {
-          delete loadProbe;
-          state->recoveryProbe = nullptr;
-          fail(QStringLiteral(
-                   "Image-load failure smoke could not create archive sidecar: %1")
-                   .arg(QString::fromUtf8(sidecarArchiveError)));
+              "Image-load failure smoke could not create legacy/archive sidecars"));
           return;
         }
 
@@ -1133,8 +1124,8 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
       }
 
       case 2: {
-        // A successful Save must synchronously update the current .par file and
-        // allow the document to close.
+        // A successful Save must synchronously update the current .cspar
+        // archive, including the inner image area, and allow closing.
         queueDialogResponses(app, {{QStringLiteral("Unsaved Changes"),
                                     QMessageBox::Save}});
         if (!first || !first->close()) {

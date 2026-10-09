@@ -135,6 +135,14 @@ bool saveParameterPayloadAtomically(
     const colorscreen::solver_parameters &solver,
     const std::vector<colorscreen::point_t> &profileSpots, QString *error) {
   if (!archive) {
+    if (render.image_area.set) {
+      if (error)
+        *error = QCoreApplication::translate(
+            "MainWindow",
+            "Legacy .par cannot preserve the photographic image area. "
+            "Save as .cspar or clear the inner image area first.");
+      return false;
+    }
     return qtgui_io::saveStdioAtomically(
         path,
         [&scrToImg, detect, &render, &solver, &profileSpots](FILE *staged) {
@@ -158,11 +166,13 @@ bool saveParameterPayloadAtomically(
       colorscreen::parameter_archive_render_overrides_from(render);
   const colorscreen::parameter_archive_geometry_final_frame geometryFrame =
       colorscreen::parameter_archive_geometry_final_frame_from(scrToImg);
+  const colorscreen::parameter_archive_image_area imageArea =
+      colorscreen::parameter_archive_image_area_from(render);
   std::string archiveError;
   const QByteArray targetName = path.toUtf8();
   const bool written = colorscreen::write_parameter_payload_file(
       targetName.constData(), payload, true, versionBytes.constData(),
-      &archiveError, &renderOverrides, &geometryFrame);
+      &archiveError, &renderOverrides, &geometryFrame, &imageArea);
   if (!written && error)
     *error = QString::fromUtf8(archiveError);
   else if (written && error)
@@ -227,6 +237,8 @@ bool loadParameterPayload(
   if (archive) {
     colorscreen::apply_parameter_archive_render_overrides(
         archiveManifest.render_overrides, &loadedState.rparams);
+    colorscreen::apply_parameter_archive_image_area(
+        archiveManifest.image_area, &loadedState.rparams);
     colorscreen::apply_parameter_archive_geometry_final_frame(
         archiveManifest.geometry_final_frame, &loadedState.scrToImg);
   }
@@ -539,6 +551,19 @@ bool MainWindow::saveReproducibilityReportToFile(const QString &fileName,
                             state.scrToImg.final_ratio);
   metadata.insert(QStringLiteral("geometry_final_frame"), geometryFinalFrame);
 
+  // The inner photographic bounds are not part of the trailing CSP mirror.
+  QJsonObject photographicArea;
+  photographicArea.insert(QStringLiteral("enabled"),
+                          state.rparams.image_area.set);
+  QJsonArray photographicRect;
+  const auto &bounds = state.rparams.image_area;
+  photographicRect.append(bounds.set ? bounds.x : 0);
+  photographicRect.append(bounds.set ? bounds.y : 0);
+  photographicRect.append(bounds.set ? bounds.width : 0);
+  photographicRect.append(bounds.set ? bounds.height : 0);
+  photographicArea.insert(QStringLiteral("rect"), photographicRect);
+  metadata.insert(QStringLiteral("image_area"), photographicArea);
+
   metadata.insert(QStringLiteral("workflow"), workflow);
   metadata.insert(QStringLiteral("provenance"), provenance);
 
@@ -550,7 +575,7 @@ bool MainWindow::saveReproducibilityReportToFile(const QString &fileName,
   const QByteArray payloadMarker =
       QByteArrayLiteral(
           "\n# Legacy-compatible Color-Screen parameter payload follows.\n"
-          "# Structured-only render and final geometry values are in JSON metadata.\n"
+          "# Structured-only render, final geometry and photographic bounds are in JSON metadata.\n"
           "# The legacy payload starts at the next screen_alignment_version line.\n");
 
   const QString absoluteFileName = QFileInfo(fileName).absoluteFilePath();

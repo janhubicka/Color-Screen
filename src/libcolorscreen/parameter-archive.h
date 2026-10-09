@@ -59,6 +59,22 @@ apply_parameter_archive_geometry_final_frame (
     const parameter_archive_geometry_final_frame &frame,
     scr_to_img_parameters *param);
 
+/* Persist the inner photographic bounds separately from the physical-object
+   scan crop stored by legacy CSP. A missing required image-area-v1 feature
+   means that older files have no independent photographic image boundary. */
+struct parameter_archive_image_area
+{
+  bool present = false;
+  int_optional_image_area area;
+};
+
+/* Capture and apply the versioned photographic image-area supplement. */
+DLL_PUBLIC parameter_archive_image_area
+parameter_archive_image_area_from (const render_parameters &rparam);
+DLL_PUBLIC void
+apply_parameter_archive_image_area (const parameter_archive_image_area &bounds,
+                                    render_parameters *rparam);
+
 /* Parsed compatibility information from a Color-Screen parameter archive.  */
 struct parameter_archive_manifest
 {
@@ -66,6 +82,7 @@ struct parameter_archive_manifest
   std::string legacy_csp_path;
   parameter_archive_render_overrides render_overrides;
   parameter_archive_geometry_final_frame geometry_final_frame;
+  parameter_archive_image_area image_area;
 };
 
 /* Return true if UTF-8 host path NAME starts with a ZIP signature and may
@@ -107,7 +124,8 @@ write_parameter_archive (
     const char *name, const std::string &legacy_csp,
     const char *generator_version, std::string *error,
     const parameter_archive_render_overrides *render_overrides = nullptr,
-    const parameter_archive_geometry_final_frame *geometry_final_frame = nullptr);
+    const parameter_archive_geometry_final_frame *geometry_final_frame = nullptr,
+    const parameter_archive_image_area *image_area = nullptr);
 
 /* Atomically replace UTF-8 host path NAME with PAYLOAD.
 
@@ -121,7 +139,8 @@ write_parameter_payload_file (
     const char *name, const std::string &payload, bool archive,
     const char *generator_version, std::string *error,
     const parameter_archive_render_overrides *render_overrides = nullptr,
-    const parameter_archive_geometry_final_frame *geometry_final_frame = nullptr);
+    const parameter_archive_geometry_final_frame *geometry_final_frame = nullptr,
+    const parameter_archive_image_area *image_area = nullptr);
 
 }
 

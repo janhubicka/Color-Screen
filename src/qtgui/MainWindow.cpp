@@ -1003,6 +1003,29 @@ void MainWindow::setupUi() {
                        QStringLiteral("capture"));
   connect(m_capturePanel, &CapturePanel::cropRequested, this,
           &MainWindow::onCropRequested);
+  connect(m_capturePanel, &CapturePanel::imageAreaRequested, this, [this]() {
+    startAreaSelection(tr("Select the photographic image inside the object crop"),
+                       [this](QRect chosen) {
+      if (!m_scan)
+        return;
+      ParameterState state = getCurrentState();
+      const colorscreen::int_image_area crop =
+          state.rparams.get_scan_crop(m_scan->width, m_scan->height);
+      const QRect objectRect(crop.x, crop.y, crop.width, crop.height);
+      const QRect imageRect = chosen.intersected(objectRect);
+      if (imageRect.isEmpty()) {
+        inspectorStatusBar()->showMessage(
+            tr("The image area must overlap the object crop."), 5000);
+        return;
+      }
+      // Save in unrotated scan coordinates. The outer crop continues to
+      // include mount, tape and edges, independently of these inner bounds.
+      state.rparams.image_area = colorscreen::int_optional_image_area(
+          colorscreen::int_image_area(imageRect.x(), imageRect.y(),
+                                      imageRect.width(), imageRect.height()));
+      changeParameters(state, tr("Set photographic image area"));
+    });
+  });
   connect(m_capturePanel, &CapturePanel::measureRequested, this,
           &MainWindow::onMeasureRequested);
   connect(m_capturePanel, &CapturePanel::flatFieldRequested, this,
@@ -5383,7 +5406,19 @@ void MainWindow::onAreaSelected(QRect area) {
     state.rparams.scan_crop.height = imgArea.height();
     state.rparams.scan_crop.set = true;
 
-    changeParameters(state, "Set Crop Area");
+    // Keep any already selected photographic bounds inside the new physical
+    // object. Never allow the inner image area to include outside pixels.
+    if (state.rparams.image_area.set) {
+      const colorscreen::int_image_area clipped =
+          state.rparams.image_area.intersect(state.rparams.scan_crop);
+      if (clipped.empty_p())
+        state.rparams.image_area = colorscreen::int_optional_image_area();
+      else
+        state.rparams.image_area =
+            colorscreen::int_optional_image_area(clipped);
+    }
+
+    changeParameters(state, tr("Set object crop"));
 
     // Keep center
     image->centerOn(center);

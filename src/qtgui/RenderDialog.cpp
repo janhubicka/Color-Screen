@@ -63,7 +63,8 @@ RenderDialog::RenderDialog(
     const QString &outputPath,
     bool isDng,
     QWidget *parent)
-  : QDialog(parent), m_rtparams(rtparams), m_scrParams(scrParams), m_scan(scan)
+  : QDialog(parent), m_rtparams(rtparams), m_rparams(rparams),
+    m_scrParams(scrParams), m_scan(scan)
 {
   setWindowTitle(tr("Render to File"));
   setMinimumWidth(520);
@@ -137,7 +138,8 @@ RenderDialog::RenderDialog(
   }
 
   auto *processingLabel = new QLabel(
-      tr("Uses the current document crop and Sharpness settings. "
+      tr("Uses the selected photographic image area for cropping when available; "
+         "otherwise the document crop or original output bounds. "
          "No additional export-only sharpening is applied."),
       outputGroup);
   processingLabel->setObjectName(
@@ -389,7 +391,8 @@ void RenderDialog::updateSizePreview()
   render_type_parameters rt = renderTypeParams();
   scr_to_img_parameters  sc = m_scrParams;
 
-  if (!complete_rendered_file_parameters(rt, sc, const_cast<image_data &>(*m_scan), &rfp)) {
+  if (!complete_rendered_file_parameters(rt, sc, const_cast<image_data &>(*m_scan),
+                                          &rfp, &m_rparams)) {
     m_sizePreviewLabel->setText(tr("(cannot compute)"));
     return;
   }

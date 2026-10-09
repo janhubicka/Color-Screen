@@ -51,6 +51,8 @@ private:
 
   // Stored copies for complete_rendered_file_parameters calls
   colorscreen::render_type_parameters m_rtparams;
+  // Snapshot of source processing state for accurate photographic bounds.
+  colorscreen::render_parameters m_rparams;
   colorscreen::scr_to_img_parameters  m_scrParams;
   const colorscreen::image_data      *m_scan;
 
