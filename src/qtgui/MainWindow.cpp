@@ -881,14 +881,24 @@ void MainWindow::setupUi() {
                        },
                        [this]() { return panelImageData(); }, this);
 
-  // Create Tiles Panel
+  // Create Tiles Panel. Exposure/dark-point edits remain document
+  // changes, but tile visibility belongs to the currently inspected view.
   m_tilesPanel =
       new TilesPanel([this]() { return getCurrentState(); },
                      [this](const ParameterState &s, const QString &desc,
                              const QString &parameterKey) {
                          changeParameters(s, desc, parameterKey);
                        },
-                     [this]() { return panelImageData(); }, this);
+                     [this]() { return panelImageData(); },
+                     [this](int x, int y) {
+                       ImageWidget *view = inspectorImageWidget();
+                       return !view || view->tileVisible(x, y);
+                     },
+                     [this](int x, int y, bool visible) {
+                       if (ImageWidget *view = inspectorImageWidget())
+                         view->setTileVisible(x, y, visible);
+                     },
+                     this);
 
   // Create Image Layer Panel
   m_imageLayerPanel =
@@ -2985,6 +2995,10 @@ void MainWindow::syncInspectorViewActions() {
     const QSignalBlocker blocker(action);
     action->setChecked((int)image->viewOutputProfile() == i);
   }
+  // The same shared inspector may be attached to a different ordinary view,
+  // which has an independent stitched-tile visibility mask.
+  if (m_tilesPanel)
+    m_tilesPanel->updateUI();
 }
 
 /** Suppress tool cancellation while Qt moves one document's presentation.
