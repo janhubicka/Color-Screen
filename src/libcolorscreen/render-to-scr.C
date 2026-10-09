@@ -436,11 +436,13 @@ render_to_scr::simulate_screen (progress_info *progress)
   sharpen.usm_radius = m_params.screen_blur_radius * psize;
   sharpen.scanner_mtf_scale *= psize;
   screen_sampling sampling = screen_sampling::integrate_pixel;
-  std::shared_ptr<screen> scr = get_screen (m_scr_to_img.get_type (), false,
-	       false,
-	       sharpen,
-	       m_params.red_strip_width,
-	       m_params.green_strip_width, progress, &screen_id, &sampling);
+  std::shared_ptr<screen> scr = get_screen (
+      m_scr_to_img.get_type (), false, false, sharpen,
+      m_params.red_strip_width, m_params.green_strip_width,
+      progress, &screen_id, &sampling, nullptr,
+      m_params.get_image_layer_wavelength (&m_img));
+  if (!scr)
+    return;
   m_simulated_screen =
     get_simulated_screen (m_scr_to_img.get_param (), scr.get (), screen_id,
                           sampling, m_params.sharpen,
