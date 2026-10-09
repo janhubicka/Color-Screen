@@ -597,9 +597,19 @@ struct finetune_screen_cache_params
                 || green_strip_width != o.green_strip_width)))
       return false;
     for (int c = 0; c < 3; c++)
-      if (!same_filtered_screen_parameters_p (
-              sharpen[c], o.sharpen[c], anticipate_sharpening))
-        return false;
+      {
+        if (!same_filtered_screen_parameters_p (
+                sharpen[c], o.sharpen[c], anticipate_sharpening))
+          return false;
+        /* MTF_PARAMETERS::OPERATOR== compares the optical model independently
+           of wavelength; optical caches receive wavelength as a separate
+           key.  This finished-screen cache receives only SHARPEN, so the
+           effective process-primary wavelength must be compared explicitly
+           to avoid reusing a screen filtered at the wrong wavelength.  */
+        if (sharpen[c].scanner_mtf.get_channel_wavelength (c)
+            != o.sharpen[c].scanner_mtf.get_channel_wavelength (c))
+          return false;
+      }
     return true;
   }
 };
