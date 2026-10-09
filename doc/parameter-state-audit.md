@@ -121,8 +121,12 @@ the grid.
 false promise of persistence and Undo/dirty changes during tile loading.
 The Tiles checkbox controls the current view's render mask, and successful
 background loads notify canvases without modifying `ParameterState`.
-`tile_for_scr(..., only_loaded)` continues checking physical readiness.
-Per-tile calibration is unaffected.
+`tile_for_scr(..., only_loaded)` checks an acquire/release tile-ready flag
+published only when incremental decode and validation complete: the image
+pointer itself becomes non-null too early. GUI stitch documents retain decoded
+tiles in memory while rendering, and the process-wide loader bookkeeping uses
+atomic counters for concurrent distinct-tile workers. Neither mask nor
+readiness flag is serialized. Per-tile calibration is unaffected.
 
 ## Confirmed user decisions for the next GUI work
 
