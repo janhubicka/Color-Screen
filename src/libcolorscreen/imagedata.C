@@ -9,6 +9,7 @@
 #include <array>
 #include <atomic>
 #include <cstdint>
+#include <mutex>
 #include <assert.h>
 #include <cmath>
 #include <cstdlib>
@@ -49,7 +50,11 @@ static std::atomic<uint64_t> retained_raw_source_bytes {0};
 class unpacked_raw_source
 {
 public:
+  /* Future dcraw_process() calls must be serialized on this single mutable
+     LibRaw instance; finished image_data variants own independent pixels. */
+  std::mutex processing_mutex;
   std::unique_ptr<LibRaw> processor;
+  std::string source_filename;
   void *input_buffer = nullptr;
   uint64_t reserved_bytes = 0;
 
@@ -217,6 +222,7 @@ public:
        The active image_data already owns a separate pixel copy. */
     m_processor->free_image ();
     source->processor = std::move (m_processor);
+    source->source_filename = std::move (m_source_filename);
     source->input_buffer = m_buffer;
     m_buffer = nullptr;
     return source;
@@ -228,6 +234,7 @@ private:
   void *m_buffer;
   /* Do not put it on the stack since it is rather large.  */
   std::unique_ptr<LibRaw> m_processor;
+  std::string m_source_filename;
   bool monochromatic = false;
   bool bayer_correction = false;
 };
@@ -744,6 +751,9 @@ raw_image_data_loader::init_loader (const char *name, const char **error,
                                     progress_info *progress,
                                     image_data::demosaicing_t demosaic)
 {
+  /* Retain the actual external identity before an EIP archive rewrites NAME
+     to its internal IIQ entry (EIP caching is currently not admitted). */
+  m_source_filename = name;
   size_t buffer_size = 0;
   m_buffer = NULL;
   if (has_suffix (name, ".eip"))
