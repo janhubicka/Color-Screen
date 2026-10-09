@@ -320,18 +320,18 @@ void startWorkspaceChurnSmoke(ColorScreenApplication &app,
             first->documentStateSnapshot();
         first->m_imageWidget->setViewGamutWarning(true);
         view->imageWidget()->setViewOutputProfile(
-            colorscreen::render_parameters::output_profile_xyz);
+            colorscreen::render_output_parameters::output_profile_xyz);
         first->syncInspectorViewActions();
         if (first->m_imageWidget->viewGamutWarning() != true ||
             view->imageWidget()->viewGamutWarning() != false ||
             first->m_imageWidget->viewOutputProfile() !=
-                colorscreen::render_parameters::output_profile_sRGB ||
+                colorscreen::render_output_parameters::output_profile_sRGB ||
             view->imageWidget()->viewOutputProfile() !=
-                colorscreen::render_parameters::output_profile_xyz ||
+                colorscreen::render_output_parameters::output_profile_xyz ||
             first->documentStateSnapshot() != colorViewBaseline ||
             first->m_gamutWarningAction->isChecked() ||
             !first->m_viewOutputProfileActions[
-                colorscreen::render_parameters::output_profile_xyz]->isChecked()) {
+                colorscreen::render_output_parameters::output_profile_xyz]->isChecked()) {
           fail(QStringLiteral(
               "View-local display options affected a sibling or document state"));
           return;
@@ -340,7 +340,7 @@ void startWorkspaceChurnSmoke(ColorScreenApplication &app,
         first->syncInspectorViewActions();
         if (!first->m_gamutWarningAction->isChecked() ||
             !first->m_viewOutputProfileActions[
-                colorscreen::render_parameters::output_profile_sRGB]->isChecked()) {
+                colorscreen::render_output_parameters::output_profile_sRGB]->isChecked()) {
           fail(QStringLiteral(
               "Shared View menu did not track the primary image canvas"));
           return;
@@ -348,7 +348,7 @@ void startWorkspaceChurnSmoke(ColorScreenApplication &app,
         first->m_imageWidget->setViewGamutWarning(false);
         workspace->activateView(view);
         view->imageWidget()->setViewOutputProfile(
-            colorscreen::render_parameters::output_profile_sRGB);
+            colorscreen::render_output_parameters::output_profile_sRGB);
         first->syncInspectorViewActions();
         if (first->documentStateSnapshot() != colorViewBaseline) {
           fail(QStringLiteral(
