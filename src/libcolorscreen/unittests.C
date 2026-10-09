@@ -10287,6 +10287,49 @@ test_parameter_archive ()
   return true;
 }
 
+/* A stitched image may establish its dimensions after loading a CSP
+   sidecar. That must not discard tile-specific user corrections that were
+   already read from the file. A genuinely different grid still resets to
+   documented defaults instead of reusing adjustments at wrong coordinates. */
+static bool
+test_stitch_tile_adjustment_grid ()
+{
+  render_parameters params;
+  params.set_tile_adjustments_dimensions (2, 1);
+  auto &left = params.get_tile_adjustment (0, 0);
+  left.exposure = (luminosity_t)1.25;
+  left.dark_point = (luminosity_t)0.125;
+  left.enabled = false;
+  params.get_tile_adjustment (1, 0).exposure = (luminosity_t)0.75;
+
+  /* MainWindow::loadFile repeats the grid size after reading a sidecar. */
+  params.set_tile_adjustments_dimensions (2, 1);
+  if (params.tile_adjustments.size () != 2
+      || params.get_tile_adjustment (0, 0).exposure != (luminosity_t)1.25
+      || params.get_tile_adjustment (0, 0).dark_point != (luminosity_t)0.125
+      || params.get_tile_adjustment (0, 0).enabled
+      || params.get_tile_adjustment (1, 0).exposure != (luminosity_t)0.75)
+    {
+      fprintf (stderr,
+               "Reconfirming stitch grid dimensions discarded tile settings\n");
+      return false;
+    }
+
+  /* A 1x2 grid is not the same mapping as a 2x1 grid. */
+  params.set_tile_adjustments_dimensions (1, 2);
+  if (params.tile_adjustments.size () != 2
+      || params.get_tile_adjustment (0, 0).exposure != (luminosity_t)1
+      || params.get_tile_adjustment (0, 0).dark_point != (luminosity_t)0
+      || !params.get_tile_adjustment (0, 0).enabled
+      || params.get_tile_adjustment (0, 1).exposure != (luminosity_t)1)
+    {
+      fprintf (stderr, "A changed stitch grid retained stale tile settings\n");
+      return false;
+    }
+  params.set_tile_adjustments_dimensions (0, 0);
+  return params.tile_adjustments.empty ();
+}
+
 /* Verify conservative detection of monochromatic data that was initially
    rendered as RGB from a standard Bayer RAW file.  Channel gains/offsets and
    small noise are allowed; real chromatic structure, flat data and non-Bayer
@@ -10442,6 +10485,8 @@ main (int argc, char **argv)
     { "mesh_inversion", "mesh inversion tests", [] () { return test_mesh_inversion (); } },
     { "cow_points", "cow points tests", [] () { return test_cow_points (); } },
     { "image_area", "image area tests", [] () { return test_image_area (); } },
+    { "stitch_tile_grid", "stitch tile adjustment grid persistence tests",
+      [] () { return test_stitch_tile_adjustment_grid (); } },
     { "channel_sharpening", "per-channel scanner sharpening tests",
       [] () { return test_channel_sharpening (); } },
     { "slanted_edge", "slanted edge MTF tests", [] () { return test_slanted_edge_mtf (); } },

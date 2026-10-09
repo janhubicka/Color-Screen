@@ -468,9 +468,8 @@ struct render_parameters
     std::shared_ptr <scanner_blur_correction_parameters> scanner_blur_correction = nullptr;
     /* If true tile is rendered, if false tile is not rendered.  */
     bool enabled = true;
-    /* Coordinates of the tile in stitch project (used to check that tile
-       adjustments match stitch project dimensions).  */
-    unsigned char x = 0, y = 0;
+    /* Position comes from the tile-adjustment grid index and its dimensions,
+       not from independently stored per-tile coordinates. */
 
     /* Default constructor.  */
     constexpr tile_adjustment () = default;

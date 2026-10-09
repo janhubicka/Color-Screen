@@ -944,10 +944,17 @@ render_parameters::get_icc_profile (void **buffer, image_data *img, bool normali
   return create_profile(color_model_properties[color_model].name, r, g, b, observer_whitepoint, output_gamma, buffer);
 }
 
-/* Set dimensions of tile adjustments vector to W x H.  */
+/* Set dimensions of tile adjustments vector to W x H.  A repeated
+   dimension assignment must not erase user-authored per-tile exposure,
+   dark-point or scanner blur corrections.  In particular, the Qt stitched
+   image loader calls this after reading its parameter sidecar.  */
 void
 render_parameters::set_tile_adjustments_dimensions (int w, int h)
 {
+  if (tile_adjustments_width == w && tile_adjustments_height == h
+      && tile_adjustments.size () == (size_t)w * h)
+    return;
+
   tile_adjustments.clear ();
   tile_adjustments.resize (w * h);
   for (tile_adjustment &adj : tile_adjustments)
