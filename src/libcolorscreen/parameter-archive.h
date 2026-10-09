@@ -202,6 +202,21 @@ decode_parameter_json_v2_reconstruction (
     const std::string &input, render_parameters *render,
     std::string *error);
 
+/* Encode historical process colour-model, screen strip widths, dye
+   aging/density and complete contact-copy characteristic curve into native
+   JSON. This is a component for a future complete v2 document. */
+DLL_PUBLIC bool
+encode_parameter_json_v2_process (
+    const render_parameters &render, std::string *output,
+    std::string *error);
+
+/* Decode process parameters transactionally without changing other render
+   controls, or the document, on failure. */
+DLL_PUBLIC bool
+decode_parameter_json_v2_process (
+    const std::string &input, render_parameters *render,
+    std::string *error);
+
 /* Parse the native JSON v2 registration component into independent temporary
    state, committing only when all fields and bounds are valid. This prevents
    a malformed field from partially mutating a live document. ERROR gives a
