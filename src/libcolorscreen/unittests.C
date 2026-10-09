@@ -10490,6 +10490,24 @@ test_stitch_tile_adjustment_grid ()
   if (!params.tile_adjustments.empty ())
     return false;
 
+  /* The loader allocates the image object before its incremental decoder
+     has written all pixels. A non-null IMG must not be enough for an
+     only_loaded render lookup. Otherwise a background load could expose
+     partially initialized capture data to another thread. */
+  auto project = std::make_unique<stitch_project> ();
+  project->params.width = 1;
+  project->params.height = 1;
+  stitch_image &incomplete = project->images[0][0];
+  incomplete.img = std::make_unique<image_data> ();
+  int tile_x = -1, tile_y = -1;
+  if (incomplete.image_ready_p ()
+      || project->tile_for_scr (nullptr, 0, 0, &tile_x, &tile_y, true))
+    {
+      fprintf (stderr,
+               "Unfinished stitched tile was published to rendering\\n");
+      return false;
+    }
+
   /* A tile's presence in a render is not a property of its exposure,
      nor is it tied to any other view. Every new output request includes
      all available tiles until this view explicitly hides one. */
