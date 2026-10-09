@@ -4370,4 +4370,102 @@ decode_parameter_json_v2_document (
   return true;
 }
 
+
+/* Check whether UTF-8 host path NAME looks like a native JSON text file.
+   This does not claim full schema-v2 validity: use the complete reader for
+   format-marker, version, required fields and hostile input validation. */
+bool
+parameter_json_v2_signature_p (const char *name)
+{
+  FILE *file = open_utf8_binary_read (name);
+  if (!file)
+    return false;
+  int first = EOF;
+  do
+    first = fgetc (file);
+  while (first == ' ' || first == '\t' || first == '\r'
+         || first == '\n');
+  fclose (file);
+  return first == '{';
+}
+
+/* Stream a whole native JSON document from UTF-8 PATH while enforcing the
+   codec's input limit before allocating untrusted arrays. No FILE* returned
+   to frontends is disguised as a legacy CSP parameter stream. */
+bool
+read_parameter_json_v2_file (
+    const char *name, scr_to_img_parameters *geometry,
+    scr_detect_parameters *detection, render_parameters *render,
+    solver_parameters *solver, std::vector<point_t> *profile_spots,
+    std::string *error)
+{
+  if (error)
+    error->clear ();
+  if (!name || !geometry || !detection || !render || !solver
+      || !profile_spots)
+    return archive_fail (error, "invalid v2 document file arguments");
+
+  FILE *file = open_utf8_binary_read (name);
+  if (!file)
+    return archive_fail (error, "could not open native JSON v2 file");
+  std::string contents;
+  char buffer[64 * 1024];
+  bool ok = true;
+  while (true)
+    {
+      const size_t count = fread (buffer, 1, sizeof (buffer), file);
+      if (count)
+        {
+          if (count > v2_max_document_bytes - contents.size ())
+            {
+              archive_fail (error, "v2 parameter file exceeds size limit");
+              ok = false;
+              break;
+            }
+          contents.append (buffer, count);
+        }
+      if (count < sizeof (buffer))
+        {
+          if (ferror (file))
+            {
+              archive_fail (error, "error reading native JSON v2 file");
+              ok = false;
+            }
+          break;
+        }
+    }
+  if (fclose (file) != 0)
+    {
+      archive_fail (error, "error closing native JSON v2 file");
+      ok = false;
+    }
+  if (!ok)
+    return false;
+  return decode_parameter_json_v2_document (
+      contents, geometry, detection, render, solver, profile_spots, error);
+}
+
+/* Write the complete direct native JSON document atomically using the same
+   Unicode-path, sibling-staging and replace-on-success writer as schema-v1
+   archives. ARCHIVE=false here means raw bytes, never legacy CSP conversion. */
+bool
+write_parameter_json_v2_file (
+    const char *name, const scr_to_img_parameters &geometry,
+    const scr_detect_parameters &detection,
+    const render_parameters &render, const solver_parameters &solver,
+    const std::vector<point_t> &profile_spots, std::string *error)
+{
+  if (error)
+    error->clear ();
+  if (!name)
+    return archive_fail (error, "missing native JSON v2 output pathname");
+  std::string document;
+  if (!encode_parameter_json_v2_document (
+          geometry, detection, render, solver, profile_spots,
+          &document, error))
+    return false;
+  return write_parameter_payload_file (name, document,
+                                       /*archive=*/false, nullptr, error);
+}
+
 }
