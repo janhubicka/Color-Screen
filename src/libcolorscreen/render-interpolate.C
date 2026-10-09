@@ -1025,7 +1025,7 @@ analyze_patches (analyzer analyze, const char *task, image_data &img,
 			if (pfin.x < full_area.x || pfin.y < full_area.y
                             || pfin.x > full_area.x + full_area.width
 			    || pfin.y > full_area.y + full_area.height
-			    || !stitch.tile_for_scr (&my_rparam, src.x, src.y,
+			    || !stitch.tile_for_scr (nullptr, src.x, src.y,
 						     &ttx, &tty, true)
 			    || ttx != tx || tty != ty)
 			  return true;
@@ -1104,7 +1104,7 @@ analyze_rgb_patches (rgb_analyzer analyze, const char *task, image_data &img,
 			if (pfin.x < full_area.x || pfin.y < full_area.y
                             || pfin.x > full_area.x + full_area.width
 			    || pfin.y > full_area.y + full_area.height
-			    || !stitch.tile_for_scr (&my_rparam, src.x, src.y,
+			    || !stitch.tile_for_scr (nullptr, src.x, src.y,
 						     &ttx, &tty, true)
 			    || ttx != tx || tty != ty)
 			  return true;
