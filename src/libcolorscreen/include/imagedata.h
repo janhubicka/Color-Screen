@@ -14,6 +14,7 @@ namespace colorscreen
 
 class image_data_loader;
 class stitch_project;
+struct raw_capture_source;
 
 /* Statistics describing whether an RGB RAW rendering is consistent with one
    monochromatic signal observed through the three Bayer filter colors.  */
@@ -27,7 +28,7 @@ struct monochrome_bayer_analysis
 };
 
 /* Scanned image descriptor.  */
-class image_data
+class image_data : public std::enable_shared_from_this<image_data>
 {
 public:
   /* Specify spectra or XYZ coordinates of color dyes used in the process.  */
@@ -182,6 +183,20 @@ public:
   nodiscard_attr DLL_PUBLIC bool load (const char *name, bool preload_all, const char **error,
 				       progress_info *progress = NULL,
 				       demosaicing_t demosaic = demosaic_default);
+
+  /* Return a separately owned RAW decode using MODE, generating it on demand
+     from this image's retained, already unpacked LibRaw mosaic. Other image
+     formats have no mosaic and return nullptr with a diagnostic. Results for
+     the same MODE share their image_data while consumers retain them; the
+     cache itself holds only weak references to avoid an image/source cycle.
+     Results are published only when fully decoded and not cancelled.
+     Serialized demosaic preference remains in render_parameters. */
+  DLL_PUBLIC std::shared_ptr<image_data>
+  demosaiced_variant (demosaicing_t mode, const char **error,
+                      progress_info *progress = nullptr);
+
+  /* True only for a completed RAW load with a retained unpacked capture. */
+  DLL_PUBLIC bool can_redemosaic () const;
   /* Set dimensions of the image.  This can be used to produce image_data
      without loading it.  */
   nodiscard_attr DLL_PUBLIC bool set_dimensions (int w, int h, bool allocate_rgb = false,
@@ -239,6 +254,10 @@ public:
 
 private:
   std::unique_ptr<image_data_loader> loader;
+  /* Retained, unpacked RAW pixels (not rendered/demosaiced). Shared by
+     independently owned image variants; never stored in a parameter file. */
+  std::shared_ptr<raw_capture_source> m_raw_capture;
+  demosaicing_t m_requested_demosaic = demosaic_default;
   /* True if the data is owned by the structure.  */
   bool own = false;
   bool m_preload_all = false;
