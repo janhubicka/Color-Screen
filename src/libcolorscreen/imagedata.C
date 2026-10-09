@@ -1399,6 +1399,7 @@ image_data::init_loader (const char *name, bool preload_all,
                          demosaicing_t demosaic)
 {
   assert (!loader);
+  m_requested_demosaic = demosaic;
   m_preload_all = preload_all;
   if (has_suffix (name, ".tif") || has_suffix (name, ".tiff"))
     loader = std::make_unique<tiff_image_data_loader> (this);
@@ -1445,6 +1446,18 @@ image_data::load_part (int *permille, const char **error,
   bool ret = loader->load_part (permille, error, progress);
   if (!ret || *permille == 1000)
     {
+      if (ret && *permille == 1000)
+        if (auto *raw = dynamic_cast<raw_image_data_loader *> (loader.get ()))
+          {
+            /* The loader's LibRaw has already unpacked the sensor mosaic.
+               Retain it separately before destroying the transient loader.
+               Only the completely decoded original enters the weak cache. */
+            m_raw_capture = raw->retain_capture ();
+            std::lock_guard<std::mutex> lock (m_raw_capture->mutex);
+            m_raw_capture->variants[(int)m_requested_demosaic]
+                = weak_from_this ();
+            m_raw_capture->processor->free_image ();
+          }
       loader = NULL;
       /* If color profile is available, parse it.  */
       if (icc_profile)
