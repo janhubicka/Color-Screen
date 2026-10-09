@@ -474,7 +474,7 @@ test_finetune_helpers ()
   coord_t useful_blur_limit = 0;
   if (!finetune_useful_blur_diameter_limit (
           fallback_mtf, screen_frequency, (coord_t)0.05, 20,
-          &useful_blur_limit)
+          &useful_blur_limit, test_mtf_wavelength (fallback_mtf))
       || useful_blur_limit <= 0 || useful_blur_limit >= 20)
     {
       fprintf (stderr, "Useful fallback-blur range was not detected\n");
@@ -491,7 +491,7 @@ test_finetune_helpers ()
   fallback_mtf.blur_diameter = 0;
   if (finetune_useful_blur_diameter_limit (
           focus_mtf, screen_frequency, (coord_t)0.05, 20,
-          &useful_blur_limit))
+          &useful_blur_limit, test_mtf_wavelength (focus_mtf)))
     {
       fprintf (stderr, "Physical model was accepted as fallback blur\n");
       return false;
