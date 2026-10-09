@@ -10714,6 +10714,81 @@ test_raw_source_variants ()
       fprintf (stderr, "Invalid RAW variant request was not rejected\n");
       return false;
     }
+
+  /* A pre-cancelled request must never publish a variant.  The retained
+     sensor mosaic remains usable for the same algorithm afterwards. */
+  progress_info cancelled;
+  cancelled.cancel ();
+  error = nullptr;
+  if (source.demosaiced_variant (image_data::demosaic_VNG, &error, &cancelled)
+      || !error || strcmp (error, "cancelled"))
+    {
+      fprintf (stderr, "Cancelled RAW request was not rejected\n");
+      return false;
+    }
+  error = nullptr;
+  auto after_cancel = source.demosaiced_variant (image_data::demosaic_VNG,
+                                                 &error);
+  image_data fresh_vng;
+  if (!after_cancel
+      || !fresh_vng.load (path, true, &error, nullptr,
+                          image_data::demosaic_VNG)
+      || !same_pixels (*after_cancel, fresh_vng))
+    {
+      fprintf (stderr, "Cancellation damaged RAW source: %s\n",
+               error ? error : "pixel/geometry mismatch");
+      return false;
+    }
+
+  /* Concurrent requests for the same algorithm must serialize reprocessing
+     and return one published result, not competing partially decoded images. */
+  constexpr int concurrent_requests = 8;
+  std::array<std::shared_ptr<image_data>, concurrent_requests> results;
+  std::array<const char *, concurrent_requests> errors {};
+  std::vector<std::thread> workers;
+  for (int i = 0; i < concurrent_requests; i++)
+    workers.emplace_back ([&source, &results, &errors, i] ()
+      {
+        results[i] = source.demosaiced_variant (image_data::demosaic_AHD,
+                                                &errors[i]);
+      });
+  for (std::thread &worker : workers)
+    worker.join ();
+  for (int i = 0; i < concurrent_requests; i++)
+    if (!results[i] || results[i] != results[0] || errors[i])
+      {
+        fprintf (stderr, "Concurrent RAW requests did not share one variant\n");
+        return false;
+      }
+
+  /* A freshly reopened RAW is a distinct resource: its cached results and
+     identities cannot alias variants from the previous image generation. */
+  image_data other_source;
+  error = nullptr;
+  if (!other_source.load (path, true, &error, nullptr,
+                          image_data::demosaic_linear)
+      || !other_source.has_unpacked_raw_source ())
+    {
+      fprintf (stderr, "Could not reopen independent RAW source: %s\n",
+               error ? error : "missing mosaic");
+      return false;
+    }
+  auto other_variant = other_source.demosaiced_variant (
+      image_data::demosaic_AHD, &error);
+  if (!other_variant || other_variant == results[0]
+      || other_variant->id == results[0]->id
+      || !same_pixels (*other_variant, *results[0]))
+    {
+      fprintf (stderr, "Separate RAW sources alias or decode differently\n");
+      return false;
+    }
+  const image_data::pixel after_threads = source.get_rgb_pixel (47, 61);
+  if (baseline.r != after_threads.r || baseline.g != after_threads.g
+      || baseline.b != after_threads.b)
+    {
+      fprintf (stderr, "Concurrent RAW requests changed source pixels\n");
+      return false;
+    }
   return true;
 }
 
