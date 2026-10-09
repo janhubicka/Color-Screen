@@ -4,9 +4,12 @@
 #include "include/render-parameters.h"
 #include "include/render-type-parameters.h"
 #include "include/scr-to-img-parameters.h"
+#include "include/scr-detect-parameters.h"
+#include "include/solver-parameters.h"
 
 #include <cstdio>
 #include <string>
+#include <vector>
 
 namespace colorscreen
 {
@@ -146,6 +149,34 @@ write_parameter_payload_file (
     const parameter_archive_render_overrides *render_overrides = nullptr,
     const parameter_archive_geometry_final_frame *geometry_final_frame = nullptr,
     const parameter_archive_image_area *image_area = nullptr);
+
+
+/* Serialize one native JSON v2 registration component.
+
+   This is a lossless building block for the eventual complete schema-v2
+   document, NOT a standalone .cspar writer. It reads these structures
+   directly, without constructing or parsing legacy CSP text. It includes
+   accepted screen geometry (including mesh and final frame), detection dye
+   controls, solver policy/points and profile spots. The full document writer
+   must not be exposed until every persistent domain has native coverage.
+   OUTPUT remains unchanged on failure. */
+DLL_PUBLIC bool
+encode_parameter_json_v2_registration (
+    const scr_to_img_parameters &geometry,
+    const scr_detect_parameters &detection,
+    const solver_parameters &solver,
+    const std::vector<point_t> &profile_spots,
+    std::string *output, std::string *error);
+
+/* Parse the native JSON v2 registration component into independent temporary
+   state, committing only when all fields and bounds are valid. This prevents
+   a malformed field from partially mutating a live document. ERROR gives a
+   diagnostic; all outputs remain unchanged on failure. */
+DLL_PUBLIC bool
+decode_parameter_json_v2_registration (
+    const std::string &input, scr_to_img_parameters *geometry,
+    scr_detect_parameters *detection, solver_parameters *solver,
+    std::vector<point_t> *profile_spots, std::string *error);
 
 }
 
