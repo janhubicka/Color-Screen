@@ -836,7 +836,7 @@ render::precompute_all (int flags, rgbdata patch_proportions,
           = std::make_unique<precomputed_function<luminosity_t>> (
               lmin, lmax, yvals, steps);
     }
-  return out_color.precompute (m_params, &m_img, normalized_patches,
+  return out_color.precompute (m_params, m_output, &m_img, normalized_patches,
                                patch_proportions, progress);
 }
 
