@@ -6138,10 +6138,11 @@ void MainWindow::onRender() {
     // Keep the settings dialog parent-owned and asynchronous too. The render
     // request snapshots document + dialog state only after explicit acceptance.
     colorscreen::render_type_parameters previewType = m_renderTypeParams;
-    if (ImageWidget *view = inspectorImageWidget()) {
-      previewType.output.output_profile = view->viewOutputProfile();
-      previewType.output.gamut_warning = view->viewGamutWarning();
-    }
+    if (ImageWidget *view = inspectorImageWidget())
+      previewType.output = view->viewOutputParameters();
+    // A gamut-warning overlay is a diagnostic of an onscreen preview, not
+    // a request to paint warning colours into the exported photograph.
+    previewType.output.gamut_warning = false;
     auto *dialog = new RenderDialog(
         previewType, m_rparams, m_scrToImgParams, m_scan.get(),
         outputPath, isDng, this);
