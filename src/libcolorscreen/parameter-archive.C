@@ -1870,8 +1870,21 @@ template <class T>
 bool
 v2_real (const json_value &number, T *out)
 {
+  if (number.type != json_value::kind::number || number.text.empty ())
+    return false;
+  /* The JSON lexical parser has already validated the number spelling.
+     Parse in the classic locale: legacy CSP's setlocale hack must not
+     determine whether a native JSON decimal point is accepted. */
+  std::istringstream stream (number.text);
+  stream.imbue (std::locale::classic ());
   double value = 0;
-  if (!json_finite_double (number, &value))
+  if (!(stream >> value) || !my_isfinite (value))
+    return false;
+  char extra = 0;
+  if (stream.get (extra) || !stream.eof ())
+    return false;
+  if (value < (double)std::numeric_limits<T>::lowest ()
+      || value > (double)std::numeric_limits<T>::max ())
     return false;
   T converted = (T)value;
   if (!my_isfinite (converted))
@@ -1919,9 +1932,11 @@ v2_field_real (const json_value &object, const char *key, T *out,
 {
   const json_value *v
       = v2_required (object, key, json_value::kind::number, error);
-  return v && (v2_real (*v, out)
-               || archive_fail (error,
-                                std::string ("invalid v2 number: ") + key));
+  if (!v)
+    return false;
+  if (!v2_real (*v, out))
+    return archive_fail (error, std::string ("invalid v2 number: ") + key);
+  return true;
 }
 
 /* Decode a typed required boolean into OUT. */
@@ -2201,10 +2216,12 @@ encode_parameter_json_v2_registration (
   text += ",\n    \"optimize_tilt\": ";
   text += solver.optimize_tilt ? "true" : "false";
   text += ",\n    \"points\": [";
+  bool first_point = true;
   for (const auto &point : solver.points)
     {
-      if (&point != &solver.points[0])
+      if (!first_point)
         text += ",";
+      first_point = false;
       text += "\n      {\"image\": " + v2_point_text (point.img)
               + ", \"screen\": " + v2_point_text (point.scr)
               + ", \"color\": \""
@@ -2338,16 +2355,15 @@ decode_parameter_json_v2_registration (
       = v2_required (*r, "points", json_value::kind::array, error);
   if (!points || points->array_value.size () > v2_max_registration_points)
     return archive_fail (error, "invalid v2 registration points");
+  std::vector<std::string> colour_names;
+  for (int i = 0; i < solver_parameters::max_point_color; ++i)
+    colour_names.emplace_back (solver_parameters::point_color_names[i]);
   for (const json_value &point : points->array_value)
     {
       if (point.type != json_value::kind::object)
         return archive_fail (error, "v2 registration point must be object");
       solver_parameters::solver_point_t p;
       int colour = 0;
-      std::vector<std::string> colour_names;
-      for (int i = 0; i < solver_parameters::max_point_color; ++i)
-        colour_names.emplace_back (
-            solver_parameters::point_color_names[i]);
       if (!v2_field_point (point, "image", &p.img, error)
           || !v2_field_point (point, "screen", &p.scr, error)
           || !v2_enum (point, "color", colour_names, &colour, error))
