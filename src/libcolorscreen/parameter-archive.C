@@ -2246,7 +2246,6 @@ encode_parameter_json_v2_registration (
 
 /* Decode a self-contained native v2 registration component, committing
    geometry, dye detection, solver settings and spots only on total success. */
-bool
 /* Decode a validated JSON syntax tree into the named native component.
    The public component reader and future full document reader share this
    implementation rather than parsing or serializing nested data twice. */
@@ -2383,6 +2382,7 @@ v2_decode_registration_root (const json_value &root,
   return true;
 }
 
+bool
 decode_parameter_json_v2_registration (
     const std::string &input, scr_to_img_parameters *geometry,
     scr_detect_parameters *detection, solver_parameters *solver,
@@ -2579,7 +2579,6 @@ encode_parameter_json_v2_capture (const render_parameters &capture,
 /* Decode a native capture component while preserving unrelated colour,
    sharpness, reconstruction and grid controls in CAPTURE. No output changes
    until the complete document has passed strict validation. */
-bool
 /* Decode a validated JSON syntax tree into the named native component.
    The public component reader and future full document reader share this
    implementation rather than parsing or serializing nested data twice. */
@@ -2627,6 +2626,7 @@ v2_decode_capture_root (const json_value &root,
   return true;
 }
 
+bool
 decode_parameter_json_v2_capture (const std::string &input,
                                   render_parameters *capture,
                                   std::string *error)
@@ -2787,7 +2787,6 @@ encode_parameter_json_v2_reconstruction (const render_parameters &render,
 
 /* Parse native reconstruction controls into a copy. The independent input,
    output and MTF/correction settings already in RENDER are not changed. */
-bool
 /* Decode a validated JSON syntax tree into the named native component.
    The public component reader and future full document reader share this
    implementation rather than parsing or serializing nested data twice. */
@@ -2851,6 +2850,7 @@ v2_decode_reconstruction_root (const json_value &root,
   return true;
 }
 
+bool
 decode_parameter_json_v2_reconstruction (const std::string &input,
                                          render_parameters *render,
                                          std::string *error)
@@ -2998,7 +2998,6 @@ encode_parameter_json_v2_process (const render_parameters &render,
 
 /* Parse a complete process group privately, commit only on success, and
    retain unrelated capture/sharpness/colour parameters untouched. */
-bool
 /* Decode a validated JSON syntax tree into the named native component.
    The public component reader and future full document reader share this
    implementation rather than parsing or serializing nested data twice. */
@@ -3062,6 +3061,7 @@ v2_decode_process_root (const json_value &root,
   return true;
 }
 
+bool
 decode_parameter_json_v2_process (const std::string &input,
                                   render_parameters *render,
                                   std::string *error)
@@ -3243,7 +3243,6 @@ encode_parameter_json_v2_color (const render_parameters &render,
 
 /* Parse saved colour calibration and appearance transactionally. No renderer
    output profile/transfer or view-specific gamut warning is touched. */
-bool
 /* Decode a validated JSON syntax tree into the named native component.
    The public component reader and future full document reader share this
    implementation rather than parsing or serializing nested data twice. */
@@ -3322,6 +3321,7 @@ v2_decode_color_root (const json_value &root,
   return true;
 }
 
+bool
 decode_parameter_json_v2_color (const std::string &input,
                                 render_parameters *render, std::string *error)
 {
@@ -3599,7 +3599,6 @@ encode_parameter_json_v2_sharpness (const render_parameters &render,
 /* Read all MTF and sharpening inputs as one transaction. A malformed
    measurement, nested array, ROI, or unknown channel cannot modify the
    caller's accepted parameters. */
-bool
 /* Decode a validated JSON syntax tree into the named native component.
    The public component reader and future full document reader share this
    implementation rather than parsing or serializing nested data twice. */
@@ -3750,6 +3749,7 @@ v2_decode_sharpness_root (const json_value &root,
   return true;
 }
 
+bool
 decode_parameter_json_v2_sharpness (const std::string &input,
                                     render_parameters *render,
                                     std::string *error)
@@ -4136,7 +4136,6 @@ encode_parameter_json_v2_correction_grids (
 
 /* Decode all correction resources privately and commit only when every
    sample and every nested stitched-tile grid is present and valid. */
-bool
 /* Decode a validated JSON syntax tree into the named native component.
    The public component reader and future full document reader share this
    implementation rather than parsing or serializing nested data twice. */
@@ -4198,6 +4197,7 @@ v2_decode_correction_grids_root (const json_value &root,
   return true;
 }
 
+bool
 decode_parameter_json_v2_correction_grids (
     const std::string &input, render_parameters *render, std::string *error)
 {
