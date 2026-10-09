@@ -211,7 +211,7 @@ template <typename O, typename mem_O, typename T, typename P,
 nodiscard_attr bool
 deconvolve (mem_O *out, T data, P param, int width, int height,
             const sharpen_parameters &sharpen, progress_info *progress,
-            bool parallel = true)
+            bool parallel = true, double wavelength_nm = 0)
 {
   if (!out || width <= 0 || height <= 0)
     return false;
@@ -233,7 +233,10 @@ deconvolve (mem_O *out, T data, P param, int width, int height,
     default:
       abort ();
     }
-  std::shared_ptr<mtf> scanner_mtf = mtf::get_mtf (sharpen.scanner_mtf, progress);
+  std::shared_ptr<mtf> scanner_mtf = mtf::get_mtf (sharpen.scanner_mtf,
+                      wavelength_nm > 0 ? wavelength_nm
+                          : sharpen.scanner_mtf.get_channel_wavelength (0),
+                      progress);
   if (!scanner_mtf || !scanner_mtf->precompute (progress, parallel))
     return false;
   deconvolution<DT> d (scanner_mtf.get (), sharpen.scanner_mtf_scale,
@@ -309,7 +312,8 @@ template <typename O, typename mem_O, typename T, typename P,
 nodiscard_attr bool
 deconvolve_rgb (mem_O *out, T data, P param, int width, int height,
                 const std::array<sharpen_parameters, 3> &sharpen,
-                progress_info *progress, bool parallel = true)
+                progress_info *progress, bool parallel = true,
+                std::array<double, 3> wavelengths_nm = {})
 {
   if (!out || width <= 0 || height <= 0)
     return false;
@@ -347,7 +351,11 @@ deconvolve_rgb (mem_O *out, T data, P param, int width, int height,
   for (int channel = 0; channel < 3; channel++)
     {
       scanner_mtf[channel]
-          = mtf::get_mtf (sharpen[channel].scanner_mtf, progress);
+          = mtf::get_mtf (sharpen[channel].scanner_mtf,
+                            wavelengths_nm[channel] > 0
+                              ? wavelengths_nm[channel]
+                              : sharpen[channel].scanner_mtf.get_channel_wavelength (channel),
+                            progress);
       if (!scanner_mtf[channel]
           || !scanner_mtf[channel]->precompute (progress, parallel))
         return false;
@@ -441,7 +449,7 @@ template <typename O, typename mem_O, typename T, typename P,
 nodiscard_attr bool
 deconvolve_rgb (mem_O *out, T data, P param, int width, int height,
                 const sharpen_parameters &sharpen, progress_info *progress,
-                bool parallel = true)
+                bool parallel = true, double wavelength_nm = 0)
 {
   if (!out || width <= 0 || height <= 0)
     return false;
@@ -464,7 +472,10 @@ deconvolve_rgb (mem_O *out, T data, P param, int width, int height,
       abort ();
     }
   std::shared_ptr<mtf> scanner_mtf
-      = mtf::get_mtf (sharpen.scanner_mtf, progress);
+      = mtf::get_mtf (sharpen.scanner_mtf,
+                      wavelength_nm > 0 ? wavelength_nm
+                          : sharpen.scanner_mtf.get_channel_wavelength (0),
+                      progress);
   if (!scanner_mtf || !scanner_mtf->precompute (progress, parallel))
     return false;
   deconvolution<DT> d (
@@ -549,18 +560,18 @@ template <typename O, typename mem_O, typename T, typename P,
 nodiscard_attr bool
 deconvolve (mem_O *out, T data, P param, int width, int height,
             const sharpen_parameters &sharpen, progress_info *progress,
-            bool parallel = true)
+            bool parallel = true, double wavelength_nm = 0)
 {
   /* For many iterations use double; otherwise float is good and faster.  */
   if (sharpen.mode != sharpen_parameters::richardson_lucy_deconvolution
       || sharpen.richardson_lucy_iterations < 300)
     return deconvolve<O, mem_O, T, P, getdata, float>(out, data, param, width,
 						      height, sharpen, progress,
-						      parallel);
+						      parallel, wavelength_nm);
   else
     return deconvolve<O, mem_O, T, P, getdata, double>(out, data, param, width,
 						       height, sharpen, progress,
-						       parallel);
+						       parallel, wavelength_nm);
 }
 
 /* Auto-select the type for deconvolution of RGB data with independent
@@ -571,7 +582,8 @@ template <typename O, typename mem_O, typename T, typename P,
 nodiscard_attr bool
 deconvolve_rgb (mem_O *out, T data, P param, int width, int height,
                 const std::array<sharpen_parameters, 3> &sharpen,
-                progress_info *progress, bool parallel = true)
+                progress_info *progress, bool parallel = true,
+                std::array<double, 3> wavelengths_nm = {})
 {
   bool need_double = false;
   for (const sharpen_parameters &channel : sharpen)
@@ -580,9 +592,9 @@ deconvolve_rgb (mem_O *out, T data, P param, int width, int height,
       need_double = true;
   if (!need_double)
     return deconvolve_rgb<O, mem_O, T, P, getdata, float> (
-        out, data, param, width, height, sharpen, progress, parallel);
+        out, data, param, width, height, sharpen, progress, parallel, wavelengths_nm);
   return deconvolve_rgb<O, mem_O, T, P, getdata, double> (
-      out, data, param, width, height, sharpen, progress, parallel);
+      out, data, param, width, height, sharpen, progress, parallel, wavelengths_nm);
 }
 
 /* Auto-select the type for RGB deconvolution using one common transfer.  */
@@ -591,14 +603,14 @@ template <typename O, typename mem_O, typename T, typename P,
 nodiscard_attr bool
 deconvolve_rgb (mem_O *out, T data, P param, int width, int height,
                 const sharpen_parameters &sharpen, progress_info *progress,
-                bool parallel = true)
+                bool parallel = true, double wavelength_nm = 0)
 {
   if (sharpen.mode != sharpen_parameters::richardson_lucy_deconvolution
       || sharpen.richardson_lucy_iterations < 300)
     return deconvolve_rgb<O, mem_O, T, P, getdata, float> (
-        out, data, param, width, height, sharpen, progress, parallel);
+        out, data, param, width, height, sharpen, progress, parallel, wavelength_nm);
   return deconvolve_rgb<O, mem_O, T, P, getdata, double> (
-      out, data, param, width, height, sharpen, progress, parallel);
+      out, data, param, width, height, sharpen, progress, parallel, wavelength_nm);
 }
 
 }

@@ -25,6 +25,7 @@ struct screen_params
   coord_t red_strip_width = (coord_t)0.0, green_strip_width = (coord_t)0.0;
   bool anticipate_sharpening = false;
   sharpen_parameters sharpen = {};
+  double wavelength_nm = 0;
 
   /* Return true if this structure is equal to O.  */
   bool
@@ -33,6 +34,7 @@ struct screen_params
     return t == o.t && preview == o.preview 
 	   && anticipate_sharpening == o.anticipate_sharpening
 	   && sharpen == o.sharpen
+           && wavelength_nm == o.wavelength_nm
 	   /* We also blur, so we need to compare MTF if used.  */
 	   && sharpen.scanner_mtf_scale == o.sharpen.scanner_mtf_scale
 	   && (!sharpen.scanner_mtf_scale || sharpen.scanner_mtf == o.sharpen.scanner_mtf)
@@ -78,7 +80,8 @@ get_new_screen (struct screen_params &p, progress_info *progress)
       sharpen_parameters *vv[3] = {&p.sharpen, &p.sharpen, &p.sharpen};
       blurred->empty ();
       if (!blurred->initialize_with_sharpen_parameters (
-              *s, vv, p.anticipate_sharpening))
+              *s, vv, p.anticipate_sharpening, true, nullptr,
+              {p.wavelength_nm, p.wavelength_nm, p.wavelength_nm}))
         return nullptr;
     }
   else
@@ -97,6 +100,7 @@ struct screen_table_params
   scr_type type = Joly;
   coord_t red_strip_width = (coord_t)0.0, green_strip_width = (coord_t)0.0;
   sharpen_parameters sharpen = {};
+  double wavelength_nm = 0;
 
   /* Return true if this structure is equal to O.  */
   bool
@@ -107,7 +111,8 @@ struct screen_table_params
            && green_strip_width == o.green_strip_width
 	   && sharpen.scanner_mtf_scale == o.sharpen.scanner_mtf_scale
 	   && (!sharpen.scanner_mtf_scale || sharpen.scanner_mtf == o.sharpen.scanner_mtf)
-           && sharpen == o.sharpen;
+           && sharpen == o.sharpen
+           && wavelength_nm == o.wavelength_nm;
   }
 };
 
@@ -116,7 +121,8 @@ std::unique_ptr<screen_table>
 get_new_screen_table (struct screen_table_params &p, progress_info *progress)
 {
   auto s = std::make_unique<screen_table> (p.param, p.type, p.red_strip_width,
-                                       p.green_strip_width, p.sharpen, progress);
+                                       p.green_strip_width, p.sharpen,
+                                        p.wavelength_nm, progress);
   if (!s->valid_p () || (progress && progress->cancelled ()))
     return nullptr;
   return s;
@@ -135,6 +141,7 @@ struct saturation_loss_params
   int img_width = 0, img_height = 0;
   luminosity_t collection_threshold = (luminosity_t)0.0;
   sharpen_parameters sharpen = {};
+  double wavelength_nm = 0;
   uint64_t mesh_id = 0;
   scr_to_img_parameters scr_to_img_params = {};
   class scr_to_img *map = nullptr;
@@ -146,6 +153,7 @@ struct saturation_loss_params
     return scr_table_id == o.scr_table_id
            && collection_threshold == o.collection_threshold
            && sharpen == o.sharpen
+           && wavelength_nm == o.wavelength_nm
 	   && sharpen.scanner_mtf_scale == o.sharpen.scanner_mtf_scale
 	   && (!sharpen.scanner_mtf_scale || sharpen.scanner_mtf == o.sharpen.scanner_mtf)
            && img_width == o.img_width && img_height == o.img_height
@@ -161,7 +169,7 @@ get_new_saturation_loss_table (struct saturation_loss_params &p,
 {
   auto s = std::make_unique<saturation_loss_table> (
       p.scr_table, p.collection_screen, p.img_width, p.img_height, p.map,
-      p.collection_threshold, p.sharpen, progress);
+      p.collection_threshold, p.sharpen, p.wavelength_nm, progress);
   if (progress && progress->cancelled ())
     {
       return nullptr;
@@ -180,7 +188,7 @@ screen_table::screen_table (scanner_blur_correction_parameters *param,
                             scr_type type, luminosity_t red_strip_width,
                             luminosity_t green_strip_width,
 			    const sharpen_parameters &sharpen,
-                            progress_info *progress)
+                            double wavelength_nm, progress_info *progress)
     : m_id (lru_caches::get ()), m_width (param->get_width ()),
       m_height (param->get_height ()),
       m_sampling (
@@ -195,7 +203,7 @@ screen_table::screen_table (scanner_blur_correction_parameters *param,
   if (progress)
     progress->set_task ("computing screen table", m_width * m_height);
   std::atomic<bool> failed (false);
-#pragma omp parallel for default(none) shared(progress,sharpen,failed) collapse(2)    \
+#pragma omp parallel for default(none) shared(progress,sharpen,failed,wavelength_nm) collapse(2)    \
     shared(param, s)
   for (int y = 0; y < m_height; y++)
     for (int x = 0; x < m_width; x++)
@@ -217,7 +225,9 @@ screen_table::screen_table (scanner_blur_correction_parameters *param,
 	      sp.scanner_mtf.defocus = param->get_correction (x, y);
 	      sharpen_parameters *vv[3] = {&sp, &sp, &sp};
 	      if (!m_screen_table[y * m_width + x]
-                       .initialize_with_sharpen_parameters (s, vv, false))
+                       .initialize_with_sharpen_parameters (
+                           s, vv, false, true, nullptr,
+                           {wavelength_nm, wavelength_nm, wavelength_nm}))
                 failed.store (true, std::memory_order_relaxed);
 	      break;
 	    }
@@ -227,7 +237,9 @@ screen_table::screen_table (scanner_blur_correction_parameters *param,
 	      sp.scanner_mtf.blur_diameter = param->get_correction (x, y);
 	      sharpen_parameters *vv[3] = {&sp, &sp, &sp};
 	      if (!m_screen_table[y * m_width + x]
-                       .initialize_with_sharpen_parameters (s, vv, false))
+                       .initialize_with_sharpen_parameters (
+                           s, vv, false, true, nullptr,
+                           {wavelength_nm, wavelength_nm, wavelength_nm}))
                 failed.store (true, std::memory_order_relaxed);
 	      break;
 	    }
@@ -245,7 +257,7 @@ screen_table::screen_table (scanner_blur_correction_parameters *param,
 saturation_loss_table::saturation_loss_table (
     screen_table *screen_table, screen *collection_screen, int img_width,
     int img_height, scr_to_img *map, luminosity_t collection_threshold,
-    const sharpen_parameters &sharpen,
+    const sharpen_parameters &sharpen, double wavelength_nm,
     progress_info *progress)
     : m_id (lru_caches::get ()), m_width (screen_table->get_width ()),
       m_height (screen_table->get_height ()), m_img_width (img_width),
@@ -257,7 +269,7 @@ saturation_loss_table::saturation_loss_table (
   if (progress)
     progress->set_task ("computing saturation loss table", m_width * m_height);
 #pragma omp parallel for default(none) shared(progress) collapse(2)           \
-    shared(screen_table, collection_screen, collection_threshold, map, sharpen)
+    shared(screen_table, collection_screen, collection_threshold, map, sharpen, wavelength_nm)
   for (int y = 0; y < m_height; y++)
     for (int x = 0; x < m_width; x++)
       {
@@ -275,7 +287,7 @@ saturation_loss_table::saturation_loss_table (
                 *collection_screen, NULL,
                 screen_table->get_sampling (), collection_threshold, sharpen,
                 *map,
-		{xp - 100, yp - 100, 200, 200}))
+		{xp - 100, yp - 100, 200, 200}, wavelength_nm))
           {
             color_matrix sat (cred.red, cgreen.red, cblue.red, (luminosity_t)0.0,
 			      cred.green, cgreen.green, cblue.green, (luminosity_t)0.0,
@@ -341,9 +353,13 @@ render_to_scr::get_screen (enum scr_type t, bool preview,
 			   const sharpen_parameters &sharpen,
                            coord_t red_strip_width, coord_t green_strip_width,
                            progress_info *progress, uint64_t *id,
-                           screen_sampling *sampling, bool *cache_hit)
+                           screen_sampling *sampling, bool *cache_hit,
+                           double wavelength_nm)
 {
-  screen_params p = { t, preview, red_strip_width, green_strip_width, anticipate_sharpening, sharpen};
+  if (!(my_isfinite (wavelength_nm) && wavelength_nm > 0))
+    wavelength_nm = sharpen.scanner_mtf.get_channel_wavelength (3, false);
+  screen_params p = { t, preview, red_strip_width, green_strip_width,
+                      anticipate_sharpening, sharpen, wavelength_nm };
   if (sampling)
     *sampling = screen_sampling_for_capture_transfer (
         sharpen, screen_uses_capture_mtf_p (sharpen));
@@ -365,7 +381,8 @@ render_to_scr::compute_screen_table (progress_info *progress)
   screen_table_params p
       = { m_params.scanner_blur_correction.get (),
           m_params.scanner_blur_correction->id, m_scr_to_img.get_type (),
-          m_params.red_strip_width, m_params.green_strip_width, {} };
+          m_params.red_strip_width, m_params.green_strip_width, {},
+          m_params.get_image_layer_wavelength (&m_img) };
   if (m_params.scanner_blur_correction->get_mode () != scanner_blur_correction_parameters::blur_radius)
     {
       p.sharpen = m_params.get_image_layer_sharpen_parameters (&m_img);
@@ -397,6 +414,7 @@ render_to_scr::compute_saturation_loss_table (
           m_img.height,
           collection_threshold,
 	  sharpen,
+          m_params.get_image_layer_wavelength (&m_img),
           m_scr_to_img_param.mesh_trans ? m_scr_to_img_param.mesh_trans->id
                                         : 0,
           m_scr_to_img_param.mesh_trans ? dummy : m_scr_to_img_param,
@@ -418,11 +436,13 @@ render_to_scr::simulate_screen (progress_info *progress)
   sharpen.usm_radius = m_params.screen_blur_radius * psize;
   sharpen.scanner_mtf_scale *= psize;
   screen_sampling sampling = screen_sampling::integrate_pixel;
-  std::shared_ptr<screen> scr = get_screen (m_scr_to_img.get_type (), false,
-	       false,
-	       sharpen,
-	       m_params.red_strip_width,
-	       m_params.green_strip_width, progress, &screen_id, &sampling);
+  std::shared_ptr<screen> scr = get_screen (
+      m_scr_to_img.get_type (), false, false, sharpen,
+      m_params.red_strip_width, m_params.green_strip_width,
+      progress, &screen_id, &sampling, nullptr,
+      m_params.get_image_layer_wavelength (&m_img));
+  if (!scr)
+    return;
   m_simulated_screen =
     get_simulated_screen (m_scr_to_img.get_param (), scr.get (), screen_id,
                           sampling, m_params.sharpen,
@@ -484,16 +504,20 @@ render_screen_tile (tile_parameters &tile, scr_type type,
       if (rst == dot_spread_ir)
         {
           mtfs[0] = mtfs[1] = mtfs[2] = mtf::get_mtf (
-              rparam.get_sharpen_parameters_for_channel (3).scanner_mtf, NULL);
+              rparam.get_sharpen_parameters_for_channel (3).scanner_mtf,
+              rparam.get_sharpen_wavelength_for_channel (3), NULL);
         }
       else
         {
           mtfs[0] = mtf::get_mtf (
-              rparam.get_sharpen_parameters_for_channel (0).scanner_mtf, NULL);
+              rparam.get_sharpen_parameters_for_channel (0).scanner_mtf,
+              rparam.get_sharpen_wavelength_for_channel (0), NULL);
           mtfs[1] = mtf::get_mtf (
-              rparam.get_sharpen_parameters_for_channel (1).scanner_mtf, NULL);
+              rparam.get_sharpen_parameters_for_channel (1).scanner_mtf,
+              rparam.get_sharpen_wavelength_for_channel (1), NULL);
           mtfs[2] = mtf::get_mtf (
-              rparam.get_sharpen_parameters_for_channel (2).scanner_mtf, NULL);
+              rparam.get_sharpen_parameters_for_channel (2).scanner_mtf,
+              rparam.get_sharpen_wavelength_for_channel (2), NULL);
         }
       for (int i = 0; i < 3; i++)
         {
@@ -576,9 +600,8 @@ render_screen_tile (tile_parameters &tile, scr_type type,
       digital_usm_radius = sp.usm_radius * pixel_size;
       digital_usm_amount = sp.usm_amount;
       sp.scanner_mtf_scale *= pixel_size;
-      int img_layer_c = rparam.get_image_layer_channel(nullptr);
-      sp.scanner_mtf.wavelength =
-          sp.scanner_mtf.get_channel_wavelength(img_layer_c);
+      /* Image-layer wavelength is resolved by the transfer operation;
+         preview sharpening no longer mutates a stored scalar MTF field. */
       effective_mode = sp.get_mode ();
 
       /* The preview has three distinct stages:
@@ -623,7 +646,8 @@ render_screen_tile (tile_parameters &tile, scr_type type,
     }
   std::shared_ptr<screen> scr = render_to_scr::get_screen (
       type, false, anticipate_sharpening, sp, rparam.red_strip_width,
-      rparam.green_strip_width, progress);
+      rparam.green_strip_width, progress, nullptr, nullptr, nullptr,
+      rparam.get_image_layer_wavelength (nullptr));
 
   /* Periodic inverse-filter construction handles the deconvolution modes.
      Unsharp Mask is instead the same linear FIR operation used by image

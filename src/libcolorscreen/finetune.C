@@ -180,7 +180,8 @@ static bool
 finetune_useful_scalar_limit (mtf_parameters params,
                               coord_t pixel_frequency,
                               coord_t minimum_mtf, coord_t hard_max,
-                              SetValue set_value, coord_t *limit)
+                              SetValue set_value, coord_t *limit,
+                              double wavelength_nm)
 {
   if (!limit || !my_isfinite (pixel_frequency) || pixel_frequency <= 0
       || !my_isfinite (minimum_mtf) || minimum_mtf <= 0
@@ -188,7 +189,7 @@ finetune_useful_scalar_limit (mtf_parameters params,
     return false;
 
   set_value (params, 0);
-  const coord_t in_focus = params.system_mtf (pixel_frequency);
+  const coord_t in_focus = params.system_mtf (pixel_frequency, wavelength_nm);
   if (!my_isfinite (in_focus) || in_focus <= minimum_mtf)
     return false;
 
@@ -199,7 +200,7 @@ finetune_useful_scalar_limit (mtf_parameters params,
       const coord_t t = (coord_t)i / samples;
       const coord_t value = hard_max * t * t;
       set_value (params, value);
-      const coord_t current_mtf = params.system_mtf (pixel_frequency);
+      const coord_t current_mtf = params.system_mtf (pixel_frequency, wavelength_nm);
       if (!my_isfinite (current_mtf))
         return false;
       if (current_mtf <= minimum_mtf)
@@ -212,7 +213,7 @@ finetune_useful_scalar_limit (mtf_parameters params,
             {
               const coord_t middle = (low + high) * (coord_t)0.5;
               set_value (params, middle);
-              const coord_t middle_mtf = params.system_mtf (pixel_frequency);
+              const coord_t middle_mtf = params.system_mtf (pixel_frequency, wavelength_nm);
               if (!my_isfinite (middle_mtf))
                 return false;
               if (middle_mtf > minimum_mtf)
@@ -234,13 +235,14 @@ bool
 finetune_useful_defocus_limit (mtf_parameters params,
                                coord_t pixel_frequency,
                                coord_t minimum_mtf, coord_t hard_max,
-                               coord_t *limit)
+                               coord_t *limit, double wavelength_nm)
 {
   if (!params.simulate_diffraction_p ())
     return false;
   return finetune_useful_scalar_limit (
       params, pixel_frequency, minimum_mtf, hard_max,
-      [] (mtf_parameters &p, coord_t value) { p.defocus = value; }, limit);
+      [] (mtf_parameters &p, coord_t value) { p.defocus = value; }, limit,
+      wavelength_nm);
 }
 
 /* Find the first useful metadata-free compact-blur boundary.  */
@@ -248,14 +250,14 @@ bool
 finetune_useful_blur_diameter_limit (mtf_parameters params,
                                      coord_t pixel_frequency,
                                      coord_t minimum_mtf, coord_t hard_max,
-                                     coord_t *limit)
+                                     coord_t *limit, double wavelength_nm)
 {
   if (params.simulate_diffraction_p () || params.use_measured_mtf ())
     return false;
   return finetune_useful_scalar_limit (
       params, pixel_frequency, minimum_mtf, hard_max,
       [] (mtf_parameters &p, coord_t value) { p.blur_diameter = value; },
-      limit);
+      limit, wavelength_nm);
 }
 
 /* Classify one completed fit for use by adaptive blur/focus reduction.  Do
@@ -595,9 +597,19 @@ struct finetune_screen_cache_params
                 || green_strip_width != o.green_strip_width)))
       return false;
     for (int c = 0; c < 3; c++)
-      if (!same_filtered_screen_parameters_p (
-              sharpen[c], o.sharpen[c], anticipate_sharpening))
-        return false;
+      {
+        if (!same_filtered_screen_parameters_p (
+                sharpen[c], o.sharpen[c], anticipate_sharpening))
+          return false;
+        /* MTF_PARAMETERS::OPERATOR== compares the optical model independently
+           of wavelength; optical caches receive wavelength as a separate
+           key.  This finished-screen cache receives only SHARPEN, so the
+           effective process-primary wavelength must be compared explicitly
+           to avoid reusing a screen filtered at the wrong wavelength.  */
+        if (sharpen[c].scanner_mtf.get_channel_wavelength (c)
+            != o.sharpen[c].scanner_mtf.get_channel_wavelength (c))
+          return false;
+      }
     return true;
   }
 };
@@ -2786,9 +2798,6 @@ public:
         sp[0].scanner_mtf.defocus = defocus.red;
         sp[1].scanner_mtf.defocus = defocus.green;
         sp[2].scanner_mtf.defocus = defocus.blue;
-        if (!tiles[0].color.empty ())
-          for (int c = 0; c < 3; c++)
-            sp[c].scanner_mtf.wavelength = sp[c].scanner_mtf.get_channel_wavelength(c);
       }
     else
       {
@@ -6883,7 +6892,8 @@ finetune_area (solver_parameters *solver, render_parameters &rparam,
    the data collection.  SIMULATED_SCREEN is optional simulated screen.
    SAMPLING specifies whether SCR still needs capture-pixel integration.
    THRESHOLD is the collection threshold.  SHARPEN_PARAM are sharpen
-   parameters. MAP is the scr-to-img map.  AREA defines the area.  */
+   parameters. MAP is the scr-to-img map.  AREA defines the area.
+   WAVELENGTH_NM is the capture-transfer wavelength for this operation.  */
 
 bool
 determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
@@ -6891,7 +6901,7 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
                       simulated_screen *simulated_screen,
                       screen_sampling sampling, luminosity_t threshold,
                       const sharpen_parameters &sharpen_param, scr_to_img &map,
-                      int_image_area area)
+                      int_image_area area, double wavelength_nm)
 {
   double_rgbdata red = { 0, 0, 0 }, green = { 0, 0, 0 }, blue = { 0, 0, 0 };
   double wr = 0, wg = 0, wb = 0;
@@ -6983,7 +6993,8 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
       if (sharpen_param.deconvolution_p ())
         {
           std::shared_ptr<mtf> cur_mtf
-              = mtf::get_mtf (sharpen_param.scanner_mtf, nullptr);
+              = mtf::get_mtf (sharpen_param.scanner_mtf, wavelength_nm,
+                              nullptr);
           if (!cur_mtf || !cur_mtf->precompute ())
             return false;
           ext = cur_mtf->psf_size (sharpen_param.scanner_mtf_scale);
@@ -7019,7 +7030,7 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
         {
           if (!deconvolve_rgb<rgbdata, rgbdata, rgbdata *, int, getdata_helper> (
 		      rendered2.data (), rendered.data (), xsize, ysize, ysize,
-		      sharpen_param, nullptr, false))
+		      sharpen_param, nullptr, false, wavelength_nm))
 	    return false;
         }
 
@@ -7184,7 +7195,10 @@ render_screen (image_data &img, const scr_to_img_parameters &param,
   screen_sampling sampling = screen_sampling::integrate_pixel;
   std::shared_ptr<screen> scr = render_to_scr::get_screen (
       param.type, false, false, sharpen, rparam.red_strip_width,
-      rparam.green_strip_width, nullptr, nullptr, &sampling);
+      rparam.green_strip_width, nullptr, nullptr, &sampling, nullptr,
+      rparam.get_image_layer_wavelength (&img));
+  if (!scr)
+    return false;
   for (int y = 0; y < height; y++)
     for (int x = 0; x < width; x++)
       {

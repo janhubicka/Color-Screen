@@ -26,7 +26,7 @@ class screen_table
 public:
   /* Initialize screen table for PARAM, TYPE, DUFAY_RED_STRIP_WIDTH, DUFAY_RED_STRIP_HEIGHT and SHARPEN.
      Update PROGRESS.  */
-  screen_table (scanner_blur_correction_parameters *param, scr_type type, luminosity_t dufay_red_strip_width, luminosity_t dufay_red_strip_height, const sharpen_parameters &sharpen, progress_info *progress);
+  screen_table (scanner_blur_correction_parameters *param, scr_type type, luminosity_t dufay_red_strip_width, luminosity_t dufay_red_strip_height, const sharpen_parameters &sharpen, double wavelength_nm, progress_info *progress);
   
   /* Return screen at X, Y.  */
   pure_attr screen &get_screen (int x, int y)
@@ -80,9 +80,14 @@ private:
 class saturation_loss_table
 {
 public:
-  /* Initialize saturation loss table for SCREEN_TABLE, COLLECTION_SCREEN, IMG_WIDTH, IMG_HEIGHT, MAP, COLLECTION_THRESHOLD and SHARPEN.
-     Update PROGRESS.  */
-  saturation_loss_table (screen_table *screen_table, screen *collection_screen, int img_width, int img_height, scr_to_img *map, luminosity_t collection_threshold, const sharpen_parameters &sharpen, progress_info *progress);
+  /* Initialize saturation loss for SCREEN_TABLE, COLLECTION_SCREEN,
+     IMG_WIDTH, IMG_HEIGHT, MAP, COLLECTION_THRESHOLD and SHARPEN.
+     WAVELENGTH_NM is the optical capture wavelength; PROGRESS tracks work.  */
+  saturation_loss_table (screen_table *screen_table, screen *collection_screen,
+                         int img_width, int img_height, scr_to_img *map,
+                         luminosity_t collection_threshold,
+                         const sharpen_parameters &sharpen,
+                         double wavelength_nm, progress_info *progress);
   
   /* Return saturation loss matrix at X, Y.  */
   pure_attr color_matrix &get_saturation_loss (int x, int y)
@@ -272,7 +277,8 @@ public:
                              progress_info *progress = NULL,
                              uint64_t *id = NULL,
                              screen_sampling *sampling = NULL,
-                             bool *cache_hit = NULL);
+                             bool *cache_hit = NULL,
+                             double wavelength_nm = 0);
 
   /* Release screen S.  */
   static void release_screen (screen *s);

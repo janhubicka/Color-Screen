@@ -390,7 +390,7 @@ test_coupled_physical_focus_recovers_screen_mtf ()
   capture.scanner_mtf.pixel_pitch = 3.76;
   capture.scanner_mtf.f_stop = 8;
   capture.scanner_mtf.scan_dpi = 2000;
-  capture.scanner_mtf.wavelength = 750;
+  capture.scanner_mtf.wavelengths[3] = 750;
   capture.scanner_mtf.sigma = (coord_t)0.70;
   capture.scanner_mtf.defocus = (coord_t)0.16;
   screen source, filtered;
@@ -438,7 +438,7 @@ test_coupled_physical_focus_recovers_screen_mtf ()
   /* Exercise the same image-layer channel specialization used by
      a standalone IR/BW capture: the global wavelength is unknown,
      while channel 3 supplies the authoritative 750 nm value.  */
-  rparam.sharpen.scanner_mtf.wavelength = 0;
+  /* Scalar optical wavelength is no longer stored in MTF parameters. */
   rparam.sharpen.scanner_mtf.wavelengths[3] = 750;
   rparam.sharpen.scanner_mtf.sigma = 0;
   rparam.sharpen.scanner_mtf.defocus = 0;

@@ -40,11 +40,13 @@ public:
 	sharpen.usm_radius = m_params.screen_blur_radius * psize;
 	sharpen.scanner_mtf_scale *= psize;
       }
-    m_screen = get_screen (m_scr_to_img.get_type (), m_preview, 
-			   !m_color && !m_preview,
-			   sharpen,
-                           m_params.red_strip_width,
-                           m_params.green_strip_width, progress);
+    m_screen = get_screen (
+        m_scr_to_img.get_type (), m_preview, !m_color && !m_preview,
+        sharpen, m_params.red_strip_width, m_params.green_strip_width,
+        progress, nullptr, nullptr, nullptr,
+        m_params.get_image_layer_wavelength (&m_img));
+    if (!m_screen)
+      return false;
     int flags = m_color ? PRECOMPUTE_RGB_IMAGE : PRECOMPUTE_IMAGE_LAYER;
     if (m_preview)
       flags |= NORMALIZED_PATCHES;

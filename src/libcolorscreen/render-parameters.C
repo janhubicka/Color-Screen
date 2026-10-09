@@ -174,6 +174,21 @@ render_parameters::get_sharpen_parameters_for_channel (int channel,
       mtf.measured_mtf_idx = measurement_index;
     }
 
+  return result;
+}
+
+/* Determine native-channel effective wavelength without mutating saved MTF.
+   CHANNEL uses the matching measured curve when one was selected for this
+   native channel, otherwise per-channel or general capture metadata. */
+double
+render_parameters::get_sharpen_wavelength_for_channel (int channel,
+                                                        bool has_rgb) const
+{
+  if (channel < 0 || channel >= 4)
+    return sharpen.scanner_mtf.get_channel_wavelength (channel, has_rgb);
+  const mtf_parameters mtf
+      = get_sharpen_parameters_for_channel (channel, has_rgb).scanner_mtf;
+  int measurement_index = mtf.use_measured_mtf () ? mtf.measured_mtf_idx : -1;
   double wavelength = mtf.wavelengths[channel];
   if (!(my_isfinite (wavelength) && wavelength > 0)
       && measurement_index >= 0)
@@ -193,10 +208,7 @@ render_parameters::get_sharpen_parameters_for_channel (int channel,
         }
   if (!(my_isfinite (wavelength) && wavelength > 0))
     wavelength = mtf.get_channel_wavelength (channel, has_rgb);
-  if (my_isfinite (wavelength) && wavelength > 0)
-    mtf.wavelength = wavelength;
-
-  return result;
+  return wavelength;
 }
 
 /* Return sharpening specialized for the scalar image layer of IMG.  A
@@ -226,16 +238,6 @@ render_parameters::get_image_layer_sharpen_parameters (const image_data *img) co
   if (!selected_image_layer && result.scanner_mtf.use_measured_mtf ())
     result.scanner_mtf.measured_mtf_idx = -1;
 
-  double wavelength = get_image_layer_wavelength (img);
-  if (selected_image_layer && result.scanner_mtf.use_measured_mtf ())
-    {
-      const mtf_measurement &measurement
-          = result.scanner_mtf.measurements[result.scanner_mtf.measured_mtf_idx];
-      if (my_isfinite (measurement.wavelength) && measurement.wavelength > 0)
-        wavelength = measurement.wavelength;
-    }
-  if (my_isfinite (wavelength) && wavelength > 0)
-    result.scanner_mtf.wavelength = wavelength;
   return result;
 }
 

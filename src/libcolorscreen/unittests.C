@@ -53,6 +53,26 @@
 using namespace colorscreen;
 namespace
 {
+/* Test-only wavelength selection. Optical requests now pass wavelengths as
+   arguments, never through an unsaved scalar in mtf_parameters. */
+static void
+test_set_mtf_wavelength (mtf_parameters &params, double nm)
+{
+  params.wavelengths = { nm, nm, nm, nm };
+}
+
+static double
+test_mtf_wavelength (const mtf_parameters &params)
+{
+  for (double nm : params.wavelengths)
+    if (my_isfinite (nm) && nm > 0)
+      return nm;
+  for (const mtf_measurement &measurement : params.measurements)
+    if (my_isfinite (measurement.wavelength) && measurement.wavelength > 0)
+      return measurement.wavelength;
+  return 550;
+}
+
 
 /* Construct IEC-559 special values through their object representation.
    The clang buildbots use -ffast-math/-ffinite-math-only, under which spelling
@@ -401,7 +421,7 @@ test_finetune_helpers ()
   start_mtf.model = mtf_model::physical_diffraction;
   start_mtf.scan_dpi = 4000;
   start_mtf.f_stop = 8;
-  start_mtf.wavelength = 550;
+  test_set_mtf_wavelength (start_mtf, 550);
   start_mtf.pixel_pitch = 3.76;
   start_mtf.defocus = 0.237;
   if (fabs (finetune_initial_scanner_mtf_focus (start_mtf) - 0.237)
@@ -415,32 +435,32 @@ test_finetune_helpers ()
   focus_mtf.model = mtf_model::physical_diffraction;
   focus_mtf.scan_dpi = 4000;
   focus_mtf.f_stop = 8;
-  focus_mtf.wavelength = 550;
+  test_set_mtf_wavelength (focus_mtf, 550);
   focus_mtf.pixel_pitch = 3.76;
   focus_mtf.sensor_fill_factor = 1;
   coord_t useful_limit = 0;
   const coord_t screen_frequency = (coord_t)0.12;
   if (!finetune_useful_defocus_limit (focus_mtf, screen_frequency,
-                                      (coord_t)0.05, 20, &useful_limit)
+                                      (coord_t)0.05, 20, &useful_limit, test_mtf_wavelength (focus_mtf))
       || useful_limit <= 0 || useful_limit >= 20)
     {
       fprintf (stderr, "Useful physical-focus range was not detected\n");
       return false;
     }
   focus_mtf.defocus = useful_limit;
-  if (fabs (focus_mtf.system_mtf (screen_frequency) - 0.05) > 1e-8)
+  if (fabs (focus_mtf.system_mtf (screen_frequency, test_mtf_wavelength (focus_mtf)) - 0.05) > 1e-8)
     {
       fprintf (stderr,
                "Useful focus boundary does not match 5%% MTF: %.12g\n",
-               focus_mtf.system_mtf (screen_frequency));
+               focus_mtf.system_mtf (screen_frequency, test_mtf_wavelength (focus_mtf)));
       return false;
     }
   focus_mtf.defocus = 0;
-  const coord_t in_focus = focus_mtf.system_mtf (screen_frequency);
+  const coord_t in_focus = focus_mtf.system_mtf (screen_frequency, test_mtf_wavelength (focus_mtf));
   if (in_focus >= 0.999
       || finetune_useful_defocus_limit (
           focus_mtf, screen_frequency, (in_focus + (coord_t)0.999) / 2,
-          20, &useful_limit))
+          20, &useful_limit, test_mtf_wavelength (focus_mtf)))
     {
       fprintf (stderr, "Unusable in-focus MTF was not rejected\n");
       return false;
@@ -454,24 +474,24 @@ test_finetune_helpers ()
   coord_t useful_blur_limit = 0;
   if (!finetune_useful_blur_diameter_limit (
           fallback_mtf, screen_frequency, (coord_t)0.05, 20,
-          &useful_blur_limit)
+          &useful_blur_limit, test_mtf_wavelength (fallback_mtf))
       || useful_blur_limit <= 0 || useful_blur_limit >= 20)
     {
       fprintf (stderr, "Useful fallback-blur range was not detected\n");
       return false;
     }
   fallback_mtf.blur_diameter = useful_blur_limit;
-  if (fabs (fallback_mtf.system_mtf (screen_frequency) - 0.05) > 1e-8)
+  if (fabs (fallback_mtf.system_mtf (screen_frequency, test_mtf_wavelength (fallback_mtf)) - 0.05) > 1e-8)
     {
       fprintf (stderr,
                "Useful fallback boundary does not match 5%% MTF: %.12g\n",
-               fallback_mtf.system_mtf (screen_frequency));
+               fallback_mtf.system_mtf (screen_frequency, test_mtf_wavelength (fallback_mtf)));
       return false;
     }
   fallback_mtf.blur_diameter = 0;
   if (finetune_useful_blur_diameter_limit (
           focus_mtf, screen_frequency, (coord_t)0.05, 20,
-          &useful_blur_limit))
+          &useful_blur_limit, test_mtf_wavelength (focus_mtf)))
     {
       fprintf (stderr, "Physical model was accepted as fallback blur\n");
       return false;
@@ -1174,7 +1194,7 @@ test_finetune_focus_screen_cache ()
       physical[c].scanner_mtf.model = mtf_model::physical_diffraction;
       physical[c].scanner_mtf.scan_dpi = 4000;
       physical[c].scanner_mtf.f_stop = 8;
-      physical[c].scanner_mtf.wavelength = 550;
+      test_set_mtf_wavelength (physical[c].scanner_mtf, 550);
       physical[c].scanner_mtf.pixel_pitch = 3.76;
       physical[c].scanner_mtf.sensor_fill_factor = 1;
       physical[c].scanner_mtf_scale = (luminosity_t)0.12;
@@ -1186,7 +1206,8 @@ test_finetune_focus_screen_cache ()
   bool physical_transfer_cache_hit = true;
   std::shared_ptr<const mtf_focus_transfer> prepared_transfer
       = mtf_focus_transfer::get (physical[0].scanner_mtf,
-                                 &physical_transfer_cache_hit);
+                                  test_mtf_wavelength (physical[0].scanner_mtf),
+                                  &physical_transfer_cache_hit);
   if (!prepared_transfer || physical_transfer_cache_hit)
     {
       fprintf (stderr, "Physical focus-transfer cache miss was not recorded\n");
@@ -1195,20 +1216,43 @@ test_finetune_focus_screen_cache ()
   mtf_parameters comparison_parameters = physical[0].scanner_mtf;
   comparison_parameters.defocus = (coord_t)0.5;
   std::shared_ptr<const mtf_focus_transfer> reused_transfer
-      = mtf_focus_transfer::get (comparison_parameters,
-                                 &physical_transfer_cache_hit);
+      = mtf_focus_transfer::get (comparison_parameters, test_mtf_wavelength (comparison_parameters), &physical_transfer_cache_hit);
   if (!reused_transfer || !physical_transfer_cache_hit
       || reused_transfer.get () != prepared_transfer.get ())
     {
       fprintf (stderr, "Physical focus-transfer state was not reused\n");
       return false;
     }
+  /* Effective wavelength is a cache-key argument, independent of the saved
+     MTF model.  An equal scanner model at a different wavelength must miss,
+     while repeated lookups for that new wavelength must hit. */
+  physical_transfer_cache_hit = true;
+  std::shared_ptr<const mtf_focus_transfer> alternate_transfer
+      = mtf_focus_transfer::get (comparison_parameters, 600,
+                                  &physical_transfer_cache_hit);
+  if (!alternate_transfer || physical_transfer_cache_hit
+      || alternate_transfer.get () == reused_transfer.get ())
+    {
+      fprintf (stderr, "Physical focus cache mixed different wavelengths\n");
+      return false;
+    }
+  physical_transfer_cache_hit = false;
+  std::shared_ptr<const mtf_focus_transfer> alternate_cached
+      = mtf_focus_transfer::get (comparison_parameters, 600,
+                                  &physical_transfer_cache_hit);
+  if (!alternate_cached || !physical_transfer_cache_hit
+      || alternate_cached.get () != alternate_transfer.get ())
+    {
+      fprintf (stderr, "Physical focus cache did not reuse equal wavelengths\n");
+      return false;
+    }
+
   precomputed_function<double> prepared_table;
   if (!reused_transfer->precompute (comparison_parameters.defocus,
                                     prepared_table))
     return false;
   std::shared_ptr<mtf> comparison_mtf
-      = mtf::get_mtf (comparison_parameters, nullptr);
+      = mtf::get_mtf (comparison_parameters, test_mtf_wavelength (comparison_parameters), nullptr);
   if (!comparison_mtf || !comparison_mtf->precompute (nullptr, false))
     return false;
   for (int i = 0; i <= 1000; i++)
@@ -1297,7 +1341,8 @@ test_finetune_focus_screen_cache ()
   coord_t max_defocus = 0;
   if (!finetune_useful_defocus_limit (
           physical[0].scanner_mtf, physical[0].scanner_mtf_scale,
-          (coord_t)0.05, 20, &max_defocus))
+          (coord_t)0.05, 20, &max_defocus,
+          test_mtf_wavelength (physical[0].scanner_mtf)))
     return false;
   constexpr int nodes = 33;
   constexpr int lower_index = 11;
@@ -1405,6 +1450,49 @@ test_finetune_focus_screen_cache ()
                (double)delta);
       return false;
     }
+  /* The final filtered-screen cache has no separate optical argument.
+     A wavelength change in an otherwise identical fitted physical model
+     must miss that cache, while the prepared immutable source stays valid.  */
+  std::array<sharpen_parameters, 3> other_wavelength = upper_physical;
+  other_wavelength[0].scanner_mtf.wavelengths[0] = 600;
+  bool other_wavelength_hit = true;
+  std::shared_ptr<screen> other_wavelength_screen
+      = finetune_get_cached_screen_for_test (
+          Dufay, (coord_t)0.45, (coord_t)0.35, false, other_wavelength,
+          false, &other_wavelength_hit);
+  if (!other_wavelength_screen || other_wavelength_hit
+      || other_wavelength_screen.get () == upper_screen.get ())
+    {
+      fprintf (stderr,
+               "Changed physical wavelength reused the previous screen\n");
+      return false;
+    }
+  sharpen_parameters *other_wavelength_channels[3]
+      = { &other_wavelength[0], &other_wavelength[1],
+          &other_wavelength[2] };
+  screen other_wavelength_reference;
+  if (!other_wavelength_reference.initialize_with_sharpen_parameters (
+          prepared_physical_source, other_wavelength_channels, false, false)
+      || !other_wavelength_reference.almost_equal_p (
+          *other_wavelength_screen, &delta, (luminosity_t)1e-8))
+    {
+      fprintf (stderr,
+               "Cached screen at new wavelength differs from direct build\n");
+      return false;
+    }
+  other_wavelength_hit = false;
+  std::shared_ptr<screen> repeated_wavelength_screen
+      = finetune_get_cached_screen_for_test (
+          Dufay, (coord_t)0.45, (coord_t)0.35, false, other_wavelength,
+          false, &other_wavelength_hit);
+  if (!other_wavelength_hit
+      || repeated_wavelength_screen.get () != other_wavelength_screen.get ())
+    {
+      fprintf (stderr,
+               "Unchanged explicit-wavelength screen was not reused\n");
+      return false;
+    }
+
   sharpen_parameters *target_channels[3]
       = { &target_physical[0], &target_physical[1], &target_physical[2] };
   if (!exact_target.initialize_with_sharpen_parameters (
@@ -2277,7 +2365,7 @@ test_screen_sharpening ()
 
   sharpen_parameters preview_sharpen;
   preview_sharpen.scanner_mtf.f_stop = 8;
-  preview_sharpen.scanner_mtf.wavelength = 550;
+  test_set_mtf_wavelength (preview_sharpen.scanner_mtf, 550);
   preview_sharpen.scanner_mtf.pixel_pitch = 3.7;
   preview_sharpen.scanner_mtf.scan_dpi = 4000;
   preview_sharpen.scanner_mtf.defocus = 8;
@@ -2414,7 +2502,7 @@ test_screen_sharpening ()
 
   sharpen_parameters sp;
   sp.scanner_mtf.f_stop = 8;
-  sp.scanner_mtf.wavelength = 750;
+  test_set_mtf_wavelength (sp.scanner_mtf, 750);
   /* Pixel pitch 3.7/10 micrometers as requested.  */
   sp.scanner_mtf.pixel_pitch = 3.7  /*/ 10.0*/;
   sp.scanner_mtf.scan_dpi = 4000;
@@ -2505,7 +2593,7 @@ test_screen_sharpening ()
   signed_sp.mode = sharpen_parameters::blur_deconvolution;
   signed_sp.scanner_mtf.scan_dpi = 1887;
   signed_sp.scanner_mtf.f_stop = 8;
-  signed_sp.scanner_mtf.wavelength = 750;
+  test_set_mtf_wavelength (signed_sp.scanner_mtf, 750);
   signed_sp.scanner_mtf.pixel_pitch = 3.760;
   signed_sp.scanner_mtf.sensor_fill_factor = 0;
   signed_sp.scanner_mtf.defocus = 0.5;
@@ -2530,7 +2618,7 @@ test_screen_sharpening ()
       }
   const double signed_response = signed_sum / signed_norm / 0.2;
   const double expected_signed_response
-      = signed_sp.scanner_mtf.system_otf (signed_frequency);
+      = signed_sp.scanner_mtf.system_otf (signed_frequency, test_mtf_wavelength (signed_sp.scanner_mtf));
   if (!(expected_signed_response < -0.01 && signed_response < -0.01)
       || std::abs (signed_response - expected_signed_response) > 0.004)
     {
@@ -2624,7 +2712,7 @@ test_screen_simulation ()
   applied_transfer.mode = sharpen_parameters::wiener_deconvolution;
   applied_transfer.scanner_mtf_scale = (luminosity_t)0.01;
   applied_transfer.scanner_mtf.f_stop = 8;
-  applied_transfer.scanner_mtf.wavelength = 750;
+  test_set_mtf_wavelength (applied_transfer.scanner_mtf, 750);
   applied_transfer.scanner_mtf.pixel_pitch = 3.760;
   applied_transfer.scanner_mtf.scan_dpi = 1887;
   applied_transfer.scanner_mtf.sensor_fill_factor = 1;
@@ -2685,7 +2773,7 @@ test_screen_simulation ()
      remain different because its purpose is to apply the capture blur again. */
   sharpen_parameters digital_filter;
   digital_filter.scanner_mtf.f_stop = 8;
-  digital_filter.scanner_mtf.wavelength = 550;
+  test_set_mtf_wavelength (digital_filter.scanner_mtf, 550);
   digital_filter.scanner_mtf.pixel_pitch = 3.7;
   digital_filter.scanner_mtf.scan_dpi = 4000;
   digital_filter.scanner_mtf.sensor_fill_factor = 1;
@@ -3080,7 +3168,7 @@ test_screen_simulation ()
                              dummy_screen, dummy_screen, &collected,
                              screen_sampling::point_sample, 0, no_sharpening,
                              dummy_map,
-                             {1, 0, 1, 2}))
+                             {1, 0, 1, 2}, 550))
     {
       fprintf (stderr, "Finite colour-loss simulation failed\n");
       ok = false;
@@ -3300,7 +3388,7 @@ test_mtf_physical_model ()
   mtf_parameters hurley;
   hurley.scan_dpi = 1887;
   hurley.f_stop = 8;
-  hurley.wavelength = 750;
+  test_set_mtf_wavelength (hurley, 750);
   hurley.pixel_pitch = 3.760;
   if (hurley.get_channel_wavelength (3) != 750)
     {
@@ -3329,7 +3417,7 @@ test_mtf_physical_model ()
       ok = false;
     }
   wavelength_defaults.wavelengths[3] = 0;
-  wavelength_defaults.wavelength = 700;
+  test_set_mtf_wavelength (wavelength_defaults, 700);
   if (wavelength_defaults.get_channel_wavelength (3, true) != 700
       || wavelength_defaults.get_channel_wavelength (3, false) != 700)
     {
@@ -3337,11 +3425,9 @@ test_mtf_physical_model ()
       ok = false;
     }
   render_parameters default_render;
-  if (default_render.get_sharpen_parameters_for_channel (3, true)
-              .scanner_mtf.wavelength
+  if (default_render.get_sharpen_wavelength_for_channel (3, true)
           != 750
-      || default_render.get_sharpen_parameters_for_channel (3, false)
-                 .scanner_mtf.wavelength
+      || default_render.get_sharpen_wavelength_for_channel (3, false)
              != 550)
     {
       fprintf (stderr, "Render channel specialization lost scalar defaults\n");
@@ -3367,8 +3453,7 @@ test_mtf_physical_model ()
       || domain_render.get_image_layer_sharpen_parameters (nullptr)
                  .scanner_mtf.measured_mtf_idx
              != 0
-      || domain_render.get_image_layer_sharpen_parameters (nullptr)
-                 .scanner_mtf.wavelength
+      || domain_render.get_image_layer_wavelength (nullptr)
              != 575)
     {
       fprintf (stderr, "Image-layer measured MTF leaked into native RGB\n");
@@ -3396,45 +3481,68 @@ test_mtf_physical_model ()
       ok = false;
     }
 
+  /* A scalar layer drawn from exactly one RGB channel must carry that
+     channel's measured wavelength to the optical operation, not the
+     representative green wavelength of an actual mixed RGB image layer.  */
+  image_data red_layer_capture;
+  if (!red_layer_capture.set_dimensions (1, 1, true, false))
+    {
+      fprintf (stderr, "Could not allocate red image-layer MTF test\n");
+      ok = false;
+    }
+  else
+    {
+      native_domain_render.mix_red = 1;
+      native_domain_render.mix_green = 0;
+      native_domain_render.mix_blue = 0;
+      if (native_domain_render.get_image_layer_wavelength (&red_layer_capture)
+              != 640)
+        {
+          fprintf (stderr,
+                   "One-hot native red layer lost measured wavelength\n");
+          ok = false;
+        }
+    }
+
   const double expected_magnification = 0.27933543307086614;
   const double expected_effective_f_stop = 10.234683464566929;
   const double expected_cutoff = 0.48983765357177734;
   if (std::abs (hurley.magnification () - expected_magnification) > 1e-14
       || std::abs (hurley.effective_f_stop () - expected_effective_f_stop)
              > 1e-13
-      || std::abs (hurley.nu (expected_cutoff) - 1) > 2e-14)
+      || std::abs (hurley.nu (expected_cutoff, test_mtf_wavelength (hurley)) - 1) > 2e-14)
     {
       fprintf (stderr,
                "Hurley MTF unit conversion failed: m=%0.17g N=%0.17g "
                "nu(fc)=%0.17g\n",
                hurley.magnification (), hurley.effective_f_stop (),
-               hurley.nu (expected_cutoff));
+               hurley.nu (expected_cutoff, test_mtf_wavelength (hurley)));
       ok = false;
     }
 
   const double half_cutoff = expected_cutoff * 0.5;
   const double expected_half_cutoff_mtf = 0.39100221895577064;
-  if (std::abs (hurley.lens_diffraction_mtf (half_cutoff)
+  if (std::abs (hurley.lens_diffraction_mtf (half_cutoff, test_mtf_wavelength (hurley))
                 - expected_half_cutoff_mtf)
           > 2e-13
       /* EXPECTED_CUTOFF is a rounded decimal reference.  Under -Ofast its
          independently evaluated ratio can land a few ulps below one, so test
          the physical zero rather than bitwise equality.  */
-      || hurley.lens_diffraction_mtf (expected_cutoff) > 1e-20)
+      || hurley.lens_diffraction_mtf (expected_cutoff, test_mtf_wavelength (hurley)) > 1e-20)
     {
       fprintf (stderr,
                "Circular-pupil diffraction MTF failed: half=%0.17g "
                "cutoff=%0.17g\n",
-               hurley.lens_diffraction_mtf (half_cutoff),
-               hurley.lens_diffraction_mtf (expected_cutoff));
+               hurley.lens_diffraction_mtf (half_cutoff, test_mtf_wavelength (hurley)),
+               hurley.lens_diffraction_mtf (expected_cutoff, test_mtf_wavelength (hurley)));
       ok = false;
     }
 
   hurley.defocus = 0.17939247226072069;
   const double defocus_q10
-      = hurley.lens_defocus_mtf (expected_cutoff * 0.1);
+      = hurley.lens_defocus_mtf (expected_cutoff * 0.1, test_mtf_wavelength (hurley));
   const double defocus_q50
-      = hurley.lens_defocus_mtf (expected_cutoff * 0.5);
+      = hurley.lens_defocus_mtf (expected_cutoff * 0.5, test_mtf_wavelength (hurley));
   if (std::abs (defocus_q10 - 0.94938728640116945) > 3e-12
       || std::abs (defocus_q50 - 0.66524440281563219) > 3e-12)
     {
@@ -3455,28 +3563,28 @@ test_mtf_physical_model ()
   reversed.halo_fraction = 0;
   const double reversed_frequency = expected_cutoff * 0.4;
   const double reversed_defocus
-      = reversed.lens_defocus_otf (reversed_frequency);
+      = reversed.lens_defocus_otf (reversed_frequency, test_mtf_wavelength (reversed));
   if (std::abs (reversed_defocus + 0.09507351131732263) > 4e-12
-      || reversed.lens_defocus_mtf (reversed_frequency) <= 0
-      || std::abs (reversed.lens_defocus_mtf (reversed_frequency)
+      || reversed.lens_defocus_mtf (reversed_frequency, test_mtf_wavelength (reversed)) <= 0
+      || std::abs (reversed.lens_defocus_mtf (reversed_frequency, test_mtf_wavelength (reversed))
                    + reversed_defocus)
              > 4e-12
-      || reversed.system_otf (reversed_frequency) >= 0
-      || reversed.system_mtf (reversed_frequency) <= 0)
+      || reversed.system_otf (reversed_frequency, test_mtf_wavelength (reversed)) >= 0
+      || reversed.system_mtf (reversed_frequency, test_mtf_wavelength (reversed)) <= 0)
     {
       fprintf (stderr,
                "Signed physical OTF reversal failed: defocus=%0.17g "
                "system OTF=%0.17g MTF=%0.17g\n",
-               reversed_defocus, reversed.system_otf (reversed_frequency),
-               reversed.system_mtf (reversed_frequency));
+               reversed_defocus, reversed.system_otf (reversed_frequency, test_mtf_wavelength (reversed)),
+               reversed.system_mtf (reversed_frequency, test_mtf_wavelength (reversed)));
       ok = false;
     }
 
-  mtf reversed_mtf (reversed);
+  mtf reversed_mtf (reversed, test_mtf_wavelength (reversed));
   if (!reversed_mtf.precompute (nullptr, false)
       || reversed_mtf.get_transfer (reversed_frequency) >= 0
       || std::abs (reversed_mtf.get_transfer (reversed_frequency)
-                   - reversed.system_otf (reversed_frequency))
+                   - reversed.system_otf (reversed_frequency, test_mtf_wavelength (reversed)))
              > 0.002
       || reversed_mtf.get_mtf (reversed_frequency) <= 0)
     {
@@ -3484,7 +3592,7 @@ test_mtf_physical_model ()
                "Precomputed physical OTF lost the defocus sign: table=%g "
                "model=%g\n",
                reversed_mtf.get_transfer (reversed_frequency),
-               reversed.system_otf (reversed_frequency));
+               reversed.system_otf (reversed_frequency, test_mtf_wavelength (reversed)));
       ok = false;
     }
 
@@ -3493,7 +3601,7 @@ test_mtf_physical_model ()
      measured magnitude and fitted phase reversal without changing the
      sharpening model or inventing phase for measured data.  */
   const mtf_parameters::computed_mtf reversed_curves
-      = reversed.compute_curves (201);
+      = reversed.compute_curves (201, test_mtf_wavelength (reversed));
   bool saw_negative_curve = false;
   if (reversed_curves.system_otf.size ()
           != reversed_curves.system_mtf.size ())
@@ -3530,9 +3638,9 @@ test_mtf_physical_model ()
      not invent a negative phase.  */
   mtf_parameters measured_reversal = make_measured_mtf (
       {{0, 100}, {reversed_frequency,
-                  reversed.system_mtf (reversed_frequency) * 100},
+                  reversed.system_mtf (reversed_frequency, test_mtf_wavelength (reversed)) * 100},
        {0.5, 0}});
-  mtf measured_reversal_mtf (measured_reversal);
+  mtf measured_reversal_mtf (measured_reversal, test_mtf_wavelength (measured_reversal));
   if (!measured_reversal_mtf.precompute (nullptr, false)
       || measured_reversal_mtf.get_mtf (reversed_frequency) < 0)
     {
@@ -3562,8 +3670,8 @@ test_mtf_physical_model ()
   reversed_with_halo.halo_fraction = 0.2;
   reversed_with_halo.halo_sigma = 5.0;
   const double core_otf
-      = reversed_with_halo.lens_diffraction_otf (reversed_frequency)
-        * reversed_with_halo.lens_defocus_otf (reversed_frequency)
+      = reversed_with_halo.lens_diffraction_otf (reversed_frequency, test_mtf_wavelength (reversed_with_halo))
+        * reversed_with_halo.lens_defocus_otf (reversed_frequency, test_mtf_wavelength (reversed_with_halo))
         * std::exp (-2 * M_PI * M_PI * reversed_with_halo.sigma
                     * reversed_with_halo.sigma * reversed_frequency
                     * reversed_frequency);
@@ -3573,9 +3681,9 @@ test_mtf_physical_model ()
       = 0.8 * core_otf + 0.2 * halo_component;
   const double magnitude_before_mix
       = 0.8 * std::abs (core_otf) + 0.2 * halo_component;
-  if (std::abs (reversed_with_halo.lens_otf (reversed_frequency) - mixed_otf)
+  if (std::abs (reversed_with_halo.lens_otf (reversed_frequency, test_mtf_wavelength (reversed_with_halo)) - mixed_otf)
           > 2e-13
-      || std::abs (reversed_with_halo.lens_mtf (reversed_frequency)
+      || std::abs (reversed_with_halo.lens_mtf (reversed_frequency, test_mtf_wavelength (reversed_with_halo))
                    - std::abs (mixed_otf))
              > 2e-13
       || std::abs (mixed_otf - magnitude_before_mix) < 1e-3)
@@ -3584,8 +3692,8 @@ test_mtf_physical_model ()
                "Halo was not mixed with signed core before magnitude: "
                "core=%0.17g halo=%0.17g otf=%0.17g mtf=%0.17g\n",
                core_otf, halo_component,
-               reversed_with_halo.lens_otf (reversed_frequency),
-               reversed_with_halo.lens_mtf (reversed_frequency));
+               reversed_with_halo.lens_otf (reversed_frequency, test_mtf_wavelength (reversed_with_halo)),
+               reversed_with_halo.lens_mtf (reversed_frequency, test_mtf_wavelength (reversed_with_halo)));
       ok = false;
     }
 
@@ -3598,12 +3706,12 @@ test_mtf_physical_model ()
   reversal_fit_source.halo_sigma = 5.0;
   mtf_measurement reversal_measurement;
   reversal_measurement.name = "synthetic phase-reversing physical MTF";
-  reversal_measurement.wavelength = reversal_fit_source.wavelength;
+  reversal_measurement.wavelength = test_mtf_wavelength (reversal_fit_source);
   for (int i = 0; i <= 100; i++)
     {
       const double frequency = i / 200.0;
       reversal_measurement.add_value (
-          frequency, reversal_fit_source.system_mtf (frequency) * 100);
+          frequency, reversal_fit_source.system_mtf (frequency, test_mtf_wavelength (reversal_fit_source)) * 100);
     }
   mtf_parameters reversal_fit_input = reversal_fit_source;
   reversal_fit_input.defocus = 0.35;
@@ -3647,12 +3755,12 @@ test_mtf_physical_model ()
   weighted_source.halo_sigma = 5.0;
   mtf_measurement weighted_measurement;
   weighted_measurement.name = "synthetic uncertainty-weighted MTF";
-  weighted_measurement.wavelength = weighted_source.wavelength;
+  weighted_measurement.wavelength = test_mtf_wavelength (weighted_source);
   mtf_measurement uniform_measurement = weighted_measurement;
   for (int i = 0; i <= 100; i++)
     {
       const double frequency = i / 200.0;
-      double contrast = weighted_source.system_mtf (frequency) * 100;
+      double contrast = weighted_source.system_mtf (frequency, test_mtf_wavelength (weighted_source)) * 100;
       const bool noisy_tail = frequency >= 0.28;
       if (noisy_tail)
         contrast += 4.0;
@@ -3709,28 +3817,28 @@ test_mtf_physical_model ()
   conflicting_source.defocus = 0.30;
   mtf_measurement precise_capture_measurement;
   precise_capture_measurement.name = "synthetic precise same-capture MTF";
-  precise_capture_measurement.wavelength = weighted_source.wavelength;
+  precise_capture_measurement.wavelength = test_mtf_wavelength (weighted_source);
   mtf_measurement uncertain_capture_measurement;
   uncertain_capture_measurement.name = "synthetic uncertain same-capture MTF";
-  uncertain_capture_measurement.wavelength = weighted_source.wavelength;
+  uncertain_capture_measurement.wavelength = test_mtf_wavelength (weighted_source);
   uncertain_capture_measurement.same_capture = true;
   mtf_measurement uniform_precise_capture_measurement;
   uniform_precise_capture_measurement.name
       = "synthetic uniform precise same-capture MTF";
-  uniform_precise_capture_measurement.wavelength = weighted_source.wavelength;
+  uniform_precise_capture_measurement.wavelength = test_mtf_wavelength (weighted_source);
   mtf_measurement uniform_conflicting_capture_measurement;
   uniform_conflicting_capture_measurement.name
       = "synthetic uniform conflicting same-capture MTF";
   uniform_conflicting_capture_measurement.wavelength
-      = weighted_source.wavelength;
+      = test_mtf_wavelength (weighted_source);
   uniform_conflicting_capture_measurement.same_capture = true;
   for (int i = 0; i <= 100; i++)
     {
       const double frequency = i / 200.0;
       const double precise_contrast
-          = weighted_source.system_mtf (frequency) * 100;
+          = weighted_source.system_mtf (frequency, test_mtf_wavelength (weighted_source)) * 100;
       const double conflicting_contrast
-          = conflicting_source.system_mtf (frequency) * 100;
+          = conflicting_source.system_mtf (frequency, test_mtf_wavelength (conflicting_source)) * 100;
       precise_capture_measurement.add_value (frequency, precise_contrast, 0.25);
       uncertain_capture_measurement.add_value (frequency, conflicting_contrast,
                                                 5.0);
@@ -3834,7 +3942,7 @@ test_mtf_physical_model ()
     }
   const double disk = 2 * j1_reference / argument;
   if (fallback.simulate_diffraction_p ()
-      || std::abs (fallback.lens_mtf (fallback_frequency)
+      || std::abs (fallback.lens_mtf (fallback_frequency, test_mtf_wavelength (fallback))
                    - gaussian * std::abs (disk))
              > 2e-13)
     {
@@ -3858,7 +3966,7 @@ test_mtf_physical_model ()
   for (int i = 0; i <= 100; i++)
     {
       const double frequency = i / 200.0;
-      const double contrast = source.system_mtf (frequency) * 100;
+      const double contrast = source.system_mtf (frequency, test_mtf_wavelength (source)) * 100;
       grayscale.add_value (frequency, contrast);
       infrared.add_value (frequency, contrast);
     }
@@ -3869,15 +3977,16 @@ test_mtf_physical_model ()
       mtf_parameters estimated;
       const char *error = nullptr;
       const double objective
-          = estimated.estimate_parameters (input, nullptr, nullptr, &error, 0);
+          = estimated.estimate_parameters (
+                input, nullptr, nullptr, &error, 0, 750);
       if (error || objective < 0 || objective > 1e-8
-          || estimated.wavelength != 750
+          || test_mtf_wavelength (estimated) != 750
           || estimated.wavelengths != input.wavelengths)
         {
           fprintf (stderr,
                    "Known 750 nm wavelength was not preserved: wavelength "
                    "%0.17g IR override %0.17g objective %g%s%s\n",
-                   estimated.wavelength, estimated.wavelengths[3], objective,
+                   test_mtf_wavelength (estimated), estimated.wavelengths[3], objective,
                    error ? ": " : "", error ? error : "");
           ok = false;
         }
@@ -3888,7 +3997,7 @@ test_mtf_physical_model ()
      coordinate, and the result is written to the red channel override rather
      than rewriting the measurements themselves.  */
   mtf_parameters legacy_source = source;
-  legacy_source.wavelength = 650;
+  test_set_mtf_wavelength (legacy_source, 650);
   legacy_source.wavelengths = {0, 0, 0, 0};
   mtf_measurement legacy_red_first;
   legacy_red_first.name = "legacy shared red wavelength 1";
@@ -3900,12 +4009,12 @@ test_mtf_physical_model ()
   for (int i = 0; i <= 100; i++)
     {
       const double frequency = i / 200.0;
-      const double contrast = legacy_source.system_mtf (frequency) * 100;
+      const double contrast = legacy_source.system_mtf (frequency, 650) * 100;
       legacy_red_first.add_value (frequency, contrast);
       legacy_red_second.add_value (frequency, contrast);
     }
   mtf_parameters legacy_input = legacy_source;
-  legacy_input.wavelength = 0;
+  test_set_mtf_wavelength (legacy_input, 0);
   legacy_input.measurements = {legacy_red_first, legacy_red_second};
   mtf_parameters legacy_result;
   const char *legacy_error = nullptr;
@@ -3915,14 +4024,14 @@ test_mtf_physical_model ()
           | mtf_parameters::estimate_use_multifit);
   if (legacy_error || legacy_objective < 0 || legacy_objective > 1e-7
       || std::abs (legacy_result.wavelengths[0] - 650) > 1e-3
-      || std::abs (legacy_result.wavelength - 650) > 1e-3
+      || std::abs (test_mtf_wavelength (legacy_result) - 650) > 1e-3
       || legacy_result.measurements[0].wavelength != 0
       || legacy_result.measurements[1].wavelength != 0)
     {
       fprintf (stderr,
                "Legacy shared channel wavelength changed: global %g red %g "
                "stored %g/%g objective %g%s%s\n",
-               legacy_result.wavelength, legacy_result.wavelengths[0],
+               test_mtf_wavelength (legacy_result), legacy_result.wavelengths[0],
                legacy_result.measurements[0].wavelength,
                legacy_result.measurements[1].wavelength, legacy_objective,
                legacy_error ? ": " : "", legacy_error ? legacy_error : "");
@@ -3944,7 +4053,7 @@ test_mtf_physical_model ()
   const char *fixed_zero_error = nullptr;
   const double fixed_zero_objective = fixed_zero_result.estimate_parameters (
       fixed_zero_input, fixed_zero_options, nullptr, nullptr,
-      &fixed_zero_error, 0);
+      &fixed_zero_error, 0, 750);
   if (fixed_zero_error || fixed_zero_objective <= 0.1
       || fixed_zero_result.sigma != 0 || fixed_zero_result.defocus != 0)
     {
@@ -3966,7 +4075,7 @@ test_mtf_physical_model ()
       fixed_zero_input, free_core_options, nullptr, nullptr,
       &free_core_error,
       mtf_parameters::estimate_use_nmsimplex
-          | mtf_parameters::estimate_use_multifit);
+          | mtf_parameters::estimate_use_multifit, 750);
   if (free_core_error || free_core_objective < 0
       || free_core_objective >= fixed_zero_objective * 0.01)
     {
@@ -3991,7 +4100,7 @@ test_mtf_physical_model ()
     {
       const double frequency = i / 200.0;
       optimized_fallback_measurement.add_value (
-          frequency, optimized_fallback_source.system_mtf (frequency) * 100);
+          frequency, optimized_fallback_source.system_mtf (frequency, test_mtf_wavelength (optimized_fallback_source)) * 100);
     }
   mtf_parameters optimized_fallback_input = optimized_fallback_source;
   optimized_fallback_input.sigma = 0;
@@ -4028,7 +4137,7 @@ test_mtf_physical_model ()
      and channel fallbacks disagree.  An explicit fit also selects the fitted
      analytical model instead of leaving the source measurement active.  */
   mtf_parameters authoritative_input = source;
-  authoritative_input.wavelength = 640;
+  test_set_mtf_wavelength (authoritative_input, 640);
   authoritative_input.wavelengths[3] = 850;
   mtf_measurement authoritative_measurement = infrared;
   authoritative_measurement.wavelength = 750;
@@ -4036,13 +4145,14 @@ test_mtf_physical_model ()
   authoritative_input.measured_mtf_idx = 0;
   mtf_parameters authoritative_result;
   const char *authoritative_error = nullptr;
+  double authoritative_fitted_wavelength_nm = 0;
   const double authoritative_objective
       = authoritative_result.estimate_parameters (
           authoritative_input, fixed_zero_options, nullptr, nullptr,
-          &authoritative_error, 0);
+          &authoritative_error, 0, 0, &authoritative_fitted_wavelength_nm);
   if (authoritative_error || authoritative_objective < 0
       || authoritative_objective > 1e-8
-      || authoritative_result.wavelength != 750
+      || authoritative_fitted_wavelength_nm != 750
       || authoritative_result.measurements[0].wavelength != 750
       || authoritative_result.model != mtf_model::physical_diffraction
       || authoritative_result.measured_mtf_idx != -1)
@@ -4051,7 +4161,7 @@ test_mtf_physical_model ()
                "Authoritative measurement wavelength or model activation "
                "failed: wavelength %g stored %g model %i selected %i "
                "objective %g%s%s\n",
-               authoritative_result.wavelength,
+               authoritative_fitted_wavelength_nm,
                authoritative_result.measurements[0].wavelength,
                (int)authoritative_result.model,
                authoritative_result.measured_mtf_idx,
@@ -4128,14 +4238,14 @@ test_mtf_physical_model ()
   fallback_source.pixel_pitch = 3.760;
   fallback_source.scan_dpi = 1887;
   fallback_source.f_stop = 8;
-  fallback_source.wavelength = 750;
+  test_set_mtf_wavelength (fallback_source, 750);
   fallback_source.model = mtf_model::empirical_fallback;
   mtf_measurement fallback_measurement;
   for (int i = 0; i <= 100; i++)
     {
       const double frequency = i / 200.0;
       fallback_measurement.add_value (
-          frequency, fallback_source.system_mtf (frequency) * 100);
+          frequency, fallback_source.system_mtf (frequency, test_mtf_wavelength (fallback_source)) * 100);
     }
   fallback_source.measurements = {fallback_measurement};
   fallback_source.measured_mtf_idx = 0;
@@ -4169,7 +4279,7 @@ test_mtf_physical_model ()
   invalid_metadata.f_stop = 0;
   const char *validation_error = nullptr;
   if (mtf_parameters::validate_estimation_options (
-          invalid_metadata, fixed_zero_options, &validation_error))
+          invalid_metadata, fixed_zero_options, &validation_error, 750))
     {
       fprintf (stderr, "Missing fixed f-number was accepted\n");
       ok = false;
@@ -4177,7 +4287,7 @@ test_mtf_physical_model ()
   mtf_estimation_options fitted_f_stop_options = fixed_zero_options;
   fitted_f_stop_options.optimize_f_stop = true;
   if (!mtf_parameters::validate_estimation_options (
-          invalid_metadata, fitted_f_stop_options, &validation_error))
+          invalid_metadata, fitted_f_stop_options, &validation_error, 750))
     {
       fprintf (stderr, "Optimized missing f-number was rejected: %s\n",
                validation_error ? validation_error : "unknown error");
@@ -4185,7 +4295,7 @@ test_mtf_physical_model ()
     }
 
   invalid_metadata = source;
-  invalid_metadata.wavelength = 0;
+  test_set_mtf_wavelength (invalid_metadata, 0);
   invalid_metadata.wavelengths = {0, 0, 0, 0};
   invalid_metadata.measurements = {grayscale};
   if (mtf_parameters::validate_estimation_options (
@@ -4217,7 +4327,7 @@ test_mtf_physical_model ()
                          | mtf_parameters::estimate_use_multifit
                          | mtf_parameters::estimate_halo;
   const double halo_objective = halo_estimated.estimate_parameters (
-      halo_input, nullptr, nullptr, &halo_error, halo_flags);
+      halo_input, nullptr, nullptr, &halo_error, halo_flags, 750);
   if (halo_error || halo_objective < 0 || halo_objective > 1e-8
       || std::abs (halo_estimated.halo_fraction - source.halo_fraction) > 2e-4
       || std::abs (halo_estimated.halo_sigma - source.halo_sigma) > 0.01)
@@ -4240,12 +4350,12 @@ test_mtf_physical_model ()
   no_halo_source.halo_sigma = 0;
   mtf_measurement no_halo_measurement;
   no_halo_measurement.name = "synthetic halo-free physical MTF";
-  no_halo_measurement.wavelength = no_halo_source.wavelength;
+  no_halo_measurement.wavelength = test_mtf_wavelength (no_halo_source);
   for (int i = 0; i <= 100; i++)
     {
       const double frequency = i / 200.0;
       no_halo_measurement.add_value (
-          frequency, no_halo_source.system_mtf (frequency) * 100);
+          frequency, no_halo_source.system_mtf (frequency, test_mtf_wavelength (no_halo_source)) * 100);
     }
   mtf_parameters default_fit_input = no_halo_source;
   default_fit_input.measurements = {no_halo_measurement};
@@ -4302,7 +4412,7 @@ test_mtf_physical_model ()
   mtf_parameters &saved_mtf = saved_render.sharpen.scanner_mtf;
   saved_mtf = source;
   saved_mtf.model = mtf_model::physical_diffraction;
-  saved_mtf.wavelength = 0;
+  test_set_mtf_wavelength (saved_mtf, 0);
   saved_mtf.wavelengths
       = {620.12345678901238, 540.23456789012345, 460.34567890123457,
          750.45678901234567};
@@ -4490,7 +4600,7 @@ test_mtf_deconvolution ()
   /* A three-point irregular table used to be silently treated as equidistant.  */
   mtf_parameters irregular_parameters
       = make_measured_mtf ({{0, 100}, {0.4, 40}, {0.5, 0}});
-  mtf irregular (irregular_parameters);
+  mtf irregular (irregular_parameters, test_mtf_wavelength (irregular_parameters));
   if (!irregular.precompute (nullptr, false)
       || std::abs (irregular.get_mtf (0.2) - 0.7) > 0.002
       || std::abs (irregular.get_mtf (0.4) - 0.4) > 0.002)
@@ -4502,7 +4612,7 @@ test_mtf_deconvolution ()
   /* MTF is relative to DC; normalize a non-100-percent measured DC value.  */
   mtf_parameters normalized_parameters
       = make_measured_mtf ({{0, 80}, {0.25, 40}, {0.5, 0}});
-  mtf normalized (normalized_parameters);
+  mtf normalized (normalized_parameters, test_mtf_wavelength (normalized_parameters));
   if (!normalized.precompute (nullptr, false)
       || std::abs (normalized.get_mtf (0) - 1) > 0.000001
       || std::abs (normalized.get_mtf (0.25) - 0.5) > 0.002)
@@ -4568,7 +4678,7 @@ test_mtf_deconvolution ()
     dense_nyquist_points.push_back ({i / 200.0, 100});
   mtf_parameters diagonal_parameters
       = make_measured_mtf (dense_nyquist_points);
-  mtf diagonal_mtf (diagonal_parameters);
+  mtf diagonal_mtf (diagonal_parameters, test_mtf_wavelength (diagonal_parameters));
   constexpr double diagonal_frequency_x = 0.4;
   constexpr double diagonal_frequency_y = 0.4;
   const double diagonal_frequency
@@ -4632,14 +4742,14 @@ test_mtf_deconvolution ()
   mtf_parameters signed_blur_parameters;
   signed_blur_parameters.scan_dpi = 1887;
   signed_blur_parameters.f_stop = 8;
-  signed_blur_parameters.wavelength = 750;
+  test_set_mtf_wavelength (signed_blur_parameters, 750);
   signed_blur_parameters.pixel_pitch = 3.760;
   signed_blur_parameters.sensor_fill_factor = 0;
   signed_blur_parameters.defocus = 0.5;
-  mtf signed_blur_mtf (signed_blur_parameters);
+  mtf signed_blur_mtf (signed_blur_parameters, test_mtf_wavelength (signed_blur_parameters));
   constexpr double signed_frequency = 0.1875;
   const double expected_signed_transfer
-      = signed_blur_parameters.system_otf (signed_frequency);
+      = signed_blur_parameters.system_otf (signed_frequency, test_mtf_wavelength (signed_blur_parameters));
   auto signed_signal = [] (int x, int) {
     return 0.5 + 0.2 * std::cos (2 * M_PI * signed_frequency * x);
   };
@@ -4665,7 +4775,7 @@ test_mtf_deconvolution ()
      therefore be an identity operation apart from tiny resampling error.  */
   mtf_parameters flat_parameters
       = make_measured_mtf ({{0, 100}, {0.25, 100}, {0.5, 0}});
-  mtf flat (flat_parameters);
+  mtf flat (flat_parameters, test_mtf_wavelength (flat_parameters));
   auto smooth_signal = [] (int x, int y) {
     return 0.5 + 0.17 * std::sin (2 * M_PI * 0.03125 * x)
            + 0.11 * std::cos (2 * M_PI * 0.046875 * y);
@@ -4776,7 +4886,7 @@ test_mtf_deconvolution ()
       gaussian_points.push_back ({f, response * 100});
     }
   mtf_parameters gaussian_parameters = make_measured_mtf (gaussian_points);
-  mtf gaussian (gaussian_parameters);
+  mtf gaussian (gaussian_parameters, test_mtf_wavelength (gaussian_parameters));
   const double expected_response
       = std::exp (-2 * M_PI * M_PI * sigma * sigma * frequency * frequency);
   auto original_signal = [] (int x, int) {
@@ -4830,8 +4940,8 @@ test_mtf_deconvolution ()
   phase_one_model_parameters.f_stop = 8;
   phase_one_model_parameters.scan_dpi = 4000;
   phase_one_model_parameters.pixel_pitch = 3.76;
-  phase_one_model_parameters.wavelength = 750;
-  mtf phase_one_model (phase_one_model_parameters);
+  test_set_mtf_wavelength (phase_one_model_parameters, 750);
+  mtf phase_one_model (phase_one_model_parameters, test_mtf_wavelength (phase_one_model_parameters));
   if (!phase_one_model.precompute (nullptr, false))
     {
       fprintf (stderr, "Phase One reference MTF precomputation failed\n");
@@ -4847,7 +4957,7 @@ test_mtf_deconvolution ()
         }
       mtf_parameters phase_one_measured_parameters
           = make_measured_mtf (phase_one_points);
-      mtf phase_one_measured (phase_one_measured_parameters);
+      mtf phase_one_measured (phase_one_measured_parameters, test_mtf_wavelength (phase_one_measured_parameters));
       constexpr double phase_one_scale = 16;
       constexpr double phase_one_frequency = 0.1;
       constexpr double high_resolution_frequency
@@ -6744,7 +6854,7 @@ test_channel_sharpening ()
       const sharpen_parameters channel_sharpen
           = params.get_sharpen_parameters_for_channel (channel);
       if (channel_sharpen.scanner_mtf.measured_mtf_idx != channel
-          || channel_sharpen.scanner_mtf.wavelength
+          || params.get_sharpen_wavelength_for_channel (channel)
                  != params.sharpen.scanner_mtf.wavelengths[channel])
         {
           fprintf (stderr,
@@ -6756,7 +6866,7 @@ test_channel_sharpening ()
   const sharpen_parameters ir_sharpen
       = params.get_sharpen_parameters_for_channel (3);
   if (ir_sharpen.scanner_mtf.measured_mtf_idx != -1
-      || ir_sharpen.scanner_mtf.wavelength != 850)
+      || params.get_sharpen_wavelength_for_channel (3) != 850)
     {
       fprintf (stderr,
                "Missing IR measurement did not fall back to the IR model\n");
@@ -6776,8 +6886,7 @@ test_channel_sharpening ()
       || onehot_specialization.get_image_layer_sharpen_parameters (&img)
                  .scanner_mtf.measured_mtf_idx
              != 1
-      || onehot_specialization.get_image_layer_sharpen_parameters (&img)
-                 .scanner_mtf.wavelength
+      || onehot_specialization.get_image_layer_wavelength (&img)
              != onehot_specialization.sharpen.scanner_mtf.wavelengths[1])
     {
       fprintf (stderr, "One-hot image layer did not inherit green MTF\n");
@@ -6989,7 +7098,7 @@ test_slanted_edge_mtf ()
       sp_hi.scanner_mtf.scan_dpi = 4000; 
       sp_hi.scanner_mtf.defocus = 0.01 * disp; // 10 microns displacement
       sp_hi.scanner_mtf.pixel_pitch = 3.76;
-      sp_hi.scanner_mtf.wavelength = 750; // IR lifht
+      test_set_mtf_wavelength (sp_hi.scanner_mtf, 750); // IR lifht
       sp_hi.scanner_mtf_scale = scale;
       sp_hi.supersample = 1;
 
@@ -7102,7 +7211,7 @@ test_slanted_edge_mtf ()
           return false;
         }
 
-      mtf m (sp_hi.scanner_mtf);
+      mtf m (sp_hi.scanner_mtf, test_mtf_wavelength (sp_hi.scanner_mtf));
       if (! m.precompute (NULL))
 	{
 	  printf("MTF precomputation\n");
@@ -7422,7 +7531,7 @@ test_real_mtf_reproducibility ()
           input.scan_dpi = 2089;
           input.pixel_pitch = 3.760;
           input.f_stop = 8;
-          input.wavelength = 750;
+          test_set_mtf_wavelength (input, 750);
           input.sensor_fill_factor = 1;
           input.sigma = start.sigma;
           input.defocus = start.defocus;

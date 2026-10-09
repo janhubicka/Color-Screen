@@ -219,6 +219,33 @@ selecting different MTF models automatically from these enum names.
 Until then, production code should stay conservative rather than infer viewing
 filter presence merely from `has_rgb()`.
 
+### MTF-DOM-010 — Operation-local wavelength ownership
+
+**Status:** implemented on PR #532; full platform and sanitizer validation
+pending.
+
+An optical wavelength used for one evaluation, fit, PSF or exact periodic
+screen is not the unsaved scalar previously carried inside
+`mtf_parameters`. Pass that effective wavelength explicitly in nanometres.
+Keep the saved `wavelengths[4]` for native capture-channel metadata and
+`mtf_measurement::wavelength` for each measured curve. The explicit MTF
+fitter returns a representative fitted wavelength through an output
+argument, rather than creating a new shared per-document wavelength.
+
+A selected image-layer measurement takes precedence when resolving the
+scalar image layer's working wavelength. A one-hot native RGB image layer
+inherits the matching native measured/channel wavelength. Genuine RGB
+mixtures use the existing representative analytical path pending the
+physically correct models MTF-DOM-005/006; they must not inherit an
+unrelated native measurement.
+
+Caches of optical kernels key on both optical model and effective
+wavelength. The exact finetune screen cache contains the *result* of
+applying an optical kernel and must also distinguish effective wavelengths
+even when its saved MTF parameter comparison considers the kernel models
+identical. This must be tested by changing wavelength without changing
+any optical model coefficients.
+
 ## Regression policy
 
 Tests should make domain mistakes obvious by using deliberately very different

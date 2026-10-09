@@ -631,14 +631,17 @@ analyze_scanner_blur_worker::step2 ()
       /* RGB finetuning currently applies one achromatic periodic-screen
          filter and uses 550 nm; mirror CAPTURE_SHARPEN_PARAMETERS exactly
          when deriving the useful focus range.  */
-      if (!(flags & finetune_bw) && scan.has_rgb ())
-        focus_mtf.wavelength = 550;
+      const double focus_wavelength_nm
+          = (!(flags & finetune_bw) && scan.has_rgb ())
+                ? 550
+                : rparam.get_image_layer_wavelength (&scan);
       const bool useful_range
           = my_isfinite (focus_screen_frequency)
             && focus_screen_frequency > 0
             && finetune_useful_defocus_limit (
                 focus_mtf, focus_screen_frequency, focus_mtf_threshold,
-                (coord_t)20, &focus_interpolation_max);
+                (coord_t)20, &focus_interpolation_max,
+                focus_wavelength_nm);
       if (!useful_range)
         {
           pause_stdout (progress);

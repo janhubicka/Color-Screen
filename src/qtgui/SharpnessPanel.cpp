@@ -836,9 +836,9 @@ void SharpnessPanel::updateMTFChart() {
   // Compute model curves with 100 steps for all channels.
   std::array<mtf_parameters::computed_mtf, 4> curves;
   for (int c = 0; c < 4; c++) {
-      mtf_parameters p = chartParameters;
-      p.wavelength = p.get_channel_wavelength(c, hasRgb);
-      curves[c] = p.compute_curves(100);
+      const double wavelength_nm
+          = chartParameters.get_channel_wavelength(c, hasRgb);
+      curves[c] = chartParameters.compute_curves(100, wavelength_nm);
   }
 
   // Pass simulation flag to chart

@@ -1942,6 +1942,7 @@ build_direct_periodic_filter (
    finetuning while preserving the established transfer-table sampling.  */
 static bool
 precompute_empirical_periodic_transfer (const mtf_parameters &params,
+                                        double wavelength_nm,
                                         precomputed_function<double> &transfer)
 {
   if (params.simulate_diffraction_p () || params.use_measured_mtf ())
@@ -1951,7 +1952,7 @@ precompute_empirical_periodic_transfer (const mtf_parameters &params,
   const double step = 1.0 / (entries - 2);
   for (int i = 0; i < entries - 2; i++)
     {
-      values[i] = params.system_otf (i * step);
+      values[i] = params.system_otf (i * step, wavelength_nm);
       if (!my_isfinite (values[i]))
         return false;
     }
@@ -1972,6 +1973,7 @@ build_periodic_filter (typename fft_complex_t<screen_fft_t>::type *fft,
                        sharpen_parameters &sharpen,
                        bool anticipate_sharpening, bool parallel,
                        bool direct_analytical_transfer,
+                       double wavelength_nm,
                        screen_filter_profile *profile,
                        sharpen_parameters::sharpen_mode *mode_ret)
 {
@@ -1994,7 +1996,7 @@ build_periodic_filter (typename fft_complex_t<screen_fft_t>::type *fft,
   std::shared_ptr<const mtf_focus_transfer> physical_focus;
   if (direct_analytical_transfer)
     physical_focus = mtf_focus_transfer::get (
-        sharpen.scanner_mtf, &physical_focus_cache_hit);
+        sharpen.scanner_mtf, wavelength_nm, &physical_focus_cache_hit);
   if (physical_focus)
     {
       if (profile)
@@ -2020,7 +2022,7 @@ build_periodic_filter (typename fft_complex_t<screen_fft_t>::type *fft,
     {
       precomputed_function<double> transfer;
       if (!precompute_empirical_periodic_transfer (sharpen.scanner_mtf,
-                                                   transfer))
+                                                   wavelength_nm, transfer))
         return false;
       if (profile)
         {
@@ -2038,7 +2040,7 @@ build_periodic_filter (typename fft_complex_t<screen_fft_t>::type *fft,
       if (profile)
         profile->mtf_precompute_calls++;
       std::shared_ptr<mtf> cur_mtf
-          = mtf::get_mtf (sharpen.scanner_mtf, NULL);
+          = mtf::get_mtf (sharpen.scanner_mtf, wavelength_nm, NULL);
       if (!cur_mtf->precompute (NULL, parallel))
         return false;
       int this_psf_size
@@ -2197,28 +2199,36 @@ screen::initialize_with_sharpen_parameters (screen &scr,
                                             sharpen_parameters *sharpen[3],
                                             bool anticipate_sharpening,
                                             bool parallel,
-                                            screen_filter_profile *profile)
+                                            screen_filter_profile *profile,
+                                            std::array<double, 3> wavelengths_nm)
 {
   /* ADD is presentation data rather than optical transmission.  Preserve it
      while filtering the multiplicative transmission in MULT.  */
   memcpy (add, scr.add, sizeof (add));
   auto fft = fft_alloc_complex<screen_fft_t> (screen::size * fft_size);
+  /* Only request-local wavelengths participate in optical filtering. */
+  for (int c = 0; c < 3; ++c)
+    if (!(my_isfinite (wavelengths_nm[c]) && wavelengths_nm[c] > 0))
+      wavelengths_nm[c]
+          = sharpen[c]->scanner_mtf.get_channel_wavelength (c);
   const bool all
       = same_periodic_filter_parameters_p (
             *sharpen[0], *sharpen[1], anticipate_sharpening)
         && same_periodic_filter_parameters_p (
-            *sharpen[0], *sharpen[2], anticipate_sharpening);
+            *sharpen[0], *sharpen[2], anticipate_sharpening)
+        && wavelengths_nm[0] == wavelengths_nm[1]
+        && wavelengths_nm[0] == wavelengths_nm[2];
   for (int c = 0; c < 3; c++)
     {
       sharpen_parameters::sharpen_mode mode
           = anticipate_sharpening ? sharpen[c]->get_mode ()
                                   : sharpen_parameters::none;
-      if (!c
+      if (!c || wavelengths_nm[c] != wavelengths_nm[c - 1]
           || !same_periodic_filter_parameters_p (
               *sharpen[c], *sharpen[c - 1], anticipate_sharpening))
         if (!build_periodic_filter (
                 fft.get (), *sharpen[c], anticipate_sharpening, parallel,
-                false, profile, &mode))
+                false, wavelengths_nm[c], profile, &mode))
           return false;
 
       const uint64_t channels = all ? 3 : 1;
@@ -2263,7 +2273,8 @@ bool
 screen::initialize_with_sharpen_parameters (
     const screen_filter_source &source, sharpen_parameters *sharpen[3],
     bool anticipate_sharpening, bool parallel,
-    screen_filter_profile *profile)
+    screen_filter_profile *profile,
+    std::array<double, 3> wavelengths_nm)
 {
   if (!source.m_impl)
     return false;
@@ -2275,22 +2286,29 @@ screen::initialize_with_sharpen_parameters (
 
   memcpy (add, source.m_impl->add, sizeof (add));
   auto fft = fft_alloc_complex<screen_fft_t> (screen::size * fft_size);
+  /* Only request-local wavelengths participate in optical filtering. */
+  for (int c = 0; c < 3; ++c)
+    if (!(my_isfinite (wavelengths_nm[c]) && wavelengths_nm[c] > 0))
+      wavelengths_nm[c]
+          = sharpen[c]->scanner_mtf.get_channel_wavelength (c);
   const bool all
       = same_periodic_filter_parameters_p (
             *sharpen[0], *sharpen[1], anticipate_sharpening)
         && same_periodic_filter_parameters_p (
-            *sharpen[0], *sharpen[2], anticipate_sharpening);
+            *sharpen[0], *sharpen[2], anticipate_sharpening)
+        && wavelengths_nm[0] == wavelengths_nm[1]
+        && wavelengths_nm[0] == wavelengths_nm[2];
   for (int c = 0; c < 3; c++)
     {
       sharpen_parameters::sharpen_mode mode
           = anticipate_sharpening ? sharpen[c]->get_mode ()
                                   : sharpen_parameters::none;
-      if (!c
+      if (!c || wavelengths_nm[c] != wavelengths_nm[c - 1]
           || !same_periodic_filter_parameters_p (
               *sharpen[c], *sharpen[c - 1], anticipate_sharpening))
         if (!build_periodic_filter (
                 fft.get (), *sharpen[c], anticipate_sharpening, parallel,
-                true, profile, &mode))
+                true, wavelengths_nm[c], profile, &mode))
           return false;
       /* Richardson-Lucy was rejected above; keep the assertion near the
          application point so later mode additions cannot silently misuse the
@@ -2327,7 +2345,8 @@ bool
 screen::initialize_with_weighted_capture_transfer (
     const screen_filter_source &source, sharpen_parameters *capture[3],
     rgbdata capture_weights, bool anticipate_sharpening, bool parallel,
-    screen_filter_profile *profile)
+    screen_filter_profile *profile,
+    std::array<double, 3> wavelengths_nm)
 {
   if (!source.m_impl)
     return false;
@@ -2370,6 +2389,16 @@ screen::initialize_with_weighted_capture_transfer (
       combined[i][1] = 0;
     }
 
+  for (int c = 0; c < 3; ++c)
+    if (!(my_isfinite (wavelengths_nm[c]) && wavelengths_nm[c] > 0))
+      {
+        /* Zero-weight channels may legitimately have no capture parameters;
+           they are skipped below, not dereferenced for spectral defaults. */
+        wavelengths_nm[c]
+            = capture[c] ? capture[c]->scanner_mtf.get_channel_wavelength (c)
+                         : 550;
+      }
+
   for (int c = 0; c < 3; c++)
     {
       const screen_fft_t weight
@@ -2379,7 +2408,7 @@ screen::initialize_with_weighted_capture_transfer (
       sharpen_parameters::sharpen_mode mode;
       if (!build_periodic_filter (
               channel_filter.get (), *capture[c], anticipate_sharpening,
-              parallel, true, profile, &mode))
+              parallel, true, wavelengths_nm[c], profile, &mode))
         return false;
       assert (mode != sharpen_parameters::richardson_lucy_deconvolution);
       for (int i = 0; i < screen::size * fft_size; i++)

@@ -38,7 +38,7 @@ class mtf_focus_transfer
 {
 public:
   mtf_focus_transfer ();
-  explicit mtf_focus_transfer (const mtf_parameters &params);
+  explicit mtf_focus_transfer (const mtf_parameters &params, double wavelength_nm);
   ~mtf_focus_transfer ();
   mtf_focus_transfer (mtf_focus_transfer &&) noexcept;
   mtf_focus_transfer &operator= (mtf_focus_transfer &&) noexcept;
@@ -50,7 +50,8 @@ public:
      model.  CACHE_HIT, when nonnull, reports whether the immutable state was
      already present.  */
   static std::shared_ptr<const mtf_focus_transfer>
-  get (const mtf_parameters &params, bool *cache_hit = nullptr);
+  get (const mtf_parameters &params, double wavelength_nm,
+       bool *cache_hit = nullptr);
 
   /* Build the signed radial transfer table for DEFOCUS.  Return false if the
      prepared state or resulting coefficients are invalid.  */
@@ -170,7 +171,8 @@ public:
     return std::max (psf_radius (scale) * 2 - 1, 1);
   }
 
-  mtf (const mtf_parameters &params) : m_params (params)
+  mtf (const mtf_parameters &params, double wavelength_nm)
+      : m_params (params), m_wavelength_nm (wavelength_nm)
   {
   }
 
@@ -180,12 +182,24 @@ public:
     return m_params.sigma;
   }
 
-  static std::unique_ptr<mtf> get_new_mtf (struct mtf_parameters &,
-                                           progress_info *);
-  typedef lru_cache<mtf_parameters, mtf, get_new_mtf, 10> mtf_cache_t;
+  /* The current optical wavelength is part of the cache request, never a
+     persistent mtf_parameters member. Distinct channel wavelengths must not
+     alias one cached transfer/PSF. */
+  struct mtf_cache_key
+  {
+    mtf_parameters params;
+    double wavelength_nm = 0;
+    bool operator== (const mtf_cache_key &o) const
+    {
+      return wavelength_nm == o.wavelength_nm && params == o.params;
+    }
+  };
+  static std::unique_ptr<mtf> get_new_mtf (mtf_cache_key &, progress_info *);
+  typedef lru_cache<mtf_cache_key, mtf, get_new_mtf, 10> mtf_cache_t;
 
   static std::shared_ptr<mtf> get_mtf (const mtf_parameters &mtfp,
-                                       progress_info *p);
+                                       double wavelength_nm,
+                                       progress_info *p = nullptr);
   typedef float psf_t;
   std::vector<psf_t, fft_allocator<psf_t>>
   compute_2d_psf (int psf_size, luminosity_t subscale,
@@ -195,6 +209,7 @@ public:
 
 private:
   mtf_parameters m_params;
+  double m_wavelength_nm;
   /* The MTF table is small, while an interpolation error is multiplied by an
      inverse filter.  Keep it in double even though large image FFTs use float.  */
   precomputed_function<double> m_mtf;

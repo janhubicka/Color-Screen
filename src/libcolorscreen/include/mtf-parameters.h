@@ -243,9 +243,9 @@ struct mtf_parameters
   double defocus = 0;
   /* F-stop.  */
   double f_stop = 0;
-  /* Wavelength of light in nm.  */
-  double wavelength = 0;
-  /* Per-channel Wavelength of light in nm.  */
+  /* Persisted wavelengths for the four native capture channels, in nm.
+     A single optical wavelength selected for one evaluation or fit belongs
+     to that operation's arguments, not to saved MTF parameters.  */
   std::array<double, 4> wavelengths = {0, 0, 0, 0};
   /* Sensor pixel pitch (size of a pixel) in micrometers.  */
   double pixel_pitch = 0;
@@ -327,7 +327,7 @@ struct mtf_parameters
 	     && defocus == o.defocus
 	     && blur_diameter == o.blur_diameter
 	     && f_stop == o.f_stop
-	     && wavelength == o.wavelength
+
 	     && pixel_pitch == o.pixel_pitch
 	     && scan_dpi == o.scan_dpi;
     else if (o.simulate_diffraction_p ())
@@ -348,7 +348,7 @@ struct mtf_parameters
 	   && blur_diameter == o.blur_diameter
 	   && defocus == o.defocus
 	   && f_stop == o.f_stop
-	   && wavelength == o.wavelength
+
 	   && wavelengths == o.wavelengths
 	   && pixel_pitch == o.pixel_pitch
 	   && scan_dpi == o.scan_dpi
@@ -365,7 +365,7 @@ struct mtf_parameters
     if (sigma != o.sigma || model != o.model
         || halo_fraction != o.halo_fraction || halo_sigma != o.halo_sigma
         || blur_diameter != o.blur_diameter || defocus != o.defocus
-        || f_stop != o.f_stop || wavelength != o.wavelength
+        || f_stop != o.f_stop
         || wavelengths != o.wavelengths || pixel_pitch != o.pixel_pitch
         || scan_dpi != o.scan_dpi
         || sensor_fill_factor != o.sensor_fill_factor
@@ -388,22 +388,22 @@ struct mtf_parameters
   /* Return image-side working f-number.  */
   pure_attr double effective_f_stop () const;
   /* Return PIXEL_FREQ normalized by the incoherent diffraction cutoff.  */
-  pure_attr double nu (double pixel_freq) const;
+  pure_attr double nu (double pixel_freq, double wavelength_nm) const;
   /* Return diffraction-limited circular-pupil OTF at PIXEL_FREQ.  For an
      unaberrated circular pupil this is nonnegative, but the OTF naming keeps
      the distinction from magnitude-only measured data explicit.  */
-  pure_attr double lens_diffraction_otf (double pixel_freq) const;
+  pure_attr double lens_diffraction_otf (double pixel_freq, double wavelength_nm) const;
   /* Return diffraction-limited circular-pupil MTF magnitude at PIXEL_FREQ.  */
-  pure_attr double lens_diffraction_mtf (double pixel_freq) const;
+  pure_attr double lens_diffraction_mtf (double pixel_freq, double wavelength_nm) const;
   /* Return the legacy approximate defocus factor at PIXEL_FREQ.  */
-  pure_attr double hopkins_defocus_mtf (double pixel_freq) const;
+  pure_attr double hopkins_defocus_mtf (double pixel_freq, double wavelength_nm) const;
   /* Return exact signed circular-pupil defocus OTF factor at PIXEL_FREQ.  */
-  pure_attr double lens_defocus_otf (double pixel_freq) const;
+  pure_attr double lens_defocus_otf (double pixel_freq, double wavelength_nm) const;
   /* Return magnitude of the exact circular-pupil defocus factor at
      PIXEL_FREQ.  */
-  pure_attr double lens_defocus_mtf (double pixel_freq) const;
+  pure_attr double lens_defocus_mtf (double pixel_freq, double wavelength_nm) const;
   /* Return historical Stokseth/Bessel factor at PIXEL_FREQ.  */
-  pure_attr double stokseth_defocus_mtf (double pixel_freq) const;
+  pure_attr double stokseth_defocus_mtf (double pixel_freq, double wavelength_nm) const;
   /* Return the normalized broad-scatter halo MTF at PIXEL_FREQ.  This is the
      transfer of the broad Gaussian halo component itself, before it is mixed
      with the signed compact optical core.  */
@@ -411,13 +411,13 @@ struct mtf_parameters
   /* Return signed complete lens OTF at PIXEL_FREQ.  This is meaningful only
      for the known analytical physical model; measured curves do not carry
      phase/sign information.  */
-  pure_attr double lens_otf (double pixel_freq) const;
+  pure_attr double lens_otf (double pixel_freq, double wavelength_nm) const;
   /* Return complete lens MTF magnitude at PIXEL_FREQ.  */
-  pure_attr double lens_mtf (double pixel_freq) const;
+  pure_attr double lens_mtf (double pixel_freq, double wavelength_nm) const;
   /* Return signed lens times sensor OTF at PIXEL_FREQ.  */
-  pure_attr double system_otf (double pixel_freq) const;
+  pure_attr double system_otf (double pixel_freq, double wavelength_nm) const;
   /* Return lens times sensor MTF magnitude at PIXEL_FREQ.  */
-  pure_attr double system_mtf (double pixel_freq) const;
+  pure_attr double system_mtf (double pixel_freq, double wavelength_nm) const;
   /* Return signed radial first-cut sensor-aperture OTF at PIXEL_FREQ.  */
   pure_attr double sensor_otf (double pixel_freq) const;
   /* Return radial first-cut sensor-aperture MTF magnitude at PIXEL_FREQ.  */
@@ -464,13 +464,14 @@ struct mtf_parameters
   DLL_PUBLIC double estimate_parameters (
       mtf_parameters &par, const char *write_table = nullptr,
       progress_info *progress = nullptr, const char **error = nullptr,
-      int flags = estimate_use_nmsimplex | estimate_use_multifit);
+      int flags = estimate_use_nmsimplex | estimate_use_multifit,
+      double wavelength_nm = 0, double *fitted_wavelength_nm = nullptr);
 
   /* Validate an explicit fitting request OPTIONS for parameter values PAR.
      ERROR receives a static diagnostic on failure.  */
   DLL_PUBLIC static bool validate_estimation_options (
       const mtf_parameters &par, const mtf_estimation_options &options,
-      const char **error = nullptr);
+      const char **error = nullptr, double wavelength_nm = 0);
 
   /* Fit this object to measurements in PAR using explicit free-variable
      OPTIONS.  WRITE_TABLE optionally receives component curves, PROGRESS
@@ -480,44 +481,45 @@ struct mtf_parameters
       mtf_parameters &par, const mtf_estimation_options &options,
       const char *write_table = nullptr, progress_info *progress = nullptr,
       const char **error = nullptr,
-      int flags = estimate_use_nmsimplex | estimate_use_multifit);
+      int flags = estimate_use_nmsimplex | estimate_use_multifit,
+      double wavelength_nm = 0, double *fitted_wavelength_nm = nullptr);
 
   /* Construct default parameters.  */
   mtf_parameters () = default;
 
   /* Save the model PSF to WRITE_TABLE.  PROGRESS reports work and ERROR
      receives a diagnostic.  */
-  DLL_PUBLIC bool save_psf (progress_info *progress, const char *write_table,
-                            const char **error) const;
+  DLL_PUBLIC bool save_psf (double wavelength_nm, progress_info *progress,
+                            const char *write_table, const char **error) const;
 
   /* Write component curves to WRITE_TABLE; report failures through ERROR.  */
-  DLL_PUBLIC bool write_table (const char *write_table,
+  DLL_PUBLIC bool write_table (double wavelength_nm, const char *write_table,
                                const char **error) const;
 
   /* Evaluate all diagnostic component curves at STEPS equidistant samples.  */
-  DLL_PUBLIC computed_mtf compute_curves (int steps) const;
+  DLL_PUBLIC computed_mtf compute_curves (int steps,
+                                          double wavelength_nm) const;
 
   /* Load a QuickMTF-style curve from IN, label it NAME, and report failures
      through ERROR.  Return the number of appended measurements (one for a
      monochrome table, three for RGB) or -1.  */
   DLL_PUBLIC int load_csv (FILE *in, std::string name, const char **error);
 
-  /* Return configured wavelength for channel C, falling back to the global
-     narrow-band wavelength and then to a generic capture default.  HAS_RGB
-     distinguishes a fourth infrared channel from a standalone monochrome
-     capture: the former defaults to near-IR while the latter defaults to
-     visible green light.  Scanner/camera metadata and explicit parameters
-     always override these defaults.  */
+  /* Resolve the wavelength for native channel C. REQUEST_WAVELENGTH_NM is an
+     optional operation-local override after the persisted channel metadata;
+     no single-channel value is stored in this parameter object. HAS_RGB
+     distinguishes near-IR companion data from standalone grayscale.  */
   double
-  get_channel_wavelength (int c, bool has_rgb = true) const
+  get_channel_wavelength (int c, bool has_rgb = true,
+                          double request_wavelength_nm = 0) const
   {
     static constexpr double default_wavelengths[] = {600, 530, 450, 750};
     if (c < 0 || c >= 4)
-      return wavelength > 0 ? wavelength : 550;
+      return request_wavelength_nm > 0 ? request_wavelength_nm : 550;
     if (wavelengths[c] > 0)
       return wavelengths[c];
-    if (wavelength > 0)
-      return wavelength;
+    if (request_wavelength_nm > 0)
+      return request_wavelength_nm;
     if (c == 3 && !has_rgb)
       return 550;
     return default_wavelengths[c];
@@ -528,9 +530,9 @@ private:
   double estimate_parameters_internal (
       mtf_parameters &par, const mtf_estimation_options *options,
       const char *write_table, progress_info *progress, const char **error,
-      int flags);
+      int flags, double wavelength_nm, double *fitted_wavelength_nm);
   /* Write diagnostic-table header to F and return true on success.  */
-  bool print_csv_header (FILE *f) const;
+  bool print_csv_header (FILE *f, double wavelength_nm) const;
 };
 }
 #endif

@@ -448,6 +448,11 @@ struct render_parameters
   DLL_PUBLIC sharpen_parameters
   get_sharpen_parameters_for_channel (int channel, bool has_rgb = true) const;
 
+  /* Resolve the effective wavelength for native CHANNEL as a call-site
+     argument; this value is not part of persistent scanner parameters. */
+  DLL_PUBLIC double
+  get_sharpen_wavelength_for_channel (int channel, bool has_rgb = true) const;
+
   /* Return capture sharpening specialized for the scalar image layer.  This
      selects scalar/image-layer measured data and the effective visible/IR
      wavelength without treating process-primary or scanner RGB indexes as the
@@ -1163,12 +1168,28 @@ public:
     const int native_channel = get_image_layer_native_channel (img);
     return native_channel >= 0 ? native_channel : 1;
   }
-  /* Return the wavelength used by the current scalar image-layer model.  */
+  /* Return the request-local wavelength for the scalar image layer of
+     IMG.  An explicitly selected image-layer measurement is authoritative;
+     otherwise native scalar and one-hot RGB layers inherit their scanner
+     channel's measurement when present.  A genuine RGB mixture retains the
+     representative analytical wavelength, never an unrelated native curve.  */
   double get_image_layer_wavelength (const image_data *img) const
   {
+    const mtf_parameters &mtf = sharpen.scanner_mtf;
+    if (mtf.use_measured_mtf ())
+      {
+        const mtf_measurement &measurement
+            = mtf.measurements[mtf.measured_mtf_idx];
+        if (measurement.image_layer
+            && my_isfinite (measurement.wavelength)
+            && measurement.wavelength > 0)
+          return measurement.wavelength;
+      }
     const int channel = get_image_layer_channel (img);
-    return sharpen.scanner_mtf.get_channel_wavelength (
-        channel, !img || img->has_rgb ());
+    const bool has_rgb = !img || img->has_rgb ();
+    if (get_image_layer_native_channel (img) >= 0)
+      return get_sharpen_wavelength_for_channel (channel, has_rgb);
+    return mtf.get_channel_wavelength (channel, has_rgb);
   }
 };
 }

@@ -196,7 +196,8 @@ circular_pupil_defocus_factor (double q, double edge_phase)
    narrow-band setting supplies a positive finite wavelength.  */
 static double
 measurement_wavelength (const mtf_parameters &params,
-                        const mtf_measurement &measurement)
+                        const mtf_measurement &measurement,
+                        double request_wavelength_nm)
 {
   if (my_isfinite (measurement.wavelength) && measurement.wavelength > 0)
     return measurement.wavelength;
@@ -204,8 +205,8 @@ measurement_wavelength (const mtf_parameters &params,
       && my_isfinite (params.wavelengths[measurement.channel])
       && params.wavelengths[measurement.channel] > 0)
     return params.wavelengths[measurement.channel];
-  if (my_isfinite (params.wavelength) && params.wavelength > 0)
-    return params.wavelength;
+  if (my_isfinite (request_wavelength_nm) && request_wavelength_nm > 0)
+    return request_wavelength_nm;
   return 0;
 }
 
@@ -248,8 +249,9 @@ public:
               const std::vector<mtf_measurement> &measured,
               const mtf_estimation_options &options,
               progress_info *progress, bool verbose,
-              bool legacy_channel_wavelengths)
+              bool legacy_channel_wavelengths, double request_wavelength_nm)
       : m_measurements (measured), m_params (params), m_options (options),
+        m_request_wavelength_nm (request_wavelength_nm),
         m_progress (progress), be_verbose (verbose), start_vec (),
         fit_weights (), start (nullptr), diffraction (false),
         m_legacy_channel_wavelengths (legacy_channel_wavelengths), nvalues (0),
@@ -635,7 +637,8 @@ public:
   double
   fixed_wavelength (size_t measurement) const
   {
-    return measurement_wavelength (m_params, m_measurements[measurement]);
+    return measurement_wavelength (m_params, m_measurements[measurement],
+                                   m_request_wavelength_nm);
   }
 
   /* Return true when wavelength of MEASUREMENT is represented by a free
@@ -705,7 +708,7 @@ public:
              + legacy_channel_wavelength_ranges[2 * c];
     if (m_params.wavelengths[c] > 0)
       return m_params.wavelengths[c];
-    return m_params.wavelength;
+    return m_request_wavelength_nm;
   }
 
   /* Return a representative wavelength for the fitted physical model.  The
@@ -718,7 +721,7 @@ public:
          measurement++)
       if (measurement_included_p (measurement))
         return get_wavelength (measurement, vals);
-    return m_params.wavelength;
+    return m_request_wavelength_nm;
   }
 
   /* Return marked f-number from optimization vector VALS.  */
@@ -795,7 +798,7 @@ public:
 	    continue;
 	  }
 	auto &measurement = m_measurements[m];
-	p.wavelength = get_wavelength (m, vals);
+	const double curve_wavelength_nm = get_wavelength (m, vals);
 	if (diffraction)
 	  p.defocus = get_defocus (m, vals);
 	else
@@ -813,7 +816,7 @@ public:
 	    /* A slanted-edge measurement contains MTF magnitude only.  Fit it to
 	       the magnitude of the complete signed physical OTF; the analytical
 	       model, not the measurement, supplies the sign after a phase reversal.  */
-	    const double predicted_otf = p.system_otf (freq);
+	    const double predicted_otf = p.system_otf (freq, curve_wavelength_nm);
 	    double contrast2 = my_fabs (predicted_otf) * 100;
 	    const double residual = contrast - contrast2;
 	    const double weighted_residual = residual * fit_weights[m][i];
@@ -838,7 +841,7 @@ public:
 	            "blur_diameter %f, sqsum %f\n",
 	            m, p.sensor_fill_factor, p.f_stop,
 	            p.effective_f_stop (), p.sigma, p.halo_fraction,
-	            p.halo_sigma, p.wavelength, p.defocus,
+	            p.halo_sigma, curve_wavelength_nm, p.defocus,
 	            p.blur_diameter, msum);
 	    if (m_progress)
 	      m_progress->resume_stdout ();
@@ -874,6 +877,7 @@ public:
   const std::vector <mtf_measurement> &m_measurements;
   mtf_parameters m_params;
   mtf_estimation_options m_options;
+  double m_request_wavelength_nm;
   progress_info *m_progress;
   bool be_verbose;
   std::vector<double> start_vec;
@@ -970,7 +974,8 @@ mtf_focus_transfer &
 mtf_focus_transfer::operator= (mtf_focus_transfer &&) noexcept = default;
 
 /* Prepare all physical-transfer terms that do not depend on DEFOCUS.  */
-mtf_focus_transfer::mtf_focus_transfer (const mtf_parameters &params)
+mtf_focus_transfer::mtf_focus_transfer (const mtf_parameters &params,
+                                        double wavelength_nm)
 {
   if (!params.simulate_diffraction_p ())
     return;
@@ -983,7 +988,7 @@ mtf_focus_transfer::mtf_focus_transfer (const mtf_parameters &params)
   const double halo_fraction
       = halo_enabled ? std::clamp (params.halo_fraction, 0.0, 1.0) : 0;
   const double compact_fraction = halo_enabled ? 1.0 - halo_fraction : 1.0;
-  const double wavelength_mm = params.wavelength * 1.0e-6;
+  const double wavelength_mm = wavelength_nm * 1.0e-6;
   const double working_f_stop = params.effective_f_stop ();
   const double phase_scale
       = M_PI / (wavelength_mm * working_f_stop * working_f_stop);
@@ -995,11 +1000,11 @@ mtf_focus_transfer::mtf_focus_transfer (const mtf_parameters &params)
     {
       const double frequency = i * focus_transfer_step;
       impl::sample &sample = prepared->samples[i];
-      sample.q = params.nu (frequency);
+      sample.q = params.nu (frequency, wavelength_nm);
       const double sensor = params.sensor_otf (frequency);
       sample.compact
           = sensor * compact_fraction
-            * params.lens_diffraction_otf (frequency)
+            * params.lens_diffraction_otf (frequency, wavelength_nm)
             * gaussian_blur_mtf (frequency, params.sigma);
       sample.halo = halo_enabled
                         ? sensor * halo_fraction * params.halo_mtf (frequency)
@@ -1078,11 +1083,12 @@ namespace
 struct mtf_focus_transfer_cache_params
 {
   mtf_parameters params;
+  double wavelength_nm = 0;
 
   bool
   operator== (const mtf_focus_transfer_cache_params &o) const
   {
-    return params == o.params;
+    return wavelength_nm == o.wavelength_nm && params == o.params;
   }
 };
 
@@ -1091,7 +1097,7 @@ get_new_mtf_focus_transfer (mtf_focus_transfer_cache_params &p,
                             progress_info *progress)
 {
   (void)progress;
-  auto ret = std::make_unique<mtf_focus_transfer> (p.params);
+  auto ret = std::make_unique<mtf_focus_transfer> (p.params, p.wavelength_nm);
   if (!ret->valid_p ())
     return nullptr;
   return ret;
@@ -1106,7 +1112,8 @@ static mtf_focus_transfer_cache_t mtf_focus_transfer_cache (
 }
 
 std::shared_ptr<const mtf_focus_transfer>
-mtf_focus_transfer::get (const mtf_parameters &params, bool *cache_hit)
+mtf_focus_transfer::get (const mtf_parameters &params,
+                         double wavelength_nm, bool *cache_hit)
 {
   if (cache_hit)
     *cache_hit = false;
@@ -1115,6 +1122,7 @@ mtf_focus_transfer::get (const mtf_parameters &params, bool *cache_hit)
   mtf_focus_transfer_cache_params key;
   key.params = params;
   key.params.defocus = 0;
+  key.wavelength_nm = wavelength_nm;
   return mtf_focus_transfer_cache.get (key, nullptr, nullptr, cache_hit);
 }
 
@@ -1173,12 +1181,12 @@ mtf_parameters::effective_f_stop () const
    PIXEL_FREQ is spatial frequency in cycles per sensor/output pixel.  NU is
    zero at DC and one at the incoherent diffraction cutoff.  */
 double
-mtf_parameters::nu (double pixel_freq) const
+mtf_parameters::nu (double pixel_freq, double wavelength_nm) const
 {
-  if (!can_simulate_diffraction_p () || !my_isfinite (wavelength) || wavelength <= 0 || !my_isfinite (pixel_freq))
+  if (!can_simulate_diffraction_p () || !my_isfinite (wavelength_nm) || wavelength_nm <= 0 || !my_isfinite (pixel_freq))
     return 0;
   double frequency_per_mm = my_fabs (pixel_freq) / (pixel_pitch * 0.001);
-  double wavelength_mm = wavelength * 1.0e-6;
+  double wavelength_mm = wavelength_nm * 1.0e-6;
   double cutoff_per_mm = 1.0 / (wavelength_mm * effective_f_stop ());
   return std::clamp (frequency_per_mm / cutoff_per_mm, 0.0, 1.0);
 }
@@ -1186,17 +1194,17 @@ mtf_parameters::nu (double pixel_freq) const
 /* Return diffraction-limited circular-pupil OTF at PIXEL_FREQ cycles per
    pixel.  The unaberrated circular-pupil OTF is real and nonnegative.  */
 double
-mtf_parameters::lens_diffraction_otf (double pixel_freq) const
+mtf_parameters::lens_diffraction_otf (double pixel_freq, double wavelength_nm) const
 {
-  return circular_pupil_diffraction_otf (nu (pixel_freq));
+  return circular_pupil_diffraction_otf (nu (pixel_freq, wavelength_nm));
 }
 
 /* Return diffraction-limited circular-pupil MTF magnitude at PIXEL_FREQ
    cycles per pixel.  */
 double
-mtf_parameters::lens_diffraction_mtf (double pixel_freq) const
+mtf_parameters::lens_diffraction_mtf (double pixel_freq, double wavelength_nm) const
 {
-  return my_fabs (lens_diffraction_otf (pixel_freq));
+  return my_fabs (lens_diffraction_otf (pixel_freq, wavelength_nm));
 }
 
 /* Return the exact signed defocus OTF factor for the diffraction model.
@@ -1205,13 +1213,13 @@ mtf_parameters::lens_diffraction_mtf (double pixel_freq) const
    of the known circular-pupil transfer and must survive forward blur and
    deconvolution.  */
 double
-mtf_parameters::lens_defocus_otf (double pixel_freq) const
+mtf_parameters::lens_defocus_otf (double pixel_freq, double wavelength_nm) const
 {
-  double q = nu (pixel_freq);
+  double q = nu (pixel_freq, wavelength_nm);
   if (q <= 0 || q >= 1 || my_fabs (defocus) < 1.0e-15)
     return 1;
 
-  double wavelength_mm = wavelength * 1.0e-6;
+  double wavelength_mm = wavelength_nm * 1.0e-6;
   double working_f_stop = effective_f_stop ();
   double edge_phase
       = M_PI * defocus * q * (1.0 - q)
@@ -1225,9 +1233,9 @@ mtf_parameters::lens_defocus_otf (double pixel_freq) const
 /* Return magnitude of the exact circular-pupil defocus factor at PIXEL_FREQ.
    This is the quantity comparable with a measured slanted-edge MTF.  */
 double
-mtf_parameters::lens_defocus_mtf (double pixel_freq) const
+mtf_parameters::lens_defocus_mtf (double pixel_freq, double wavelength_nm) const
 {
-  return my_fabs (lens_defocus_otf (pixel_freq));
+  return my_fabs (lens_defocus_otf (pixel_freq, wavelength_nm));
 }
 
 /* Return the historical Stokseth/Bessel defocus approximation.
@@ -1235,13 +1243,13 @@ mtf_parameters::lens_defocus_mtf (double pixel_freq) const
    only for diagnostics and regression comparison; LENS_MTF uses the exact
    pupil-autocorrelation factor returned by LENS_DEFOCUS_MTF.  */
 double
-mtf_parameters::stokseth_defocus_mtf (double pixel_freq) const
+mtf_parameters::stokseth_defocus_mtf (double pixel_freq, double wavelength_nm) const
 {
-  double q = nu (pixel_freq);
+  double q = nu (pixel_freq, wavelength_nm);
   if (q <= 0 || q >= 1 || my_fabs (defocus) < 1.0e-15)
     return 1;
 
-  double wavelength_mm = wavelength * 1.0e-6;
+  double wavelength_mm = wavelength_nm * 1.0e-6;
   double working_f_stop = effective_f_stop ();
   double edge_phase
       = M_PI * defocus * q * (1.0 - q)
@@ -1254,9 +1262,9 @@ mtf_parameters::stokseth_defocus_mtf (double pixel_freq) const
 /* Return the legacy approximate defocus factor.
    PIXEL_FREQ is spatial frequency in cycles per pixel.  */
 double
-mtf_parameters::hopkins_defocus_mtf (double pixel_freq) const
+mtf_parameters::hopkins_defocus_mtf (double pixel_freq, double wavelength_nm) const
 {
-  return stokseth_defocus_mtf (pixel_freq);
+  return stokseth_defocus_mtf (pixel_freq, wavelength_nm);
 }
 
 /* Return the normalized MTF of the broad scattering halo component.
@@ -1278,13 +1286,13 @@ mtf_parameters::halo_mtf (double pixel_freq) const
    OTF first, and take the magnitude only later in LENS_MTF/SYSTEM_MTF.  This
    preserves and correctly shifts physical phase reversals.  */
 double
-mtf_parameters::lens_otf (double pixel_freq) const
+mtf_parameters::lens_otf (double pixel_freq, double wavelength_nm) const
 {
   if (simulate_diffraction_p ())
     {
       const double core_otf
-          = lens_diffraction_otf (pixel_freq)
-            * lens_defocus_otf (pixel_freq)
+          = lens_diffraction_otf (pixel_freq, wavelength_nm)
+            * lens_defocus_otf (pixel_freq, wavelength_nm)
             * gaussian_blur_mtf (pixel_freq, sigma);
       if (!(my_isfinite (halo_fraction) && halo_fraction > 0
             && my_isfinite (halo_sigma) && halo_sigma > 0))
@@ -1299,9 +1307,9 @@ mtf_parameters::lens_otf (double pixel_freq) const
 
 /* Return complete lens MTF magnitude at PIXEL_FREQ cycles per pixel.  */
 double
-mtf_parameters::lens_mtf (double pixel_freq) const
+mtf_parameters::lens_mtf (double pixel_freq, double wavelength_nm) const
 {
-  return my_fabs (lens_otf (pixel_freq));
+  return my_fabs (lens_otf (pixel_freq, wavelength_nm));
 }
 
 /* Return an optional correction applied on top of a measured MTF.
@@ -1321,16 +1329,16 @@ mtf_parameters::measured_mtf_correction (double pixel_freq) const
    phase model and therefore remains nonnegative.  Measured slanted-edge data
    is magnitude-only and is handled separately by MTF::PRECOMPUTE.  */
 double
-mtf_parameters::system_otf (double pixel_freq) const
+mtf_parameters::system_otf (double pixel_freq, double wavelength_nm) const
 {
-  return sensor_otf (pixel_freq) * lens_otf (pixel_freq);
+  return sensor_otf (pixel_freq) * lens_otf (pixel_freq, wavelength_nm);
 }
 
 /* Return complete radial system MTF magnitude at PIXEL_FREQ cycles per pixel.  */
 double
-mtf_parameters::system_mtf (double pixel_freq) const
+mtf_parameters::system_mtf (double pixel_freq, double wavelength_nm) const
 {
-  return my_fabs (system_otf (pixel_freq));
+  return my_fabs (system_otf (pixel_freq, wavelength_nm));
 }
 
 /* Compute right half of LSF.
@@ -1776,19 +1784,19 @@ mtf::precompute (progress_info *progress, bool parallel)
       std::vector<double> contrasts (entries);
       double step = 1.0 / (entries - 2);
       for (int i = 0; i < entries - 2; i++)
-        contrasts[i] = m_params.system_otf (i * step);
+        contrasts[i] = m_params.system_otf (i * step, m_wavelength_nm);
       contrasts[entries - 2] = contrasts[entries - 1] = 0;
       m_mtf.set_range (0, 1 + step);
       m_mtf.init_by_y_values (contrasts.data (), entries);
 
       if (colorscreen_checking)
         for (int i = 0; i < entries - 1; i++)
-          if (my_fabs (m_params.system_otf (i * step)
+          if (my_fabs (m_params.system_otf (i * step, m_wavelength_nm)
                     - m_mtf.apply (i * step))
               > 0.0001)
             {
               printf ("Mismatch (model) %f %f %f\n",
-                      m_params.system_otf (i * step),
+                      m_params.system_otf (i * step, m_wavelength_nm),
                       m_mtf.apply (i * step), step);
               abort ();
             }
@@ -1821,31 +1829,35 @@ mtf::precompute_psf (progress_info *progress, bool parallel, const char *filenam
 }
 
 std::unique_ptr<mtf>
-mtf::get_new_mtf (struct mtf_parameters &p, progress_info *)
+mtf::get_new_mtf (mtf_cache_key &p, progress_info *)
 {
-  return std::make_unique<mtf> (p);
+  return std::make_unique<mtf> (p.params, p.wavelength_nm);
 }
 
 static mtf::mtf_cache_t
     mtf_cache ("Modulation transfer functions");
 
 std::shared_ptr<mtf>
-mtf::get_mtf (const mtf_parameters &mtfp, progress_info *p)
+mtf::get_mtf (const mtf_parameters &mtfp, double wavelength_nm,
+              progress_info *p)
 {
-  return mtf_cache.get (const_cast<mtf_parameters &> (mtfp), p);
+  mtf_cache_key request;
+  request.params = mtfp;
+  request.wavelength_nm = wavelength_nm;
+  return mtf_cache.get (request, p);
 }
 
 bool
-mtf_parameters::save_psf (progress_info *progress, const char *write_table,
-                          const char **error) const
+mtf_parameters::save_psf (double wavelength_nm, progress_info *progress,
+                          const char *write_table, const char **error) const
 {
-  mtf mtf (*this);
+  mtf mtf (*this, wavelength_nm);
   return mtf.precompute_psf (progress, true, write_table, error);
 }
 
 /* Write the shared component-curve header to F.  */
 bool
-mtf_parameters::print_csv_header (FILE *f) const
+mtf_parameters::print_csv_header (FILE *f, double wavelength_nm) const
 {
   return fprintf (
              f,
@@ -1854,7 +1866,7 @@ mtf_parameters::print_csv_header (FILE *f) const
              "%.10gmm\tlegacy Bessel defocus\tcore sigma=%.8gpx\thalo "
              "component fraction %.8g sigma %.8gpx\tlens\tsensor fill factor "
              "%.8g\tsystem\n",
-             f_stop, effective_f_stop (), wavelength, magnification (),
+             f_stop, effective_f_stop (), wavelength_nm, magnification (),
              pixel_pitch, defocus, sigma, halo_fraction, halo_sigma,
              sensor_fill_factor)
          >= 0;
@@ -1863,7 +1875,8 @@ mtf_parameters::print_csv_header (FILE *f) const
 /* Write model component curves to WRITE_TABLE and report errors through
    ERROR.  */
 bool
-mtf_parameters::write_table (const char *write_table, const char **error) const
+mtf_parameters::write_table (double wavelength_nm, const char *write_table,
+                             const char **error) const
 {
   if (write_table)
     {
@@ -1874,7 +1887,7 @@ mtf_parameters::write_table (const char *write_table, const char **error) const
             *error = "failed to open output file";
           return false;
         }
-      if (fprintf (f, "frequency\t") < 0 || !print_csv_header (f))
+      if (fprintf (f, "frequency\t") < 0 || !print_csv_header (f, wavelength_nm))
         {
           if (error)
             *error = "write error";
@@ -1887,13 +1900,13 @@ mtf_parameters::write_table (const char *write_table, const char **error) const
           if (fprintf (f,
                        "%.17g\t%.12g\t%.12g\t%.12g\t%.12g\t%.12g\t"
                        "%.12g\t%.12g\t%.12g\n",
-                       freq, lens_diffraction_mtf (freq) * 100,
-                       lens_defocus_mtf (freq) * 100,
-                       stokseth_defocus_mtf (freq) * 100,
+                       freq, lens_diffraction_mtf (freq, wavelength_nm) * 100,
+                       lens_defocus_mtf (freq, wavelength_nm) * 100,
+                       stokseth_defocus_mtf (freq, wavelength_nm) * 100,
                        gaussian_blur_mtf (freq, sigma) * 100,
-                       halo_mtf (freq) * 100, lens_mtf (freq) * 100,
+                       halo_mtf (freq) * 100, lens_mtf (freq, wavelength_nm) * 100,
                        sensor_mtf (freq) * 100,
-                       system_mtf (freq) * 100)
+                       system_mtf (freq, wavelength_nm) * 100)
               < 0)
             {
               if (error)
@@ -1915,7 +1928,7 @@ mtf_parameters::write_table (const char *write_table, const char **error) const
 /* Return STEPS uniformly sampled component curves over zero to one cycle per
    pixel.  An empty result is returned for nonpositive STEPS.  */
 mtf_parameters::computed_mtf
-mtf_parameters::compute_curves (int steps) const
+mtf_parameters::compute_curves (int steps, double wavelength_nm) const
 {
   computed_mtf result;
   if (steps <= 0)
@@ -1934,16 +1947,16 @@ mtf_parameters::compute_curves (int steps) const
   for (int i = 0; i < steps; i++)
     {
       double freq = steps == 1 ? 0.0 : i / (double)(steps - 1);
-      result.lens_diffraction_mtf.push_back (lens_diffraction_mtf (freq));
-      result.lens_defocus_mtf.push_back (lens_defocus_mtf (freq));
+      result.lens_diffraction_mtf.push_back (lens_diffraction_mtf (freq, wavelength_nm));
+      result.lens_defocus_mtf.push_back (lens_defocus_mtf (freq, wavelength_nm));
       result.stokseth_defocus_mtf.push_back (
-          stokseth_defocus_mtf (freq));
+          stokseth_defocus_mtf (freq, wavelength_nm));
       result.gaussian_blur_mtf.push_back (gaussian_blur_mtf (freq, sigma));
       result.halo_mtf.push_back (halo_mtf (freq));
-      result.lens_mtf.push_back (lens_mtf (freq));
+      result.lens_mtf.push_back (lens_mtf (freq, wavelength_nm));
       result.sensor_mtf.push_back (sensor_mtf (freq));
-      result.system_otf.push_back (system_otf (freq));
-      result.system_mtf.push_back (system_mtf (freq));
+      result.system_otf.push_back (system_otf (freq, wavelength_nm));
+      result.system_mtf.push_back (system_mtf (freq, wavelength_nm));
       result.hopkins_blur_mtf.push_back (
           circular_blur_mtf (freq, blur_diameter));
     }
@@ -1975,7 +1988,7 @@ physical_estimation_model_p (const mtf_parameters &par,
 bool
 mtf_parameters::validate_estimation_options (
     const mtf_parameters &par, const mtf_estimation_options &options,
-    const char **error)
+    const char **error, double wavelength_nm)
 {
   if (error)
     *error = nullptr;
@@ -2044,7 +2057,7 @@ mtf_parameters::validate_estimation_options (
           if (options.optimize_measurement_wavelength_p (measurement))
             {
               const double initial_wavelength
-                  = measurement_wavelength (par, value);
+                  = measurement_wavelength (par, value, wavelength_nm);
               if (initial_wavelength > 0
                   && (initial_wavelength < fitted_wavelength_min_nm
                       || initial_wavelength > fitted_wavelength_max_nm))
@@ -2053,7 +2066,7 @@ mtf_parameters::validate_estimation_options (
               variables++;
               fitted_wavelengths++;
             }
-          else if (measurement_wavelength (par, value) > 0)
+          else if (measurement_wavelength (par, value, wavelength_nm) > 0)
             fixed_wavelengths++;
           else
             return fail ("every selected physical MTF measurement needs a "
@@ -2167,7 +2180,8 @@ mtf_parameters::validate_estimation_options (
    interface.  This helper exists only for source compatibility; new callers,
    especially the GUI, should construct MTF_ESTIMATION_OPTIONS directly.  */
 static mtf_estimation_options
-legacy_estimation_options (const mtf_parameters &par, int flags)
+legacy_estimation_options (const mtf_parameters &par, int flags,
+                           double wavelength_nm)
 {
   mtf_estimation_options options;
   options.model = mtf_model::automatic_legacy;
@@ -2194,7 +2208,8 @@ legacy_estimation_options (const mtf_parameters &par, int flags)
       for (size_t measurement = 0; measurement < par.measurements.size ();
            measurement++)
         options.optimize_measurement_wavelengths[measurement]
-            = measurement_wavelength (par, par.measurements[measurement]) <= 0;
+            = measurement_wavelength (par, par.measurements[measurement],
+                                    wavelength_nm) <= 0;
     }
   else
     options.optimize_blur_diameter
@@ -2208,10 +2223,13 @@ double
 mtf_parameters::estimate_parameters (mtf_parameters &par,
                                      const char *write_table,
                                      progress_info *progress,
-                                     const char **error, int flags)
+                                     const char **error, int flags,
+                                     double wavelength_nm,
+                                     double *fitted_wavelength_nm)
 {
   return estimate_parameters_internal (par, nullptr, write_table, progress,
-                                       error, flags);
+                                       error, flags, wavelength_nm,
+                                       fitted_wavelength_nm);
 }
 
 /* Fit this object to measurements in PAR using explicit free-variable
@@ -2222,10 +2240,13 @@ mtf_parameters::estimate_parameters (mtf_parameters &par,
                                      const mtf_estimation_options &options,
                                      const char *write_table,
                                      progress_info *progress,
-                                     const char **error, int flags)
+                                     const char **error, int flags,
+                                     double wavelength_nm,
+                                     double *fitted_wavelength_nm)
 {
   return estimate_parameters_internal (par, &options, write_table, progress,
-                                       error, flags);
+                                       error, flags, wavelength_nm,
+                                       fitted_wavelength_nm);
 }
 
 /* Fit this object to measurements in PAR.  EXPLICIT_OPTIONS is null only for
@@ -2237,16 +2258,19 @@ double
 mtf_parameters::estimate_parameters_internal (
     mtf_parameters &par, const mtf_estimation_options *explicit_options,
     const char *write_table, progress_info *progress, const char **error,
-    int flags)
+    int flags, double wavelength_nm, double *fitted_wavelength_nm)
 {
+  if (fitted_wavelength_nm)
+    *fitted_wavelength_nm = 0;
   if (error)
     *error = nullptr;
 
   const mtf_estimation_options options
       = explicit_options ? *explicit_options
-                         : legacy_estimation_options (par, flags);
+                         : legacy_estimation_options (par, flags, wavelength_nm);
   if (explicit_options
-      && !validate_estimation_options (par, options, error))
+      && !validate_estimation_options (par, options, error,
+                                       wavelength_nm))
     return -1;
 
   /* Retain the useful historical diagnostic for compatibility callers.  The
@@ -2262,7 +2286,7 @@ mtf_parameters::estimate_parameters_internal (
   *this = par;
   mtf_solver solver (par, par.measurements, options, progress,
                      flags & estimate_verbose_solving,
-                     explicit_options == nullptr);
+                     explicit_options == nullptr, wavelength_nm);
   if (solver.num_values () > 0)
     {
       /* Pure defocus is even around the in-focus starting point, so its first
@@ -2314,9 +2338,6 @@ mtf_parameters::estimate_parameters_internal (
 
   if (physical && !explicit_options)
     {
-      wavelength = par.wavelength > 0
-                       ? par.wavelength
-                       : solver.get_wavelength (0, solver.start);
       wavelengths = par.wavelengths;
       for (int channel = 0; channel < 4; channel++)
         if (solver.channel_wavelength_estimated_p (channel))
@@ -2329,9 +2350,13 @@ mtf_parameters::estimate_parameters_internal (
       defocus = solver.get_defocus (first_measurement, solver.start);
       blur_diameter
           = solver.get_blur_diameter (first_measurement, solver.start);
-      if (physical && explicit_options)
-        wavelength = solver.first_wavelength (solver.start);
+      if (physical && fitted_wavelength_nm)
+        *fitted_wavelength_nm = solver.first_wavelength (solver.start);
     }
+  if (physical && fitted_wavelength_nm && !(*fitted_wavelength_nm > 0))
+    *fitted_wavelength_nm = solver.first_wavelength (solver.start);
+  const double report_wavelength_nm
+      = physical ? solver.first_wavelength (solver.start) : wavelength_nm;
   const double final_objective = solver.objfunc (solver.start);
 
   if (flags & estimate_verbose)
@@ -2359,7 +2384,7 @@ mtf_parameters::estimate_parameters_internal (
           return -1;
         }
       if (fprintf (f, "frequency\tmeasured MTF\t") < 0
-          || !print_csv_header (f))
+          || !print_csv_header (f, report_wavelength_nm))
         {
           if (error)
             *error = "write error in CSV file";
@@ -2377,10 +2402,12 @@ mtf_parameters::estimate_parameters_internal (
           fitted_curve.measured_mtf_idx = -1;
           fitted_curve.model = physical ? mtf_model::physical_diffraction
                                         : mtf_model::empirical_fallback;
+          const double curve_wavelength_nm
+              = physical
+                    ? solver.get_wavelength (measurement_index, solver.start)
+                    : report_wavelength_nm;
           if (physical)
             {
-              fitted_curve.wavelength
-                  = solver.get_wavelength (measurement_index, solver.start);
               fitted_curve.defocus
                   = solver.get_defocus (measurement_index, solver.start);
             }
@@ -2396,14 +2423,14 @@ mtf_parameters::estimate_parameters_internal (
                            "%.17g\t%.12g\t%.12g\t%.12g\t%.12g\t%.12g\t"
                            "%.12g\t%.12g\t%.12g\t%.12g\n",
                            freq, contrast,
-                           fitted_curve.lens_diffraction_mtf (freq) * 100,
-                           fitted_curve.lens_defocus_mtf (freq) * 100,
-                           fitted_curve.stokseth_defocus_mtf (freq) * 100,
+                           fitted_curve.lens_diffraction_mtf (freq, curve_wavelength_nm) * 100,
+                           fitted_curve.lens_defocus_mtf (freq, curve_wavelength_nm) * 100,
+                           fitted_curve.stokseth_defocus_mtf (freq, curve_wavelength_nm) * 100,
                            gaussian_blur_mtf (freq, fitted_curve.sigma) * 100,
                            fitted_curve.halo_mtf (freq) * 100,
-                           fitted_curve.lens_mtf (freq) * 100,
+                           fitted_curve.lens_mtf (freq, curve_wavelength_nm) * 100,
                            fitted_curve.sensor_mtf (freq) * 100,
-                           fitted_curve.system_mtf (freq) * 100)
+                           fitted_curve.system_mtf (freq, curve_wavelength_nm) * 100)
                   < 0)
                 {
                   if (error)
