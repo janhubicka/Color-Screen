@@ -53,7 +53,7 @@ public:
   /* Future dcraw_process() calls must be serialized on this single mutable
      LibRaw instance; finished image_data variants own independent pixels. */
   std::mutex processing_mutex;
-  std::unique_ptr<LibRaw> processor;
+  std::shared_ptr<LibRaw> processor;
   std::string source_filename;
   void *input_buffer = nullptr;
   uint64_t reserved_bytes = 0;
@@ -172,7 +172,13 @@ private:
 class raw_image_data_loader : public image_data_loader
 {
 public:
-  raw_image_data_loader (image_data *img) : m_backlight_corr (nullptr), m_img (img), m_buffer (nullptr), m_processor (std::make_unique<LibRaw> ()) {}
+  raw_image_data_loader (image_data *img)
+      : m_backlight_corr (nullptr), m_img (img), m_buffer (nullptr),
+        m_processor (std::make_shared<LibRaw> ()) {}
+  raw_image_data_loader (image_data *img,
+                         std::shared_ptr<unpacked_raw_source> source)
+      : m_backlight_corr (nullptr), m_img (img), m_buffer (nullptr),
+        m_processor (source->processor), m_reuse_source (std::move (source)) {}
   virtual bool init_loader (const char *name, const char **error,
                             progress_info *, image_data::demosaicing_t);
   virtual bool load_part (int *permille, const char **error,
@@ -188,6 +194,12 @@ public:
   std::shared_ptr<unpacked_raw_source>
   take_unpacked_raw_source () override
   {
+    /* A second pass borrows the source rather than taking ownership. */
+    if (m_reuse_source)
+      {
+        m_processor->free_image ();
+        return {};
+      }
     if (!m_processor || !m_img->standard_bayer_cfa || m_buffer)
       return {};
 
@@ -233,7 +245,10 @@ private:
   image_data *m_img;
   void *m_buffer;
   /* Do not put it on the stack since it is rather large.  */
-  std::unique_ptr<LibRaw> m_processor;
+  std::shared_ptr<LibRaw> m_processor;
+  /* Kept alive across this borrowed reprocessing pass, with the resource
+     mutex held by image_data::demosaiced_variant(). */
+  std::shared_ptr<unpacked_raw_source> m_reuse_source;
   std::string m_source_filename;
   bool monochromatic = false;
   bool bayer_correction = false;
