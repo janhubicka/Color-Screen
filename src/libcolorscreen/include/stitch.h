@@ -6,6 +6,7 @@
 #include "imagedata.h"
 #include "scr-to-img.h"
 #include "colorscreen.h"
+#include "render-type-parameters.h"
 struct tiff;
 typedef struct tiff TIFF;
 
@@ -276,7 +277,7 @@ public:
     release_images = false;
   }
   bool
-  tile_for_scr (const render_parameters *rparams, coord_t sx, coord_t sy, int *x,
+  tile_for_scr (const render_output_parameters *output, coord_t sx, coord_t sy, int *x,
                 int *y, bool only_loaded)
   {
 #if 0
@@ -286,7 +287,8 @@ public:
       {
 	for (ix = 0 ; ix < params.width; ix++)
 	  if ((!only_loaded || images[iy][ix].img)
-	      && (!rparams || rparams->get_tile_adjustment (this, ix, iy).enabled)
+	      && (!output || output->tile_enabled_p (ix, iy, params.width,
+                                              params.height))
 	      && images[iy][ix].pixel_known_p (sx, sy))
 	    break;
 	if (ix != params.width)
@@ -307,8 +309,9 @@ public:
       {
         for (ix = 0; ix < params.width; ix++)
           if ((!only_loaded || images[iy][ix].img)
-              && (!rparams
-                  || rparams->get_tile_adjustment (this, ix, iy).enabled)
+              && (!output
+                  || output->tile_enabled_p (ix, iy, params.width,
+                                             params.height))
               && images[iy][ix].pixel_maybe_in_range_p ({ sx, sy }))
             {
               /* Compute image coordinates.  */
