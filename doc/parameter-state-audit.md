@@ -73,13 +73,19 @@ completion only triggers canvas updates; it cannot change the document,
 Undo or a deliberate view mask. Per-tile exposure, dark-point and blur
 corrections remain saved.
 
-**Demosaic follow-up (separate project):** retain the saved `demosaic`
-choice. Consider an immutable, on-demand image-data cache keyed by decoder
-and demosaic parameters, preserving the original mosaic/non-demosaiced input
-for fast reprocessing. Bound memory with LRU eviction and lifetime-safe shared
-ownership, and ensure that cancellation and scan replacement cannot publish
-results from an obsolete request. Do not integrate that larger storage/decoder
-refactor into a renderer-output migration.
+**Demosaic resource follow-up (draft PR #536):** retain the saved
+`demosaic` choice. A conventional Bayer capture may now retain its unpacked
+sensor mosaic (opportunistic 256 MiB process budget) and generate decoded
+variants on demand (separate 256 MiB strong-cache budget, up to two per
+source). Qt explicitly reuses the same RAW source on **Reload and demosaic**,
+with generation-gated worker publication and cancellation of superseded loads;
+ordinary Open still rereads the input file and unsupported/over-budget sources
+use the old loader. These caches are runtime resources, never additional
+archive/YAML fields. The original decoded source image remains owned while
+variants are shown, so its RGB buffer also consumes memory; this is a known
+memory-pressure tradeoff rather than a saved parameter. Keep this separate
+from the already merged renderer-output split. The draft still requires
+full-matrix validation and expanded Qt RAW lifecycle smoke.
 
 ## MTF persistence audit: separate real values from bookkeeping
 
