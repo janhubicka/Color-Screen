@@ -217,6 +217,22 @@ decode_parameter_json_v2_process (
     const std::string &input, render_parameters *render,
     std::string *error);
 
+/* Serialize persistent colour calibration and appearance, including scanner
+   primaries, process-profile RGB matrices, balance/observer adjustments and
+   editable output tone curve. Output monitor profile and transfer gamma are
+   per-render resources and deliberately absent. */
+DLL_PUBLIC bool
+encode_parameter_json_v2_color (
+    const render_parameters &render, std::string *output,
+    std::string *error);
+
+/* Decode one native colour/appearance component transactionally into RENDER
+   while retaining all unrelated processing controls and caches. */
+DLL_PUBLIC bool
+decode_parameter_json_v2_color (
+    const std::string &input, render_parameters *render,
+    std::string *error);
+
 /* Parse the native JSON v2 registration component into independent temporary
    state, committing only when all fields and bounds are valid. This prevents
    a malformed field from partially mutating a live document. ERROR gives a
