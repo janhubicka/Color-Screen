@@ -10570,6 +10570,215 @@ test_stitch_tile_adjustment_grid ()
 }
 
 
+/* Directly persist all spatial calibration resources without a CSP mirror,
+   including non-enabled backlight samples and per-tile optical corrections. */
+static bool
+test_native_json_v2_correction_grids ()
+{
+  render_parameters original;
+  original.gamma = 2.5f;
+  bool enabled[4] = {true, false, true, true};
+  original.backlight_correction
+      = std::make_shared<backlight_correction_parameters> ();
+  if (!original.backlight_correction->alloc (7, 5, enabled))
+    return false;
+  original.backlight_correction->black_correction = true;
+  for (int y = 0; y < 5; ++y)
+    for (int x = 0; x < 7; ++x)
+      for (int c = 0; c < 4; ++c)
+        {
+          const int i = y * 7 + x;
+          auto channel = (backlight_correction_parameters::channel)c;
+          original.backlight_correction->set_luminosity (
+              x, y, (luminosity_t)(i * 4 + c + 1) / 32, channel);
+          original.backlight_correction->set_sub (
+              x, y, (luminosity_t)(i * 4 + c) / 256, channel);
+        }
+
+  auto blur = std::make_shared<scanner_blur_correction_parameters> ();
+  if (!blur->alloc (4, 3, scanner_blur_correction_parameters::mtf_defocus)
+      || !blur->alloc_diagnostics ())
+    return false;
+  for (int y = 0; y < 3; ++y)
+    for (int x = 0; x < 4; ++x)
+      {
+        blur->set_correction (x, y, (luminosity_t)(x + y * 4) / 64);
+        blur->set_diagnostics (x, y, {0.25f, 0.75f, 8, 10});
+      }
+  original.scanner_blur_correction = blur;
+  original.set_tile_adjustments_dimensions (3, 2);
+  for (int y = 0; y < 2; ++y)
+    for (int x = 0; x < 3; ++x)
+      {
+        auto &tile = original.get_tile_adjustment (x, y);
+        tile.exposure = 1 + (luminosity_t)(x + 3 * y) / 16;
+        tile.dark_point = -(luminosity_t)(x + y) / 32;
+      }
+  auto nested = std::make_shared<scanner_blur_correction_parameters> ();
+  if (!nested->alloc (2, 2, scanner_blur_correction_parameters::blur_radius))
+    return false;
+  for (int y = 0; y < 2; ++y)
+    for (int x = 0; x < 2; ++x)
+      nested->set_correction (x, y, (luminosity_t)(x + 2 * y) / 16);
+  original.get_tile_adjustment (2, 1).scanner_blur_correction = nested;
+
+  std::string json, error;
+  if (!encode_parameter_json_v2_correction_grids (original, &json, &error)
+      || json.find ("\"backlight\"") == std::string::npos
+      || json.find ("\"mtf-defocus\"") == std::string::npos
+      || json.find ("\"robust_spread\"") != std::string::npos
+      || json.find ("\"legacy_csp\"") != std::string::npos)
+    {
+      fprintf (stderr, "Native v2 calibration encoding failed: %s\n",
+               error.c_str ());
+      return false;
+    }
+
+  render_parameters decoded;
+  decoded.gamma = 3.25f;
+  decoded.brightness = 0.875f;
+  if (!decode_parameter_json_v2_correction_grids (json, &decoded, &error))
+    {
+      fprintf (stderr, "Native v2 calibration decoding failed: %s\n",
+               error.c_str ());
+      return false;
+    }
+
+  auto same_blur = [] (
+      const std::shared_ptr<scanner_blur_correction_parameters> &a,
+      const std::shared_ptr<scanner_blur_correction_parameters> &b)
+    {
+      if (!a || !b)
+        return !a && !b;
+      if (a->get_width () != b->get_width ()
+          || a->get_height () != b->get_height ()
+          || a->get_mode () != b->get_mode ())
+        return false;
+      for (int y = 0; y < a->get_height (); ++y)
+        for (int x = 0; x < a->get_width (); ++x)
+          if (a->get_correction (x, y) != b->get_correction (x, y))
+            return false;
+      return true;
+    };
+  auto same_grid = [&same_blur] (const render_parameters &a,
+                                const render_parameters &b)
+    {
+      if (a.tile_adjustments_width != b.tile_adjustments_width
+          || a.tile_adjustments_height != b.tile_adjustments_height
+          || a.tile_adjustments.size () != b.tile_adjustments.size ()
+          || !same_blur (a.scanner_blur_correction,
+                         b.scanner_blur_correction)
+          || (bool)a.backlight_correction != (bool)b.backlight_correction)
+        return false;
+      if (a.backlight_correction)
+        {
+          const auto &aa = *a.backlight_correction;
+          const auto &bb = *b.backlight_correction;
+          if (aa.black_correction != bb.black_correction
+              || aa.get_width () != bb.get_width ()
+              || aa.get_height () != bb.get_height ())
+            return false;
+          for (int c = 0; c < 4; ++c)
+            if (aa.channel_enabled ((backlight_correction_parameters::channel)c)
+                != bb.channel_enabled (
+                    (backlight_correction_parameters::channel)c))
+              return false;
+          for (int y = 0; y < aa.get_height (); ++y)
+            for (int x = 0; x < aa.get_width (); ++x)
+              for (int c = 0; c < 4; ++c)
+                {
+                  auto channel = (backlight_correction_parameters::channel)c;
+                  if (aa.get_luminosity (x, y, channel)
+                          != bb.get_luminosity (x, y, channel)
+                      || aa.get_sub (x, y, channel)
+                             != bb.get_sub (x, y, channel))
+                    return false;
+                }
+        }
+      for (size_t i = 0; i < a.tile_adjustments.size (); ++i)
+        if (a.tile_adjustments[i].exposure != b.tile_adjustments[i].exposure
+            || a.tile_adjustments[i].dark_point
+                   != b.tile_adjustments[i].dark_point
+            || !same_blur (
+                 a.tile_adjustments[i].scanner_blur_correction,
+                 b.tile_adjustments[i].scanner_blur_correction))
+          return false;
+      return true;
+    };
+
+  if (!same_grid (original, decoded)
+      || decoded.gamma != 3.25f || decoded.brightness != 0.875f
+      || decoded.scanner_blur_correction->has_diagnostics ())
+    {
+      fprintf (stderr, "Native v2 calibration roundtrip lost data\n");
+      return false;
+    }
+  std::string canonical;
+  if (!encode_parameter_json_v2_correction_grids (
+          decoded, &canonical, &error) || canonical != json)
+    return false;
+
+  /* Invalid nested payloads cannot update any accepted calibration. */
+  auto check_bad = [&] (const std::string &before,
+                       const std::string &after) -> bool
+    {
+      std::string bad = json;
+      size_t pos = bad.find (before);
+      if (pos == std::string::npos)
+        return false;
+      bad.replace (pos, before.size (), after);
+      return !decode_parameter_json_v2_correction_grids (
+                 bad, &decoded, &error)
+             && same_grid (original, decoded)
+             && decoded.gamma == 3.25f;
+    };
+  if (!check_bad ("\"dimensions\": [7, 5]",
+                  "\"dimensions\": [7, 6]")
+      || !check_bad ("\"channels\": [true, false, true, true]",
+                     "\"channels\": [true, 1, true, true]")
+      || !check_bad ("\"luminosities\": [[0.03125, 0.0625, 0.09375, 0.125]",
+                     "\"luminosities\": [[0.03125, 0.0625, 0.09375]")
+      || !check_bad ("\"mode\": \"mtf-defocus\"",
+                     "\"mode\": \"invalid-mode\"")
+      || !check_bad ("\"values\": [0, 0.015625",
+                     "\"values\": [1e999, 0.015625")
+      || !check_bad ("\"dimensions\": [3, 2]",
+                     "\"dimensions\": [3, 3]"))
+    {
+      fprintf (stderr, "Invalid v2 calibration applied or test failed\n");
+      return false;
+    }
+
+  original.get_tile_adjustment (0, 0).dark_point
+      = my_quiet_nan<luminosity_t> ();
+  std::string unchanged = "keep";
+  if (encode_parameter_json_v2_correction_grids (
+          original, &unchanged, &error) || unchanged != "keep")
+    return false;
+
+  render_parameters empty;
+  if (!encode_parameter_json_v2_correction_grids (empty, &json, &error)
+      || !decode_parameter_json_v2_correction_grids (
+          json, &decoded, &error)
+      || decoded.backlight_correction || decoded.scanner_blur_correction
+      || !decoded.tile_adjustments.empty ()
+      || decoded.tile_adjustments_width || decoded.tile_adjustments_height)
+    return false;
+
+  /* A failed allocation must not destroy the existing calibration. */
+  bool channels[4] = {true, true, true, false};
+  auto retained = std::make_shared<backlight_correction_parameters> ();
+  if (!retained->alloc (2, 2, channels))
+    return false;
+  retained->set_luminosity (0, 0, 0.8125f);
+  if (retained->alloc (-2, 100, channels)
+      || retained->get_width () != 2 || retained->get_height () != 2
+      || retained->get_luminosity (
+          0, 0, backlight_correction_parameters::red) != 0.8125f)
+    return false;
+  return true;
+}
+
 /* Native MTF JSON must preserve not only sampled frequency response but also
    independent capture channel, selected record and complete spatial evidence. */
 static bool
@@ -11495,6 +11704,8 @@ main (int argc, char **argv)
     { "mesh_inversion", "mesh inversion tests", [] () { return test_mesh_inversion (); } },
     { "cow_points", "cow points tests", [] () { return test_cow_points (); } },
     { "image_area", "image area tests", [] () { return test_image_area (); } },
+    { "json_v2_correction_grids", "native JSON schema-v2 spatial correction grid codec",
+      [] () { return test_native_json_v2_correction_grids (); } },
     { "json_v2_sharpness", "native JSON schema-v2 complete MTF/PSF codec",
       [] () { return test_native_json_v2_sharpness (); } },
     { "json_v2_color", "native JSON schema-v2 colour/appearance codec",
