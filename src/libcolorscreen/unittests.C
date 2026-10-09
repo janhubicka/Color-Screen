@@ -10745,9 +10745,9 @@ test_native_json_v2_document ()
   {
     std::ifstream input (std::filesystem::u8path (native_path),
                          std::ios::binary);
-    const std::string bytes (
+    const std::string bytes {
         std::istreambuf_iterator<char> (input),
-        std::istreambuf_iterator<char> ());
+        std::istreambuf_iterator<char> ()};
     if (!input.good () && !input.eof ())
       return false;
     if (bytes != first)
@@ -10784,9 +10784,9 @@ test_native_json_v2_document ()
   {
     std::ifstream input (std::filesystem::u8path (native_path),
                          std::ios::binary);
-    const std::string bytes (
+    const std::string bytes {
         std::istreambuf_iterator<char> (input),
-        std::istreambuf_iterator<char> ());
+        std::istreambuf_iterator<char> ()};
     if (bytes != first)
       return false;
   }
