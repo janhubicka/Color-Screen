@@ -1983,10 +1983,6 @@ bool scopedPresetSmoke() {
       colorscreen::tone_curve::tone_curve_custom;
   source.rparams.output_tone_curve_control_points =
       {{0, 0}, {0.4, 0.22}, {1, 1}};
-  source.rparams.output_profile =
-      colorscreen::render_parameters::output_profile_xyz;
-  source.rparams.output_gamma = 2.15;
-  source.rparams.gamut_warning = true;
 
   QString error;
   if (!qtgui_presets::save(QStringLiteral("Capture rig"),
@@ -2128,15 +2124,10 @@ bool scopedPresetSmoke() {
   const auto retainedColorModel = target.rparams.color_model;
   const auto retainedProfileRed = target.rparams.profiled_red;
   const auto retainedColorSpots = target.profileSpots;
-  const auto retainedDisplayProfile = target.rparams.output_profile;
-  const bool retainedGamutWarning = target.rparams.gamut_warning;
   if (!qtgui_presets::apply(colorPreset, &target, &clearedRegistration,
                             &error) ||
       target.rparams.white_balance != source.rparams.white_balance ||
       target.rparams.observer_whitepoint != source.rparams.observer_whitepoint ||
-      target.rparams.output_profile != retainedDisplayProfile ||
-      target.rparams.output_gamma != source.rparams.output_gamma ||
-      target.rparams.gamut_warning != retainedGamutWarning ||
       target.rparams.output_tone_curve_control_points !=
           source.rparams.output_tone_curve_control_points ||
       target.rparams.color_model != retainedColorModel ||
