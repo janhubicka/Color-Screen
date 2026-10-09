@@ -179,6 +179,32 @@ decode_parameter_json_v2_document (
     std::vector<point_t> *profile_spots,
     std::string *error);
 
+/* True if the first non-whitespace byte of UTF-8 path NAME begins a
+   native JSON document. This is signature-based dispatch only; the typed
+   schema-v2 reader must still validate the format marker and version. */
+DLL_PUBLIC bool parameter_json_v2_signature_p (const char *name);
+
+/* Read a complete plain JSON v2 parameter file from a UTF-8 host pathname.
+   Every persistent core/Qt-spot input is parsed as typed JSON; no CSP
+   stream or ZIP is involved. All destinations remain unchanged on error. */
+DLL_PUBLIC bool
+read_parameter_json_v2_file (
+    const char *name, scr_to_img_parameters *geometry,
+    scr_detect_parameters *detection, render_parameters *render,
+    solver_parameters *solver, std::vector<point_t> *profile_spots,
+    std::string *error);
+
+/* Atomically save one complete JSON v2 parameter file to UTF-8 path NAME.
+   The existing sibling-staging and native replacement primitive preserves
+   an older destination if any serialization, write or rename fails.
+   This explicit API does not change normal alpha Save/Save As defaults. */
+DLL_PUBLIC bool
+write_parameter_json_v2_file (
+    const char *name, const scr_to_img_parameters &geometry,
+    const scr_detect_parameters &detection,
+    const render_parameters &render, const solver_parameters &solver,
+    const std::vector<point_t> &profile_spots, std::string *error);
+
 /* Serialize one native JSON v2 registration component.
 
    This is a lossless building block for the eventual complete schema-v2
