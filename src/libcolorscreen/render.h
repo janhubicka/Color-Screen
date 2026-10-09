@@ -98,6 +98,13 @@ public:
   {
   }
 
+  /* Install one immutable output request before the first precompute.
+     This is not a mutable image/document parameter. */
+  void set_output_parameters (const render_output_parameters &output)
+  {
+    m_output = output;
+  }
+
   /* Determine grayscale value at a given position in the image.  */
   pure_attr inline luminosity_t get_img_pixel (point_t p) const noexcept;
 
@@ -298,8 +305,10 @@ protected:
   /* Scanned image.  */
   const image_data &m_img;
 
-  /* Rendering parameters.  */
+  /* Saved image/calibration parameters, separate from presentation. */
   render_parameters m_params;
+  /* View/export-local output encoding and tile visibility. */
+  render_output_parameters m_output;
 
   /* ID of the precomputed scalar image layer.  */
   uint64_t m_image_layer_id = m_img.id;
