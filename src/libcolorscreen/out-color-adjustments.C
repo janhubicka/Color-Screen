@@ -130,7 +130,7 @@ out_color_adjustments::precompute (render_parameters &m_params,
 	}
       else
 	{
-	  if (m_params.output_profile == render_parameters::output_profile_xyz)
+	  if (output.output_profile == render_output_parameters::output_profile_xyz)
 	    ;
 	  else if (do_pro_photo)
 	    {
