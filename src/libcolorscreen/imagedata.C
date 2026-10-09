@@ -33,16 +33,23 @@ namespace colorscreen
 extern void prune_render_caches ();
 extern void prune_render_scr_detect_caches ();
 
+/* RAW mosaics remain sizeable even after freeing processed RGB output.
+   Retain at most 256 MiB across live images. This is a global, opportunistic
+   cache budget, not a limit on the image that Color-Screen may decode. */
+static constexpr uint64_t raw_source_budget = UINT64_C (256) * 1024 * 1024;
+static std::atomic<uint64_t> retained_raw_source_bytes {0};
+
 /* Own LibRaw's decoded sensor samples after the initial loader has gone.
-   The processed image buffer is released on transfer: source data needed
-   for a future demosaicing pass remains, without duplicating the current
-   RGB/grayscale image. EIP open_buffer input must remain alive as long as
-   LibRaw may retain its input datastream. */
+   The processed image buffer is released on transfer. Retention is currently
+   limited to Bayer CFA data: other RAW formats may use substantially larger
+   multicomponent buffers and will be supported once their memory accounting
+   and reprocessing tests are established. */
 class unpacked_raw_source
 {
 public:
   std::unique_ptr<LibRaw> processor;
   void *input_buffer = nullptr;
+  uint64_t reserved_bytes = 0;
 
   ~unpacked_raw_source ()
   {
@@ -51,6 +58,9 @@ public:
     processor.reset ();
     if (input_buffer)
       free (input_buffer);
+    if (reserved_bytes)
+      retained_raw_source_bytes.fetch_sub (reserved_bytes,
+                                           std::memory_order_relaxed);
   }
 };
 
@@ -171,15 +181,39 @@ public:
   std::shared_ptr<unpacked_raw_source>
   take_unpacked_raw_source () override
   {
-    if (!m_processor)
+    if (!m_processor || !m_img->standard_bayer_cfa || m_buffer)
       return {};
 
-    /* libraw::free_image releases only the processed image allocation;
-       unpacked rawdata and metadata remain available for dcraw_process()
-       with another demosaic configuration. Our image_data pixel buffers
-       already contain an independent copy of the completed output. */
-    m_processor->free_image ();
+    /* Only Bayer's one-sample-per-sensel RAW buffer is accounted for here.
+       EIP's separate open_buffer allocation and non-Bayer layouts require
+       more extensive accounting, so keep the legacy release behaviour for
+       them rather than accidentally pinning unbounded memory. */
+    const auto &raw = m_processor->imgdata.rawdata;
+    const uint64_t w = (uint64_t)m_processor->imgdata.sizes.raw_width;
+    const uint64_t h = (uint64_t)m_processor->imgdata.sizes.raw_height;
+    if (!raw.raw_image || !w || !h || w > raw_source_budget / 2 / h)
+      return {};
+    const uint64_t needed = w * h * 2;
     auto source = std::make_shared<unpacked_raw_source> ();
+
+    /* Atomically reserve from the process-wide budget. Multiple documents
+       may finish loading concurrently. Under memory pressure source
+       retention is optional; the already-decoded image is still valid. */
+    uint64_t used = retained_raw_source_bytes.load (std::memory_order_relaxed);
+    do
+      {
+        if (used > raw_source_budget - needed)
+          return {};
+      }
+    while (!retained_raw_source_bytes.compare_exchange_weak (
+        used, used + needed, std::memory_order_relaxed,
+        std::memory_order_relaxed));
+    source->reserved_bytes = needed;
+
+    /* free_image releases the temporary postprocessed image, not unpacked
+       CFA samples. A future dcraw_process may reprocess the same samples.
+       The active image_data already owns a separate pixel copy. */
+    m_processor->free_image ();
     source->processor = std::move (m_processor);
     source->input_buffer = m_buffer;
     m_buffer = nullptr;
