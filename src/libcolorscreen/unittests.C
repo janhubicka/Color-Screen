@@ -10718,6 +10718,79 @@ test_native_json_v2_document ()
       return false;
     }
 
+  /* Exercise the explicit on-disk v2 API without altering the normal
+     alpha GUI/CLI Save preference. It must write plain UTF-8 JSON and use
+     the same Unicode-path atomic staging as the existing v1 writer. */
+  const std::string native_path
+      = u8"native-v2-žluťoučký-測試.cspar";
+  struct native_path_cleanup
+  {
+    std::filesystem::path path;
+    ~native_path_cleanup ()
+    {
+      std::error_code ignored;
+      std::filesystem::remove (path, ignored);
+    }
+  } cleanup {std::filesystem::u8path (native_path)};
+  if (!write_parameter_json_v2_file (
+          native_path.c_str (), geometry, detection, render,
+          solver, spots, &error)
+      || !parameter_json_v2_signature_p (native_path.c_str ())
+      || parameter_archive_signature_p (native_path.c_str ()))
+    {
+      fprintf (stderr, "Native v2 Unicode-path file save failed: %s\n",
+               error.c_str ());
+      return false;
+    }
+  {
+    std::ifstream input (std::filesystem::u8path (native_path),
+                         std::ios::binary);
+    const std::string bytes (
+        std::istreambuf_iterator<char> (input),
+        std::istreambuf_iterator<char> ());
+    if (!input.good () && !input.eof ())
+      return false;
+    if (bytes != first)
+      {
+        fprintf (stderr, "Native v2 file did not contain plain canonical JSON\n");
+        return false;
+      }
+  }
+  scr_to_img_parameters loaded_geometry;
+  scr_detect_parameters loaded_detection;
+  render_parameters loaded_render;
+  solver_parameters loaded_solver;
+  std::vector<point_t> loaded_spots;
+  if (!read_parameter_json_v2_file (
+          native_path.c_str (), &loaded_geometry, &loaded_detection,
+          &loaded_render, &loaded_solver, &loaded_spots, &error)
+      || !encode_parameter_json_v2_document (
+          loaded_geometry, loaded_detection, loaded_render, loaded_solver,
+          loaded_spots, &canonical, &error)
+      || canonical != first)
+    {
+      fprintf (stderr, "Native v2 Unicode-path file roundtrip failed: %s\n",
+               error.c_str ());
+      return false;
+    }
+  /* A failed attempted replacement must leave the last good file byte
+     for byte intact, never even opening the target for truncation. */
+  render_parameters invalid_render = render;
+  invalid_render.gamma = my_quiet_nan<luminosity_t> ();
+  if (write_parameter_json_v2_file (
+          native_path.c_str (), geometry, detection, invalid_render,
+          solver, spots, &error))
+    return false;
+  {
+    std::ifstream input (std::filesystem::u8path (native_path),
+                         std::ios::binary);
+    const std::string bytes (
+        std::istreambuf_iterator<char> (input),
+        std::istreambuf_iterator<char> ());
+    if (bytes != first)
+      return false;
+  }
+
   /* Corruption late in the file must not publish any previously accepted
      capture, geometry, points or MTF data. */
   auto reject_unchanged = [&] (const std::string &bad)
