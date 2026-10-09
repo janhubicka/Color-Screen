@@ -1070,6 +1070,13 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
     obsolete->close();
   }
 
+  // A new image request supersedes the previous one immediately. Request
+  // cancellation as well as guarding its eventual completion by generation;
+  // a RAW reprocessing worker can then stop between decoded row batches.
+  if (auto oldProgress = m_imageLoad.activeProgress.lock())
+    oldProgress->cancel();
+  m_imageLoad.activeProgress.reset();
+
   // Final-result work and any pending one-shot confirmation belong to the
   // current image snapshot. Invalidate both before starting replacement I/O.
   dismissOneShotPrompts();
@@ -1127,6 +1134,7 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
 
         auto progress = std::make_shared<colorscreen::progress_info>();
         progress->set_task("Opening image", 0);
+        m_imageLoad.activeProgress = progress;
         addProgress(progress);
 
         // A manual demosaic reload may reuse this document's retained CFA.
@@ -1172,6 +1180,7 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
               // generation may clear the pending state or replace the document scan.
               if (loadGeneration != m_imageLoad.generation)
                 return;
+              m_imageLoad.activeProgress.reset();
 
               const bool autodetectScreenAfterLoad =
                   m_imageLoad.screenAutodetectAfterGeneration &&
