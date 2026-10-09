@@ -938,6 +938,39 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
             probe->m_recoveryDirty != state->failedOpenRecoveryDirty ||
             probe->m_currentImageFile != state->failedOpenImagePath ||
             !probe->canReuseForOpen()) {
+          const ParameterState actualState = probe->getCurrentState();
+          qCritical().noquote()
+              << "Failed-open rollback detail:"
+              << "failure-prompt" << static_cast<bool>(loadFailure)
+              << "sidecar-prompt"
+              << static_cast<bool>(probe->m_imageLoad.sidecarPrompt)
+              << "scan" << static_cast<bool>(probe->sharedImageData())
+              << "failure-prompt-owned"
+              << (probe->m_imageLoad.failurePrompt == loadFailure)
+              << "state" << (actualState == state->failedOpenBaseline)
+              << "render"
+              << (actualState.rparams == state->failedOpenBaseline.rparams)
+              << "geometry"
+              << (actualState.scrToImg == state->failedOpenBaseline.scrToImg)
+              << "detection"
+              << (actualState.detect == state->failedOpenBaseline.detect)
+              << "solver"
+              << (actualState.solver == state->failedOpenBaseline.solver)
+              << "spots"
+              << (actualState.profileSpots == state->failedOpenBaseline.profileSpots)
+              << "path" << probe->m_parameterFile.path
+              << state->failedOpenParameterPath
+              << "suggested" << probe->m_parameterFile.suggested
+              << state->failedOpenParameterSuggested
+              << "archive"
+              << (probe->m_parameterFile.format ==
+                  MainWindow::ParameterFileState::Format::Archive)
+              << state->failedOpenParameterArchive
+              << "recovery-dirty" << probe->m_recoveryDirty
+              << state->failedOpenRecoveryDirty
+              << "image" << probe->m_currentImageFile
+              << state->failedOpenImagePath
+              << "reusable" << probe->canReuseForOpen();
           fail(QStringLiteral(
               "Failed image open leaked staged sidecar/target state or lost blank-window reuse"));
           return;
