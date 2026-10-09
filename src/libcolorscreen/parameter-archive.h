@@ -233,6 +233,22 @@ decode_parameter_json_v2_color (
     const std::string &input, render_parameters *render,
     std::string *error);
 
+/* Serialize all persistent capture sharpening and MTF settings directly
+   into JSON, including each measured transfer curve, uncertainty and spatial
+   provenance. Do not include derived fit tables or transient fit options.
+   This is a component, not a complete schema-v2 .cspar writer. */
+DLL_PUBLIC bool
+encode_parameter_json_v2_sharpness (
+    const render_parameters &render, std::string *output,
+    std::string *error);
+
+/* Parse native sharpness and MTF input transactionally, without modifying
+   unrelated processing/calibration state if an input is malformed. */
+DLL_PUBLIC bool
+decode_parameter_json_v2_sharpness (
+    const std::string &input, render_parameters *render,
+    std::string *error);
+
 /* Parse the native JSON v2 registration component into independent temporary
    state, committing only when all fields and bounds are valid. This prevents
    a malformed field from partially mutating a live document. ERROR gives a
