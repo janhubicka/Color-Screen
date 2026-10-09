@@ -14,8 +14,8 @@ extern const unsigned char sRGB_icc[];
 extern const unsigned int sRGB_icc_len;
 namespace colorscreen
 {
-uint64_t stitch_image::current_time;
-int stitch_image::nloaded;
+std::atomic<uint64_t> stitch_image::current_time {0};
+std::atomic<int> stitch_image::nloaded {0};
 
 stitch_image::stitch_image ()
 : filename (""), img (), mesh_trans (), demosaic (image_data::demosaic_default), xshift (0), yshift (0),
@@ -37,6 +37,7 @@ stitch_image::release_image_data (progress_info *progress)
   //printf ("Releasing input tile %s\n", filename.c_str ());
   //progress->resume_stdout ();
   assert (!refcount && img);
+  m_image_ready.store (false, std::memory_order_release);
   img = NULL;
   nloaded--;
 }
@@ -45,9 +46,13 @@ bool
 stitch_image::init_loader (const char **error, progress_info *progress)
 {
   assert (!img);
+  m_image_ready.store (false, std::memory_order_release);
   img = std::make_unique <image_data> ();
   if (!img->init_loader (m_prj->add_path (filename).c_str (), false, error, progress))
-    return false;
+    {
+      img = NULL;
+      return false;
+    }
   if (img->stitch)
     {
       *error = "Can not embedd stitch projects in sitch projects";
@@ -61,6 +66,7 @@ stitch_image::load_part (int *permille, const char **error, progress_info *progr
 {
   if (!img->load_part (permille, error, progress))
     {
+      m_image_ready.store (false, std::memory_order_release);
       img = NULL;
       return false;
     }
@@ -75,9 +81,14 @@ stitch_image::load_part (int *permille, const char **error, progress_info *progr
       if (!img->has_rgb ())
 	{
 	  *error = "source image is not having color channels";
+          m_image_ready.store (false, std::memory_order_release);
 	  img = NULL;
 	  return false;
 	}
+      /* All pixels and tile metadata are now complete. The GUI's render
+         lookup uses an acquire-load before accessing IMG, so publishing
+         this bit is the tile's visibility/readiness handoff. */
+      m_image_ready.store (true, std::memory_order_release);
     }
   return true;
 }
@@ -88,7 +99,12 @@ stitch_image::load_img (const char **error, progress_info *progress)
   refcount++;
   lastused = ++current_time;
   if (img)
-    return true;
+    {
+      const bool ready = image_ready_p ();
+      if (!ready)
+        refcount--;
+      return ready;
+    }
   /* Perhaps make number of cached images user specified.  */
   if (nloaded >= 1 && m_prj->release_images)
     {
@@ -121,13 +137,20 @@ stitch_image::load_img (const char **error, progress_info *progress)
   if (progress)
     progress->set_task ("loading image header",1);
   if (!init_loader (error, progress))
-    return false;
+    {
+      nloaded--;
+      refcount--;
+      return false;
+    }
   if (progress)
     progress->set_task ("loading",1000);
   if (!img->allocate ())
     {
       *error = "out of memory";
+      m_image_ready.store (false, std::memory_order_release);
       img = NULL;
+      nloaded--;
+      refcount--;
       return false;
     }
   int permille = 0;
@@ -140,10 +163,15 @@ stitch_image::load_img (const char **error, progress_info *progress)
       if (progress && progress->cancel_requested ())
 	{
 	  *error = "cancelled";
+          m_image_ready.store (false, std::memory_order_release);
 	  img = NULL;
+          nloaded--;
+          refcount--;
 	  return false;
 	}
     }
+  nloaded--;
+  refcount--;
   return false;
 }
 
