@@ -117,7 +117,7 @@ QMessageBox *findMessageBox(const QString &title, QMessageBox *previousBox) {
 /** Click a known sequence of modal QMessageBox buttons as they appear.
 
     QFileDialog is intentionally not automated here.  The smoke establishes a
-    real current .par file first, so choosing Save exercises the ordinary
+    real current parameter file first, so choosing Save exercises the ordinary
     synchronous save path rather than a platform-native Save As dialog. */
 void queueDialogResponses(ColorScreenApplication &app,
                           std::vector<DialogResponse> responses) {
@@ -437,8 +437,12 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
       app.exit(documentLifecycleFailure);
       return;
     }
+    // The recovery fixture assigns a photographic image area to the first
+    // document.  Only .cspar can retain that field when Save is chosen from
+    // the unsaved-changes prompt.  Keep the peer on the legacy .par path to
+    // preserve its independent failure/atomic-save coverage.
     state->firstParameters = state->temporaryDirectory->filePath(
-        QStringLiteral("first.par"));
+        QStringLiteral("first.cspar"));
     state->secondParameters = state->temporaryDirectory->filePath(
         QStringLiteral("second.par"));
 
@@ -1138,8 +1142,8 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
       }
 
       case 2: {
-        // A successful Save must synchronously update the current .par file and
-        // allow the document to close.
+        // A successful Save must synchronously update the current .cspar
+        // archive, including the inner image area, and allow closing.
         queueDialogResponses(app, {{QStringLiteral("Unsaved Changes"),
                                     QMessageBox::Save}});
         if (!first || !first->close()) {
