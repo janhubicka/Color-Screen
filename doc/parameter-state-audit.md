@@ -25,11 +25,12 @@ Do not automatically migrate every member into `.cspar`.
 
 | Field or API | Evidence in the current tree | Suggested action |
 | --- | --- | --- |
-| `render_parameters::image_area` | Independent photographic-image bounding area, distinct from the physical-object crop. Used by focus/finetune and pixel-size estimation but not represented in legacy CSP. | **Keep and expose in GUI**, with versioned archive persistence; `scan_crop` may include bindings and tapes. |
+| `render_parameters::image_area` | Independent photographic-image bounding area, distinct from the physical-object crop. Used by focus/finetune and pixel-size estimation but not represented in legacy CSP. | **Keep.** GUI selection and structured archive persistence are implemented and full-CI tested separately in PR #531 (stacked on #528); `scan_crop` may include bindings and tapes. |
 | `render_parameters::tile_adjustment::{x,y}` | The adjustment array is indexed by row/column and stores dimensions; per-element bytes were not initialized, compared or saved. | **Removed in this branch**, retaining real tile adjustment values. |
 | `solver_parameters::copy_without_points()` and `solver_mesh(..., sparam2, smap, ...)` | Mesh code copies lens/tilt policy to a scratch `solver_parameters`, but the local fit uses nearby points and its own weighted homography. | **Deferred at user's request.** No saving impact; leave the API alone for now. |
 | `render_parameters::demosaic` | An image-loading choice, rather than a rendering step. Correctly persisted so RAW capture can be reopened with the same demosaicer. | **Keep unchanged** in this alpha. |
-| `render_parameters::gamut_warning` | A rendering diagnostic currently shared across the document and persisted in the structured override. | **Plan per-view ownership**, without changing existing behaviour until view-local render state and compatibility are tested. |
+| `render_parameters::output_profile` | View/display/output colourspace selection, not a property of the scanned object. Older schema-v1 `render-overrides-v1` manifests nonetheless require a typed field. | **Per-view/operation** in PR #533; PR #534 writes `sRGB` as the neutral schema-v1 compatibility value. Do not conflate this with the persistent output tone curve, gamma, or adapted whitepoint without a separate semantic decision. |
+| `render_parameters::gamut_warning` | Diagnostic intent for an individual preview. The core renderer still consumes the flag on its temporary render-request copy. | **View-owned** in PR #533; PR #534 accepts historical schema-v1 values strictly but emits a neutral compatibility key and does not restore it into document state. Neither PR is part of this cleanup branch. |
 
 ## MTF persistence audit: separate real values from bookkeeping
 
@@ -40,7 +41,7 @@ reason to investigate ownership, **not** automatic grounds for removal.
 
 | Field(s) | Legacy `.par` and active code | Decision |
 | --- | --- | --- |
-| `mtf_parameters::wavelength` (scalar) | **Not saved** as an independent global wavelength. Runtime channel specialization, finetune and CLI one-off model evaluation assign it; persistent native channel wavelengths and measurement wavelengths are separate. | **Candidate for runtime-only extraction.** Verify numerical equivalence and CLI semantics before removing or changing this member. |
+| `mtf_parameters::wavelength` (scalar) | **Not saved** as an independent global wavelength. Runtime channel specialization, finetune and CLI one-off model evaluation assign it; persistent native channel wavelengths and measurement wavelengths are separate. | **Removed by separate PR #532**, replaced by operation-local wavelength arguments with full cross-platform and sanitizer validation. Native channel and measurement metadata remain persistent. |
 | `mtf_parameters::wavelengths[4]` | Saved via `scanner_mtf_channel_wavelengths_nm`; used by the GUI and physical model. | **Keep persistent.** |
 | `model`, `sigma`, `halo_fraction`, `halo_sigma`, `blur_diameter`, `defocus`, `f_stop`, `pixel_pitch`, `sensor_fill_factor`, `scan_dpi` | Explicit `scanner_mtf_*` and `scan_dpi` keys persist them; they affect analytical/modelled sharpening. | **Keep persistent.** |
 | `measured_mtf_idx`, curve list and its frequency/contrast/uncertainty samples | Serialized; selected curves and uncertainties affect deconvolution and numerical fitting. | **Keep persistent.** |
@@ -50,11 +51,12 @@ reason to investigate ownership, **not** automatic grounds for removal.
 | `mtf_estimation_options` | Separate per-fit request structure supplied by the GUI, **not** embedded in `mtf_parameters`. | **Already appropriately separated.** |
 | `mtf_parameters::computed_mtf` | Nested return-value containing derived chart/CSV curves, **not** an embedded parameter member. | **Already appropriately separated.** |
 
-**Follow-up:** check that the scalar `mtf_parameters::wavelength` can be passed
-as an operation-local specialization without losing CLI overrides or changing
-existing physical-model fits. The fact that other measurement provenance was
-originally considered bookkeeping is insufficient to remove it: most of it
-is explicitly saved and used by the GUI.
+**Follow-up resolved in PR #532:** the effective optical wavelength is passed
+to MTF/PSF/fitting and render operations explicitly, including color-loss
+simulation, with wavelength-aware cache identities and preserved CLI override
+semantics. That PR has a green full test matrix. The fact that measurement
+provenance was originally considered bookkeeping is insufficient to remove it:
+most of it is explicitly saved and used by the GUI.
 
 ## Confirmed user decisions for the next GUI work
 
@@ -66,9 +68,11 @@ is explicitly saved and used by the GUI.
   already determine position.
 - Defer `copy_without_points()`, which has no impact on saving.
 - Keep `demosaic` in its current structure.
-- `gamut_warning` should probably become **per-view**; confirm how each view
-  requests its renderer before changing document ownership or saved-state
-  compatibility.
+- `gamut_warning` and the preview `output_profile` are **per-view**, without
+  modifying the shared document or Undo, in PR #533. PR #534 makes their
+  historical archive keys neutral compatibility placeholders, while retaining
+  the four genuine structured inputs including `output_gamma`. Explicit
+  Render-to-File output choice remains separate from view display choices.
 
 ## Fields checked and intentionally retained
 
