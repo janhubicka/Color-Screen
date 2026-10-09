@@ -4216,4 +4216,158 @@ decode_parameter_json_v2_correction_grids (
   return v2_decode_correction_grids_root (root, render, error);
 }
 
+
+/* Native schema-v2 document envelope. Unlike the v1 ZIP writer, this has a
+   single authoritative typed JSON root. Component encoders create validated
+   root objects; append only their members, never a legacy CSP mirror. */
+namespace
+{
+constexpr size_t v2_max_document_bytes = 256 * 1024 * 1024;
+constexpr size_t v2_max_document_nodes = 12000000;
+
+/* Append the members of a trusted, validated component root to DOC.
+   Each component emits a complete JSON object and knows its stable names.
+   Strip only its outermost braces, preserving every nested numeric value. */
+bool
+v2_append_document_component (const std::string &fragment,
+                              std::string *doc, std::string *error)
+{
+  const size_t first_brace = fragment.find_first_not_of (" \t\r\n");
+  const size_t last_brace = fragment.find_last_not_of (" \t\r\n");
+  if (first_brace == std::string::npos || last_brace <= first_brace
+      || fragment[first_brace] != '{' || fragment[last_brace] != '}')
+    return archive_fail (error, "invalid internal v2 component object");
+  const size_t first_key
+      = fragment.find_first_not_of (" \t\r\n", first_brace + 1);
+  const size_t last_key
+      = fragment.find_last_not_of (" \t\r\n", last_brace - 1);
+  if (first_key == std::string::npos || first_key > last_key
+      || last_key >= last_brace)
+    return archive_fail (error, "empty internal v2 component");
+  if (doc->size () > v2_max_document_bytes - (last_key - first_key + 3))
+    return archive_fail (error, "v2 document exceeds size limit");
+  *doc += ",\n";
+  doc->append (fragment, first_key, last_key - first_key + 1);
+  return true;
+}
+} // anonymous namespace
+
+/* Encode all authoritative persistent processing/calibration domains into
+   one complete plain-JSON document. The in-memory result does not change
+   Save As, CLI, recovery or on-disk content format until their integration
+   and compatibility tests have been completed. */
+bool
+encode_parameter_json_v2_document (
+    const scr_to_img_parameters &geometry,
+    const scr_detect_parameters &detection,
+    const render_parameters &render,
+    const solver_parameters &solver,
+    const std::vector<point_t> &profile_spots,
+    std::string *output, std::string *error)
+{
+  if (error)
+    error->clear ();
+  if (!output)
+    return archive_fail (error, "missing v2 document output");
+  std::string text
+      = "{\n  \"format\": \"org.colorscreen.parameters\",\n"
+        "  \"schema_version\": 2";
+  std::string component;
+
+  /* Maintain stable ordering for reproducible files and useful diffs. */
+  if (!encode_parameter_json_v2_capture (render, &component, error)
+      || !v2_append_document_component (component, &text, error)
+      || !encode_parameter_json_v2_process (render, &component, error)
+      || !v2_append_document_component (component, &text, error)
+      || !encode_parameter_json_v2_registration (
+             geometry, detection, solver, profile_spots, &component, error)
+      || !v2_append_document_component (component, &text, error)
+      || !encode_parameter_json_v2_reconstruction (render, &component, error)
+      || !v2_append_document_component (component, &text, error)
+      || !encode_parameter_json_v2_sharpness (render, &component, error)
+      || !v2_append_document_component (component, &text, error)
+      || !encode_parameter_json_v2_color (render, &component, error)
+      || !v2_append_document_component (component, &text, error)
+      || !encode_parameter_json_v2_correction_grids (render, &component, error)
+      || !v2_append_document_component (component, &text, error))
+    return false;
+  text += "\n}\n";
+  if (text.size () > v2_max_document_bytes || !valid_utf8 (text))
+    return archive_fail (error, "v2 document exceeds UTF-8/size limit");
+  *output = std::move (text);
+  return true;
+}
+
+/* Parse one full JSON syntax tree with strict v2 identity, then use the same
+   typed component decoders as focused regression tests. No component may
+   publish into the original document before all sections have validated. */
+bool
+decode_parameter_json_v2_document (
+    const std::string &input,
+    scr_to_img_parameters *geometry,
+    scr_detect_parameters *detection,
+    render_parameters *render,
+    solver_parameters *solver,
+    std::vector<point_t> *profile_spots,
+    std::string *error)
+{
+  if (error)
+    error->clear ();
+  if (!geometry || !detection || !render || !solver || !profile_spots)
+    return archive_fail (error, "missing v2 document destination");
+  if (input.size () > v2_max_document_bytes || !valid_utf8 (input))
+    return archive_fail (error, "invalid v2 document UTF-8/size");
+  json_parser parser (input.data (), input.data () + input.size (),
+                      v2_max_document_nodes);
+  json_value root;
+  if (!parser.parse (&root))
+    return archive_fail (error, "invalid v2 document JSON: "
+                         + parser.error ());
+  if (root.type != json_value::kind::object)
+    return archive_fail (error, "v2 document root must be an object");
+
+  const json_value *format
+      = v2_required (root, "format", json_value::kind::string, error);
+  const json_value *version
+      = v2_required (root, "schema_version",
+                     json_value::kind::number, error);
+  uint64_t schema = 0;
+  if (!format || format->text != "org.colorscreen.parameters"
+      || !version || !json_uint64 (*version, &schema) || schema != 2)
+    return archive_fail (error, "unsupported v2 parameter document identity");
+
+  /* Do not reinterpret old ZIP/CSP mirrors as optional v2 payloads, and do
+     not ignore required features that an older reader cannot preserve. */
+  if (object_member (root, "state") || object_member (root, "legacy_csp")
+      || object_member (root, "payloads"))
+    return archive_fail (error, "legacy container members are not v2 state");
+  const json_value *features = object_member (root, "required_features");
+  if (features && (features->type != json_value::kind::array
+                   || !features->array_value.empty ()))
+    return archive_fail (error, "unsupported required v2 parameter feature");
+
+  scr_to_img_parameters parsed_geometry;
+  scr_detect_parameters parsed_detection;
+  render_parameters parsed_render;
+  solver_parameters parsed_solver;
+  std::vector<point_t> parsed_spots;
+  if (!v2_decode_capture_root (root, &parsed_render, error)
+      || !v2_decode_process_root (root, &parsed_render, error)
+      || !v2_decode_registration_root (
+             root, &parsed_geometry, &parsed_detection, &parsed_solver,
+             &parsed_spots, error)
+      || !v2_decode_reconstruction_root (root, &parsed_render, error)
+      || !v2_decode_sharpness_root (root, &parsed_render, error)
+      || !v2_decode_color_root (root, &parsed_render, error)
+      || !v2_decode_correction_grids_root (root, &parsed_render, error))
+    return false;
+
+  *geometry = std::move (parsed_geometry);
+  *detection = std::move (parsed_detection);
+  *render = std::move (parsed_render);
+  *solver = std::move (parsed_solver);
+  *profile_spots = std::move (parsed_spots);
+  return true;
+}
+
 }
