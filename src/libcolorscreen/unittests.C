@@ -10570,6 +10570,122 @@ test_stitch_tile_adjustment_grid ()
 }
 
 
+/* Colour profiles, observer conditions and editable tone curves must have
+   exact native JSON representation without saving output ICC/gamma choices. */
+static bool
+test_native_json_v2_color ()
+{
+  render_parameters original;
+  original.scanner_red = {0.4125f, 0.2125f, 0.0125f};
+  original.scanner_green = {0.325f, 0.715f, 0.065f};
+  original.scanner_blue = {0.125f, 0.0725f, 0.951f};
+  original.profiled_dark = {0.0125f, 0.025f, 0.0375f};
+  original.profiled_red = {0.8125f, 0.05f, 0.125f};
+  original.profiled_green = {0.125f, 0.825f, 0.0625f};
+  original.profiled_blue = {0.03125f, 0.0625f, 0.9f};
+  original.white_balance = {1.125f, 0.875f, 1.25f};
+  original.presaturation = 1.25f;
+  original.temperature = 5500.125f;
+  original.backlight_temperature = 6500.375f;
+  original.observer_whitepoint = {0.3127f, 0.3290f};
+  original.dye_balance = render_parameters::dye_balance_whitepoint;
+  original.saturation = 1.125f;
+  original.brightness = 0.875f;
+  original.output_tone_curve = tone_curve::tone_curve_custom;
+  original.output_tone_curve_control_points.clear ();
+  for (int i = 0; i < 1500; ++i)
+    original.output_tone_curve_control_points.push_back (
+        {(coord_t)i / 1499.0, (coord_t)(i * i) / (1499.0 * 1499.0)});
+
+  std::string json, error;
+  if (!encode_parameter_json_v2_color (original, &json, &error)
+      || json.find ("\"scanner_primaries\"") == std::string::npos
+      || json.find ("\"output_profile\"") != std::string::npos
+      || json.find ("\"output_gamma\"") != std::string::npos)
+    return false;
+
+  render_parameters decoded;
+  decoded.demosaic = image_data::demosaic_PPG;
+  decoded.screen_blur_radius = 0.375;
+  if (!decode_parameter_json_v2_color (json, &decoded, &error))
+    {
+      fprintf (stderr, "Native v2 colour decode failed: %s\n", error.c_str ());
+      return false;
+    }
+  if (decoded.scanner_red.x != original.scanner_red.x
+      || decoded.scanner_red.y != original.scanner_red.y
+      || decoded.scanner_red.z != original.scanner_red.z
+      || decoded.scanner_green.x != original.scanner_green.x
+      || decoded.scanner_green.y != original.scanner_green.y
+      || decoded.scanner_green.z != original.scanner_green.z
+      || decoded.scanner_blue.x != original.scanner_blue.x
+      || decoded.scanner_blue.y != original.scanner_blue.y
+      || decoded.scanner_blue.z != original.scanner_blue.z
+      || decoded.profiled_dark != original.profiled_dark
+      || decoded.profiled_red != original.profiled_red
+      || decoded.profiled_green != original.profiled_green
+      || decoded.profiled_blue != original.profiled_blue
+      || decoded.white_balance != original.white_balance
+      || decoded.presaturation != original.presaturation
+      || decoded.temperature != original.temperature
+      || decoded.backlight_temperature != original.backlight_temperature
+      || decoded.observer_whitepoint != original.observer_whitepoint
+      || decoded.dye_balance != original.dye_balance
+      || decoded.saturation != original.saturation
+      || decoded.brightness != original.brightness
+      || decoded.output_tone_curve != original.output_tone_curve
+      || decoded.output_tone_curve_control_points
+             != original.output_tone_curve_control_points
+      || decoded.demosaic != image_data::demosaic_PPG
+      || decoded.screen_blur_radius != 0.375)
+    {
+      fprintf (stderr, "Native v2 colour roundtrip lost a saved value\n");
+      return false;
+    }
+  std::string second;
+  if (!encode_parameter_json_v2_color (decoded, &second, &error)
+      || second != json)
+    return false;
+
+  const render_parameters unchanged = decoded;
+  for (const auto &substitution :
+       {std::pair<std::string, std::string> {
+            "\"type\": \"custom\"", "\"type\": \"missing-type\""},
+        {"\"saturation\": 1.125", "\"saturation\": 1e999"},
+        {"\"observer_whitepoint\": [", "\"unknown_whitepoint\": ["},
+        {"\"control_points\": [[0, 0]", "\"control_points\": [[0, 0, 0]"},
+        {"\"presaturation\": 1.25",
+         "\"presaturation\": 1.25, \"presaturation\": 1.5"}})
+    {
+      std::string bad = json;
+      size_t at = bad.find (substitution.first);
+      if (at == std::string::npos)
+        {
+          fprintf (stderr, "V2 colour test replacement not found\n");
+          return false;
+        }
+      bad.replace (at, substitution.first.size (), substitution.second);
+      if (decode_parameter_json_v2_color (bad, &decoded, &error)
+          || decoded.output_tone_curve != unchanged.output_tone_curve
+          || decoded.output_tone_curve_control_points
+                 != unchanged.output_tone_curve_control_points
+          || decoded.saturation != unchanged.saturation
+          || decoded.temperature != unchanged.temperature
+          || decoded.demosaic != unchanged.demosaic)
+        {
+          fprintf (stderr, "Invalid v2 colour payload modified document\n");
+          return false;
+        }
+    }
+
+  original.white_balance.red = my_quiet_nan<luminosity_t> ();
+  std::string untouched = "keep";
+  if (encode_parameter_json_v2_color (original, &untouched, &error)
+      || untouched != "keep")
+    return false;
+  return true;
+}
+
 /* Historical material settings must survive as native structured values,
    including the disabled contact-copy simulation's full editable H&D curve. */
 static bool
@@ -11228,6 +11344,8 @@ main (int argc, char **argv)
     { "mesh_inversion", "mesh inversion tests", [] () { return test_mesh_inversion (); } },
     { "cow_points", "cow points tests", [] () { return test_cow_points (); } },
     { "image_area", "image area tests", [] () { return test_image_area (); } },
+    { "json_v2_color", "native JSON schema-v2 colour/appearance codec",
+      [] () { return test_native_json_v2_color (); } },
     { "json_v2_process", "native JSON schema-v2 historical process codec",
       [] () { return test_native_json_v2_process (); } },
     { "json_v2_reconstruction", "native JSON schema-v2 reconstruction codec",
