@@ -49,6 +49,7 @@ bool render_img_normal(render_type_parameters rtparam,
 		       progress_info *progress)
 {
   T render (param, img, rparam, 255);
+  render.set_output_parameters (rtparam.output);
   render.set_render_type (rtparam);
   if (progress)
     progress->set_task ("precomputing", 1);
@@ -95,6 +96,7 @@ bool render_img_downscale(render_type_parameters rtparam,
 			  progress_info *progress)
 {
   T render (param, img, rparam, 255);
+  render.set_output_parameters (rtparam.output);
   render.set_render_type (rtparam);
   if (progress)
     progress->set_task ("precomputing", 1);
@@ -148,6 +150,7 @@ bool render_img_gray_downscale(render_type_parameters rtparam,
 			       progress_info *progress)
 {
   T render (param, img, rparam, 255);
+  render.set_output_parameters (rtparam.output);
   render.set_render_type (rtparam);
   if (progress)
     progress->set_task ("precomputing", 1);
@@ -192,6 +195,7 @@ template<typename T,typename P,typename RP> T*
 init_render_scr (RP &rtparam, render_parameters &my_rparam, image_data &img, scr_to_img_parameters &param, P &oparam, progress_info *progress)
 {
   T *r = new T (param, img, my_rparam, 255);
+  r->set_output_parameters (rtparam.output);
   r->set_render_type (rtparam);
   if (!r->precompute_all (progress))
     {
@@ -209,6 +213,7 @@ template<typename T,typename P,typename RP> T*
 init_render_img (RP &rtparam, render_parameters &my_rparam, image_data &img, scr_to_img_parameters &param, P &oparam, progress_info *progress)
 {
   T *r = new T (oparam, img, my_rparam, 255);
+  r->set_output_parameters (rtparam.output);
   r->set_render_type (rtparam);
   if (!r->precompute_all (progress))
     {
