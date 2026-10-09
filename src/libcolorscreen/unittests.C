@@ -9795,18 +9795,19 @@ test_parameter_archive ()
       || old_manifest.render_overrides.output_profile
              != render_output_parameters::output_profile_xyz
       || !old_manifest.render_overrides.gamut_warning
-      || old_manifest.render_overrides.output_gamma != 2.4)
+      || old_manifest.render_overrides.output_gamma != (luminosity_t)2.4)
     {
       fprintf (stderr,
                "Historical v1 output settings: loaded=%d present=%d "
-               "profile=%d (want %d) gamut=%d gamma=%.17g (want 2.4), error=%s\n",
+               "profile=%d (want %d) gamut=%d gamma=%.17g "
+               "(want %.17g), error=%s\n",
                (int)historical_loaded,
                (int)old_manifest.render_overrides.present,
                (int)old_manifest.render_overrides.output_profile,
                (int)render_output_parameters::output_profile_xyz,
                (int)old_manifest.render_overrides.gamut_warning,
                (double)old_manifest.render_overrides.output_gamma,
-               error.c_str ());
+               (double)(luminosity_t)2.4, error.c_str ());
       std::remove (historical.c_str ());
       return false;
     }
