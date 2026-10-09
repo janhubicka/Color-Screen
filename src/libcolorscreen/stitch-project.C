@@ -617,6 +617,15 @@ stitch_project::write_tiles (render_parameters rparam, render_to_file_params *rf
   for (int y = 0; y < params.height; y++)
     for (int x = 0; x < params.width; x++)
       {
+        /* Individual-tile export uses the same request-only visibility mask
+           as interactive stitching; a hidden tile is not an image setting. */
+        if (!rtparam.output.tile_enabled_p (x, y, params.width,
+                                            params.height))
+          {
+            if (progress)
+              progress->inc_progress ();
+            continue;
+          }
 	for (int i = 0; i < n; i++)
 	  {
 	    if (progress && progress->cancel_requested ())
