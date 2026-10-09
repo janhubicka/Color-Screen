@@ -6272,14 +6272,20 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
       if (best_solver.optimize_emulsion_intensities)
         ret.merged_screen = best_solver.tiles[0].merged_scr->get_image ();
 
-      screen tmp;
-      best_solver.collect_screen (&tmp, best_solver.start.data (), 0);
-      ret.collected_screen = tmp.get_image ();
+      /* A screen carries two 128x128x3 floating-point planes. Keeping
+         several such temporary screens in this finetune stack frame
+         makes the frame multiple megabytes, stressing macOS ASan's
+         stack-lifetime instrumentation on asynchronous GUI workers. */
+      auto collected = std::make_unique<screen> ();
+      best_solver.collect_screen (collected.get (), best_solver.start.data (), 0);
+      ret.collected_screen = collected->get_image ();
 
-      screen scr, scr1;
-      scr1.initialize_dot ();
-      if (best_solver.apply_blur (best_solver.start.data (), 0, &scr, &scr1))
-        ret.dot_spread = scr.get_image (true, 1);
+      auto dot_screen = std::make_unique<screen> ();
+      auto dot_source = std::make_unique<screen> ();
+      dot_source->initialize_dot ();
+      if (best_solver.apply_blur (best_solver.start.data (), 0,
+                                  dot_screen.get (), dot_source.get ()))
+        ret.dot_spread = dot_screen->get_image (true, 1);
     }
   if (fparams.screen_file)
     best_solver.original_scr->save_tiff (fparams.screen_file);
@@ -6291,16 +6297,18 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
     best_solver.tiles[0].merged_scr->save_tiff (fparams.merged_file);
   if (fparams.collected_file)
     {
-      screen tmp;
-      best_solver.collect_screen (&tmp, best_solver.start.data (), 0);
-      tmp.save_tiff (fparams.collected_file);
+      auto collected = std::make_unique<screen> ();
+      best_solver.collect_screen (collected.get (), best_solver.start.data (), 0);
+      collected->save_tiff (fparams.collected_file);
     }
   if (fparams.dot_spread_file)
     {
-      screen scr, scr1;
-      scr1.initialize_dot ();
-      if (best_solver.apply_blur (best_solver.start.data (), 0, &scr, &scr1))
-        scr.save_tiff (fparams.dot_spread_file, true, 1);
+      auto dot_screen = std::make_unique<screen> ();
+      auto dot_source = std::make_unique<screen> ();
+      dot_source->initialize_dot ();
+      if (best_solver.apply_blur (best_solver.start.data (), 0,
+                                  dot_screen.get (), dot_source.get ()))
+        dot_screen->save_tiff (fparams.dot_spread_file, true, 1);
     }
   // printf ("%i %i %i %i %f %f %f %f\n", bx, by, fsx, fsy,
   // best_solver.tile_pos[twidth/2+(theight/2)*twidth].x,
