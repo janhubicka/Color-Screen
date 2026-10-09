@@ -73,6 +73,16 @@ public:
    * @param renderType Parameters for specific renderers (e.g. Paget, Thames).
    * @param solver Parameters for the registration solver.
    */
+  /** Set this view's display-only gamut overlay independently from saved state. */
+  void setViewGamutWarning(bool enabled);
+  bool viewGamutWarning() const { return m_viewGamutWarning; }
+
+  /** Select a color space for the onscreen view, not for its source file. */
+  void setViewOutputProfile(colorscreen::render_parameters::output_profile_t profile);
+  colorscreen::render_parameters::output_profile_t viewOutputProfile() const {
+    return m_viewOutputProfile;
+  }
+
   void setImage(std::shared_ptr<colorscreen::image_data> scan,
                 colorscreen::render_parameters *rparams,
                 colorscreen::scr_to_img_parameters *scrToImg,
@@ -470,6 +480,10 @@ private:
 
   std::shared_ptr<colorscreen::image_data> m_scan;
   colorscreen::render_parameters *m_rparams = nullptr;
+  // View-local display intent: never enters document parameters or Undo.
+  bool m_viewGamutWarning = false;
+  colorscreen::render_parameters::output_profile_t m_viewOutputProfile =
+      colorscreen::render_parameters::output_profile_sRGB;
   colorscreen::scr_to_img_parameters *m_scrToImg = nullptr;
   colorscreen::scr_detect_parameters *m_scrDetect = nullptr;
   colorscreen::render_type_parameters *m_renderType = nullptr;
