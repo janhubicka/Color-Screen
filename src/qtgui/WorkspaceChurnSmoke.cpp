@@ -313,11 +313,20 @@ void startWorkspaceChurnSmoke(ColorScreenApplication &app,
           return;
         }
 
-        // Gamut warning and output colourspace are per-canvas preview
-        // settings. They must not dirty the shared document or leak between
+        // Gamut warnings and the internal output request are per-canvas
+        // settings. The onscreen GUI deliberately does not expose profile
+        // selection until ICC-managed/HDR display surfaces are supported.
+        // They must not dirty the shared document or leak between
         // ordinary views of the same photograph.
         const ParameterState colorViewBaseline =
             first->documentStateSnapshot();
+        for (QAction *action : first->m_viewMenu->actions())
+          if (action && action->menu() &&
+              action->menu()->title() == QStringLiteral("Display colourspace")) {
+            fail(QStringLiteral(
+                "Unmanaged XYZ/source display profile menu was exposed"));
+            return;
+          }
         first->m_imageWidget->setViewGamutWarning(true);
         view->imageWidget()->setViewOutputProfile(
             colorscreen::render_output_parameters::output_profile_xyz);
@@ -329,18 +338,14 @@ void startWorkspaceChurnSmoke(ColorScreenApplication &app,
             view->imageWidget()->viewOutputProfile() !=
                 colorscreen::render_output_parameters::output_profile_xyz ||
             first->documentStateSnapshot() != colorViewBaseline ||
-            first->m_gamutWarningAction->isChecked() ||
-            !first->m_viewOutputProfileActions[
-                colorscreen::render_output_parameters::output_profile_xyz]->isChecked()) {
+            first->m_gamutWarningAction->isChecked()) {
           fail(QStringLiteral(
               "View-local display options affected a sibling or document state"));
           return;
         }
         workspace->activateDocument(first);
         first->syncInspectorViewActions();
-        if (!first->m_gamutWarningAction->isChecked() ||
-            !first->m_viewOutputProfileActions[
-                colorscreen::render_output_parameters::output_profile_sRGB]->isChecked()) {
+        if (!first->m_gamutWarningAction->isChecked()) {
           fail(QStringLiteral(
               "Shared View menu did not track the primary image canvas"));
           return;
