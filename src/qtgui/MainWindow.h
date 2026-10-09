@@ -386,6 +386,9 @@ signals:
       Secondary views refresh from this signal while keeping render mode, zoom,
       and pan view-local. */
   void documentStateChanged();
+  /** A stitched tile became ready. Repaint views without changing Undo or
+      publishing any new saved parameter state. */
+  void imageTilesChanged();
   /** Emitted when session-local MTF fit provenance changes without parameters. */
   void mtfCalibrationStateChanged();
   /** Emitted when detected-patch map availability or visibility changes. */
