@@ -536,12 +536,10 @@ bool MainWindow::saveReproducibilityReportToFile(const QString &fileName,
   renderOverrides.insert(
       QStringLiteral("output_profile"),
       QString::fromLatin1(
-          colorscreen::render_parameters::output_profile_names
-              [static_cast<int>(state.rparams.output_profile)]));
-  renderOverrides.insert(QStringLiteral("output_gamma"),
-                         state.rparams.output_gamma);
-  renderOverrides.insert(QStringLiteral("gamut_warning"),
-                         state.rparams.gamut_warning);
+          colorscreen::render_output_parameters::output_profile_names
+              [(int)colorscreen::render_output_parameters::output_profile_sRGB]));
+  renderOverrides.insert(QStringLiteral("output_gamma"), -1);
+  renderOverrides.insert(QStringLiteral("gamut_warning"), false);
   metadata.insert(QStringLiteral("render_overrides"), renderOverrides);
 
   QJsonObject geometryFinalFrame;
@@ -1985,11 +1983,9 @@ bool MainWindow::loadParameterFile(const QString &fileName) {
     updateColorCheckBoxState();
   }
 
-  // Sync Gamut Warning Button
-  if (m_gamutWarningAction) {
-    QSignalBlocker blocker(m_gamutWarningAction);
-    m_gamutWarningAction->setChecked(m_rparams.gamut_warning);
-  }
+  // Loading document processing state must not reset this view's output
+  // colours or its gamut diagnostics.
+  syncInspectorViewActions();
 
   if (m_undoStack)
     m_undoStack->clear();
