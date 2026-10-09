@@ -235,9 +235,6 @@ bool profileCalibrationInputsDiffer(
   a.profiled_red = b.profiled_red = defaults.profiled_red;
   a.profiled_green = b.profiled_green = defaults.profiled_green;
   a.profiled_blue = b.profiled_blue = defaults.profiled_blue;
-  // optimize_color_model_colors() forces XYZ output internally.
-  a.output_profile = b.output_profile =
-      colorscreen::render_parameters::output_profile_xyz;
   return a != b;
 }
 
@@ -2616,16 +2613,16 @@ void MainWindow::createMenus() {
 
   // Display colourspace belongs to the inspected canvas, not the document.
   QMenu *displayProfileMenu = m_viewMenu->addMenu(tr("Display colourspace"));
-  for (int i = 0; i < (int)colorscreen::render_parameters::output_profile_max;
+  for (int i = 0; i < (int)colorscreen::render_output_parameters::output_profile_max;
        ++i) {
     QAction *action = displayProfileMenu->addAction(
-        QString::fromUtf8(colorscreen::render_parameters::output_profile_names[i]));
+        QString::fromUtf8(colorscreen::render_output_parameters::output_profile_names[i]));
     action->setCheckable(true);
     m_viewOutputProfileActions[i] = action;
     connect(action, &QAction::triggered, this, [this, i]() {
       if (ImageWidget *view = inspectorImageWidget()) {
         view->setViewOutputProfile(
-            static_cast<colorscreen::render_parameters::output_profile_t>(i));
+            static_cast<colorscreen::render_output_parameters::output_profile_t>(i));
         syncInspectorViewActions();
       }
     });
@@ -2980,7 +2977,7 @@ void MainWindow::syncInspectorViewActions() {
     const QSignalBlocker blocker(m_gamutWarningAction);
     m_gamutWarningAction->setChecked(image->viewGamutWarning());
   }
-  for (int i = 0; i < (int)colorscreen::render_parameters::output_profile_max;
+  for (int i = 0; i < (int)colorscreen::render_output_parameters::output_profile_max;
        ++i) {
     QAction *action = m_viewOutputProfileActions[i];
     if (!action)
@@ -6146,11 +6143,13 @@ void MainWindow::onRender() {
 
     // Keep the settings dialog parent-owned and asynchronous too. The render
     // request snapshots document + dialog state only after explicit acceptance.
-    colorscreen::render_parameters previewParams = m_rparams;
-    if (ImageWidget *view = inspectorImageWidget())
-      previewParams.output_profile = view->viewOutputProfile();
+    colorscreen::render_type_parameters previewType = m_renderTypeParams;
+    if (ImageWidget *view = inspectorImageWidget()) {
+      previewType.output.output_profile = view->viewOutputProfile();
+      previewType.output.gamut_warning = view->viewGamutWarning();
+    }
     auto *dialog = new RenderDialog(
-        m_renderTypeParams, previewParams, m_scrToImgParams, m_scan.get(),
+        previewType, m_rparams, m_scrToImgParams, m_scan.get(),
         outputPath, isDng, this);
     dialog->setObjectName(QStringLiteral("RenderSettingsDialog"));
     dialog->setAttribute(Qt::WA_DeleteOnClose);
@@ -6168,7 +6167,7 @@ void MainWindow::onRender() {
       request.detectParams = m_detectParams;
       request.renderParams = m_rparams;
       request.renderType = dialog->renderTypeParams();
-      request.renderParams.output_profile = dialog->outputProfile();
+      request.renderType.output.output_profile = dialog->outputProfile();
       request.outputPath = outputPath;
       request.progressTitle =
           tr("Rendering %1").arg(QFileInfo(outputPath).fileName());
