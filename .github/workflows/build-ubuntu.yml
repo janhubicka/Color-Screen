@@ -102,12 +102,14 @@ jobs:
       run: |
         if ! make -j$(nproc) check; then
           echo '=== Failed TAP test logs ==='
-          for log in testsuite/*.test.log; do
+          for log in testsuite/*.log; do
             if [ -f "$log" ] && grep -Eq '(^not ok|^FAIL:|FAILED:|Error:|failed)' "$log"; then
               echo "=== $log ==="
               tail -n 240 "$log"
             fi
           done
+          echo '=== Focused MTF/focus-cache regression diagnostics ==='
+          ./src/libcolorscreen/unittests finetune_focus_cache mtf_model || true
           exit 1
         fi
     - name: Upload Test Results
