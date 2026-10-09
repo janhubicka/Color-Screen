@@ -11,6 +11,10 @@ if test -z "$srcdir"; then
     test "${VERBOSE+set}" != set && VERBOSE=1
 fi
 
+# Check the complete legacy-key migration inventory before running the C++
+# codec round trips. A new persistent field must be classified explicitly.
+python3 "$srcdir/check-parameter-v2-inventory.py"
+
 ../src/libcolorscreen/unittests
 
 # Exercise the serializer as a complete document-state round trip, not only the
