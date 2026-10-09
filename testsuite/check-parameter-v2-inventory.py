@@ -83,7 +83,7 @@ def main() -> int:
         return 1
 
     print(
-        f"v2 migration coverage inventory: {len(tracked)} legacy keys and "
+        f"# v2 migration coverage inventory: {len(tracked)} legacy keys and "
         f"{len(extra)} supplemental keys accounted for"
     )
     return 0
