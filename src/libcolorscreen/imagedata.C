@@ -55,6 +55,7 @@ public:
   std::mutex processing_mutex;
   std::shared_ptr<LibRaw> processor;
   std::string source_filename;
+  int full_res_width = 0;
   void *input_buffer = nullptr;
   uint64_t reserved_bytes = 0;
 
@@ -235,6 +236,7 @@ public:
     m_processor->free_image ();
     source->processor = std::move (m_processor);
     source->source_filename = std::move (m_source_filename);
+    source->full_res_width = m_img->full_res_width;
     source->input_buffer = m_buffer;
     m_buffer = nullptr;
     return source;
@@ -771,7 +773,7 @@ raw_image_data_loader::init_loader (const char *name, const char **error,
   m_source_filename = name;
   size_t buffer_size = 0;
   m_buffer = NULL;
-  if (has_suffix (name, ".eip"))
+  if (!m_reuse_source && has_suffix (name, ".eip"))
     {
       int errcode;
       zip_t *zip = NULL;
@@ -876,6 +878,13 @@ raw_image_data_loader::init_loader (const char *name, const char **error,
         }
       zip_close (zip);
     }
+  /* dcraw_process() supports multiple passes after unpack(), but parameters
+     retained from the previous pass must be reset before selecting the new
+     algorithm (especially half-size and noninterpolating modes). */
+  m_processor->imgdata.params.half_size = 0;
+  m_processor->imgdata.params.no_interpolation = 0;
+  m_img->demosaiced_by = image_data::demosaic_max;
+  m_img->demosaic = demosaic;
   m_processor->imgdata.params.gamm[0] = m_processor->imgdata.params.gamm[1]
       = m_processor->imgdata.params.no_auto_bright = 1;
   m_processor->imgdata.params.use_camera_matrix = 0;
@@ -946,11 +955,14 @@ raw_image_data_loader::init_loader (const char *name, const char **error,
   m_processor->imgdata.params.threshold = 0;
   if (demosaic == image_data::demosaic_none || monochromatic)
     m_processor->imgdata.params.no_interpolation = 1;
-  int ret;
-  if (m_buffer)
-    ret = m_processor->open_buffer (m_buffer, buffer_size);
-  else
-    ret = m_processor->open_file (name);
+  int ret = LIBRAW_SUCCESS;
+  if (!m_reuse_source)
+    {
+      if (m_buffer)
+        ret = m_processor->open_buffer (m_buffer, buffer_size);
+      else
+        ret = m_processor->open_file (name);
+    }
   if (ret != LIBRAW_SUCCESS)
     {
       if (m_buffer)
@@ -987,8 +999,10 @@ raw_image_data_loader::init_loader (const char *name, const char **error,
       return false;
     }
   if (progress)
-    progress->set_task ("unpacking RAW data", 1);
-  if ((ret = m_processor->unpack ()) != LIBRAW_SUCCESS)
+    progress->set_task (m_reuse_source
+                            ? "reusing unpacked RAW data"
+                            : "unpacking RAW data", 1);
+  if (!m_reuse_source && (ret = m_processor->unpack ()) != LIBRAW_SUCCESS)
     {
       if (m_buffer)
         {
@@ -1001,7 +1015,9 @@ raw_image_data_loader::init_loader (const char *name, const char **error,
   /* Save the full-resolution usable width before dcraw_process which may
      halve dimensions in half-size mode.  This is needed to correct
      FocalPlaneResolution-based pixel pitch for downsampled output.  */
-  m_img->full_res_width = m_processor->imgdata.sizes.width;
+  m_img->full_res_width = m_reuse_source
+                              ? m_reuse_source->full_res_width
+                              : m_processor->imgdata.sizes.width;
   if (progress)
     progress->set_task ("demosaicing", 1);
   if ((ret = m_processor->dcraw_process ()) != LIBRAW_SUCCESS)
