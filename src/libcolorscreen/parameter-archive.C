@@ -3,6 +3,7 @@
    This file is part of ColorScreen.  */
 
 #include "parameter-archive.h"
+#include "include/mesh.h"
 
 #include <zip.h>
 
@@ -285,8 +286,9 @@ hex_value (char c)
 class json_parser
 {
 public:
-  json_parser (const char *begin, const char *end)
-      : m_cur (begin), m_end (end)
+  json_parser (const char *begin, const char *end,
+               size_t max_nodes = json_max_nodes)
+      : m_cur (begin), m_end (end), m_max_nodes (max_nodes)
   {
   }
 
@@ -316,6 +318,7 @@ private:
   const char *m_cur;
   const char *m_end;
   size_t m_nodes = 0;
+  size_t m_max_nodes;
   std::string m_error;
 
   /* Store MESSAGE as the first parser failure.  */
@@ -343,8 +346,8 @@ private:
   {
     if (depth > json_max_depth)
       return fail ("JSON manifest nesting is too deep");
-    if (++m_nodes > json_max_nodes)
-      return fail ("JSON manifest contains too many values");
+    if (++m_nodes > m_max_nodes)
+      return fail ("JSON document contains too many values");
     if (m_cur == m_end)
       return fail ("unexpected end of JSON manifest");
 
@@ -1803,6 +1806,575 @@ write_parameter_payload_file (
 
   if (error)
     error->clear ();
+  return true;
+}
+
+
+/* Native schema-v2 registration component. This is intentionally kept
+   separate from open_parameter_payload and write_parameter_payload_file:
+   neither can produce a complete v2 document until all persistent processing
+   domains have a native representation. These helpers NEVER parse CSP text. */
+namespace
+{
+constexpr size_t v2_max_registration_points = 1000000;
+constexpr size_t v2_max_mesh_points = 1000000;
+constexpr size_t v2_max_json_bytes = 128 * 1024 * 1024;
+constexpr size_t v2_max_json_nodes = 12000000;
+
+/* Validate point P before rendering it as an unquoted JSON pair. */
+bool
+v2_finite_point (point_t p)
+{
+  return my_isfinite (p.x) && my_isfinite (p.y);
+}
+
+/* Validate all channels of COLOUR. */
+bool
+v2_finite_colour (color_t colour)
+{
+  return my_isfinite (colour.red) && my_isfinite (colour.green)
+         && my_isfinite (colour.blue);
+}
+
+/* Return a pair of finite coordinates as JSON. Caller validated P. */
+std::string
+v2_point_text (point_t p)
+{
+  return "[" + json_number (p.x) + ", " + json_number (p.y) + "]";
+}
+
+/* Return a finite triplet as JSON. Caller validated C. */
+std::string
+v2_colour_text (color_t c)
+{
+  return "[" + json_number (c.red) + ", " + json_number (c.green)
+         + ", " + json_number (c.blue) + "]";
+}
+
+/* Require KEY in OBJECT with TYPE; report the field name in ERROR. */
+const json_value *
+v2_required (const json_value &object, const char *key, json_value::kind type,
+             std::string *error)
+{
+  const json_value *member = object_member (object, key);
+  if (!member || member->type != type)
+    {
+      archive_fail (error, std::string ("invalid or missing v2 field: ") + key);
+      return nullptr;
+    }
+  return member;
+}
+
+/* Read finite NUMBER into a storage type without non-finite overflow. */
+template <class T>
+bool
+v2_real (const json_value &number, T *out)
+{
+  double value = 0;
+  if (!json_finite_double (number, &value))
+    return false;
+  T converted = (T)value;
+  if (!my_isfinite (converted))
+    return false;
+  *out = converted;
+  return true;
+}
+
+/* Decode [x, y] into POINT; no partial publication on failure. */
+bool
+v2_point (const json_value &value, point_t *point)
+{
+  if (value.type != json_value::kind::array
+      || value.array_value.size () != 2)
+    return false;
+  point_t parsed;
+  if (!v2_real (value.array_value[0], &parsed.x)
+      || !v2_real (value.array_value[1], &parsed.y))
+    return false;
+  *point = parsed;
+  return true;
+}
+
+/* Decode [r, g, b] into COLOUR in stored precision. */
+bool
+v2_colour (const json_value &value, color_t *colour)
+{
+  if (value.type != json_value::kind::array
+      || value.array_value.size () != 3)
+    return false;
+  color_t parsed;
+  if (!v2_real (value.array_value[0], &parsed.red)
+      || !v2_real (value.array_value[1], &parsed.green)
+      || !v2_real (value.array_value[2], &parsed.blue))
+    return false;
+  *colour = parsed;
+  return true;
+}
+
+/* Decode a typed required finite scalar into OUT. */
+template <class T>
+bool
+v2_field_real (const json_value &object, const char *key, T *out,
+               std::string *error)
+{
+  const json_value *v
+      = v2_required (object, key, json_value::kind::number, error);
+  return v && (v2_real (*v, out)
+               || archive_fail (error,
+                                std::string ("invalid v2 number: ") + key));
+}
+
+/* Decode a typed required boolean into OUT. */
+bool
+v2_field_bool (const json_value &object, const char *key, bool *out,
+               std::string *error)
+{
+  const json_value *v
+      = v2_required (object, key, json_value::kind::boolean, error);
+  if (!v)
+    return false;
+  *out = v->boolean_value;
+  return true;
+}
+
+/* Decode a required point-valued field into POINT. */
+bool
+v2_field_point (const json_value &object, const char *key, point_t *point,
+                std::string *error)
+{
+  const json_value *v
+      = v2_required (object, key, json_value::kind::array, error);
+  return v && (v2_point (*v, point)
+               || archive_fail (error,
+                                std::string ("invalid v2 point: ") + key));
+}
+
+/* Decode an identifier from N stable choices; never serialize enum ordinals. */
+bool
+v2_enum (const json_value &object, const char *key,
+         const std::vector<std::string> &names, int *out,
+         std::string *error)
+{
+  const json_value *v
+      = v2_required (object, key, json_value::kind::string, error);
+  if (!v)
+    return false;
+  for (size_t i = 0; i < names.size (); ++i)
+    if (v->text == names[i])
+      {
+        *out = (int)i;
+        return true;
+      }
+  return archive_fail (error, std::string ("unknown v2 enum value for ") + key);
+}
+
+/* Build a list of stable ids from one property_t table. */
+template <class T>
+std::vector<std::string>
+v2_property_names (const T *names, size_t count)
+{
+  std::vector<std::string> result;
+  result.reserve (count);
+  for (size_t i = 0; i < count; ++i)
+    result.emplace_back (names[i].name);
+  return result;
+}
+
+/* Validate the complete registration component before producing JSON.
+   Particularly large meshes and point sets are bounded before traversal. */
+bool
+v2_validate_registration (
+    const scr_to_img_parameters &geometry,
+    const scr_detect_parameters &detection,
+    const solver_parameters &solver,
+    const std::vector<point_t> &profile_spots,
+    std::string *error)
+{
+  if ((int)geometry.type < 0 || (int)geometry.type >= max_scr_type
+      || (int)geometry.scanner_type < 0
+      || (int)geometry.scanner_type >= max_scanner_type)
+    return archive_fail (error, "invalid v2 screen/scanner type");
+
+  if (!v2_finite_point (geometry.center)
+      || !v2_finite_point (geometry.coordinate1)
+      || !v2_finite_point (geometry.coordinate2)
+      || !v2_finite_point (geometry.lens_correction.center)
+      || !my_isfinite (geometry.projection_distance)
+      || !my_isfinite (geometry.tilt_x)
+      || !my_isfinite (geometry.tilt_y)
+      || !my_isfinite (geometry.final_rotation)
+      || !my_isfinite (geometry.final_angle)
+      || !my_isfinite (geometry.final_ratio)
+      || !(geometry.final_ratio > 0))
+    return archive_fail (error, "invalid v2 geometry scalar");
+  for (coord_t kr : geometry.lens_correction.kr)
+    if (!my_isfinite (kr))
+      return archive_fail (error, "invalid v2 radial lens coefficient");
+
+  if (!v2_finite_colour (detection.red)
+      || !v2_finite_colour (detection.green)
+      || !v2_finite_colour (detection.blue)
+      || !v2_finite_colour (detection.black)
+      || !my_isfinite (detection.min_luminosity)
+      || !my_isfinite (detection.min_ratio))
+    return archive_fail (error, "invalid v2 screen detection control");
+
+  if (!my_isfinite (solver.lens_center_distance)
+      || solver.points.size () > v2_max_registration_points
+      || profile_spots.size () > v2_max_registration_points)
+    return archive_fail (error, "invalid v2 registration point count/policy");
+  for (const auto &p : solver.points)
+    if (!v2_finite_point (p.img) || !v2_finite_point (p.scr)
+        || (int)p.color < 0
+        || (int)p.color >= solver_parameters::max_point_color)
+      return archive_fail (error, "invalid v2 registration control point");
+  for (point_t point : profile_spots)
+    if (!v2_finite_point (point))
+      return archive_fail (error, "invalid v2 profile spot");
+
+  if (geometry.mesh_trans)
+    {
+      const mesh &m = *geometry.mesh_trans;
+      const int w = m.get_width (), h = m.get_height ();
+      if (w < 2 || h < 2
+          || (size_t)w > v2_max_mesh_points / (size_t)h
+          || !my_isfinite (m.get_xshift ())
+          || !my_isfinite (m.get_yshift ())
+          || !my_isfinite (m.get_xstep ())
+          || !my_isfinite (m.get_ystep ())
+          || m.get_xstep () == 0 || m.get_ystep () == 0)
+        return archive_fail (error, "invalid v2 mesh dimensions/geometry");
+      for (int y = 0; y < h; ++y)
+        for (int x = 0; x < w; ++x)
+          if (!v2_finite_point (m.get_point ({x, y})))
+            return archive_fail (error, "nonfinite v2 mesh point");
+    }
+  return true;
+}
+
+/* Decode a native mesh object, checking shape and actual point count before
+   allocation. An omitted mesh must be an explicit JSON null. */
+bool
+v2_decode_mesh (const json_value &value, scr_to_img_parameters *geometry,
+                std::string *error)
+{
+  if (value.type == json_value::kind::null_value)
+    {
+      geometry->mesh_trans.reset ();
+      geometry->mesh_trans_is_scr_to_img = false;
+      return true;
+    }
+  if (value.type != json_value::kind::object)
+    return archive_fail (error, "v2 geometry mesh must be an object or null");
+
+  const json_value *direction
+      = v2_required (value, "direction", json_value::kind::string, error);
+  const json_value *dimensions
+      = v2_required (value, "dimensions", json_value::kind::array, error);
+  const json_value *points
+      = v2_required (value, "points", json_value::kind::array, error);
+  if (!direction || !dimensions || !points)
+    return false;
+  if (direction->text == "screen-to-image")
+    geometry->mesh_trans_is_scr_to_img = true;
+  else if (direction->text == "image-to-screen")
+    geometry->mesh_trans_is_scr_to_img = false;
+  else
+    return archive_fail (error, "unknown v2 mesh direction");
+
+  uint64_t w = 0, h = 0;
+  if (dimensions->array_value.size () != 2
+      || !json_uint64 (dimensions->array_value[0], &w)
+      || !json_uint64 (dimensions->array_value[1], &h)
+      || w < 2 || h < 2 || w > v2_max_mesh_points / h
+      || w > (uint64_t)std::numeric_limits<int>::max ()
+      || h > (uint64_t)std::numeric_limits<int>::max ()
+      || points->array_value.size () != w * h)
+    return archive_fail (error, "invalid v2 mesh point dimensions");
+
+  point_t shift, step;
+  if (!v2_field_point (value, "shift", &shift, error)
+      || !v2_field_point (value, "step", &step, error)
+      || step.x == 0 || step.y == 0)
+    return archive_fail (error, "invalid v2 mesh step/shift");
+
+  auto result = std::make_shared<mesh> (
+      shift.x, shift.y, step.x, step.y, (int)w, (int)h);
+  for (size_t i = 0; i < points->array_value.size (); ++i)
+    {
+      point_t p;
+      if (!v2_point (points->array_value[i], &p)
+          || !my_isfinite ((mesh::mesh_coord_t)p.x)
+          || !my_isfinite ((mesh::mesh_coord_t)p.y))
+        return archive_fail (error, "invalid v2 mesh coordinate");
+      result->set_point ({(int)(i % w), (int)(i / w)}, p);
+    }
+  geometry->mesh_trans = std::move (result);
+  return true;
+}
+} // anonymous namespace
+
+/* Encode the native registration part of a future plain JSON v2 document.
+   No CSP mirror or transitional v1 container fields are emitted. */
+bool
+encode_parameter_json_v2_registration (
+    const scr_to_img_parameters &geometry,
+    const scr_detect_parameters &detection,
+    const solver_parameters &solver,
+    const std::vector<point_t> &profile_spots,
+    std::string *output, std::string *error)
+{
+  if (error)
+    error->clear ();
+  if (!output)
+    return archive_fail (error, "missing v2 registration output");
+  if (!v2_validate_registration (geometry, detection, solver, profile_spots,
+                                 error))
+    return false;
+
+  std::string text;
+  text.reserve (2048 + solver.points.size () * 110
+                + profile_spots.size () * 48);
+  text += "{\n  \"geometry\": {\n    \"screen_type\": \"";
+  text += json_escape (scr_names[(int)geometry.type].name);
+  text += "\",\n    \"scanner_type\": \"";
+  text += json_escape (scanner_type_names[(int)geometry.scanner_type].name);
+  text += "\",\n    \"center\": " + v2_point_text (geometry.center);
+  text += ",\n    \"axis_x\": " + v2_point_text (geometry.coordinate1);
+  text += ",\n    \"axis_y\": " + v2_point_text (geometry.coordinate2);
+  text += ",\n    \"projection_distance\": "
+          + json_number (geometry.projection_distance);
+  text += ",\n    \"tilt\": "
+          + v2_point_text ({geometry.tilt_x, geometry.tilt_y});
+  text += ",\n    \"final_rotation\": "
+          + json_number (geometry.final_rotation);
+  text += ",\n    \"final_mirror\": ";
+  text += geometry.final_mirror ? "true" : "false";
+  text += ",\n    \"final_angle\": " + json_number (geometry.final_angle);
+  text += ",\n    \"final_ratio\": " + json_number (geometry.final_ratio);
+  text += ",\n    \"lens\": {\n      \"radial\": [";
+  for (int i = 0; i < 4; ++i)
+    {
+      if (i)
+        text += ", ";
+      text += json_number (geometry.lens_correction.kr[i]);
+    }
+  text += "],\n      \"center\": "
+          + v2_point_text (geometry.lens_correction.center) + "\n    },\n";
+  text += "    \"mesh\": ";
+  if (!geometry.mesh_trans)
+    text += "null";
+  else
+    {
+      const mesh &m = *geometry.mesh_trans;
+      text += "{\n      \"direction\": \"";
+      text += geometry.mesh_trans_is_scr_to_img
+                  ? "screen-to-image" : "image-to-screen";
+      text += "\",\n      \"shift\": "
+              + v2_point_text ({m.get_xshift (), m.get_yshift ()});
+      text += ",\n      \"step\": "
+              + v2_point_text ({m.get_xstep (), m.get_ystep ()});
+      text += ",\n      \"dimensions\": ["
+              + std::to_string (m.get_width ()) + ", "
+              + std::to_string (m.get_height ()) + "],\n      \"points\": [";
+      for (int y = 0; y < m.get_height (); ++y)
+        for (int x = 0; x < m.get_width (); ++x)
+          {
+            if (x || y)
+              text += ", ";
+            text += v2_point_text (m.get_point ({x, y}));
+          }
+      text += "]\n    }";
+    }
+  text += "\n  },\n  \"detection\": {\n    \"red\": "
+          + v2_colour_text (detection.red);
+  text += ",\n    \"green\": " + v2_colour_text (detection.green);
+  text += ",\n    \"blue\": " + v2_colour_text (detection.blue);
+  text += ",\n    \"black\": " + v2_colour_text (detection.black);
+  text += ",\n    \"min_luminosity\": "
+          + json_number (detection.min_luminosity);
+  text += ",\n    \"min_ratio\": " + json_number (detection.min_ratio);
+  text += "\n  },\n  \"registration\": {\n    \"optimize_lens\": ";
+  text += solver.optimize_lens ? "true" : "false";
+  text += ",\n    \"lens_center_distance\": "
+          + json_number (solver.lens_center_distance);
+  text += ",\n    \"optimize_tilt\": ";
+  text += solver.optimize_tilt ? "true" : "false";
+  text += ",\n    \"points\": [";
+  for (const auto &point : solver.points)
+    {
+      if (&point != &solver.points[0])
+        text += ",";
+      text += "\n      {\"image\": " + v2_point_text (point.img)
+              + ", \"screen\": " + v2_point_text (point.scr)
+              + ", \"color\": \""
+              + json_escape (solver_parameters::point_color_names
+                                 [(int)point.color])
+              + "\"}";
+    }
+  text += "\n    ]\n  },\n  \"profile\": {\n    \"spots\": [";
+  for (size_t i = 0; i < profile_spots.size (); ++i)
+    {
+      if (i)
+        text += ", ";
+      text += v2_point_text (profile_spots[i]);
+    }
+  text += "]\n  }\n}\n";
+  if (text.size () > v2_max_json_bytes)
+    return archive_fail (error, "v2 registration JSON exceeds memory budget");
+  *output = std::move (text);
+  return true;
+}
+
+/* Decode a self-contained native v2 registration component, committing
+   geometry, dye detection, solver settings and spots only on total success. */
+bool
+decode_parameter_json_v2_registration (
+    const std::string &input, scr_to_img_parameters *geometry,
+    scr_detect_parameters *detection, solver_parameters *solver,
+    std::vector<point_t> *profile_spots, std::string *error)
+{
+  if (error)
+    error->clear ();
+  if (!geometry || !detection || !solver || !profile_spots)
+    return archive_fail (error, "missing v2 registration destination");
+  if (input.size () > v2_max_json_bytes)
+    return archive_fail (error, "v2 registration JSON exceeds memory budget");
+  if (!valid_utf8 (input))
+    return archive_fail (error, "v2 registration JSON is not valid UTF-8");
+
+  json_parser parser (input.data (), input.data () + input.size (),
+                      v2_max_json_nodes);
+  json_value root;
+  if (!parser.parse (&root))
+    return archive_fail (error, "invalid v2 registration JSON: "
+                         + parser.error ());
+
+  const json_value *g
+      = v2_required (root, "geometry", json_value::kind::object, error);
+  const json_value *d
+      = v2_required (root, "detection", json_value::kind::object, error);
+  const json_value *r
+      = v2_required (root, "registration", json_value::kind::object, error);
+  const json_value *profile
+      = v2_required (root, "profile", json_value::kind::object, error);
+  if (!g || !d || !r || !profile)
+    return false;
+
+  scr_to_img_parameters parsed_g;
+  scr_detect_parameters parsed_d;
+  solver_parameters parsed_r;
+  std::vector<point_t> parsed_spots;
+
+  int screen_index = 0, scanner_index = 0;
+  if (!v2_enum (*g, "screen_type",
+                v2_property_names (scr_names, max_scr_type),
+                &screen_index, error)
+      || !v2_enum (*g, "scanner_type",
+                   v2_property_names (scanner_type_names, max_scanner_type),
+                   &scanner_index, error))
+    return false;
+  parsed_g.type = (scr_type)screen_index;
+  parsed_g.scanner_type = (enum scanner_type)scanner_index;
+  point_t tilt;
+  if (!v2_field_point (*g, "center", &parsed_g.center, error)
+      || !v2_field_point (*g, "axis_x", &parsed_g.coordinate1, error)
+      || !v2_field_point (*g, "axis_y", &parsed_g.coordinate2, error)
+      || !v2_field_real (*g, "projection_distance",
+                         &parsed_g.projection_distance, error)
+      || !v2_field_point (*g, "tilt", &tilt, error)
+      || !v2_field_real (*g, "final_rotation",
+                         &parsed_g.final_rotation, error)
+      || !v2_field_bool (*g, "final_mirror", &parsed_g.final_mirror, error)
+      || !v2_field_real (*g, "final_angle", &parsed_g.final_angle, error)
+      || !v2_field_real (*g, "final_ratio", &parsed_g.final_ratio, error)
+      || !(parsed_g.final_ratio > 0))
+    return archive_fail (error, "invalid v2 geometry fields");
+  parsed_g.tilt_x = tilt.x;
+  parsed_g.tilt_y = tilt.y;
+  const json_value *lens
+      = v2_required (*g, "lens", json_value::kind::object, error);
+  if (!lens)
+    return false;
+  const json_value *radial
+      = v2_required (*lens, "radial", json_value::kind::array, error);
+  if (!radial || radial->array_value.size () != 4)
+    return archive_fail (error, "invalid v2 lens polynomial");
+  for (int i = 0; i < 4; ++i)
+    if (!v2_real (radial->array_value[i],
+                  &parsed_g.lens_correction.kr[i]))
+      return archive_fail (error, "invalid v2 radial lens coefficient");
+  if (!v2_field_point (*lens, "center", &parsed_g.lens_correction.center,
+                       error))
+    return false;
+  const json_value *mesh_object = object_member (*g, "mesh");
+  if (!mesh_object || !v2_decode_mesh (*mesh_object, &parsed_g, error))
+    return archive_fail (error, "invalid or missing v2 mesh field");
+
+  const json_value *red
+      = v2_required (*d, "red", json_value::kind::array, error);
+  const json_value *green
+      = v2_required (*d, "green", json_value::kind::array, error);
+  const json_value *blue
+      = v2_required (*d, "blue", json_value::kind::array, error);
+  const json_value *black
+      = v2_required (*d, "black", json_value::kind::array, error);
+  if (!red || !green || !blue || !black
+      || !v2_colour (*red, &parsed_d.red)
+      || !v2_colour (*green, &parsed_d.green)
+      || !v2_colour (*blue, &parsed_d.blue)
+      || !v2_colour (*black, &parsed_d.black)
+      || !v2_field_real (*d, "min_luminosity",
+                         &parsed_d.min_luminosity, error)
+      || !v2_field_real (*d, "min_ratio", &parsed_d.min_ratio, error))
+    return archive_fail (error, "invalid v2 screen dye controls");
+
+  if (!v2_field_bool (*r, "optimize_lens", &parsed_r.optimize_lens, error)
+      || !v2_field_real (*r, "lens_center_distance",
+                         &parsed_r.lens_center_distance, error)
+      || !v2_field_bool (*r, "optimize_tilt", &parsed_r.optimize_tilt, error))
+    return false;
+  const json_value *points
+      = v2_required (*r, "points", json_value::kind::array, error);
+  if (!points || points->array_value.size () > v2_max_registration_points)
+    return archive_fail (error, "invalid v2 registration points");
+  for (const json_value &point : points->array_value)
+    {
+      if (point.type != json_value::kind::object)
+        return archive_fail (error, "v2 registration point must be object");
+      solver_parameters::solver_point_t p;
+      int colour = 0;
+      std::vector<std::string> colour_names;
+      for (int i = 0; i < solver_parameters::max_point_color; ++i)
+        colour_names.emplace_back (
+            solver_parameters::point_color_names[i]);
+      if (!v2_field_point (point, "image", &p.img, error)
+          || !v2_field_point (point, "screen", &p.scr, error)
+          || !v2_enum (point, "color", colour_names, &colour, error))
+        return false;
+      p.color = (solver_parameters::point_color)colour;
+      parsed_r.points.push_back (p);
+    }
+
+  const json_value *spots
+      = v2_required (*profile, "spots", json_value::kind::array, error);
+  if (!spots || spots->array_value.size () > v2_max_registration_points)
+    return archive_fail (error, "invalid v2 profile spots");
+  parsed_spots.reserve (spots->array_value.size ());
+  for (const json_value &spot : spots->array_value)
+    {
+      point_t p;
+      if (!v2_point (spot, &p))
+        return archive_fail (error, "invalid v2 profile spot");
+      parsed_spots.push_back (p);
+    }
+  if (!v2_validate_registration (parsed_g, parsed_d, parsed_r,
+                                 parsed_spots, error))
+    return false;
+  *geometry = std::move (parsed_g);
+  *detection = std::move (parsed_d);
+  *solver = std::move (parsed_r);
+  *profile_spots = std::move (parsed_spots);
   return true;
 }
 
