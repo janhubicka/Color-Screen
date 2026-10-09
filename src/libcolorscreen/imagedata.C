@@ -7,6 +7,8 @@
 #include "lru-cache.h"
 #include "mapalloc.h"
 #include <array>
+#include <atomic>
+#include <cstdint>
 #include <assert.h>
 #include <cmath>
 #include <cstdlib>
