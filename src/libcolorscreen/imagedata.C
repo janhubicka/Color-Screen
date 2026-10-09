@@ -46,6 +46,9 @@ public:
 
   ~unpacked_raw_source ()
   {
+    /* LibRaw may still own a datastream referring to the EIP input
+       buffer. Destroy its processor before returning that memory. */
+    processor.reset ();
     if (input_buffer)
       free (input_buffer);
   }
