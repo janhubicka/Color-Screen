@@ -863,7 +863,7 @@ void MainWindow::reloadCurrentImageWithDemosaic(bool autodetectScreen) {
   else
     m_imageLoad.screenAutodetectAfterGeneration.reset();
 
-  loadFile(m_currentImageFile, true);
+  loadFile(m_currentImageFile, true, true);
   if (ColorScreenApplication *application = documentApplication())
     application->reloadSlantedEdgeReferences(this);
 }
@@ -1026,7 +1026,8 @@ void MainWindow::maybeOfferInitialSetupGuide(
    The actual image loading runs asynchronously via QtConcurrent::run; on
    completion, the scan is set on ImageWidget, stitch tile loading is launched
    in parallel for .csprj projects, and undo history is cleared.  */
-void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
+void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
+                          bool preferCachedRaw) {
   if (fileName.isEmpty())
     return;
 
@@ -1034,6 +1035,14 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
   const QString outgoingImageFile = m_currentImageFile;
   const auto outgoingScan = m_scan;
   const bool restoreOutgoingImage = static_cast<bool>(outgoingScan);
+
+  // Return the completed scan through QFuture rather than sharing a mutable
+  // pointer between the worker and the GUI thread. Cached demosaic requests
+  // can return a different image_data object from a fresh file decode.
+  struct ImageReadResult {
+    std::pair<bool, QString> status;
+    std::shared_ptr<colorscreen::image_data> scan;
+  };
 
   struct SidecarLoadStaging {
     std::optional<ParameterState> state;
@@ -1103,7 +1112,7 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
   const auto startImageRead =
       [this, requestedImageFile, outgoingImageFile, outgoingScan,
        restoreOutgoingImage, sidecarStaging, suppressParamPrompt,
-       loadGeneration]() {
+       loadGeneration, preferCachedRaw]() {
         if (m_closeLifecycle.closing() ||
             loadGeneration != m_imageLoad.generation)
           return;
@@ -1120,8 +1129,15 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
         progress->set_task("Opening image", 0);
         addProgress(progress);
 
-        std::shared_ptr<colorscreen::image_data> tempScan =
-            std::make_shared<colorscreen::image_data>();
+        // A manual demosaic reload may reuse this document's retained CFA.
+        // Ordinary Open (even of the same path) still re-reads the disk, and
+        // files without retained Bayer data use the old loader unchanged.
+        const std::shared_ptr<colorscreen::image_data> cachedRawSource =
+            preferCachedRaw && m_imageLoad.rawSourceFile == requestedImageFile &&
+                    m_imageLoad.rawSource &&
+                    m_imageLoad.rawSource->has_unpacked_raw_source()
+                ? m_imageLoad.rawSource
+                : nullptr;
         // A staged sidecar may select the demosaic algorithm needed to decode the
         // image, even though the rest of its state remains private until success.
         const colorscreen::image_data::demosaicing_t demosaic =
@@ -1131,12 +1147,13 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
         bool isCsprj =
             requestedImageFile.endsWith(QLatin1String(".csprj"), Qt::CaseInsensitive);
 
-        QFutureWatcher<std::pair<bool, QString>> *watcher =
-            new QFutureWatcher<std::pair<bool, QString>>(this);
+        QFutureWatcher<ImageReadResult> *watcher =
+            new QFutureWatcher<ImageReadResult>(this);
         connect(
             watcher, &QFutureWatcher<std::pair<bool, QString>>::finished, this,
-            [this, watcher, tempScan, progress, isCsprj,
-             allowInitialGuide, suggestDetectedMetadata, loadGeneration, outgoingScan,
+            [this, watcher, progress, isCsprj, cachedRawSource,
+             requestedImageFile, allowInitialGuide, suggestDetectedMetadata,
+             loadGeneration, outgoingScan,
              outgoingImageFile, restoreOutgoingImage, sidecarStaging,
              suppressParamPrompt]() {
               if (m_closeLifecycle.closing()) {
@@ -1144,7 +1161,9 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
                 return;
               }
 
-              const std::pair<bool, QString> result = watcher->result();
+              const ImageReadResult completed = watcher->result();
+              const std::pair<bool, QString> &result = completed.status;
+              const auto tempScan = completed.scan;
               removeProgress(progress);
               watcher->deleteLater();
 
@@ -1226,6 +1245,14 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
                 m_profileCalibration.clear();
                 if (m_profilePanel)
                   m_profilePanel->setSpotResults(m_profileCalibration.spotResults);
+                // Keep the unpacked RAW owner even after publishing a variant
+                // whose pixels do not themselves own the sensor mosaic.
+                // A new scan replaces the resource only after successful load;
+                // failed or obsolete requests cannot erase the previous owner.
+                m_imageLoad.rawSource = cachedRawSource ? cachedRawSource :
+                    (tempScan->has_unpacked_raw_source() ? tempScan : nullptr);
+                m_imageLoad.rawSourceFile = m_imageLoad.rawSource
+                    ? requestedImageFile : QString();
                 m_scan = tempScan;
 
                 /* GUI tile workers publish individually decoded image data
@@ -1402,24 +1429,34 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
             });
 
         const QString absolutePath = requestedImageFile;
-        QFuture<std::pair<bool, QString>> future = QtConcurrent::run(
-            [tempScan, absolutePath, progress, demosaic, isCsprj]() {
+        QFuture<ImageReadResult> future = QtConcurrent::run(
+            [cachedRawSource, absolutePath, progress, demosaic, isCsprj]() {
               try {
                 const char *error = nullptr;
                 colorscreen::sub_task task(progress.get());
-                const bool res =
-                    tempScan->load(absolutePath.toUtf8().constData(),
-                                   /*preload_all=*/!isCsprj, &error,
-                                   progress.get(), demosaic);
+                // LibRaw reprocessing is serialized by the retained resource;
+                // the initial source pixels and all finished variants remain
+                // independent. The worker never writes document GUI state.
+                auto scan = cachedRawSource
+                    ? cachedRawSource->demosaiced_variant(demosaic, &error,
+                                                         progress.get())
+                    : std::make_shared<colorscreen::image_data>();
+                const bool res = cachedRawSource
+                    ? static_cast<bool>(scan)
+                    : scan->load(absolutePath.toUtf8().constData(),
+                                 /*preload_all=*/!isCsprj, &error,
+                                 progress.get(), demosaic);
                 QString errStr;
                 if (!res && error)
                   errStr = QString::fromUtf8(error);
-                return std::make_pair(res, errStr);
+                return ImageReadResult{{res, errStr}, std::move(scan)};
               } catch (const std::exception &exception) {
-                return std::make_pair(false, QString::fromUtf8(exception.what()));
+                return ImageReadResult{{false, QString::fromUtf8(exception.what())},
+                                       nullptr};
               } catch (...) {
-                return std::make_pair(
-                    false, QStringLiteral("Unexpected exception while loading image."));
+                return ImageReadResult{
+                    {false, QStringLiteral("Unexpected exception while loading image.")},
+                    nullptr};
               }
             });
 
