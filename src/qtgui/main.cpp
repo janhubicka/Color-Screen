@@ -3115,13 +3115,21 @@ bool runBetaInvariantSmoke() {
                                   QStringLiteral("smoke.tiles.setup"));
   undoStack->clear();
 
+  colorscreen::render_output_parameters tileViewOutput;
   TilesPanel tiles(
       [&window]() { return window.documentStateSnapshot(); },
       [&window](const ParameterState &state, const QString &description,
                 const QString &parameterKey) {
         window.applySharedDocumentState(state, description, parameterKey);
       },
-      [stitchedScan]() { return stitchedScan; }, nullptr);
+      [stitchedScan]() { return stitchedScan; },
+      [&tileViewOutput](int x, int y) {
+        return tileViewOutput.tile_enabled_p(x, y, 2, 1);
+      },
+      [&tileViewOutput](int x, int y, bool enabled) {
+        tileViewOutput.set_tile_enabled(2, 1, x, y, enabled);
+      },
+      nullptr);
   tiles.updateForNewImage();
   tiles.updateUI();
 
@@ -3173,13 +3181,30 @@ bool runBetaInvariantSmoke() {
   if (!tile0Selector || !tile1Selector || !tile0Enabled || !tile1Enabled ||
       !exposure || !darkPoint || !tileAdjustmentsToggle ||
       !tileAdjustmentsGroup ||
-      tile0Enabled->property("parameterKey").toString() !=
+      tile0Enabled->property("parameterKey").isValid() ||
+      tile1Enabled->property("parameterKey").isValid() ||
+      tile0Enabled->property("renderSettingKey").toString() !=
           QStringLiteral("tiles.0.0.enabled") ||
-      tile1Enabled->property("parameterKey").toString() !=
+      tile1Enabled->property("renderSettingKey").toString() !=
           QStringLiteral("tiles.1.0.enabled") ||
       tile0Selector->property("parameterKey").isValid() ||
       tile1Selector->property("parameterKey").isValid())
     return fail("tile keys crossed the document/selection-state boundary");
+
+  // Visibility is a render-only choice. Even though the user can click the
+  // checkbox, no adjustment, saved document state or Undo entry may change.
+  const ParameterState beforeTileVisibility = window.documentStateSnapshot();
+  const int priorTileUndoCount = undoStack->count();
+  tile0Enabled->setChecked(false);
+  tiles.updateUI();
+  if (tile0Enabled->isChecked() || !tile1Enabled->isChecked() ||
+      tileViewOutput.tile_enabled_p(0, 0, 2, 1) ||
+      !tileViewOutput.tile_enabled_p(1, 0, 2, 1) ||
+      window.documentStateSnapshot() != beforeTileVisibility ||
+      undoStack->count() != priorTileUndoCount)
+    return fail("Tile visibility changed persistent parameters or Undo");
+  tile0Enabled->setChecked(true);
+  tiles.updateUI();
 
   // Folding is presentation-only and must own the shared tile editors without
   // touching the independent tile-selector grid or document state.
