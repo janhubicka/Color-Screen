@@ -320,6 +320,8 @@ render_interpolate::precompute (int_image_area area, progress_info *progress)
       || m_precise_rgb)
     {
       coord_t psize = pixel_size ();
+      const double image_layer_wavelength_nm
+          = m_params.get_image_layer_wavelength (&m_img);
       sharpen_parameters sharpen
           = m_params.get_image_layer_sharpen_parameters (&m_img);
       sharpen.usm_radius = m_params.screen_blur_radius * psize;
@@ -333,7 +335,8 @@ render_interpolate::precompute (int_image_area area, progress_info *progress)
       m_screen = get_screen (m_scr_to_img.get_type (), false,
                              sharpen.deconvolution_p (), sharpen,
                              m_params.red_strip_width,
-                             m_params.green_strip_width, progress, &screen_id);
+                             m_params.green_strip_width, progress, &screen_id,
+                             nullptr, nullptr, image_layer_wavelength_nm);
       if (!m_screen)
         return false;
       if (!m_original_color && !m_precise_rgb)
@@ -353,13 +356,17 @@ render_interpolate::precompute (int_image_area area, progress_info *progress)
               std::shared_ptr<screen> scr = get_screen (
                   m_scr_to_img.get_type (), false, false, sharpen,
                   m_params.red_strip_width, m_params.green_strip_width,
-                  progress, &screen_id, &sampling);
+                  progress, &screen_id, &sampling, nullptr,
+                  image_layer_wavelength_nm);
+              if (!scr)
+                return false;
               if (determine_color_loss (
                       &cred, &cgreen, &cblue, *scr, *m_screen,
                       m_simulated_screen.get (), sampling,
                       m_params.collection_threshold, m_params.sharpen,
                       m_scr_to_img,
-		      {m_img.width / 2 - 100, m_img.height / 2 - 100, 200, 200}))
+		      {m_img.width / 2 - 100, m_img.height / 2 - 100, 200, 200},
+                      image_layer_wavelength_nm))
                 {
 		  color_matrix sat (cred.red, cgreen.red, cblue.red,
 				    (luminosity_t)0,
