@@ -10570,6 +10570,157 @@ test_stitch_tile_adjustment_grid ()
 }
 
 
+/* Native MTF JSON must preserve not only sampled frequency response but also
+   independent capture channel, selected record and complete spatial evidence. */
+static bool
+test_native_json_v2_sharpness ()
+{
+  render_parameters original;
+  sharpen_parameters &p = original.sharpen;
+  p.mode = sharpen_parameters::richardson_lucy_deconvolution;
+  p.usm_radius = 1.375f;
+  p.usm_amount = 0.625f;
+  p.scanner_snr = 1400.125f;
+  p.scanner_mtf_scale = 0.875f;
+  p.richardson_lucy_iterations = 7;
+  p.richardson_lucy_sigma = 0.125f;
+  p.supersample = 3;
+  p.resampling = sharpen_parameters::lanczos8_resampling;
+
+  mtf_parameters &m = p.scanner_mtf;
+  m.model = mtf_model::physical_diffraction;
+  m.sigma = 1.0123456789;
+  m.halo_fraction = 0.125;
+  m.halo_sigma = 12.345;
+  m.blur_diameter = 0.325;
+  m.defocus = -0.015;
+  m.f_stop = 8.0;
+  m.wavelengths = {601.25, 531.75, 457.5, 752.25};
+  m.pixel_pitch = 5.126;
+  m.sensor_fill_factor = 1.125;
+  m.scan_dpi = 4100.75;
+  m.measured_mtf_idx = 1;
+
+  mtf_measurement source;
+  source.channel = -1;
+  source.image_layer = true;
+  source.wavelength = 546.1;
+  source.same_capture = false;
+  source.name = "M\xC4\x9B\xC5\x99en\xC3\xAD: original \xC2\xB5 & \"\xC4\x8Derven\xC3\xA1\"";
+  source.source_filename = "C:\\\\scans\\\\\xC4\x8Cesk\xC3\xA1 fotografie\\\\edge 01.tif";
+  source.source_width = 2048;
+  source.source_height = 1536;
+  source.roi = {22, 31, 95, 45};
+  source.edge_p1 = {23.012345678901, 36.75};
+  source.edge_p2 = {113.875, 62.625};
+  source.edge_angle = 5.126;
+  source.edge_fit_rms = 0.125;
+  source.edge_contrast = 0.75;
+  source.edge_snr = 52.125;
+  source.phase_coverage = 0.875;
+  for (int i = 0; i < 2048; ++i)
+    source.add_value ((double)i / 8192.0,
+                      100.0 / (1.0 + (double)i * 0.02345),
+                      (double)(i % 5) / 1024.0);
+  m.measurements.push_back (source);
+
+  mtf_measurement second = source;
+  second.channel = 3;
+  second.image_layer = false;
+  second.wavelength = 750.25;
+  second.same_capture = true;
+  second.name = "Infrared (same capture)";
+  second.source_filename.clear ();
+  second.source_width = second.source_height = -1;
+  second.roi = {};
+  second.edge_p1 = {0, 0};
+  second.edge_p2 = {0, 0};
+  second.edge_angle = second.edge_fit_rms = second.edge_contrast = 0;
+  second.edge_snr = second.phase_coverage = 0;
+  m.measurements.push_back (std::move (second));
+
+  std::string json, error;
+  if (!encode_parameter_json_v2_sharpness (original, &json, &error)
+      || json.find ("\"measurements\"") == std::string::npos
+      || json.find ("\"legacy_csp\"") != std::string::npos)
+    {
+      fprintf (stderr, "Native JSON MTF encode failed: %s\n", error.c_str ());
+      return false;
+    }
+
+  render_parameters decoded;
+  decoded.gamma = 2.75f;
+  decoded.brightness = 0.875f;
+  if (!decode_parameter_json_v2_sharpness (json, &decoded, &error))
+    {
+      fprintf (stderr, "Native JSON MTF decode failed: %s\n", error.c_str ());
+      return false;
+    }
+  if (!decoded.sharpen.equal_p (original.sharpen)
+      || decoded.gamma != 2.75f || decoded.brightness != 0.875f)
+    {
+      fprintf (stderr, "Native JSON MTF lost exact numerical/provenance data\n");
+      return false;
+    }
+  std::string canonical;
+  if (!encode_parameter_json_v2_sharpness (decoded, &canonical, &error)
+      || canonical != json)
+    {
+      fprintf (stderr, "Native JSON MTF is not deterministic\n");
+      return false;
+    }
+
+  /* A later malformed nested measured curve must not publish partial MTF,
+     exposure or any earlier parsed coefficients. */
+  auto invalid = json;
+  auto check_invalid = [&] (const std::string &before,
+                           const std::string &after) -> bool
+    {
+      invalid = json;
+      const size_t pos = invalid.find (before);
+      if (pos == std::string::npos)
+        return false;
+      invalid.replace (pos, before.size (), after);
+      return !decode_parameter_json_v2_sharpness (invalid, &decoded, &error)
+             && decoded.sharpen.equal_p (original.sharpen)
+             && decoded.gamma == 2.75f;
+    };
+
+  if (!check_invalid ("\"model\": \"physical-diffraction\"",
+                      "\"model\": \"bad-model\"")
+      || !check_invalid ("\"selected_measurement\": 1",
+                         "\"selected_measurement\": 200")
+      || !check_invalid ("\"richardson_lucy_iterations\": 7",
+                         "\"richardson_lucy_iterations\": 7.5")
+      || !check_invalid ("\"wavelengths_nm\": [",
+                         "\"wavelengths_nm\": [1e999, ")
+      || !check_invalid ("\"source_dimensions\": [2048, 1536]",
+                         "\"source_dimensions\": [2147483648, 1536]")
+      || !check_invalid ("\"samples\": [[0, 100, 0]",
+                         "\"samples\": [[0, 100]"))
+    {
+      fprintf (stderr, "Invalid v2 measured MTF was applied or test failed\n");
+      return false;
+    }
+
+  /* Direct encoder rejects invalid retained values without touching OUT. */
+  original.sharpen.scanner_mtf.measurements[1].wavelength
+      = my_quiet_nan<double> ();
+  std::string untouched = "keep";
+  if (encode_parameter_json_v2_sharpness (original, &untouched, &error)
+      || untouched != "keep")
+    return false;
+
+  /* A record with the legacy unavailable-ROI sentinel still round-trips. */
+  original.sharpen.scanner_mtf.measurements[1].wavelength = 750.25;
+  original.sharpen.scanner_mtf.measured_mtf_idx = -1;
+  if (!encode_parameter_json_v2_sharpness (original, &json, &error)
+      || !decode_parameter_json_v2_sharpness (json, &decoded, &error)
+      || !decoded.sharpen.equal_p (original.sharpen))
+    return false;
+  return true;
+}
+
 /* Colour profiles, observer conditions and editable tone curves must have
    exact native JSON representation without saving output ICC/gamma choices. */
 static bool
@@ -11344,6 +11495,8 @@ main (int argc, char **argv)
     { "mesh_inversion", "mesh inversion tests", [] () { return test_mesh_inversion (); } },
     { "cow_points", "cow points tests", [] () { return test_cow_points (); } },
     { "image_area", "image area tests", [] () { return test_image_area (); } },
+    { "json_v2_sharpness", "native JSON schema-v2 complete MTF/PSF codec",
+      [] () { return test_native_json_v2_sharpness (); } },
     { "json_v2_color", "native JSON schema-v2 colour/appearance codec",
       [] () { return test_native_json_v2_color (); } },
     { "json_v2_process", "native JSON schema-v2 historical process codec",
