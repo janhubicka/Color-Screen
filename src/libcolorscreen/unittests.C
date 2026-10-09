@@ -10569,6 +10569,166 @@ test_stitch_tile_adjustment_grid ()
   return true;
 }
 
+
+/* Round-trip v2 registration directly through JSON, without the legacy CSP
+   parser or ZIP container. Include enough points to exceed the small v1
+   manifest's JSON node budget. */
+static bool
+test_native_json_v2_registration ()
+{
+  scr_to_img_parameters geometry;
+  geometry.type = Dufay;
+  geometry.center = {1234.56789012345, -0.0000123};
+  geometry.coordinate1 = {4.125, 0.0125};
+  geometry.coordinate2 = {-0.005, 4.875};
+  geometry.projection_distance = 1.23;
+  geometry.tilt_x = 0.00345;
+  geometry.tilt_y = -0.01234;
+  geometry.final_rotation = 17.5;
+  geometry.final_mirror = true;
+  geometry.final_angle = 91.125;
+  geometry.final_ratio = 1.25;
+  geometry.lens_correction.kr[0] = 1.02;
+  geometry.lens_correction.kr[1] = -0.025;
+  geometry.lens_correction.center = {0.49, 0.53};
+  geometry.mesh_trans_is_scr_to_img = true;
+  geometry.mesh_trans
+      = std::make_shared<mesh> (1.25, -2.5, 4.0, 3.5, 4, 3);
+  for (int y = 0; y < 3; ++y)
+    for (int x = 0; x < 4; ++x)
+      geometry.mesh_trans->set_point (
+          {x, y}, {(coord_t)(x * 0.25 + y * 0.125),
+                   (coord_t)(y * 0.75 - x * 0.375)});
+
+  scr_detect_parameters detection;
+  detection.red = {0.8125f, 0.0625f, 0.125f};
+  detection.min_luminosity = 0.0125f;
+  detection.min_ratio = 1.25f;
+  solver_parameters solver;
+  solver.optimize_lens = false;
+  solver.optimize_tilt = false;
+  solver.lens_center_distance = 1.125;
+  for (int i = 0; i < 2500; ++i)
+    solver.points.push_back (
+        {{(coord_t)(i * 0.3), (coord_t)(i * 0.6)},
+         {(coord_t)(i * 0.01), (coord_t)(i * 0.02)},
+         (solver_parameters::point_color)(i % solver_parameters::max_point_color)});
+  std::vector<point_t> spots {{3.25, 7.5}, {-1.125, 0.0078125}};
+
+  std::string first, error;
+  if (!encode_parameter_json_v2_registration (
+          geometry, detection, solver, spots, &first, &error)
+      || first.find ("\"legacy_csp\"") != std::string::npos
+      || first.find ("screen_alignment_version") != std::string::npos)
+    {
+      fprintf (stderr, "Native JSON v2 encode failed: %s\n", error.c_str ());
+      return false;
+    }
+  scr_to_img_parameters decoded_g;
+  scr_detect_parameters decoded_d;
+  solver_parameters decoded_s;
+  std::vector<point_t> decoded_spots;
+  if (!decode_parameter_json_v2_registration (
+          first, &decoded_g, &decoded_d, &decoded_s, &decoded_spots, &error))
+    {
+      fprintf (stderr, "Native JSON v2 decode failed: %s\n", error.c_str ());
+      return false;
+    }
+  if (decoded_g.type != geometry.type
+      || decoded_g.center != geometry.center
+      || decoded_g.coordinate1 != geometry.coordinate1
+      || decoded_g.coordinate2 != geometry.coordinate2
+      || decoded_g.projection_distance != geometry.projection_distance
+      || decoded_g.tilt_x != geometry.tilt_x
+      || decoded_g.tilt_y != geometry.tilt_y
+      || decoded_g.final_rotation != geometry.final_rotation
+      || decoded_g.final_mirror != geometry.final_mirror
+      || decoded_g.final_angle != geometry.final_angle
+      || decoded_g.final_ratio != geometry.final_ratio
+      || !(decoded_g.lens_correction == geometry.lens_correction)
+      || !decoded_g.mesh_trans || !decoded_g.mesh_trans_is_scr_to_img
+      || !(decoded_d == detection)
+      || decoded_s.points != solver.points
+      || decoded_s.optimize_lens != solver.optimize_lens
+      || decoded_s.optimize_tilt != solver.optimize_tilt
+      || decoded_s.lens_center_distance != solver.lens_center_distance
+      || decoded_spots != spots)
+    {
+      fprintf (stderr, "Native JSON v2 registration changed state\n");
+      return false;
+    }
+  for (int y = 0; y < 3; ++y)
+    for (int x = 0; x < 4; ++x)
+      if (decoded_g.mesh_trans->get_point ({x, y})
+          != geometry.mesh_trans->get_point ({x, y}))
+        return false;
+  std::string second;
+  if (!encode_parameter_json_v2_registration (
+          decoded_g, decoded_d, decoded_s, decoded_spots, &second, &error)
+      || first != second)
+    return false;
+
+  /* Malformed numeric/shape/enum data must never partly modify live state. */
+  scr_to_img_parameters unchanged_g;
+  unchanged_g.final_angle = 44.5;
+  scr_detect_parameters unchanged_d;
+  solver_parameters unchanged_s;
+  unchanged_s.optimize_lens = false;
+  std::vector<point_t> unchanged_spots {{12, 19}};
+  for (const auto &substitution :
+       {std::pair<std::string, std::string> {
+            "\"final_ratio\": 1.25", "\"final_ratio\": -1"},
+        {"\"dimensions\": [4, 3]", "\"dimensions\": [4, 4]"}})
+    {
+      std::string bad = first;
+      const size_t pos = bad.find (substitution.first);
+      if (pos == std::string::npos)
+        return false;
+      bad.replace (pos, substitution.first.size (), substitution.second);
+      if (decode_parameter_json_v2_registration (
+              bad, &unchanged_g, &unchanged_d, &unchanged_s,
+              &unchanged_spots, &error)
+          || unchanged_g.final_angle != 44.5
+          || unchanged_d != scr_detect_parameters ()
+          || unchanged_s.optimize_lens
+          || unchanged_spots != std::vector<point_t> ({{12, 19}}))
+        return false;
+    }
+  std::string bad = first;
+  const std::string enum_prefix = "\"screen_type\": \"";
+  const size_t begin = bad.find (enum_prefix);
+  if (begin == std::string::npos)
+    return false;
+  const size_t from = begin + enum_prefix.size ();
+  const size_t to = bad.find ('"', from);
+  if (to == std::string::npos)
+    return false;
+  bad.replace (from, to - from, "invalid-screen-type");
+  if (decode_parameter_json_v2_registration (
+          bad, &unchanged_g, &unchanged_d, &unchanged_s,
+          &unchanged_spots, &error))
+    return false;
+
+  auto invalid_g = geometry;
+  invalid_g.final_ratio = my_quiet_nan<coord_t> ();
+  std::string unchanged_json = "keep";
+  if (encode_parameter_json_v2_registration (
+          invalid_g, detection, solver, spots, &unchanged_json, &error)
+      || unchanged_json != "keep")
+    return false;
+
+  geometry.mesh_trans.reset ();
+  geometry.mesh_trans_is_scr_to_img = false;
+  if (!encode_parameter_json_v2_registration (
+          geometry, detection, solver, spots, &first, &error)
+      || !decode_parameter_json_v2_registration (
+          first, &decoded_g, &decoded_d, &decoded_s,
+          &decoded_spots, &error)
+      || decoded_g.mesh_trans || decoded_g.mesh_trans_is_scr_to_img)
+    return false;
+  return true;
+}
+
 /* Verify conservative detection of monochromatic data that was initially
    rendered as RGB from a standard Bayer RAW file.  Channel gains/offsets and
    small noise are allowed; real chromatic structure, flat data and non-Bayer
@@ -10724,6 +10884,8 @@ main (int argc, char **argv)
     { "mesh_inversion", "mesh inversion tests", [] () { return test_mesh_inversion (); } },
     { "cow_points", "cow points tests", [] () { return test_cow_points (); } },
     { "image_area", "image area tests", [] () { return test_image_area (); } },
+    { "json_v2_registration", "native JSON schema-v2 registration codec",
+      [] () { return test_native_json_v2_registration (); } },
     { "stitch_tile_grid", "stitch tile adjustment grid persistence tests",
       [] () { return test_stitch_tile_adjustment_grid (); } },
     { "channel_sharpening", "per-channel scanner sharpening tests",
