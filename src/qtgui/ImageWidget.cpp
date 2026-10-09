@@ -3031,6 +3031,13 @@ void ImageWidget::setTileVisible(int x, int y, bool visible) {
   emit tileVisibilityChanged();
 }
 
+colorscreen::render_output_parameters ImageWidget::viewOutputParameters() const {
+  colorscreen::render_output_parameters output = m_viewTileVisibility;
+  output.output_profile = m_viewOutputProfile;
+  output.gamut_warning = m_viewGamutWarning;
+  return output;
+}
+
 // Request a new render job (non-blocking)
 /**
  * @brief Requests a new asynchronous render of the image tile.
@@ -3068,11 +3075,7 @@ void ImageWidget::requestRender() {
                                    : colorscreen::render_type_parameters();
     // Presentation and output encoding are immutable per-render inputs, not
     // properties of the underlying photograph.
-    data.renderType.output.gamut_warning = m_viewGamutWarning;
-    data.renderType.output.output_profile = m_viewOutputProfile;
-    data.renderType.output.tile_columns = m_viewTileVisibility.tile_columns;
-    data.renderType.output.tile_rows = m_viewTileVisibility.tile_rows;
-    data.renderType.output.tile_enabled = m_viewTileVisibility.tile_enabled;
+    data.renderType.output = viewOutputParameters();
 
     int reqId = m_renderQueue.requestRender(QVariant::fromValue(data));
     qCDebug(lcRenderSync) << "ImageWidget::requestRender - Created ID:" << reqId << " scale:" << m_scale;
