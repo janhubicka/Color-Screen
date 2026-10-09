@@ -2247,27 +2247,15 @@ encode_parameter_json_v2_registration (
 /* Decode a self-contained native v2 registration component, committing
    geometry, dye detection, solver settings and spots only on total success. */
 bool
-decode_parameter_json_v2_registration (
-    const std::string &input, scr_to_img_parameters *geometry,
+/* Decode a validated JSON syntax tree into the named native component.
+   The public component reader and future full document reader share this
+   implementation rather than parsing or serializing nested data twice. */
+static bool
+v2_decode_registration_root (const json_value &root,
+    scr_to_img_parameters *geometry,
     scr_detect_parameters *detection, solver_parameters *solver,
     std::vector<point_t> *profile_spots, std::string *error)
 {
-  if (error)
-    error->clear ();
-  if (!geometry || !detection || !solver || !profile_spots)
-    return archive_fail (error, "missing v2 registration destination");
-  if (input.size () > v2_max_json_bytes)
-    return archive_fail (error, "v2 registration JSON exceeds memory budget");
-  if (!valid_utf8 (input))
-    return archive_fail (error, "v2 registration JSON is not valid UTF-8");
-
-  json_parser parser (input.data (), input.data () + input.size (),
-                      v2_max_json_nodes);
-  json_value root;
-  if (!parser.parse (&root))
-    return archive_fail (error, "invalid v2 registration JSON: "
-                         + parser.error ());
-
   const json_value *g
       = v2_required (root, "geometry", json_value::kind::object, error);
   const json_value *d
@@ -2393,6 +2381,30 @@ decode_parameter_json_v2_registration (
   *solver = std::move (parsed_r);
   *profile_spots = std::move (parsed_spots);
   return true;
+}
+
+decode_parameter_json_v2_registration (
+    const std::string &input, scr_to_img_parameters *geometry,
+    scr_detect_parameters *detection, solver_parameters *solver,
+    std::vector<point_t> *profile_spots, std::string *error)
+{
+  if (error)
+    error->clear ();
+  if (!geometry || !detection || !solver || !profile_spots)
+    return archive_fail (error, "missing v2 registration destination");
+  if (input.size () > v2_max_json_bytes)
+    return archive_fail (error, "v2 registration JSON exceeds memory budget");
+  if (!valid_utf8 (input))
+    return archive_fail (error, "v2 registration JSON is not valid UTF-8");
+
+  json_parser parser (input.data (), input.data () + input.size (),
+                      v2_max_json_nodes);
+  json_value root;
+  if (!parser.parse (&root))
+    return archive_fail (error, "invalid v2 registration JSON: "
+                         + parser.error ());
+
+  return v2_decode_registration_root (root, geometry, detection, solver, profile_spots, error);
 }
 
 
@@ -2568,20 +2580,13 @@ encode_parameter_json_v2_capture (const render_parameters &capture,
    sharpness, reconstruction and grid controls in CAPTURE. No output changes
    until the complete document has passed strict validation. */
 bool
-decode_parameter_json_v2_capture (const std::string &input,
-                                  render_parameters *capture,
-                                  std::string *error)
+/* Decode a validated JSON syntax tree into the named native component.
+   The public component reader and future full document reader share this
+   implementation rather than parsing or serializing nested data twice. */
+static bool
+v2_decode_capture_root (const json_value &root,
+    render_parameters *capture, std::string *error)
 {
-  if (error)
-    error->clear ();
-  if (!capture)
-    return archive_fail (error, "missing v2 capture destination");
-  if (input.size () > v2_max_capture_json_bytes || !valid_utf8 (input))
-    return archive_fail (error, "invalid v2 capture UTF-8/size");
-  json_parser parser (input.data (), input.data () + input.size ());
-  json_value root;
-  if (!parser.parse (&root))
-    return archive_fail (error, "invalid v2 capture JSON: " + parser.error ());
   const json_value *object
       = v2_required (root, "capture", json_value::kind::object, error);
   if (!object)
@@ -2620,6 +2625,23 @@ decode_parameter_json_v2_capture (const std::string &input,
     return false;
   *capture = std::move (parsed);
   return true;
+}
+
+decode_parameter_json_v2_capture (const std::string &input,
+                                  render_parameters *capture,
+                                  std::string *error)
+{
+  if (error)
+    error->clear ();
+  if (!capture)
+    return archive_fail (error, "missing v2 capture destination");
+  if (input.size () > v2_max_capture_json_bytes || !valid_utf8 (input))
+    return archive_fail (error, "invalid v2 capture UTF-8/size");
+  json_parser parser (input.data (), input.data () + input.size ());
+  json_value root;
+  if (!parser.parse (&root))
+    return archive_fail (error, "invalid v2 capture JSON: " + parser.error ());
+  return v2_decode_capture_root (root, capture, error);
 }
 
 
@@ -2766,22 +2788,13 @@ encode_parameter_json_v2_reconstruction (const render_parameters &render,
 /* Parse native reconstruction controls into a copy. The independent input,
    output and MTF/correction settings already in RENDER are not changed. */
 bool
-decode_parameter_json_v2_reconstruction (const std::string &input,
-                                         render_parameters *render,
-                                         std::string *error)
+/* Decode a validated JSON syntax tree into the named native component.
+   The public component reader and future full document reader share this
+   implementation rather than parsing or serializing nested data twice. */
+static bool
+v2_decode_reconstruction_root (const json_value &root,
+    render_parameters *render, std::string *error)
 {
-  if (error)
-    error->clear ();
-  if (!render)
-    return archive_fail (error, "missing v2 reconstruction destination");
-  if (input.size () > v2_max_capture_json_bytes || !valid_utf8 (input))
-    return archive_fail (error, "invalid v2 reconstruction UTF-8/size");
-
-  json_parser parser (input.data (), input.data () + input.size ());
-  json_value root;
-  if (!parser.parse (&root))
-    return archive_fail (error, "invalid v2 reconstruction JSON: "
-                         + parser.error ());
   const json_value *object
       = v2_required (root, "reconstruction", json_value::kind::object, error);
   if (!object)
@@ -2836,6 +2849,25 @@ decode_parameter_json_v2_reconstruction (const std::string &input,
     return false;
   *render = std::move (parsed);
   return true;
+}
+
+decode_parameter_json_v2_reconstruction (const std::string &input,
+                                         render_parameters *render,
+                                         std::string *error)
+{
+  if (error)
+    error->clear ();
+  if (!render)
+    return archive_fail (error, "missing v2 reconstruction destination");
+  if (input.size () > v2_max_capture_json_bytes || !valid_utf8 (input))
+    return archive_fail (error, "invalid v2 reconstruction UTF-8/size");
+
+  json_parser parser (input.data (), input.data () + input.size ());
+  json_value root;
+  if (!parser.parse (&root))
+    return archive_fail (error, "invalid v2 reconstruction JSON: "
+                         + parser.error ());
+  return v2_decode_reconstruction_root (root, render, error);
 }
 
 
@@ -2967,22 +2999,13 @@ encode_parameter_json_v2_process (const render_parameters &render,
 /* Parse a complete process group privately, commit only on success, and
    retain unrelated capture/sharpness/colour parameters untouched. */
 bool
-decode_parameter_json_v2_process (const std::string &input,
-                                  render_parameters *render,
-                                  std::string *error)
+/* Decode a validated JSON syntax tree into the named native component.
+   The public component reader and future full document reader share this
+   implementation rather than parsing or serializing nested data twice. */
+static bool
+v2_decode_process_root (const json_value &root,
+    render_parameters *render, std::string *error)
 {
-  if (error)
-    error->clear ();
-  if (!render)
-    return archive_fail (error, "missing v2 process destination");
-  if (input.size () > v2_max_capture_json_bytes || !valid_utf8 (input))
-    return archive_fail (error, "invalid v2 process UTF-8/size");
-  json_parser parser (input.data (), input.data () + input.size ());
-  json_value root;
-  if (!parser.parse (&root))
-    return archive_fail (error, "invalid v2 process JSON: "
-                         + parser.error ());
-
   const json_value *object
       = v2_required (root, "process", json_value::kind::object, error);
   if (!object)
@@ -3037,6 +3060,25 @@ decode_parameter_json_v2_process (const std::string &input,
     return false;
   *render = std::move (parsed);
   return true;
+}
+
+decode_parameter_json_v2_process (const std::string &input,
+                                  render_parameters *render,
+                                  std::string *error)
+{
+  if (error)
+    error->clear ();
+  if (!render)
+    return archive_fail (error, "missing v2 process destination");
+  if (input.size () > v2_max_capture_json_bytes || !valid_utf8 (input))
+    return archive_fail (error, "invalid v2 process UTF-8/size");
+  json_parser parser (input.data (), input.data () + input.size ());
+  json_value root;
+  if (!parser.parse (&root))
+    return archive_fail (error, "invalid v2 process JSON: "
+                         + parser.error ());
+
+  return v2_decode_process_root (root, render, error);
 }
 
 
@@ -3202,20 +3244,13 @@ encode_parameter_json_v2_color (const render_parameters &render,
 /* Parse saved colour calibration and appearance transactionally. No renderer
    output profile/transfer or view-specific gamut warning is touched. */
 bool
-decode_parameter_json_v2_color (const std::string &input,
-                                render_parameters *render, std::string *error)
+/* Decode a validated JSON syntax tree into the named native component.
+   The public component reader and future full document reader share this
+   implementation rather than parsing or serializing nested data twice. */
+static bool
+v2_decode_color_root (const json_value &root,
+    render_parameters *render, std::string *error)
 {
-  if (error)
-    error->clear ();
-  if (!render)
-    return archive_fail (error, "missing v2 colour destination");
-  if (input.size () > v2_max_color_json_bytes || !valid_utf8 (input))
-    return archive_fail (error, "invalid v2 colour UTF-8/size");
-  json_parser parser (input.data (), input.data () + input.size (),
-                      v2_max_color_json_nodes);
-  json_value root;
-  if (!parser.parse (&root))
-    return archive_fail (error, "invalid v2 colour JSON: " + parser.error ());
   const json_value *object
       = v2_required (root, "color", json_value::kind::object, error);
   if (!object)
@@ -3285,6 +3320,23 @@ decode_parameter_json_v2_color (const std::string &input,
     return false;
   *render = std::move (parsed);
   return true;
+}
+
+decode_parameter_json_v2_color (const std::string &input,
+                                render_parameters *render, std::string *error)
+{
+  if (error)
+    error->clear ();
+  if (!render)
+    return archive_fail (error, "missing v2 colour destination");
+  if (input.size () > v2_max_color_json_bytes || !valid_utf8 (input))
+    return archive_fail (error, "invalid v2 colour UTF-8/size");
+  json_parser parser (input.data (), input.data () + input.size (),
+                      v2_max_color_json_nodes);
+  json_value root;
+  if (!parser.parse (&root))
+    return archive_fail (error, "invalid v2 colour JSON: " + parser.error ());
+  return v2_decode_color_root (root, render, error);
 }
 
 
@@ -3548,23 +3600,13 @@ encode_parameter_json_v2_sharpness (const render_parameters &render,
    measurement, nested array, ROI, or unknown channel cannot modify the
    caller's accepted parameters. */
 bool
-decode_parameter_json_v2_sharpness (const std::string &input,
-                                    render_parameters *render,
-                                    std::string *error)
+/* Decode a validated JSON syntax tree into the named native component.
+   The public component reader and future full document reader share this
+   implementation rather than parsing or serializing nested data twice. */
+static bool
+v2_decode_sharpness_root (const json_value &root,
+    render_parameters *render, std::string *error)
 {
-  if (error)
-    error->clear ();
-  if (!render)
-    return archive_fail (error, "missing v2 sharpness destination");
-  if (input.size () > v2_max_sharpness_bytes || !valid_utf8 (input))
-    return archive_fail (error, "invalid v2 sharpness JSON UTF-8/size");
-
-  json_parser parser (input.data (), input.data () + input.size (),
-                      v2_max_sharpness_nodes);
-  json_value root;
-  if (!parser.parse (&root))
-    return archive_fail (error, "invalid v2 sharpness JSON: "
-                         + parser.error ());
   const json_value *object
       = v2_required (root, "sharpness", json_value::kind::object, error);
   if (!object)
@@ -3706,6 +3748,26 @@ decode_parameter_json_v2_sharpness (const std::string &input,
     return false;
   *render = std::move (parsed);
   return true;
+}
+
+decode_parameter_json_v2_sharpness (const std::string &input,
+                                    render_parameters *render,
+                                    std::string *error)
+{
+  if (error)
+    error->clear ();
+  if (!render)
+    return archive_fail (error, "missing v2 sharpness destination");
+  if (input.size () > v2_max_sharpness_bytes || !valid_utf8 (input))
+    return archive_fail (error, "invalid v2 sharpness JSON UTF-8/size");
+
+  json_parser parser (input.data (), input.data () + input.size (),
+                      v2_max_sharpness_nodes);
+  json_value root;
+  if (!parser.parse (&root))
+    return archive_fail (error, "invalid v2 sharpness JSON: "
+                         + parser.error ());
+  return v2_decode_sharpness_root (root, render, error);
 }
 
 
@@ -4075,21 +4137,13 @@ encode_parameter_json_v2_correction_grids (
 /* Decode all correction resources privately and commit only when every
    sample and every nested stitched-tile grid is present and valid. */
 bool
-decode_parameter_json_v2_correction_grids (
-    const std::string &input, render_parameters *render, std::string *error)
+/* Decode a validated JSON syntax tree into the named native component.
+   The public component reader and future full document reader share this
+   implementation rather than parsing or serializing nested data twice. */
+static bool
+v2_decode_correction_grids_root (const json_value &root,
+    render_parameters *render, std::string *error)
 {
-  if (error)
-    error->clear ();
-  if (!render)
-    return archive_fail (error, "missing v2 corrections destination");
-  if (input.size () > v2_max_grids_bytes || !valid_utf8 (input))
-    return archive_fail (error, "invalid v2 calibration JSON UTF-8/size");
-  json_parser parser (input.data (), input.data () + input.size (),
-                      v2_max_grids_nodes);
-  json_value root;
-  if (!parser.parse (&root))
-    return archive_fail (error, "invalid v2 calibration JSON: "
-                         + parser.error ());
   const json_value *object
       = v2_required (root, "correction_grids",
                      json_value::kind::object, error);
@@ -4142,6 +4196,24 @@ decode_parameter_json_v2_correction_grids (
     return false;
   *render = std::move (parsed);
   return true;
+}
+
+decode_parameter_json_v2_correction_grids (
+    const std::string &input, render_parameters *render, std::string *error)
+{
+  if (error)
+    error->clear ();
+  if (!render)
+    return archive_fail (error, "missing v2 corrections destination");
+  if (input.size () > v2_max_grids_bytes || !valid_utf8 (input))
+    return archive_fail (error, "invalid v2 calibration JSON UTF-8/size");
+  json_parser parser (input.data (), input.data () + input.size (),
+                      v2_max_grids_nodes);
+  json_value root;
+  if (!parser.parse (&root))
+    return archive_fail (error, "invalid v2 calibration JSON: "
+                         + parser.error ());
+  return v2_decode_correction_grids_root (root, render, error);
 }
 
 }
