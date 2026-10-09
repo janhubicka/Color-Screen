@@ -155,9 +155,9 @@ RenderDialog::RenderDialog(
 
   m_profileCombo = new QComboBox(m_nonDngWidget);
   m_profileCombo->setObjectName(QStringLiteral("RenderOutputProfileCombo"));
-  for (int i = 0; i < (int)render_parameters::output_profile_max; ++i)
-    m_profileCombo->addItem(render_parameters::output_profile_names[i], i);
-  m_profileCombo->setCurrentIndex((int)rparams.output_profile);
+  for (int i = 0; i < (int)render_output_parameters::output_profile_max; ++i)
+    m_profileCombo->addItem(render_output_parameters::output_profile_names[i], i);
+  m_profileCombo->setCurrentIndex((int)rtparams.output.output_profile);
   nonDngForm->addRow(tr("Output profile:"), m_profileCombo);
 
   m_hdrCheck = new QCheckBox(tr("HDR output"), m_nonDngWidget);
@@ -422,10 +422,10 @@ render_type_parameters RenderDialog::renderTypeParams() const {
   p.type = (render_type_t)m_modeCombo->currentData().toInt();
   return p;
 }
-render_parameters::output_profile_t RenderDialog::outputProfile() const {
+render_output_parameters::output_profile_t RenderDialog::outputProfile() const {
   return m_profileCombo
-    ? (render_parameters::output_profile_t)m_profileCombo->currentData().toInt()
-    : render_parameters::output_profile_sRGB;
+    ? (render_output_parameters::output_profile_t)m_profileCombo->currentData().toInt()
+    : render_output_parameters::output_profile_sRGB;
 }
 bool RenderDialog::hdr() const { return m_hdrCheck && m_hdrCheck->isChecked(); }
 int  RenderDialog::depth() const { return m_depthCombo ? m_depthCombo->currentData().toInt() : 16; }
