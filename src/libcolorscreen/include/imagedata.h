@@ -13,6 +13,7 @@ namespace colorscreen
 {
 
 class image_data_loader;
+class unpacked_raw_source;
 class stitch_project;
 
 /* Statistics describing whether an RGB RAW rendering is consistent with one
@@ -188,6 +189,16 @@ public:
 						 bool allocate_grayscale = false);
   DLL_PUBLIC bool save_tiff (const char *name, progress_info *progress = NULL);
 
+  /* True when this source image retained LibRaw's unpacked sensor samples.
+     These samples are independent of the selected demosaicing algorithm, so
+     future on-demand variants can reprocess them without reopening the RAW
+     file. Non-RAW images, incomplete loads and synthetic images return false.
+     Retention itself never changes the active image's pixel data. */
+  bool has_unpacked_raw_source () const noexcept
+  {
+    return static_cast<bool> (m_unpacked_raw_source);
+  }
+
   pure_attr DLL_PUBLIC bool has_rgb () const;
   pure_attr DLL_PUBLIC bool has_grayscale_or_ir () const;
   /* Analyze a normally demosaiced RGB RAW image and return how closely its
@@ -239,6 +250,10 @@ public:
 
 private:
   std::unique_ptr<image_data_loader> loader;
+  /* LibRaw's unpacked sensor mosaic and metadata, retained only after a
+     successful RAW load. The processed RGB/grayscale output above remains
+     independent of this resource and can be used by existing renderers. */
+  std::shared_ptr<unpacked_raw_source> m_unpacked_raw_source;
   /* True if the data is owned by the structure.  */
   bool own = false;
   bool m_preload_all = false;
