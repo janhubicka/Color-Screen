@@ -471,8 +471,6 @@ struct render_parameters
     luminosity_t dark_point = 0;
     /* Scanner blur usually differs for every capture.  */
     std::shared_ptr <scanner_blur_correction_parameters> scanner_blur_correction = nullptr;
-    /* If true tile is rendered, if false tile is not rendered.  */
-    bool enabled = true;
     /* Position comes from the tile-adjustment grid index and its dimensions,
        not from independently stored per-tile coordinates. */
 
@@ -483,7 +481,7 @@ struct render_parameters
     pure_attr bool
     operator== (const tile_adjustment &other) const
     {
-      return enabled == other.enabled && dark_point == other.dark_point
+      return dark_point == other.dark_point
              && exposure == other.exposure
              && scanner_blur_correction == other.scanner_blur_correction;
     }
