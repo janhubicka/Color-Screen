@@ -1230,12 +1230,15 @@ compare_deltae (image_data &img, scr_to_img_parameters &param1,
                 render_parameters &rparam2, const char *cmpname,
                 double *ret_avg, double *ret_max, progress_info *progress)
 {
-  rparam1.output_profile = render_parameters::output_profile_xyz;
-  rparam2.output_profile = render_parameters::output_profile_xyz;
   rparam1.observer_whitepoint = srgb_white;
   rparam2.observer_whitepoint = srgb_white;
   render_interpolate render1 (param1, img, rparam1, 256);
   render_interpolate render2 (param2, img, rparam2, 256);
+  render_output_parameters comparison_output;
+  comparison_output.output_profile =
+      render_output_parameters::output_profile_xyz;
+  render1.set_output_parameters (comparison_output);
+  render2.set_output_parameters (comparison_output);
   if (!render1.precompute_all (progress) || !render2.precompute_all (progress))
     return false;
   int border = 100;
