@@ -151,6 +151,34 @@ write_parameter_payload_file (
     const parameter_archive_image_area *image_area = nullptr);
 
 
+/* Compose one complete native JSON schema-v2 document from the core and
+   Qt profile-spot processing/calibration inputs. Every component is encoded
+   directly from typed C++ state, without a legacy CSP mirror or ZIP wrapper.
+   OUTPUT is not modified if a component is invalid. This in-memory API does
+   not alter the alpha GUI/CLI default save target or perform file I/O. */
+DLL_PUBLIC bool
+encode_parameter_json_v2_document (
+    const scr_to_img_parameters &geometry,
+    const scr_detect_parameters &detection,
+    const render_parameters &render,
+    const solver_parameters &solver,
+    const std::vector<point_t> &profile_spots,
+    std::string *output, std::string *error);
+
+/* Parse a complete schema-v2 JSON document with one syntax tree and decode
+   all persistent parameter domains into private state. An invalid header,
+   missing/unknown required feature, malformed nested array, or failed
+   decoder leaves *all* caller outputs unchanged. */
+DLL_PUBLIC bool
+decode_parameter_json_v2_document (
+    const std::string &input,
+    scr_to_img_parameters *geometry,
+    scr_detect_parameters *detection,
+    render_parameters *render,
+    solver_parameters *solver,
+    std::vector<point_t> *profile_spots,
+    std::string *error);
+
 /* Serialize one native JSON v2 registration component.
 
    This is a lossless building block for the eventual complete schema-v2
