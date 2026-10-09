@@ -1228,6 +1228,15 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
                   m_profilePanel->setSpotResults(m_profileCalibration.spotResults);
                 m_scan = tempScan;
 
+                /* GUI tile workers publish individually decoded image data
+                   to views over time. Keep successfully decoded tiles resident
+                   until this scan is replaced; the legacy stitch-analysis LRU
+                   may evict images only when rendering does not read them
+                   concurrently. The tile_ready bit controls availability
+                   independently of each view's visibility mask. */
+                if (isCsprj && m_scan->stitch)
+                  m_scan->stitch->keep_all_images();
+
                 if ((int)m_scan->gamma != -2 && m_scan->gamma > 0 &&
                     m_rparams.gamma == -1) // Update only if unknown
                   m_rparams.gamma = m_scan->gamma;
