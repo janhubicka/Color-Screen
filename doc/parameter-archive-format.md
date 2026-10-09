@@ -1,5 +1,13 @@
 # Color-Screen parameter archive format
 
+**Schema v1 compatibility specification.** This document describes the
+existing ZIP-based `.cspar` alpha format and its historical structured
+supplements. It is **not** the agreed final format. The pre-beta target is a
+**single native JSON schema-v2 document**, with no ZIP wrapper or embedded
+legacy CSP mirror; see [Plain JSON v2 migration](parameter-json-v2-plan.md).
+Work on v2 must preserve these v1 readers but must not extend the legacy
+mirror as the final authoritative representation.
+
 ## Status
 
 This document defines the post-GUI alpha file-format migration planned before
@@ -363,17 +371,19 @@ Implementation status in the alpha tree:
 - `image-area-v1` preserves the independently selectable photographic area
   within the outer object crop.
 
-Remaining rollout sequence:
+Remaining pre-beta rollout sequence (updated decision):
 
-1. Migrate high-value structured sections and dense payloads incrementally,
-   declaring one authoritative representation per schema version and validating
-   the legacy mirror rather than silently merging conflicts.
-2. Crash recovery now saves structured `.cspar` snapshots, while reading
-   old `recovery_params.par` snapshots when no archive exists. Preserve this
-   compatibility and the corrupt-new-archive/no-stale-fallback tests.
-3. Audit any remaining saved `ParameterState` fields that are not represented
-   by legacy CSP and make their structured archive representation authoritative
-   before beta.
-4. Keep all sanitizer/platform matrices green, run alpha field testing on the
-   completed workflow/file format, and only then consider advancing the product
-   version toward beta.
+1. Keep the existing schema-v1 ZIP format as an importer and temporary
+   default writer throughout the alpha transition.
+2. Complete **native plain JSON v2** serialization of every persistent
+   C++ and Qt parameter, as specified in
+   [parameter-json-v2-plan.md](parameter-json-v2-plan.md).
+   The registration component is only the first building block, not a
+   standalone v2 file. Account for all legacy keys and structured-only
+   fields in the tracked migration inventory.
+3. Integrate full v2 into CLI, GUI, Save As and recovery after
+   native round-trip, malformed-input, Unicode-path, atomic-save,
+   full-platform and sanitizer coverage passes. Preserve loaded v1/legacy
+   format identity until explicit conversion.
+4. Switch **new** saves to v2 only after full coverage passes; keep
+   the product in 2.0alpha until GUI and format field testing completes.
