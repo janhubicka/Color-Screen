@@ -3438,6 +3438,29 @@ test_mtf_physical_model ()
       ok = false;
     }
 
+  /* A scalar layer drawn from exactly one RGB channel must carry that
+     channel's measured wavelength to the optical operation, not the
+     representative green wavelength of an actual mixed RGB image layer.  */
+  image_data red_layer_capture;
+  if (!red_layer_capture.set_dimensions (1, 1, true, false))
+    {
+      fprintf (stderr, "Could not allocate red image-layer MTF test\n");
+      ok = false;
+    }
+  else
+    {
+      native_domain_render.mix_red = 1;
+      native_domain_render.mix_green = 0;
+      native_domain_render.mix_blue = 0;
+      if (native_domain_render.get_image_layer_wavelength (&red_layer_capture)
+              != 640)
+        {
+          fprintf (stderr,
+                   "One-hot native red layer lost measured wavelength\n");
+          ok = false;
+        }
+    }
+
   const double expected_magnification = 0.27933543307086614;
   const double expected_effective_f_stop = 10.234683464566929;
   const double expected_cutoff = 0.48983765357177734;
