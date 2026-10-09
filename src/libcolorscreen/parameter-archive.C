@@ -781,10 +781,10 @@ parse_render_overrides (const json_value &object,
                          "unknown state.render_overrides demosaiced_scaling");
 
   bool profile_found = false;
-  for (int i = 0; i < (int)render_parameters::output_profile_max; ++i)
-    if (profile->text == render_parameters::output_profile_names[i])
+  for (int i = 0; i < (int)render_output_parameters::output_profile_max; ++i)
+    if (profile->text == render_output_parameters::output_profile_names[i])
       {
-        parsed.output_profile = (render_parameters::output_profile_t)i;
+        parsed.output_profile = (render_output_parameters::output_profile_t)i;
         profile_found = true;
         break;
       }
@@ -1284,8 +1284,8 @@ parameter_archive_render_overrides_from (const render_parameters &rparam)
      colourspace and gamut diagnostics now belong to individual views or
      explicit file-render requests. Do not serialize a transient display
      choice as if it were a reconstruction parameter. */
-  result.output_profile = render_parameters::output_profile_sRGB;
-  result.output_gamma = rparam.output_gamma;
+  result.output_profile = render_output_parameters::output_profile_sRGB;
+  result.output_gamma = -1;
   result.gamut_warning = false;
   return result;
 }
@@ -1305,7 +1305,7 @@ apply_parameter_archive_render_overrides (
      typed representation during parsing, but do not restore them into
      document reconstruction state: current view/export configuration owns
      output colourspace and gamut warnings independently. */
-  rparam->output_gamma = overrides.output_gamma;
+
 }
 
 /* Extract the final frame from PARAM without changing other geometry. */
@@ -1564,7 +1564,7 @@ write_parameter_archive (
       const double output_gamma = render_overrides->output_gamma;
       if ((int)scaling < 0
           || scaling >= render_parameters::max_demosaiced_scaling
-          || (int)profile < 0 || profile >= render_parameters::output_profile_max
+          || (int)profile < 0 || profile >= render_output_parameters::output_profile_max
           || !std::isfinite (white_x) || !std::isfinite (white_y)
           || white_x < 0 || white_y <= 0 || white_x + white_y > 1
           || !std::isfinite (output_gamma)
@@ -1642,7 +1642,7 @@ write_parameter_archive (
              + json_number (render_overrides->observer_whitepoint.y)
              + "],\n"
                "      \"output_profile\": \""
-             + json_escape (render_parameters::output_profile_names
+             + json_escape (render_output_parameters::output_profile_names
                                 [(int)render_overrides->output_profile])
              + "\",\n"
                "      \"output_gamma\": "
