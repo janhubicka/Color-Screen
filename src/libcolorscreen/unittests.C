@@ -1341,7 +1341,8 @@ test_finetune_focus_screen_cache ()
   coord_t max_defocus = 0;
   if (!finetune_useful_defocus_limit (
           physical[0].scanner_mtf, physical[0].scanner_mtf_scale,
-          (coord_t)0.05, 20, &max_defocus))
+          (coord_t)0.05, 20, &max_defocus,
+          test_mtf_wavelength (physical[0].scanner_mtf)))
     return false;
   constexpr int nodes = 33;
   constexpr int lower_index = 11;
