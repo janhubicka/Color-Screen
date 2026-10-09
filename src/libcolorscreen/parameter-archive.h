@@ -168,6 +168,24 @@ encode_parameter_json_v2_registration (
     const std::vector<point_t> &profile_spots,
     std::string *output, std::string *error);
 
+/* Encode the scalar capture-input component as native JSON v2.
+   This covers capture identification, RAW demosaicing choice, gamma, scan
+   presentation, physical and photographic bounds, and exposure/dark-point
+   controls. It does not serialize correction grids or scanner MTF, which have
+   separate required native components still to implement. The returned
+   object is not a complete standalone .cspar v2 document. */
+DLL_PUBLIC bool
+encode_parameter_json_v2_capture (
+    const render_parameters &capture, std::string *output,
+    std::string *error);
+
+/* Decode capture-input values transactionally into CAPTURE, retaining all
+   unrelated processing controls. On failure CAPTURE is unchanged. */
+DLL_PUBLIC bool
+decode_parameter_json_v2_capture (
+    const std::string &input, render_parameters *capture,
+    std::string *error);
+
 /* Parse the native JSON v2 registration component into independent temporary
    state, committing only when all fields and bounds are valid. This prevents
    a malformed field from partially mutating a live document. ERROR gives a
