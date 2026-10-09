@@ -64,6 +64,25 @@ public:
         e.sub[i] = sub;
   }
 
+  /* Read the exact persisted calibration grid without exposing its mutable
+     storage. Callers must use valid cell and channel indices, as with the
+     existing setters. These accessors support native JSON serialization. */
+  inline int get_width () const { return m_width; }
+  inline int get_height () const { return m_height; }
+  inline bool channel_enabled (enum channel which) const
+  {
+    return m_channel_enabled[(int)which];
+  }
+  inline luminosity_t get_luminosity (int x, int y,
+                                     enum channel which) const
+  {
+    return m_luminosities[(size_t)y * m_width + x].lum[(int)which];
+  }
+  inline luminosity_t get_sub (int x, int y, enum channel which) const
+  {
+    return m_luminosities[(size_t)y * m_width + x].sub[(int)which];
+  }
+
   /* Internal API.  */
   static std::shared_ptr <backlight_correction_parameters>
   load_captureone_lcc (memory_buffer *buf, bool verbose = false);
@@ -74,7 +93,7 @@ public:
   /* Unique id of the image (used for caching).  */
   uint64_t id;
 
-  bool black_correction;
+  bool black_correction = false;
 
 private:
   int m_width, m_height;
