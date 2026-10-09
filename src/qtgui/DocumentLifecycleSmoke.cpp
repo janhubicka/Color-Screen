@@ -819,35 +819,17 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
                 QStringLiteral("missing-image-load.cspar"));
         QFile::remove(missingLegacySidecarPath);
         QFile::remove(missingArchiveSidecarPath);
-        if (!QFile::copy(state->firstParameters, missingLegacySidecarPath)) {
+        // The first document is now stored as an authoritative structured
+        // archive because its photographic image area cannot be represented
+        // in legacy CSP.  The second document retains a genuine legacy .par
+        // target.  Copy each in its native format: embedding a ZIP archive
+        // as the legacy.par entry of a second ZIP is not a valid sidecar.
+        if (!QFile::copy(state->secondParameters, missingLegacySidecarPath) ||
+            !QFile::copy(state->firstParameters, missingArchiveSidecarPath)) {
           delete loadProbe;
           state->recoveryProbe = nullptr;
           fail(QStringLiteral(
-              "Image-load failure smoke could not create a valid legacy sidecar"));
-          return;
-        }
-
-        QFile archivePayloadFile(state->firstParameters);
-        if (!archivePayloadFile.open(QIODevice::ReadOnly)) {
-          delete loadProbe;
-          state->recoveryProbe = nullptr;
-          fail(QStringLiteral(
-              "Image-load failure smoke could not read its sidecar payload"));
-          return;
-        }
-        const QByteArray archivePayload = archivePayloadFile.readAll();
-        archivePayloadFile.close();
-        std::string sidecarArchiveError;
-        if (!colorscreen::write_parameter_archive(
-                missingArchiveSidecarPath.toUtf8().constData(),
-                std::string(archivePayload.constData(),
-                            static_cast<size_t>(archivePayload.size())),
-                "document-lifecycle-smoke", &sidecarArchiveError)) {
-          delete loadProbe;
-          state->recoveryProbe = nullptr;
-          fail(QStringLiteral(
-                   "Image-load failure smoke could not create archive sidecar: %1")
-                   .arg(QString::fromUtf8(sidecarArchiveError)));
+              "Image-load failure smoke could not create legacy/archive sidecars"));
           return;
         }
 
