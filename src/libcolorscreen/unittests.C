@@ -10476,7 +10476,41 @@ test_stitch_tile_adjustment_grid ()
       return false;
     }
   params.set_tile_adjustments_dimensions (0, 0);
-  return params.tile_adjustments.empty ();
+  if (!params.tile_adjustments.empty ())
+    return false;
+
+  /* A tile's presence in a render is not a property of its exposure,
+     nor is it tied to any other view. Every new output request includes
+     all available tiles until this view explicitly hides one. */
+  render_output_parameters primary;
+  render_output_parameters sibling;
+  if (!primary.tile_enabled_p (0, 0, 2, 1)
+      || !primary.tile_enabled_p (1, 0, 2, 1))
+    return false;
+  primary.set_tile_enabled (2, 1, 0, 0, false);
+  if (primary.tile_enabled_p (0, 0, 2, 1)
+      || !primary.tile_enabled_p (1, 0, 2, 1)
+      || !sibling.tile_enabled_p (0, 0, 2, 1))
+    {
+      fprintf (stderr, "Tile visibility leaked across rendering requests\n");
+      return false;
+    }
+  /* A different stitched grid cannot inherit visibility by index. */
+  if (!primary.tile_enabled_p (0, 0, 1, 2)
+      || !primary.tile_enabled_p (0, 1, 1, 2))
+    {
+      fprintf (stderr, "A resized stitched grid inherited visibility\n");
+      return false;
+    }
+  primary.set_tile_enabled (1, 2, 0, 1, false);
+  if (!primary.tile_enabled_p (0, 0, 1, 2)
+      || primary.tile_enabled_p (0, 1, 1, 2)
+      || !primary.tile_enabled_p (0, 0, 2, 1))
+    {
+      fprintf (stderr, "Resizing a tile mask did not reset its old mapping\n");
+      return false;
+    }
+  return true;
 }
 
 /* Verify conservative detection of monochromatic data that was initially
