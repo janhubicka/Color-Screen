@@ -1225,10 +1225,15 @@ overlays in exports.
 
 The Tiles checkbox is a per-view output mask, not an Undoable
 `tile_adjustment::enabled` input. Underlying stitch calibration still saves
-exposure, dark-point and blur. Actual loading availability is determined by
-the tile image data independently of the mask: an asynchronous completion
-refreshes primary and peer renders through `imageTilesChanged()`, without
-altering `ParameterState`, Undo or dirty state. A file export can explicitly
+exposure, dark-point and blur. Actual loading availability is determined independently of the mask:
+`stitch_image::img` is allocated before pixels are decoded, so the library
+publishes a release-store ready bit **only after** `load_part` completes
+and validates dimensions/colour channels. Render lookups acquire-load that
+bit before reading the tile. The GUI calls `keep_all_images()` on its
+stitched project before dispatching parallel loads to prevent background
+LRU eviction while a view renders. Completion refreshes primary and peer
+renders through `imageTilesChanged()`, without altering `ParameterState`,
+Undo or dirty state. A file export can explicitly
 reuse the active view's mask, but never saves it in CSP.
 
 Schema-v1 `render-overrides-v1` retains **three required compatibility
