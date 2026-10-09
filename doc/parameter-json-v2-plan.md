@@ -39,13 +39,15 @@ validation rules and a complete native reader/writer. A missing required
 section must be rejected. Do not accept a partly filled prototype as a valid
 full v2 parameter file.
 
-### First implemented building block
+### Implemented native JSON v2 components
 
-Draft PR #538 adds internal `encode_parameter_json_v2_registration` and
-`decode_parameter_json_v2_registration`. They operate **directly on C++**
-geometry, detection, solver and profile-spot data without using
-`save_csp` or `load_csp`. Their JSON consists of these four objects (to be
-composed into a future full v2 root; it is not a standalone user file):
+Draft PR #538 now has three independently tested core-only codecs:
+`encode/decode_parameter_json_v2_registration`,
+`encode/decode_parameter_json_v2_capture`, and
+`encode/decode_parameter_json_v2_reconstruction`. They operate **directly
+on C++ state** without using `save_csp` or `load_csp`, and emit component
+objects for a future complete document. No component is a standalone v2
+`.cspar` file.
 
 - `geometry` has stable string `screen_type` and `scanner_type`,
   `center`, `axis_x`, `axis_y` as [x,y] pairs,
@@ -66,10 +68,23 @@ composed into a future full v2 root; it is not a standalone user file):
   numeric [x,y] pairs. The final profile section must also cover any other
   genuinely persisted calibration state.
 
-The component codec requires finite scalars, positive final ratio, stable
-known enum identifiers, correct numeric tuple lengths, compatible mesh
-dimensions/point count, and valid numerical conversions. It parses into
-independent local state and only publishes outputs after complete validation.
+- `capture` stores capture type, RAW demosaic method, gamma, scan
+  quarter-turn rotation/mirror, independently enabled physical-object crop
+  and photographic image area, scan exposure and global/backlight dark-point
+  scalars. It does **not** yet include scanner blur grids, MTF spectral
+  metadata or colour/process white balance.
+- `reconstruction` stores IR handling, scalar/image-layer RGB mixer weights
+  and offsets, collection quality, screen demosaic and scaling algorithms,
+  blur radius and collection threshold, plus **all** persisted coefficients
+  of pre- and post-screen denoise stages. Inactive denoise coefficients are
+  preserved for Undo and future re-enabling, rather than omitted according
+  to the currently effective algorithm.
+
+All component codecs require finite scalars, stable known enum identifiers,
+valid array shapes and representable numeric conversions. Geometry additionally
+requires positive final ratio and compatible mesh dimensions/point count;
+capture independently checks outer crop and inner photographic bounds.
+Every decoder works in local state and only publishes after complete validation.
 C++ float/double values are written with enough decimal precision for exact
 round trips. Separately bounded large-array parsing does **not** weaken the
 small schema-v1 ZIP manifest limit.
@@ -139,9 +154,11 @@ or Save As selection; switch new projects to v2 only after the gates below.
 ## Execution checklist
 
 - [x] Decide plain-JSON v2 representation, independent of ZIP.
-- [x] Start a native, transaction-safe and unit-tested
-      geometry/detection/registration/profile-spots component.
-- [ ] Implement the rest of the native typed serializers/readers; complete and
+- [x] Start native, transaction-safe, separately tested components for
+      geometry/detection/registration/profile spots, core capture scalars,
+      and image-layer reconstruction/denoising controls.
+- [ ] Implement the remaining capture data/correction grids and native typed
+      process, sharpness/MTF and colour serializers; complete and
       audit mapping of every persisted field. No partial default writer.
 - [ ] Compose full v2 root and robust content-based dispatch.
 - [ ] Integrate GUI Save/Save As, CLI read/rewrite and private recovery.
