@@ -134,7 +134,8 @@ public:
       New user-initiated opens normally go through ColorScreenApplication so
       an occupied window is never overwritten.  SUPPRESSPARAMPROMPT is reserved
       for crash recovery.  */
-  void loadFile(const QString &fileName, bool suppressParamPrompt = false);
+  void loadFile(const QString &fileName, bool suppressParamPrompt = false,
+                bool preferCachedRaw = false);
 
   /** Return true when this untouched empty window may host a newly opened
       image instead of allocating another document window.  */
@@ -1047,6 +1048,11 @@ private:
     std::optional<uint64_t> screenAutodetectAfterGeneration;
     QPointer<QMessageBox> sidecarPrompt;
     QPointer<QMessageBox> failurePrompt;
+    /** The original RAW image owns the unpacked mosaic. A demosaiced
+        derivative need not own it, so retain the source as long as this
+        document continues to use the same input file. */
+    std::shared_ptr<colorscreen::image_data> rawSource;
+    QString rawSourceFile;
   };
   ImageLoadState m_imageLoad;
 
