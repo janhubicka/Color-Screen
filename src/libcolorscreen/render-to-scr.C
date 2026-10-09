@@ -141,6 +141,7 @@ struct saturation_loss_params
   int img_width = 0, img_height = 0;
   luminosity_t collection_threshold = (luminosity_t)0.0;
   sharpen_parameters sharpen = {};
+  double wavelength_nm = 0;
   uint64_t mesh_id = 0;
   scr_to_img_parameters scr_to_img_params = {};
   class scr_to_img *map = nullptr;
@@ -152,6 +153,7 @@ struct saturation_loss_params
     return scr_table_id == o.scr_table_id
            && collection_threshold == o.collection_threshold
            && sharpen == o.sharpen
+           && wavelength_nm == o.wavelength_nm
 	   && sharpen.scanner_mtf_scale == o.sharpen.scanner_mtf_scale
 	   && (!sharpen.scanner_mtf_scale || sharpen.scanner_mtf == o.sharpen.scanner_mtf)
            && img_width == o.img_width && img_height == o.img_height
@@ -167,7 +169,7 @@ get_new_saturation_loss_table (struct saturation_loss_params &p,
 {
   auto s = std::make_unique<saturation_loss_table> (
       p.scr_table, p.collection_screen, p.img_width, p.img_height, p.map,
-      p.collection_threshold, p.sharpen, progress);
+      p.collection_threshold, p.sharpen, p.wavelength_nm, progress);
   if (progress && progress->cancelled ())
     {
       return nullptr;
@@ -255,7 +257,7 @@ screen_table::screen_table (scanner_blur_correction_parameters *param,
 saturation_loss_table::saturation_loss_table (
     screen_table *screen_table, screen *collection_screen, int img_width,
     int img_height, scr_to_img *map, luminosity_t collection_threshold,
-    const sharpen_parameters &sharpen,
+    const sharpen_parameters &sharpen, double wavelength_nm,
     progress_info *progress)
     : m_id (lru_caches::get ()), m_width (screen_table->get_width ()),
       m_height (screen_table->get_height ()), m_img_width (img_width),
@@ -267,7 +269,7 @@ saturation_loss_table::saturation_loss_table (
   if (progress)
     progress->set_task ("computing saturation loss table", m_width * m_height);
 #pragma omp parallel for default(none) shared(progress) collapse(2)           \
-    shared(screen_table, collection_screen, collection_threshold, map, sharpen)
+    shared(screen_table, collection_screen, collection_threshold, map, sharpen, wavelength_nm)
   for (int y = 0; y < m_height; y++)
     for (int x = 0; x < m_width; x++)
       {
@@ -285,7 +287,7 @@ saturation_loss_table::saturation_loss_table (
                 *collection_screen, NULL,
                 screen_table->get_sampling (), collection_threshold, sharpen,
                 *map,
-		{xp - 100, yp - 100, 200, 200}))
+		{xp - 100, yp - 100, 200, 200}, wavelength_nm))
           {
             color_matrix sat (cred.red, cgreen.red, cblue.red, (luminosity_t)0.0,
 			      cred.green, cgreen.green, cblue.green, (luminosity_t)0.0,
@@ -412,6 +414,7 @@ render_to_scr::compute_saturation_loss_table (
           m_img.height,
           collection_threshold,
 	  sharpen,
+          m_params.get_image_layer_wavelength (&m_img),
           m_scr_to_img_param.mesh_trans ? m_scr_to_img_param.mesh_trans->id
                                         : 0,
           m_scr_to_img_param.mesh_trans ? dummy : m_scr_to_img_param,
