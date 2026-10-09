@@ -1477,7 +1477,7 @@ test_finetune_focus_screen_cache ()
           *other_wavelength_screen, &delta, (luminosity_t)1e-8))
     {
       fprintf (stderr,
-               "Cached screen at new wavelength differs from direct build\\n");
+               "Cached screen at new wavelength differs from direct build\n");
       return false;
     }
   other_wavelength_hit = false;
@@ -1489,7 +1489,7 @@ test_finetune_focus_screen_cache ()
       || repeated_wavelength_screen.get () != other_wavelength_screen.get ())
     {
       fprintf (stderr,
-               "Unchanged explicit-wavelength screen was not reused\\n");
+               "Unchanged explicit-wavelength screen was not reused\n");
       return false;
     }
 
