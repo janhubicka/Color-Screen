@@ -1000,7 +1000,7 @@ get_linearized_pixel (const image_data &img, render_parameters &rparam, int xx,
       int tx, ty;
       point_t scr = img.stitch->common_scr_to_img.final_to_scr (
           { (coord_t)(xx + img.xmin), (coord_t)(yy + img.ymin) });
-      if (!img.stitch->tile_for_scr (&rparam, scr.x, scr.y, &tx, &ty, true))
+      if (!img.stitch->tile_for_scr (nullptr, scr.x, scr.y, &tx, &ty, true))
         return color;
       point_t p = img.stitch->images[ty][tx].common_scr_to_img (scr);
       xx = nearest_int (p.x);
