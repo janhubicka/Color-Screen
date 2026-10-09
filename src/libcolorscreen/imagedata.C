@@ -9,6 +9,7 @@
 #include <array>
 #include <atomic>
 #include <cstdint>
+#include <list>
 #include <mutex>
 #include <assert.h>
 #include <cmath>
@@ -41,6 +42,10 @@ extern void prune_render_scr_detect_caches ();
    cache budget, not a limit on the image that Color-Screen may decode. */
 static constexpr uint64_t raw_source_budget = UINT64_C (256) * 1024 * 1024;
 static std::atomic<uint64_t> retained_raw_source_bytes {0};
+/* Count only variants held alive by the cache, not external view owners.
+   Source mosaics have a separate 256 MiB reservation. */
+static constexpr uint64_t raw_variant_budget = UINT64_C (256) * 1024 * 1024;
+static std::atomic<uint64_t> retained_raw_variant_bytes {0};
 
 /* Own LibRaw's decoded sensor samples after the initial loader has gone.
    The processed image buffer is released on transfer. Retention is currently
@@ -58,11 +63,26 @@ public:
   int full_res_width = 0;
   void *input_buffer = nullptr;
   uint64_t reserved_bytes = 0;
+  struct cached_variant
+  {
+    image_data::demosaicing_t method;
+    std::shared_ptr<image_data> image;
+    uint64_t reserved_bytes;
+  };
+  /* Most recently used first; at most two finished derivatives. A derivative
+     never holds a strong source pointer after its loader has finished. */
+  std::list<cached_variant> variants;
 
   ~unpacked_raw_source ()
   {
     /* LibRaw may still own a datastream referring to the EIP input
        buffer. Destroy its processor before returning that memory. */
+    /* Drop cached derivative ownership before releasing source storage. */
+    for (const cached_variant &variant : variants)
+      if (variant.reserved_bytes)
+        retained_raw_variant_bytes.fetch_sub (
+            variant.reserved_bytes, std::memory_order_relaxed);
+    variants.clear ();
     processor.reset ();
     if (input_buffer)
       free (input_buffer);
