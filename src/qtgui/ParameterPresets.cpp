@@ -405,10 +405,7 @@ bool save(const QString &name, Scope scope, const ParameterState &state,
                       state.rparams.observer_whitepoint.x);
         extras.insert(QStringLiteral("observerWhitepointY"),
                       state.rparams.observer_whitepoint.y);
-        extras.insert(QStringLiteral("outputProfile"),
-                      static_cast<int>(state.rparams.output_profile));
         extras.insert(QStringLiteral("outputGamma"), state.rparams.output_gamma);
-        extras.insert(QStringLiteral("gamutWarning"), state.rparams.gamut_warning);
 
         QVariantList controlPoints;
         for (const colorscreen::point_t &point :
@@ -522,23 +519,12 @@ bool apply(const Record &record, ParameterState *target,
                 record.extras.value(QStringLiteral("observerWhitepointY"))
                     .toDouble());
         }
-        if (record.extras.contains(QStringLiteral("outputProfile"))) {
-            const int profile =
-                record.extras.value(QStringLiteral("outputProfile")).toInt();
-            if (profile >= 0 &&
-                profile <
-                    static_cast<int>(colorscreen::render_parameters::
-                                         output_profile_max))
-                target->rparams.output_profile =
-                    static_cast<colorscreen::render_parameters::output_profile_t>(
-                        profile);
-        }
+        // Older colour presets may contain view-only profile/gamut keys.
+        // Those keys are ignored: the active ImageWidget and Render dialog
+        // own display/output intent, not persistent appearance presets.
         if (record.extras.contains(QStringLiteral("outputGamma")))
             target->rparams.output_gamma =
                 record.extras.value(QStringLiteral("outputGamma")).toDouble();
-        if (record.extras.contains(QStringLiteral("gamutWarning")))
-            target->rparams.gamut_warning =
-                record.extras.value(QStringLiteral("gamutWarning")).toBool();
 
         if (record.extras.contains(QStringLiteral("toneCurveControlPoints"))) {
             std::vector<colorscreen::point_t> points;

@@ -13,8 +13,12 @@ namespace colorscreen
 /* Structured render fields that the legacy CSP mirror cannot represent.
 
    PRESENT is false for legacy files and schema-v1 archives without the
-   render-overrides-v1 required feature. When true, these values are
-   authoritative and must be applied after parsing state/legacy.par. */
+   render-overrides-v1 required feature. Four values remain authoritative
+   reconstruction inputs applied after parsing state/legacy.par. Schema v1
+   also requires historical OUTPUT_PROFILE and GAMUT_WARNING fields for
+   interoperability: validate them on read, emit neutral values on write,
+   but never apply them as saved document state. Views and export requests
+   own those choices independently. */
 struct parameter_archive_render_overrides
 {
   bool present = false;
