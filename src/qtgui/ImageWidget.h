@@ -87,6 +87,9 @@ public:
       It is independent of image-load readiness and never enters Undo/save. */
   bool tileVisible(int x, int y) const;
   void setTileVisible(int x, int y, bool visible);
+  /** Complete per-view output request, including its independent tile mask.
+      File export may use it as an initial suggestion, never as document state. */
+  colorscreen::render_output_parameters viewOutputParameters() const;
   /** Refresh pixels after a staged tile finishes loading, without an edit. */
   void refreshRendering() { requestRender(); }
 
