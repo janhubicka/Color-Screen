@@ -10570,6 +10570,207 @@ test_stitch_tile_adjustment_grid ()
 }
 
 
+/* Compose and reload one COMPLETE native JSON v2 document using one parse,
+   then reject missing sections and corrupted nested content transactionally. */
+static bool
+test_native_json_v2_document ()
+{
+  scr_to_img_parameters geometry;
+  geometry.type = Dufay;
+  geometry.center = {124.125, 88.875};
+  geometry.coordinate1 = {4.25, -0.125};
+  geometry.coordinate2 = {0.375, 5.125};
+  geometry.final_angle = 93.25;
+  geometry.final_ratio = 1.375;
+  geometry.mesh_trans = std::make_shared<mesh> (0.5, 0.25, 2.0, 2.0, 2, 2);
+  geometry.mesh_trans_is_scr_to_img = true;
+  geometry.mesh_trans->set_point ({0, 0}, {0.125, 0.25});
+  geometry.mesh_trans->set_point ({1, 0}, {2.125, 0.25});
+  geometry.mesh_trans->set_point ({0, 1}, {0.125, 2.25});
+  geometry.mesh_trans->set_point ({1, 1}, {2.125, 2.25});
+
+  scr_detect_parameters detection;
+  detection.min_ratio = 1.375f;
+  solver_parameters solver;
+  solver.optimize_tilt = false;
+  solver.lens_center_distance = 1.25;
+  for (int i = 0; i < 5000; ++i)
+    solver.points.push_back (
+        {{(coord_t)i / 9, (coord_t)i / 11},
+         {(coord_t)i / 3, (coord_t)i / 5},
+         (solver_parameters::point_color)(i % 3)});
+  const std::vector<point_t> spots {{19.125, 27.25}, {25.5, 81.75}};
+
+  render_parameters render;
+  render.capture_type
+      = render_parameters::capture_transparency_with_screen;
+  render.demosaic = image_data::demosaic_AHD;
+  render.gamma = 2.25f;
+  render.scan_crop = int_image_area (2, 4, 512, 256);
+  render.image_area = int_image_area (9, 12, 470, 218);
+  render.scan_exposure = 1.125f;
+  render.ignore_infrared = true;
+  render.demosaiced_scaling = render_parameters::lanczos3_scaling;
+  render.screen_demosaic = render_parameters::amaze_demosaic;
+  render.screen_denoise.mode = denoise_parameters::nl_fast;
+  render.screen_denoise.patch_radius = 2;
+  render.demosaiced_denoise.mode = denoise_parameters::bilateral;
+  render.color_model = render_parameters::color_model_dufay_manual;
+  render.contact_copy.simulate = true;
+  render.contact_copy.exposure = 0.875f;
+  render.observer_whitepoint = {0.3127f, 0.329f};
+  render.output_tone_curve = tone_curve::tone_curve_custom;
+  render.output_tone_curve_control_points
+      = {{0, 0}, {0.25, 0.1875}, {0.75, 0.8125}, {1, 1}};
+  render.sharpen.mode = sharpen_parameters::wiener_deconvolution;
+  render.sharpen.scanner_mtf.model = mtf_model::physical_diffraction;
+  render.sharpen.scanner_mtf.sigma = 0.625;
+  render.sharpen.scanner_mtf.scan_dpi = 3200;
+  render.sharpen.scanner_mtf.wavelengths = {600, 530, 450, 750};
+  mtf_measurement measured;
+  measured.name = u8"Measured transfer ČR";
+  measured.channel = 1;
+  measured.roi = {8, 12, 32, 24};
+  measured.edge_p1 = {11.125, 13.375};
+  measured.edge_p2 = {32.75, 25.125};
+  for (int i = 0; i < 30; ++i)
+    measured.add_value ((double)i / 64, 100 - (double)i / 3,
+                        (double)(i % 7) / 128);
+  render.sharpen.scanner_mtf.measurements.push_back (measured);
+  render.sharpen.scanner_mtf.measured_mtf_idx = 0;
+
+  bool channels[4] = {true, true, false, true};
+  render.backlight_correction
+      = std::make_shared<backlight_correction_parameters> ();
+  if (!render.backlight_correction->alloc (2, 2, channels))
+    return false;
+  render.backlight_correction->black_correction = true;
+  render.backlight_correction->set_luminosity (
+      0, 0, 0.875f, backlight_correction_parameters::red);
+  render.backlight_correction->set_sub (
+      0, 0, 0.0625f, backlight_correction_parameters::red);
+  render.set_tile_adjustments_dimensions (2, 1);
+  render.get_tile_adjustment (1, 0).exposure = 1.125f;
+  render.scanner_blur_correction
+      = std::make_shared<scanner_blur_correction_parameters> ();
+  if (!render.scanner_blur_correction->alloc (
+          2, 2, scanner_blur_correction_parameters::mtf_blur_diameter))
+    return false;
+  render.scanner_blur_correction->set_correction (1, 1, 0.03125f);
+
+  std::string first, error;
+  if (!encode_parameter_json_v2_document (
+          geometry, detection, render, solver, spots, &first, &error)
+      || first.find ("\"schema_version\": 2") == std::string::npos
+      || first.find ("\"legacy_csp\"") != std::string::npos
+      || first.find ("\"capture\"") == std::string::npos
+      || first.find ("\"correction_grids\"") == std::string::npos)
+    {
+      fprintf (stderr, "Native v2 full encode failed: %s\n", error.c_str ());
+      return false;
+    }
+
+  scr_to_img_parameters parsed_geometry;
+  scr_detect_parameters parsed_detection;
+  render_parameters parsed_render;
+  solver_parameters parsed_solver;
+  std::vector<point_t> parsed_spots;
+  if (!decode_parameter_json_v2_document (
+          first, &parsed_geometry, &parsed_detection, &parsed_render,
+          &parsed_solver, &parsed_spots, &error))
+    {
+      fprintf (stderr, "Native v2 full decode failed: %s\n", error.c_str ());
+      return false;
+    }
+  if (parsed_geometry.final_ratio != geometry.final_ratio
+      || parsed_geometry.type != geometry.type
+      || !parsed_geometry.mesh_trans
+      || parsed_geometry.mesh_trans->get_point ({1, 1})
+             != geometry.mesh_trans->get_point ({1, 1})
+      || !(parsed_detection == detection)
+      || parsed_solver.points != solver.points
+      || parsed_spots != spots
+      || parsed_render.gamma != render.gamma
+      || !(parsed_render.image_area == render.image_area)
+      || parsed_render.demosaiced_scaling != render.demosaiced_scaling
+      || !parsed_render.sharpen.equal_p (render.sharpen)
+      || parsed_render.output_tone_curve_control_points
+             != render.output_tone_curve_control_points
+      || !parsed_render.backlight_correction
+      || parsed_render.backlight_correction->get_luminosity (
+             0, 0, backlight_correction_parameters::red) != 0.875f
+      || !parsed_render.scanner_blur_correction
+      || parsed_render.scanner_blur_correction->get_correction (1, 1)
+             != 0.03125f
+      || parsed_render.tile_adjustments.size () != 2
+      || parsed_render.get_tile_adjustment (1, 0).exposure != 1.125f)
+    {
+      fprintf (stderr, "Native v2 complete state roundtrip mismatch\n");
+      return false;
+    }
+  std::string canonical;
+  if (!encode_parameter_json_v2_document (
+          parsed_geometry, parsed_detection, parsed_render, parsed_solver,
+          parsed_spots, &canonical, &error)
+      || canonical != first)
+    {
+      fprintf (stderr, "Native v2 full document is not canonical\n");
+      return false;
+    }
+
+  /* Corruption late in the file must not publish any previously accepted
+     capture, geometry, points or MTF data. */
+  auto reject_unchanged = [&] (const std::string &bad)
+    {
+      return !decode_parameter_json_v2_document (
+                 bad, &parsed_geometry, &parsed_detection, &parsed_render,
+                 &parsed_solver, &parsed_spots, &error)
+             && parsed_geometry.final_ratio == geometry.final_ratio
+             && parsed_render.gamma == render.gamma
+             && parsed_solver.points == solver.points
+             && parsed_spots == spots;
+    };
+  for (const auto &substitution :
+       {std::pair<std::string, std::string> {
+            "\"schema_version\": 2", "\"schema_version\": 3"},
+        {"\"format\": \"org.colorscreen.parameters\"",
+         "\"format\": \"unknown.document\""},
+        {"\"wavelengths_nm\": [600, 530, 450, 750]",
+         "\"wavelengths_nm\": [600, 530, 450]"},
+        {"\"correction_grids\"", "\"missing_correction_grids\""},
+        {"\"capture\"", "\"capture\", \"capture\""}})
+    {
+      std::string bad = first;
+      const size_t at = bad.find (substitution.first);
+      if (at == std::string::npos)
+        {
+          fprintf (stderr, "Native v2 corruption test key missing\n");
+          return false;
+        }
+      bad.replace (at, substitution.first.size (), substitution.second);
+      if (!reject_unchanged (bad))
+        return false;
+    }
+
+  /* Unknown required features are not optional metadata and cannot be
+     silently dropped by an older v2 reader. */
+  std::string extra = first;
+  size_t at = extra.find ("\"schema_version\": 2");
+  if (at == std::string::npos)
+    return false;
+  extra.replace (at, strlen ("\"schema_version\": 2"),
+                 "\"schema_version\": 2, \"required_features\": [\"future\"]");
+  if (!reject_unchanged (extra))
+    return false;
+
+  /* A malformed source must leave an established caller's values alone,
+     including a retained calibration resource. */
+  const auto prior_blur = parsed_render.scanner_blur_correction;
+  if (!reject_unchanged ("{") || parsed_render.scanner_blur_correction != prior_blur)
+    return false;
+  return true;
+}
+
 /* Directly persist all spatial calibration resources without a CSP mirror,
    including non-enabled backlight samples and per-tile optical corrections. */
 static bool
@@ -11704,6 +11905,8 @@ main (int argc, char **argv)
     { "mesh_inversion", "mesh inversion tests", [] () { return test_mesh_inversion (); } },
     { "cow_points", "cow points tests", [] () { return test_cow_points (); } },
     { "image_area", "image area tests", [] () { return test_image_area (); } },
+    { "json_v2_document", "complete native schema-v2 JSON document roundtrip",
+      [] () { return test_native_json_v2_document (); } },
     { "json_v2_correction_grids", "native JSON schema-v2 spatial correction grid codec",
       [] () { return test_native_json_v2_correction_grids (); } },
     { "json_v2_sharpness", "native JSON schema-v2 complete MTF/PSF codec",
