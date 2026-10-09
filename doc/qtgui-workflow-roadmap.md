@@ -873,8 +873,11 @@ exists. The existing onscreen `QImage` is 8-bit sRGB.
 
 The Render-to-File dialog selects the export profile separately, while a
 chosen view's temporary tile visibility mask may seed that export. Actual
-background image-loading readiness is independent of user tile visibility and
-its notifications never change document calibration or dirty state.
+background image-loading readiness is independent of user tile visibility:
+a tile is available to render only after its incremental decoder publishes
+its ready flag, not merely when `img` has been allocated. Qt stitch documents
+retain decoded tile data during concurrent rendering. Completion
+notifications never change document calibration or dirty state.
 
 Schema-v1 compatibility still requires typed historical
 `output_profile`, `output_gamma`, and `gamut_warning` keys: current
