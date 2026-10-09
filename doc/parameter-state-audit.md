@@ -33,6 +33,51 @@ Do not automatically migrate every member into `.cspar`.
 | `render_parameters::output_profile` | View/display/output colourspace selection, not a property of the scanned object. Older schema-v1 `render-overrides-v1` manifests nonetheless require a typed field. | **Per-view/operation** in PR #533; PR #534 writes `sRGB` as the neutral schema-v1 compatibility value. Do not conflate this with the persistent output tone curve, gamma, or adapted whitepoint without a separate semantic decision. |
 | `render_parameters::gamut_warning` | Diagnostic intent for an individual preview. The core renderer still consumes the flag on its temporary render-request copy. | **View-owned** in PR #533; PR #534 accepts historical schema-v1 values strictly but emits a neutral compatibility key and does not restore it into document state. Neither PR is part of this cleanup branch. |
 
+## Output-request ownership decision (2.0alpha)
+
+**Implementation in PR #535:** `render_output_parameters` is an immutable
+per-render request value carried alongside `render_type_parameters`, not a
+member of `render_parameters` or saved `ParameterState`. It contains:
+
+- output profile/colourspace selection (default sRGB);
+- output gamma/transfer (-1 for the sRGB curve, 1 for linear), without a
+  processing-panel control;
+- gamut warning as a diagnostic for that render;
+- an optional grid-shaped enabled/disabled stitch-tile mask, defaulting to
+  all tiles visible.
+
+The GUI View menu still selects the *display* profile and warning of the
+current canvas, and Render to File still exposes an explicit export profile.
+These are presentation/export choices, not reconstruction settings. A future
+ICC-/wide-gamut/HDR-aware output pipeline should resolve the actual target
+display profile and transfer for each view (including 10/16-bit HDR surfaces),
+rather than store a single document gamma. This request structure is the
+starting boundary, not an implementation of monitor ICC/HDR handling.
+
+**Compatibility:** existing `.cspar` schema-v1 render overrides continue to
+require typed `output_profile`, `output_gamma`, and `gamut_warning` keys
+because old alpha readers insist on them. New archives write
+sRGB/-1/false; all three historical keys are parsed strictly but ignored
+when reconstructing document state. The persistent render overrides remain
+`ignore_infrared`, `demosaiced_scaling` and `observer_whitepoint`.
+The outer object crop, photographic bounds, final axis geometry, scan settings,
+output appearance tone curve, and capture calibration remain persistent.
+
+**Stitched images:** `tile_adjustment::enabled` is not saved and no longer
+exists in the calibration grid. Per-view tile visibility is a request-local
+mask. Physical readiness is represented by loaded tile image data, and worker
+completion only triggers canvas updates; it cannot change the document,
+Undo or a deliberate view mask. Per-tile exposure, dark-point and blur
+corrections remain saved.
+
+**Demosaic follow-up (separate project):** retain the saved `demosaic`
+choice. Consider an immutable, on-demand image-data cache keyed by decoder
+and demosaic parameters, preserving the original mosaic/non-demosaiced input
+for fast reprocessing. Bound memory with LRU eviction and lifetime-safe shared
+ownership, and ensure that cancellation and scan replacement cannot publish
+results from an obsolete request. Do not integrate that larger storage/decoder
+refactor into a renderer-output migration.
+
 ## MTF persistence audit: separate real values from bookkeeping
 
 The inspection compares `src/libcolorscreen/include/mtf-parameters.h` with
