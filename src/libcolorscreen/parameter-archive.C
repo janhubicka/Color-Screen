@@ -2838,4 +2838,205 @@ decode_parameter_json_v2_reconstruction (const std::string &input,
   return true;
 }
 
+
+/* Persisted historical-process controls: physical screen strip geometry,
+   dye model/age/density, and the exact contact-copy H&D curve and exposure.
+   View output colourspace and per-render gamut warnings are not part of this
+   component. */
+namespace
+{
+/* Preserve binary32 H&D coordinates without converting through a CSP file. */
+std::string
+v2_lum_pair_text (luminosity_t x, luminosity_t y)
+{
+  return "[" + json_number (x) + ", " + json_number (y) + "]";
+}
+
+/* Read an exact 2-tuple of H&D curve coordinates. */
+bool
+v2_lum_pair (const json_value &value, luminosity_t *x,
+             luminosity_t *y)
+{
+  if (value.type != json_value::kind::array
+      || value.array_value.size () != 2)
+    return false;
+  luminosity_t px, py;
+  if (!v2_real (value.array_value[0], &px)
+      || !v2_real (value.array_value[1], &py))
+    return false;
+  *x = px;
+  *y = py;
+  return true;
+}
+
+/* Decode named [x,y] H&D points with precise field diagnostics. */
+bool
+v2_named_lum_pair (const json_value &object, const char *name,
+                   luminosity_t *x, luminosity_t *y, std::string *error)
+{
+  const json_value *value
+      = v2_required (object, name, json_value::kind::array, error);
+  if (!value)
+    return false;
+  if (!v2_lum_pair (*value, x, y))
+    return archive_fail (error,
+                         std::string ("invalid v2 contact-copy point: ") + name);
+  return true;
+}
+
+/* All stored characteristic-curve coordinates are input settings,
+   including those inactive while contact-copy simulation is off. */
+bool
+v2_finite_hd_curve (const hd_curve_parameters &curve)
+{
+  return my_isfinite (curve.minx) && my_isfinite (curve.miny)
+         && my_isfinite (curve.linear1x) && my_isfinite (curve.linear1y)
+         && my_isfinite (curve.linear2x) && my_isfinite (curve.linear2y)
+         && my_isfinite (curve.maxx) && my_isfinite (curve.maxy);
+}
+
+/* Check every saved process control before writing partial JSON. */
+bool
+v2_valid_process (const render_parameters &p, std::string *error)
+{
+  if ((int)p.color_model < 0
+      || (int)p.color_model >= render_parameters::color_model_max)
+    return archive_fail (error, "unknown v2 historical dye model");
+  if (!my_isfinite (p.red_strip_width)
+      || !my_isfinite (p.green_strip_width)
+      || !v2_finite_colour (p.age)
+      || !v2_finite_colour (p.dye_density)
+      || !my_isfinite (p.contact_copy.preflash)
+      || !my_isfinite (p.contact_copy.exposure)
+      || !my_isfinite (p.contact_copy.boost)
+      || !v2_finite_hd_curve (p.contact_copy.emulsion_characteristic_curve))
+    return archive_fail (error, "nonfinite v2 historical-process parameter");
+  return true;
+}
+} // anonymous namespace
+
+/* Encode historical physical material/process properties, including the
+   characteristic-curve control points, as one native JSON component. */
+bool
+encode_parameter_json_v2_process (const render_parameters &render,
+                                  std::string *output, std::string *error)
+{
+  if (error)
+    error->clear ();
+  if (!output)
+    return archive_fail (error, "missing v2 process output");
+  if (!v2_valid_process (render, error))
+    return false;
+
+  const hd_curve_parameters &curve
+      = render.contact_copy.emulsion_characteristic_curve;
+  std::string text;
+  text.reserve (1150);
+  text += "{\n  \"process\": {\n    \"color_model\": \"";
+  text += json_escape (render_parameters::color_model_properties
+                           [(int)render.color_model].name);
+  text += "\",\n    \"age\": " + v2_colour_text (render.age);
+  text += ",\n    \"dye_density\": " + v2_colour_text (render.dye_density);
+  text += ",\n    \"strip_widths\": {\n      \"red\": "
+          + json_number (render.red_strip_width);
+  text += ",\n      \"green\": "
+          + json_number (render.green_strip_width);
+  text += "\n    },\n    \"contact_copy\": {\n      \"simulate\": ";
+  text += render.contact_copy.simulate ? "true" : "false";
+  text += ",\n      \"preflash\": "
+          + json_number (render.contact_copy.preflash);
+  text += ",\n      \"exposure\": "
+          + json_number (render.contact_copy.exposure);
+  text += ",\n      \"boost\": "
+          + json_number (render.contact_copy.boost);
+  text += ",\n      \"emulsion_curve\": {\n        \"min\": "
+          + v2_lum_pair_text (curve.minx, curve.miny);
+  text += ",\n        \"linear1\": "
+          + v2_lum_pair_text (curve.linear1x, curve.linear1y);
+  text += ",\n        \"linear2\": "
+          + v2_lum_pair_text (curve.linear2x, curve.linear2y);
+  text += ",\n        \"max\": "
+          + v2_lum_pair_text (curve.maxx, curve.maxy);
+  text += "\n      }\n    }\n  }\n}\n";
+  if (text.size () > v2_max_capture_json_bytes)
+    return archive_fail (error, "v2 process JSON exceeds size limit");
+  *output = std::move (text);
+  return true;
+}
+
+/* Parse a complete process group privately, commit only on success, and
+   retain unrelated capture/sharpness/colour parameters untouched. */
+bool
+decode_parameter_json_v2_process (const std::string &input,
+                                  render_parameters *render,
+                                  std::string *error)
+{
+  if (error)
+    error->clear ();
+  if (!render)
+    return archive_fail (error, "missing v2 process destination");
+  if (input.size () > v2_max_capture_json_bytes || !valid_utf8 (input))
+    return archive_fail (error, "invalid v2 process UTF-8/size");
+  json_parser parser (input.data (), input.data () + input.size ());
+  json_value root;
+  if (!parser.parse (&root))
+    return archive_fail (error, "invalid v2 process JSON: "
+                         + parser.error ());
+
+  const json_value *object
+      = v2_required (root, "process", json_value::kind::object, error);
+  if (!object)
+    return false;
+  render_parameters parsed = *render;
+  int color_model = 0;
+  if (!v2_enum (*object, "color_model",
+                v2_property_names (render_parameters::color_model_properties,
+                                   render_parameters::color_model_max),
+                &color_model, error))
+    return false;
+  parsed.color_model = (render_parameters::color_model_t)color_model;
+
+  const json_value *age
+      = v2_required (*object, "age", json_value::kind::array, error);
+  const json_value *density
+      = v2_required (*object, "dye_density",
+                     json_value::kind::array, error);
+  const json_value *strips
+      = v2_required (*object, "strip_widths", json_value::kind::object, error);
+  const json_value *copy
+      = v2_required (*object, "contact_copy", json_value::kind::object, error);
+  if (!age || !density || !strips || !copy)
+    return false;
+  if (!v2_colour (*age, &parsed.age)
+      || !v2_colour (*density, &parsed.dye_density)
+      || !v2_field_real (*strips, "red", &parsed.red_strip_width, error)
+      || !v2_field_real (*strips, "green", &parsed.green_strip_width, error)
+      || !v2_field_bool (*copy, "simulate", &parsed.contact_copy.simulate,
+                         error)
+      || !v2_field_real (*copy, "preflash",
+                         &parsed.contact_copy.preflash, error)
+      || !v2_field_real (*copy, "exposure",
+                         &parsed.contact_copy.exposure, error)
+      || !v2_field_real (*copy, "boost", &parsed.contact_copy.boost, error))
+    return archive_fail (error, "invalid v2 historical-process fields");
+
+  const json_value *hd
+      = v2_required (*copy, "emulsion_curve", json_value::kind::object,
+                     error);
+  if (!hd)
+    return false;
+  hd_curve_parameters &curve
+      = parsed.contact_copy.emulsion_characteristic_curve;
+  if (!v2_named_lum_pair (*hd, "min", &curve.minx, &curve.miny, error)
+      || !v2_named_lum_pair (*hd, "linear1",
+                             &curve.linear1x, &curve.linear1y, error)
+      || !v2_named_lum_pair (*hd, "linear2",
+                             &curve.linear2x, &curve.linear2y, error)
+      || !v2_named_lum_pair (*hd, "max", &curve.maxx, &curve.maxy, error)
+      || !v2_valid_process (parsed, error))
+    return false;
+  *render = std::move (parsed);
+  return true;
+}
+
 }
