@@ -29,6 +29,7 @@
 #include <QList>
 #include <QMdiArea>
 #include <QMdiSubWindow>
+#include <QMenu>
 #include <QMessageBox>
 #include <QPointer>
 #include <QPushButton>
@@ -313,34 +314,39 @@ void startWorkspaceChurnSmoke(ColorScreenApplication &app,
           return;
         }
 
-        // Gamut warning and output colourspace are per-canvas preview
-        // settings. They must not dirty the shared document or leak between
+        // Gamut warnings and the internal output request are per-canvas
+        // settings. The onscreen GUI deliberately does not expose profile
+        // selection until ICC-managed/HDR display surfaces are supported.
+        // They must not dirty the shared document or leak between
         // ordinary views of the same photograph.
         const ParameterState colorViewBaseline =
             first->documentStateSnapshot();
+        for (QAction *action : first->m_viewMenu->actions())
+          if (action && action->menu() &&
+              action->menu()->title() == QStringLiteral("Display colourspace")) {
+            fail(QStringLiteral(
+                "Unmanaged XYZ/source display profile menu was exposed"));
+            return;
+          }
         first->m_imageWidget->setViewGamutWarning(true);
         view->imageWidget()->setViewOutputProfile(
-            colorscreen::render_parameters::output_profile_xyz);
+            colorscreen::render_output_parameters::output_profile_xyz);
         first->syncInspectorViewActions();
         if (first->m_imageWidget->viewGamutWarning() != true ||
             view->imageWidget()->viewGamutWarning() != false ||
             first->m_imageWidget->viewOutputProfile() !=
-                colorscreen::render_parameters::output_profile_sRGB ||
+                colorscreen::render_output_parameters::output_profile_sRGB ||
             view->imageWidget()->viewOutputProfile() !=
-                colorscreen::render_parameters::output_profile_xyz ||
+                colorscreen::render_output_parameters::output_profile_xyz ||
             first->documentStateSnapshot() != colorViewBaseline ||
-            first->m_gamutWarningAction->isChecked() ||
-            !first->m_viewOutputProfileActions[
-                colorscreen::render_parameters::output_profile_xyz]->isChecked()) {
+            first->m_gamutWarningAction->isChecked()) {
           fail(QStringLiteral(
               "View-local display options affected a sibling or document state"));
           return;
         }
         workspace->activateDocument(first);
         first->syncInspectorViewActions();
-        if (!first->m_gamutWarningAction->isChecked() ||
-            !first->m_viewOutputProfileActions[
-                colorscreen::render_parameters::output_profile_sRGB]->isChecked()) {
+        if (!first->m_gamutWarningAction->isChecked()) {
           fail(QStringLiteral(
               "Shared View menu did not track the primary image canvas"));
           return;
@@ -348,7 +354,7 @@ void startWorkspaceChurnSmoke(ColorScreenApplication &app,
         first->m_imageWidget->setViewGamutWarning(false);
         workspace->activateView(view);
         view->imageWidget()->setViewOutputProfile(
-            colorscreen::render_parameters::output_profile_sRGB);
+            colorscreen::render_output_parameters::output_profile_sRGB);
         first->syncInspectorViewActions();
         if (first->documentStateSnapshot() != colorViewBaseline) {
           fail(QStringLiteral(
@@ -1457,13 +1463,14 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
           first->m_profilePanel->setShowProfileSpots(
               view->imageWidget()->profileSpotsVisible());
 
-          ParameterState outputOnly = profileDiagnosticBaseline;
-          outputOnly.rparams.output_profile =
-              profileDiagnosticBaseline.rparams.output_profile ==
-                      colorscreen::render_parameters::output_profile_sRGB
-                  ? colorscreen::render_parameters::output_profile_xyz
-                  : colorscreen::render_parameters::output_profile_sRGB;
-          first->applyState(outputOnly);
+          // Presentation belongs to this view, not to the profile inputs
+          // that determine whether an accepted calibration remains valid.
+          const auto previousProfile = first->m_imageWidget->viewOutputProfile();
+          const auto alternateProfile =
+              previousProfile == colorscreen::render_output_parameters::output_profile_sRGB
+                  ? colorscreen::render_output_parameters::output_profile_xyz
+                  : colorscreen::render_output_parameters::output_profile_sRGB;
+          first->m_imageWidget->setViewOutputProfile(alternateProfile);
           if (first->m_profileCalibration.spotResults.size() != 1 ||
               first->m_profileCalibration.averageDeltaE != match.deltaE ||
               first->m_imageWidget->profileSpotResultCount() != 1 ||
@@ -1474,7 +1481,12 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
                 "Output-only edit incorrectly expired profile diagnostics"));
             return;
           }
-          first->applyState(profileDiagnosticBaseline);
+          first->m_imageWidget->setViewOutputProfile(previousProfile);
+          if (first->documentStateSnapshot() != profileDiagnosticBaseline) {
+            fail(QStringLiteral(
+                "Output colourspace selection modified document parameters"));
+            return;
+          }
 
           ParameterState staleProfileInputs = profileDiagnosticBaseline;
           staleProfileInputs.rparams.brightness += 0.125;
@@ -3069,7 +3081,6 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
             colorscreen::render_parameters::lanczos3_scaling;
         archiveState.rparams.observer_whitepoint =
             colorscreen::xy_t(0.3127, 0.3290);
-        archiveState.rparams.output_gamma = 1.8;
         second->applySharedDocumentState(
             archiveState, QStringLiteral("Archive persistence smoke edit"));
         if (!second->isDocumentModified() ||

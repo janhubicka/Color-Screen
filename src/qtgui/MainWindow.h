@@ -386,6 +386,9 @@ signals:
       Secondary views refresh from this signal while keeping render mode, zoom,
       and pan view-local. */
   void documentStateChanged();
+  /** A stitched tile became ready. Repaint views without changing Undo or
+      publishing any new saved parameter state. */
+  void imageTilesChanged();
   /** Emitted when session-local MTF fit provenance changes without parameters. */
   void mtfCalibrationStateChanged();
   /** Emitted when detected-patch map availability or visibility changes. */
@@ -722,7 +725,6 @@ private:
   QAction *m_zoomFitAction;      // Added
 
   QAction *m_gamutWarningAction; // View-local display gamut diagnostic.
-  QAction *m_viewOutputProfileActions[3] = {nullptr, nullptr, nullptr};
   QAction *m_fullscreenAction;   // Fullscreen toggle
   QAction *m_lockRelativeCoordinatesAction; // Lock relative coords toggle
   QAction *m_optimizeCoordinatesAction; // Optimize coordinates button

@@ -22,8 +22,13 @@ QString tileParameterKey(int x, int y, const QString &field) {
 } // namespace
 
 TilesPanel::TilesPanel(StateGetter stateGetter, StateSetter stateSetter,
-                       ImageGetter imageGetter, QWidget *parent)
-    : ParameterPanel(stateGetter, stateSetter, imageGetter, parent) {
+                       ImageGetter imageGetter,
+                       TileVisibilityGetter tileVisibilityGetter,
+                       TileVisibilitySetter tileVisibilitySetter,
+                       QWidget *parent)
+    : ParameterPanel(stateGetter, stateSetter, imageGetter, parent),
+      m_tileVisibilityGetter(std::move(tileVisibilityGetter)),
+      m_tileVisibilitySetter(std::move(tileVisibilitySetter)) {
   setupUi();
 }
 
@@ -144,8 +149,6 @@ void TilesPanel::rebuildTileGrid() {
   gridLayout->setContentsMargins(0, 0, 0, 0);
   gridLayout->setSpacing(4);
 
-  ParameterState state = m_stateGetter();
-
   for (int gy = 0; gy < m_gridH; gy++) {
     for (int gx = 0; gx < m_gridW; gx++) {
       int flatIndex = gy * m_gridW + gx;
@@ -188,17 +191,21 @@ void TilesPanel::rebuildTileGrid() {
       auto *enBtn = new QCheckBox(tileWidget);
       enBtn->setObjectName(
           QStringLiteral("TileEnabled_%1_%2").arg(gx).arg(gy));
-      const QString enabledParameterKey =
-          tileParameterKey(gx, gy, QStringLiteral("enabled"));
-      enBtn->setProperty("parameterKey", enabledParameterKey);
+      // Rendering visibility is a per-view option, not an Undoable
+      // document field. Do not attach parameterKey or Reset metadata.
+      enBtn->setProperty("renderSettingKey",
+          tileParameterKey(gx, gy, QStringLiteral("enabled")));
       enBtn->setProperty("tileX", gx);
       enBtn->setProperty("tileY", gy);
-      enBtn->setToolTip(tr("Enable/Disable tile %1, %2").arg(gx).arg(gy));
+      enBtn->setToolTip(tr("Include tile %1, %2 in this view. "
+                             "Tile loading is handled independently.")
+                            .arg(gx).arg(gy));
       // Give it no text
       enBtn->setText("");
       // Using layout margins instead of CSS so we don't break native styling
       enBtn->setContentsMargins(0, 0, 4, 4);
-      enBtn->setChecked(state.rparams.get_tile_adjustment(img->stitch, gx, gy).enabled);
+      enBtn->setChecked(m_tileVisibilityGetter
+                            ? m_tileVisibilityGetter(gx, gy) : true);
 
       // Add enBtn to bottom right corner (row 1, col 1, aligned bottom-right)
       tileLayout->addWidget(enBtn, 1, 1, Qt::AlignBottom | Qt::AlignRight);
@@ -206,11 +213,9 @@ void TilesPanel::rebuildTileGrid() {
 
       // enBtn is a QCheckBox, so its toggled signal passes a boolean
       connect(enBtn, &QCheckBox::toggled, this,
-              [this, gx, gy, enabledParameterKey](bool checked) {
-                ParameterState s = m_stateGetter();
-                s.rparams.get_tile_adjustment(gx, gy).enabled = checked;
-                m_stateSetter(s, tr("Toggle tile %1,%2").arg(gx).arg(gy),
-                              enabledParameterKey);
+              [this, gx, gy](bool checked) {
+                if (m_tileVisibilitySetter)
+                  m_tileVisibilitySetter(gx, gy, checked);
               });
 
       gridLayout->addWidget(tileWidget, gy, gx);
@@ -241,6 +246,7 @@ void TilesPanel::onParametersRefreshed(const ParameterState &state) {
 }
 
 void TilesPanel::refreshTileToggles(const ParameterState &state) {
+  (void)state;
   auto img = m_imageGetter();
   if (!img || !img->stitch) return;
 
@@ -257,7 +263,7 @@ void TilesPanel::refreshTileToggles(const ParameterState &state) {
       if (m_tileChecks[gy][gx]) {
         QSignalBlocker signalBlocker1(m_tileChecks[gy][gx]);
         m_tileChecks[gy][gx]->setChecked(
-            state.rparams.get_tile_adjustment(img->stitch, gx, gy).enabled);
+            m_tileVisibilityGetter ? m_tileVisibilityGetter(gx, gy) : true);
         signalBlocker1.unblock();
       }
     }

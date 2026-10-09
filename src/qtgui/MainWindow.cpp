@@ -235,9 +235,6 @@ bool profileCalibrationInputsDiffer(
   a.profiled_red = b.profiled_red = defaults.profiled_red;
   a.profiled_green = b.profiled_green = defaults.profiled_green;
   a.profiled_blue = b.profiled_blue = defaults.profiled_blue;
-  // optimize_color_model_colors() forces XYZ output internally.
-  a.output_profile = b.output_profile =
-      colorscreen::render_parameters::output_profile_xyz;
   return a != b;
 }
 
@@ -884,14 +881,24 @@ void MainWindow::setupUi() {
                        },
                        [this]() { return panelImageData(); }, this);
 
-  // Create Tiles Panel
+  // Create Tiles Panel. Exposure/dark-point edits remain document
+  // changes, but tile visibility belongs to the currently inspected view.
   m_tilesPanel =
       new TilesPanel([this]() { return getCurrentState(); },
                      [this](const ParameterState &s, const QString &desc,
                              const QString &parameterKey) {
                          changeParameters(s, desc, parameterKey);
                        },
-                     [this]() { return panelImageData(); }, this);
+                     [this]() { return panelImageData(); },
+                     [this](int x, int y) {
+                       ImageWidget *view = inspectorImageWidget();
+                       return !view || view->tileVisible(x, y);
+                     },
+                     [this](int x, int y, bool visible) {
+                       if (ImageWidget *view = inspectorImageWidget())
+                         view->setTileVisible(x, y, visible);
+                     },
+                     this);
 
   // Create Image Layer Panel
   m_imageLayerPanel =
@@ -2614,22 +2621,10 @@ void MainWindow::createMenus() {
           &MainWindow::onGamutWarningToggled);
   m_viewMenu->addAction(m_gamutWarningAction);
 
-  // Display colourspace belongs to the inspected canvas, not the document.
-  QMenu *displayProfileMenu = m_viewMenu->addMenu(tr("Display colourspace"));
-  for (int i = 0; i < (int)colorscreen::render_parameters::output_profile_max;
-       ++i) {
-    QAction *action = displayProfileMenu->addAction(
-        QString::fromUtf8(colorscreen::render_parameters::output_profile_names[i]));
-    action->setCheckable(true);
-    m_viewOutputProfileActions[i] = action;
-    connect(action, &QAction::triggered, this, [this, i]() {
-      if (ImageWidget *view = inspectorImageWidget()) {
-        view->setViewOutputProfile(
-            static_cast<colorscreen::render_parameters::output_profile_t>(i));
-        syncInspectorViewActions();
-      }
-    });
-  }
+  // Onscreen output remains sRGB until display ICC profiles and high-bit-depth
+  // surfaces are supported. An XYZ/raw menu would mislabel those pixels as
+  // sRGB in the current QImage display path, so expose no profile choice here.
+  // The Render-to-File dialog still offers output profiles independently.
 
   m_viewMenu->addSeparator();
 
@@ -2980,14 +2975,10 @@ void MainWindow::syncInspectorViewActions() {
     const QSignalBlocker blocker(m_gamutWarningAction);
     m_gamutWarningAction->setChecked(image->viewGamutWarning());
   }
-  for (int i = 0; i < (int)colorscreen::render_parameters::output_profile_max;
-       ++i) {
-    QAction *action = m_viewOutputProfileActions[i];
-    if (!action)
-      continue;
-    const QSignalBlocker blocker(action);
-    action->setChecked((int)image->viewOutputProfile() == i);
-  }
+  // The same shared inspector may be attached to a different ordinary view,
+  // which has an independent stitched-tile visibility mask.
+  if (m_tilesPanel)
+    m_tilesPanel->updateUI();
 }
 
 /** Suppress tool cancellation while Qt moves one document's presentation.
@@ -6146,11 +6137,14 @@ void MainWindow::onRender() {
 
     // Keep the settings dialog parent-owned and asynchronous too. The render
     // request snapshots document + dialog state only after explicit acceptance.
-    colorscreen::render_parameters previewParams = m_rparams;
+    colorscreen::render_type_parameters previewType = m_renderTypeParams;
     if (ImageWidget *view = inspectorImageWidget())
-      previewParams.output_profile = view->viewOutputProfile();
+      previewType.output = view->viewOutputParameters();
+    // A gamut-warning overlay is a diagnostic of an onscreen preview, not
+    // a request to paint warning colours into the exported photograph.
+    previewType.output.gamut_warning = false;
     auto *dialog = new RenderDialog(
-        m_renderTypeParams, previewParams, m_scrToImgParams, m_scan.get(),
+        previewType, m_rparams, m_scrToImgParams, m_scan.get(),
         outputPath, isDng, this);
     dialog->setObjectName(QStringLiteral("RenderSettingsDialog"));
     dialog->setAttribute(Qt::WA_DeleteOnClose);
@@ -6168,7 +6162,7 @@ void MainWindow::onRender() {
       request.detectParams = m_detectParams;
       request.renderParams = m_rparams;
       request.renderType = dialog->renderTypeParams();
-      request.renderParams.output_profile = dialog->outputProfile();
+      request.renderType.output.output_profile = dialog->outputProfile();
       request.outputPath = outputPath;
       request.progressTitle =
           tr("Rendering %1").arg(QFileInfo(outputPath).fileName());

@@ -260,6 +260,7 @@ render_to_file (image_data & scan, scr_to_img_parameters & param,
 		render_type_parameters &rtparam,
 		progress_info * progress, const char **error)
 {
+  render_output_parameters &output = rtparam.output;
   bool free_profile = false;
   int black = 0;
   if (scan.stitch)
@@ -268,7 +269,7 @@ render_to_file (image_data & scan, scr_to_img_parameters & param,
   rparam.adjust_for (rtparam, in_rparam);
   if (rfparams.dng)
    {
-     rparam.output_gamma = 1;
+     output.output_gamma = 1;
      black = rparam.dark_point * 65536;
      rparam.dark_point = 0;
      rparam.scan_exposure = rparam.brightness = 1;
@@ -302,14 +303,14 @@ render_to_file (image_data & scan, scr_to_img_parameters & param,
       return false;
     }
   if (rfparams.hdr || rfparams.dng)
-    rparam.output_profile = render_parameters::output_profile_original;
+    output.output_profile = render_output_parameters::output_profile_original;
 
-  if (rparam.output_profile == render_parameters::output_profile_original)
+  if (output.output_profile == render_output_parameters::output_profile_original)
     {
       if (prop.flags & render_type_property::OUTPUTS_SCAN_PROFILE)
         {
 	  if (scan.icc_profile
-	      && rparam.gamma == rparam.output_gamma)
+	      && rparam.gamma == output.output_gamma)
 	    {
 	      rfparams.icc_profile = scan.icc_profile;
 	      rfparams.icc_profile_len = scan.icc_profile_size;
@@ -319,7 +320,7 @@ render_to_file (image_data & scan, scr_to_img_parameters & param,
 	      xyz red = xyY_to_xyz (scan.primary_red.x, scan.primary_red.y, scan.primary_red.Y);
 	      xyz green = xyY_to_xyz (scan.primary_green.x, scan.primary_green.y, scan.primary_green.Y);
 	      xyz blue = xyY_to_xyz (scan.primary_blue.x, scan.primary_blue.y, scan.primary_blue.Y);
-	      icc_profile_len = create_profile ("ColorScreen produced profile based on original scan", red, green, blue, red+green+blue, rparam.output_gamma, &icc_profile);
+	      icc_profile_len = create_profile ("ColorScreen produced profile based on original scan", red, green, blue, red+green+blue, output.output_gamma, &icc_profile);
 	      free_profile = true;
 	    }
         }
@@ -327,11 +328,12 @@ render_to_file (image_data & scan, scr_to_img_parameters & param,
         {
 	  rfparams.icc_profile = sRGB_icc;
 	  rfparams.icc_profile_len = sRGB_icc_len;
-	  rparam.output_gamma = -1;
+	  output.output_gamma = -1;
         }
       else if (!free_profile)
         {
-          icc_profile_len = rparam.get_icc_profile (&icc_profile, &scan, false /*TODO*/);
+          icc_profile_len = rparam.get_icc_profile (&icc_profile, &scan, false /*TODO*/,
+                                                output.output_gamma);
 	  free_profile = true;
         }
     }

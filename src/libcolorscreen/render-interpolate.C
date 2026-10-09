@@ -1025,7 +1025,7 @@ analyze_patches (analyzer analyze, const char *task, image_data &img,
 			if (pfin.x < full_area.x || pfin.y < full_area.y
                             || pfin.x > full_area.x + full_area.width
 			    || pfin.y > full_area.y + full_area.height
-			    || !stitch.tile_for_scr (&my_rparam, src.x, src.y,
+			    || !stitch.tile_for_scr (nullptr, src.x, src.y,
 						     &ttx, &tty, true)
 			    || ttx != tx || tty != ty)
 			  return true;
@@ -1104,7 +1104,7 @@ analyze_rgb_patches (rgb_analyzer analyze, const char *task, image_data &img,
 			if (pfin.x < full_area.x || pfin.y < full_area.y
                             || pfin.x > full_area.x + full_area.width
 			    || pfin.y > full_area.y + full_area.height
-			    || !stitch.tile_for_scr (&my_rparam, src.x, src.y,
+			    || !stitch.tile_for_scr (nullptr, src.x, src.y,
 						     &ttx, &tty, true)
 			    || ttx != tx || tty != ty)
 			  return true;
@@ -1230,12 +1230,15 @@ compare_deltae (image_data &img, scr_to_img_parameters &param1,
                 render_parameters &rparam2, const char *cmpname,
                 double *ret_avg, double *ret_max, progress_info *progress)
 {
-  rparam1.output_profile = render_parameters::output_profile_xyz;
-  rparam2.output_profile = render_parameters::output_profile_xyz;
   rparam1.observer_whitepoint = srgb_white;
   rparam2.observer_whitepoint = srgb_white;
   render_interpolate render1 (param1, img, rparam1, 256);
   render_interpolate render2 (param2, img, rparam2, 256);
+  render_output_parameters comparison_output;
+  comparison_output.output_profile =
+      render_output_parameters::output_profile_xyz;
+  render1.set_output_parameters (comparison_output);
+  render2.set_output_parameters (comparison_output);
   if (!render1.precompute_all (progress) || !render2.precompute_all (progress))
     return false;
   int border = 100;

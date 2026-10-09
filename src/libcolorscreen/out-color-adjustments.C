@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <assert.h>
 #include "include/render-parameters.h"
+#include "include/render-type-parameters.h"
 #include "include/progress-info.h"
 #include "lru-cache.h"
 #include "out-color-adjustments.h"
@@ -51,22 +52,23 @@ static lru_cache<out_lookup_table_params, precomputed_function<luminosity_t>,
    on failure.  */
 bool
 out_color_adjustments::precompute (render_parameters &m_params,
+                                   const render_output_parameters &output,
 				   const image_data *m_img,
 				   bool normalized_patches,
 				   rgbdata patch_proportions,
 				   progress_info *progress)
 {
-  m_output_gamma = m_params.output_gamma;
-  m_gamut_warning = m_params.gamut_warning;
+  m_output_gamma = output.output_gamma;
+  m_gamut_warning = output.gamut_warning;
 
-  out_lookup_table_params out_par = { m_dst_maxval, m_params.output_gamma };
+  out_lookup_table_params out_par = { m_dst_maxval, output.output_gamma };
   m_out_lookup_table = out_lookup_table_cache.get (out_par, progress);
   if (!m_out_lookup_table && progress && progress->cancel_requested ())
     return false;
 
   color_matrix color;
 
-  if (m_params.output_profile != render_parameters::output_profile_original)
+  if (output.output_profile != render_output_parameters::output_profile_original)
     {
       /* See if we want to do some output adjustments in pro photo RGB space.
 	 These should closely follow what DNG reference recommends.  */
@@ -109,7 +111,7 @@ out_color_adjustments::precompute (render_parameters &m_params,
 				 do_pro_photo ? d50_white : d65_white)
 			     * m)
 			    * (luminosity_t)1.5;
-	  if (m_params.output_profile == render_parameters::output_profile_xyz)
+	  if (output.output_profile == render_output_parameters::output_profile_xyz)
 	    ;
 	  else if (do_pro_photo)
 	    {
@@ -128,7 +130,7 @@ out_color_adjustments::precompute (render_parameters &m_params,
 	}
       else
 	{
-	  if (m_params.output_profile == render_parameters::output_profile_xyz)
+	  if (output.output_profile == render_output_parameters::output_profile_xyz)
 	    ;
 	  else if (do_pro_photo)
 	    {

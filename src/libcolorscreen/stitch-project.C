@@ -617,6 +617,19 @@ stitch_project::write_tiles (render_parameters rparam, render_to_file_params *rf
   for (int y = 0; y < params.height; y++)
     for (int x = 0; x < params.width; x++)
       {
+        /* Cancellation still applies if every tile was hidden by the
+           operation-local mask. It must not report a successful empty export. */
+        if (progress && progress->cancel_requested ())
+          return false;
+        /* Individual-tile export uses the same request-only visibility mask
+           as interactive stitching; a hidden tile is not an image setting. */
+        if (!rtparam.output.tile_enabled_p (x, y, params.width,
+                                            params.height))
+          {
+            if (progress)
+              progress->inc_progress ();
+            continue;
+          }
 	for (int i = 0; i < n; i++)
 	  {
 	    if (progress && progress->cancel_requested ())
@@ -1330,7 +1343,7 @@ stitch_project::find_ranges (coord_t xmin, coord_t xmax, coord_t ymin, coord_t y
       {
 	int tx, ty;
 	point_t scr = common_scr_to_img.final_to_scr ({(coord_t)x, (coord_t)y});
-	if (!tile_for_scr (&rparam, scr.x, scr.y, &tx, &ty, true))
+	if (!tile_for_scr (nullptr, scr.x, scr.y, &tx, &ty, true))
 	  continue;
 	point_t timg = images[ty][tx].common_scr_to_img_scr (scr);
 	int i = ty * params.width + tx;

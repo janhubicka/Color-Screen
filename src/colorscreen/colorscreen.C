@@ -385,8 +385,8 @@ print_help (char *err = NULL)
       fprintf (stderr, "      --dng                     output DNG\n");
       fprintf (stderr, "      --output-profile=profile  specify output profile\n");
       fprintf (stderr, "                                supported profiles:");
-      for (int j = 0; j < render_parameters::output_profile_max; j++)
-        fprintf (stderr, " %s", render_parameters::output_profile_names[j]);
+      for (int j = 0; j < render_output_parameters::output_profile_max; j++)
+        fprintf (stderr, " %s", render_output_parameters::output_profile_names[j]);
       fprintf (stderr, "\n");
       fprintf (stderr, "      --geometry=scan|screen    specify output file geometry\n");
       fprintf (stderr, "      --antialias=N             specify aliasing using NxN grid\n");
@@ -854,12 +854,12 @@ parse_mode (const char *mode)
 }
 
 /* Parse output profile PROFILE.  */
-static enum render_parameters::output_profile_t
+static enum render_output_parameters::output_profile_t
 parse_output_profile (const char *profile)
 {
-  return parse_enum<enum render_parameters::output_profile_t,
-                    render_parameters::output_profile_names,
-                    (int)render_parameters::output_profile_max> (
+  return parse_enum<enum render_output_parameters::output_profile_t,
+                    render_output_parameters::output_profile_names,
+                    (int)render_output_parameters::output_profile_max> (
       profile, "Unknown output profile:%s\n");
 }
 
@@ -1140,8 +1140,8 @@ render_cmd (int argc, char **argv)
 {
   const char *infname = NULL, *cspname = NULL, *error = NULL;
   float age = -100;
-  enum render_parameters::output_profile_t output_profile
-      = render_parameters::output_profile_max;
+  enum render_output_parameters::output_profile_t output_profile
+      = render_output_parameters::output_profile_max;
   render_parameters::color_model_t color_model
       = render_parameters::color_model_max;
   render_parameters::dye_balance_t dye_balance
@@ -1328,10 +1328,10 @@ render_cmd (int argc, char **argv)
     rparam.color_model = color_model;
   if (dye_balance != render_parameters::dye_balance_max)
     rparam.dye_balance = dye_balance;
-  if (output_profile != render_parameters::output_profile_max)
-    rparam.output_profile = output_profile;
+  if (output_profile != render_output_parameters::output_profile_max)
+    rtparam.output.output_profile = output_profile;
   if (output_gamma != -4)
-    rparam.output_gamma = output_gamma;
+    rtparam.output.output_gamma = output_gamma;
   if (scale)
     rfparams.scale = scale;
   if (screen_scale)

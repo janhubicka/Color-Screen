@@ -5591,9 +5591,11 @@ test_render_linearity ()
     {
       luminosity_t gamma = gammas[gamma_idx];
       rparam.gamma = gamma;
-      rparam.output_gamma = gamma;
-      rparam.output_profile = render_parameters::output_profile_original;
+      render_output_parameters output;
+      output.output_gamma = gamma;
+      output.output_profile = render_output_parameters::output_profile_original;
       render ren (img, rparam, 65535);
+      ren.set_output_parameters (output);
       if (!ren.precompute_all (PRECOMPUTE_IMAGE_LAYER, {1, 1, 1}, NULL))
 	return false;
       for (int i = 0; i < 65535; i++)
@@ -9659,9 +9661,6 @@ test_parameter_archive ()
   structured_source.ignore_infrared = true;
   structured_source.demosaiced_scaling = render_parameters::lanczos3_scaling;
   structured_source.observer_whitepoint = xy_t (0.3127, 0.3290);
-  structured_source.output_profile = render_parameters::output_profile_xyz;
-  structured_source.output_gamma = 1.8;
-  structured_source.gamut_warning = true;
   const parameter_archive_render_overrides structured_overrides
       = parameter_archive_render_overrides_from (structured_source);
   scr_to_img_parameters structured_geometry;
@@ -9697,9 +9696,8 @@ test_parameter_archive ()
       || parsed.render_overrides.observer_whitepoint
              != structured_source.observer_whitepoint
       || parsed.render_overrides.output_profile
-             != render_parameters::output_profile_sRGB
-      || parsed.render_overrides.output_gamma
-             != structured_source.output_gamma
+             != render_output_parameters::output_profile_sRGB
+      || parsed.render_overrides.output_gamma != -1
       || parsed.render_overrides.gamut_warning
       || !parsed.geometry_final_frame.present
       || parsed.geometry_final_frame.final_angle
@@ -9742,10 +9740,7 @@ test_parameter_archive ()
              != structured_source.demosaiced_scaling
       || structured_target.observer_whitepoint
              != structured_source.observer_whitepoint
-      || structured_target.output_profile
-             != render_parameters::output_profile_sRGB
-      || structured_target.output_gamma != structured_source.output_gamma
-      || structured_target.gamut_warning)
+ )
     {
       fprintf (stderr, "Structured render overrides did not apply exactly\n");
       std::remove (structured.c_str ());
@@ -9776,7 +9771,8 @@ test_parameter_archive ()
      render-overrides-v1. Keep accepting those typed keys, but applying the
      archive must not modify display/output choices owned by each view. */
   parameter_archive_render_overrides old_display = structured_overrides;
-  old_display.output_profile = render_parameters::output_profile_xyz;
+  old_display.output_profile = render_output_parameters::output_profile_xyz;
+  old_display.output_gamma = 2.4;
   old_display.gamut_warning = true;
   const std::string historical
       = parameter_archive_test_path ("historical-view-settings");
@@ -9791,25 +9787,38 @@ test_parameter_archive ()
     }
   parameter_archive_manifest old_manifest;
   std::string old_payload;
-  if (!read_parameter_archive (historical.c_str (), &old_payload,
-                               &old_manifest, &error)
+  const bool historical_loaded
+      = read_parameter_archive (historical.c_str (), &old_payload,
+                                &old_manifest, &error);
+  if (!historical_loaded
       || !old_manifest.render_overrides.present
       || old_manifest.render_overrides.output_profile
-             != render_parameters::output_profile_xyz
-      || !old_manifest.render_overrides.gamut_warning)
+             != render_output_parameters::output_profile_xyz
+      || !old_manifest.render_overrides.gamut_warning
+      || old_manifest.render_overrides.output_gamma != (luminosity_t)2.4)
     {
-      fprintf (stderr, "Historical schema-v1 view keys are not readable: %s\\n",
-               error.c_str ());
+      fprintf (stderr,
+               "Historical v1 output settings: loaded=%d present=%d "
+               "profile=%d (want %d) gamut=%d gamma=%.17g "
+               "(want %.17g), error=%s\n",
+               (int)historical_loaded,
+               (int)old_manifest.render_overrides.present,
+               (int)old_manifest.render_overrides.output_profile,
+               (int)render_output_parameters::output_profile_xyz,
+               (int)old_manifest.render_overrides.gamut_warning,
+               (double)old_manifest.render_overrides.output_gamma,
+               (double)(luminosity_t)2.4, error.c_str ());
       std::remove (historical.c_str ());
       return false;
     }
   render_parameters old_target;
   apply_parameter_archive_render_overrides (old_manifest.render_overrides,
                                            &old_target);
-  if (old_target.output_profile != render_parameters::output_profile_sRGB
-      || old_target.gamut_warning
-      || old_target.output_gamma != structured_source.output_gamma
-      || old_target.ignore_infrared != structured_source.ignore_infrared)
+  if (old_target.ignore_infrared != structured_source.ignore_infrared
+      || old_target.demosaiced_scaling
+             != structured_source.demosaiced_scaling
+      || old_target.observer_whitepoint
+             != structured_source.observer_whitepoint)
     {
       fprintf (stderr, "Historical view flags polluted document state\\n");
       std::remove (historical.c_str ());
@@ -10453,7 +10462,6 @@ test_stitch_tile_adjustment_grid ()
   auto &left = params.get_tile_adjustment (0, 0);
   left.exposure = (luminosity_t)1.25;
   left.dark_point = (luminosity_t)0.125;
-  left.enabled = false;
   params.get_tile_adjustment (1, 0).exposure = (luminosity_t)0.75;
 
   /* MainWindow::loadFile repeats the grid size after reading a sidecar. */
@@ -10461,7 +10469,6 @@ test_stitch_tile_adjustment_grid ()
   if (params.tile_adjustments.size () != 2
       || params.get_tile_adjustment (0, 0).exposure != (luminosity_t)1.25
       || params.get_tile_adjustment (0, 0).dark_point != (luminosity_t)0.125
-      || params.get_tile_adjustment (0, 0).enabled
       || params.get_tile_adjustment (1, 0).exposure != (luminosity_t)0.75)
     {
       fprintf (stderr,
@@ -10474,14 +10481,92 @@ test_stitch_tile_adjustment_grid ()
   if (params.tile_adjustments.size () != 2
       || params.get_tile_adjustment (0, 0).exposure != (luminosity_t)1
       || params.get_tile_adjustment (0, 0).dark_point != (luminosity_t)0
-      || !params.get_tile_adjustment (0, 0).enabled
       || params.get_tile_adjustment (0, 1).exposure != (luminosity_t)1)
     {
       fprintf (stderr, "A changed stitch grid retained stale tile settings\n");
       return false;
     }
   params.set_tile_adjustments_dimensions (0, 0);
-  return params.tile_adjustments.empty ();
+  if (!params.tile_adjustments.empty ())
+    return false;
+
+  /* The loader allocates the image object before its incremental decoder
+     has written all pixels. A non-null IMG must not be enough for an
+     only_loaded render lookup. Otherwise a background load could expose
+     partially initialized capture data to another thread. */
+  auto project = std::make_unique<stitch_project> ();
+  project->params.width = 1;
+  project->params.height = 1;
+  stitch_image &incomplete = project->images[0][0];
+  incomplete.img = std::make_unique<image_data> ();
+  int tile_x = -1, tile_y = -1;
+  if (incomplete.image_ready_p ()
+      || project->tile_for_scr (nullptr, 0, 0, &tile_x, &tile_y, true))
+    {
+      fprintf (stderr,
+               "Unfinished stitched tile was published to rendering\n");
+      return false;
+    }
+
+  /* A tile's presence in a render is not a property of its exposure,
+     nor is it tied to any other view. Every new output request includes
+     all available tiles until this view explicitly hides one. */
+  render_output_parameters primary;
+  render_output_parameters sibling;
+  if (!primary.tile_enabled_p (0, 0, 2, 1)
+      || !primary.tile_enabled_p (1, 0, 2, 1))
+    return false;
+  primary.set_tile_enabled (2, 1, 0, 0, false);
+  if (primary.tile_enabled_p (0, 0, 2, 1)
+      || !primary.tile_enabled_p (1, 0, 2, 1)
+      || !sibling.tile_enabled_p (0, 0, 2, 1))
+    {
+      fprintf (stderr, "Tile visibility leaked across rendering requests\n");
+      return false;
+    }
+  /* A different stitched grid cannot inherit visibility by index. */
+  if (!primary.tile_enabled_p (0, 0, 1, 2)
+      || !primary.tile_enabled_p (0, 1, 1, 2))
+    {
+      fprintf (stderr, "A resized stitched grid inherited visibility\n");
+      return false;
+    }
+  primary.set_tile_enabled (1, 2, 0, 1, false);
+  if (!primary.tile_enabled_p (0, 0, 1, 2)
+      || primary.tile_enabled_p (0, 1, 1, 2)
+      || !primary.tile_enabled_p (0, 0, 2, 1))
+    {
+      fprintf (stderr, "Resizing a tile mask did not reset its old mapping\n");
+      return false;
+    }
+
+  /* Output colourspace, transfer, gamut diagnostics and tile selection all
+     belong to the request. Copies must be independent from one another and
+     from the document's calibration state, including its Undo equality. */
+  const render_parameters unchanged_document = params;
+  render_type_parameters first_view;
+  render_type_parameters second_view;
+  first_view.output = primary;
+  first_view.output.output_profile
+      = render_output_parameters::output_profile_xyz;
+  first_view.output.output_gamma = 1;
+  first_view.output.gamut_warning = true;
+  render_type_parameters copied_view = first_view;
+  copied_view.output.set_tile_enabled (1, 2, 0, 1, true);
+  if (params != unchanged_document
+      || second_view.output.output_profile
+             != render_output_parameters::output_profile_sRGB
+      || second_view.output.output_gamma != -1
+      || second_view.output.gamut_warning
+      || !second_view.output.tile_enabled.empty ()
+      || copied_view.output.tile_enabled_p (0, 1, 1, 2) == false
+      || first_view.output.tile_enabled_p (0, 1, 1, 2) != false)
+    {
+      fprintf (stderr,
+               "Render-request presentation mutated a sibling or document\n");
+      return false;
+    }
+  return true;
 }
 
 /* Verify conservative detection of monochromatic data that was initially

@@ -405,7 +405,6 @@ bool save(const QString &name, Scope scope, const ParameterState &state,
                       state.rparams.observer_whitepoint.x);
         extras.insert(QStringLiteral("observerWhitepointY"),
                       state.rparams.observer_whitepoint.y);
-        extras.insert(QStringLiteral("outputGamma"), state.rparams.output_gamma);
 
         QVariantList controlPoints;
         for (const colorscreen::point_t &point :
@@ -522,9 +521,8 @@ bool apply(const Record &record, ParameterState *target,
         // Older colour presets may contain view-only profile/gamut keys.
         // Those keys are ignored: the active ImageWidget and Render dialog
         // own display/output intent, not persistent appearance presets.
-        if (record.extras.contains(QStringLiteral("outputGamma")))
-            target->rparams.output_gamma =
-                record.extras.value(QStringLiteral("outputGamma")).toDouble();
+        // Historical outputGamma is also ignored: encoding belongs to a
+        // rendering request, not a saved colour-correction preset.
 
         if (record.extras.contains(QStringLiteral("toneCurveControlPoints"))) {
             std::vector<colorscreen::point_t> points;

@@ -536,12 +536,10 @@ bool MainWindow::saveReproducibilityReportToFile(const QString &fileName,
   renderOverrides.insert(
       QStringLiteral("output_profile"),
       QString::fromLatin1(
-          colorscreen::render_parameters::output_profile_names
-              [static_cast<int>(state.rparams.output_profile)]));
-  renderOverrides.insert(QStringLiteral("output_gamma"),
-                         state.rparams.output_gamma);
-  renderOverrides.insert(QStringLiteral("gamut_warning"),
-                         state.rparams.gamut_warning);
+          colorscreen::render_output_parameters::output_profile_names
+              [(int)colorscreen::render_output_parameters::output_profile_sRGB]));
+  renderOverrides.insert(QStringLiteral("output_gamma"), -1);
+  renderOverrides.insert(QStringLiteral("gamut_warning"), false);
   metadata.insert(QStringLiteral("render_overrides"), renderOverrides);
 
   QJsonObject geometryFinalFrame;
@@ -1230,6 +1228,15 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
                   m_profilePanel->setSpotResults(m_profileCalibration.spotResults);
                 m_scan = tempScan;
 
+                /* GUI tile workers publish individually decoded image data
+                   to views over time. Keep successfully decoded tiles resident
+                   until this scan is replaced; the legacy stitch-analysis LRU
+                   may evict images only when rendering does not read them
+                   concurrently. The tile_ready bit controls availability
+                   independently of each view's visibility mask. */
+                if (isCsprj && m_scan->stitch)
+                  m_scan->stitch->keep_all_images();
+
                 if ((int)m_scan->gamma != -2 && m_scan->gamma > 0 &&
                     m_rparams.gamma == -1) // Update only if unknown
                   m_rparams.gamma = m_scan->gamma;
@@ -1240,17 +1247,13 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
                 if (!suppressParamPrompt)
                   m_recoveryDirty = liveEditsWhileLoading;
 
-                // If this is a stitched project, disable all tiles initially so
-                // the UI is responsive while tiles load in the background.
-                if (isCsprj && m_scan->stitch) {
-                  colorscreen::stitch_project *stitch = m_scan->stitch;
-                  int w = stitch->params.width;
-                  int h = stitch->params.height;
-                  m_rparams.set_tile_adjustments_dimensions(w, h);
-                  for (int y = 0; y < h; y++)
-                    for (int x = 0; x < w; x++)
-                      m_rparams.get_tile_adjustment(x, y).enabled = false;
-                }
+                // Grid corrections are saved processing state; preserve them
+                // while background workers load tile image data. The renderer's
+                // only_loaded lookup separately suppresses unavailable tiles.
+                if (isCsprj && m_scan->stitch)
+                  m_rparams.set_tile_adjustments_dimensions(
+                      m_scan->stitch->params.width,
+                      m_scan->stitch->params.height);
 
                 m_imageWidget->setImage(m_scan, &m_rparams, &m_scrToImgParams,
                                         &m_detectParams, &m_renderTypeParams,
@@ -1307,8 +1310,7 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
 
                       auto *tileWatcher = new QFutureWatcher<bool>(this);
                       connect(tileWatcher, &QFutureWatcher<bool>::finished, this,
-                              [this, tileWatcher, tileProgress, scanRef, capturedX,
-                               capturedY]() {
+                              [this, tileWatcher, tileProgress, scanRef]() {
                                 if (m_closeLifecycle.closing()) {
                                   tileWatcher->deleteLater();
                                   return;
@@ -1320,20 +1322,19 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
                                 // A demosaic/project reload replaces m_scan while
                                 // workers for the previous image_data may still
                                 // finish. Their tile bytes belong to scanRef only;
-                                // never publish an enable edit into the replacement
-                                // document state.
+                                // never publish an obsolete tile into new views.
                                 if (m_scan != scanRef)
                                   return;
 
                                 if (ok) {
-                                  // Enable the tile and trigger a re-render.
-                                  ParameterState state = getCurrentState();
-                                  state.rparams
-                                      .get_tile_adjustment(capturedX, capturedY)
-                                      .enabled = true;
-                                  changeParameters(state, tr("Tile loaded %1,%2")
-                                                              .arg(capturedX)
-                                                              .arg(capturedY));
+                                  // Runtime tile readiness is not an image
+                                  // parameter: preserve sidecar state, Undo and
+                                  // view-specific tile visibility as-is.
+                                  m_imageWidget->refreshRendering();
+                                  m_navigationView->updateParameters(
+                                      &m_rparams, &m_scrToImgParams,
+                                      &m_detectParams);
+                                  emit imageTilesChanged();
                                 }
                               });
 
@@ -1346,8 +1347,8 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
                               return scanRef->stitch->images[capturedY][capturedX]
                                   .load_img(&err, tileProgress.get());
                             } catch (...) {
-                              // A failed tile remains disabled. Never let a worker
-                              // exception escape through QFutureWatcher::result().
+                              // A failed tile remains unavailable. Never let a
+                              // worker exception escape through result().
                               return false;
                             }
                           });
@@ -1985,11 +1986,9 @@ bool MainWindow::loadParameterFile(const QString &fileName) {
     updateColorCheckBoxState();
   }
 
-  // Sync Gamut Warning Button
-  if (m_gamutWarningAction) {
-    QSignalBlocker blocker(m_gamutWarningAction);
-    m_gamutWarningAction->setChecked(m_rparams.gamut_warning);
-  }
+  // Loading document processing state must not reset this view's output
+  // colours or its gamut diagnostics.
+  syncInspectorViewActions();
 
   if (m_undoStack)
     m_undoStack->clear();

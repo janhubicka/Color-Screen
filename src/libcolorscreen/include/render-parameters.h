@@ -471,8 +471,6 @@ struct render_parameters
     luminosity_t dark_point = 0;
     /* Scanner blur usually differs for every capture.  */
     std::shared_ptr <scanner_blur_correction_parameters> scanner_blur_correction = nullptr;
-    /* If true tile is rendered, if false tile is not rendered.  */
-    bool enabled = true;
     /* Position comes from the tile-adjustment grid index and its dimensions,
        not from independently stored per-tile coordinates. */
 
@@ -483,7 +481,7 @@ struct render_parameters
     pure_attr bool
     operator== (const tile_adjustment &other) const
     {
-      return enabled == other.enabled && dark_point == other.dark_point
+      return dark_point == other.dark_point
              && exposure == other.exposure
              && scanner_blur_correction == other.scanner_blur_correction;
     }
@@ -729,26 +727,8 @@ struct render_parameters
   /* Control points for output tone curve.  */
   std::vector<point_t> output_tone_curve_control_points = tone_curve::default_control_points ();
 
-  /***** Output Profile *****/
-
-  /* Output profile type.  */
-  enum output_profile_t
-  {
-    output_profile_sRGB,
-    output_profile_xyz,
-    output_profile_original,
-    output_profile_max
-  };
-
-  /* Selected output profile.  */
-  output_profile_t output_profile = output_profile_sRGB;
-  DLL_PUBLIC static const char *output_profile_names[(int)output_profile_max];
-
-  /* Output gamma.  -1 means sRGB transfer curve.  */
-  luminosity_t output_gamma = -1;
-
-  /* If true, warn about out of gamut colors.  */
-  bool gamut_warning = false;
+  /* Output colourspace/transfer, gamut diagnostics and tile visibility belong
+     to the nonpersistent render_output_parameters accompanying one request. */
 
   /* Default constructor.  */
   render_parameters () = default;
@@ -775,7 +755,8 @@ struct render_parameters
      BUF is pointer to buffer where profile will be stored.
      IMG is the image being rendered.
      NORMALIZED_DYES is true if dyes are normalized.  */
-  size_t get_icc_profile (void **buf, image_data *img, bool normalized_dyes);
+  size_t get_icc_profile (void **buf, image_data *img, bool normalized_dyes,
+                          luminosity_t output_gamma);
   /* Return tile adjustment for given tile (X, Y) in STITCH project.  */
   DLL_PUBLIC const tile_adjustment &get_tile_adjustment (const stitch_project *stitch, int x, int y) const;
   /* Return tile adjustment reference for given tile (X, Y) in STITCH project.  */
@@ -802,8 +783,7 @@ struct render_parameters
            && demosaic == other.demosaic
 	   && gamma == other.gamma 
 	   && contact_copy == other.contact_copy
-           && output_gamma == other.output_gamma
-	   && scan_rotation == other.scan_rotation
+ 	   && scan_rotation == other.scan_rotation
 	   && scan_mirror == other.scan_mirror
 	   && scan_crop == other.scan_crop
 	   && image_area == other.image_area
@@ -811,7 +791,6 @@ struct render_parameters
 	   && screen_denoise.equal_p (other.screen_denoise)
 	   && demosaiced_denoise.equal_p (other.demosaiced_denoise)
            && presaturation == other.presaturation
-	   && gamut_warning == other.gamut_warning
            && saturation == other.saturation && brightness == other.brightness
            && collection_threshold == other.collection_threshold
            && mix_dark == other.mix_dark && mix_red == other.mix_red

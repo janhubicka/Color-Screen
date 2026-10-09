@@ -87,6 +87,11 @@ ImageViewWindow::ImageViewWindow(MainWindow *document, int viewNumber,
   if (m_document) {
     connect(m_document, &MainWindow::documentStateChanged, this,
             &ImageViewWindow::refreshFromDocument);
+    connect(m_document, &MainWindow::imageTilesChanged, this,
+            [this]() {
+              if (!m_slantedEdgeReference && m_imageWidget)
+                m_imageWidget->refreshRendering();
+            });
     connect(m_document, &MainWindow::detectedScreenDiagnosticsChanged, this,
             [this]() {
               if (m_document && !m_slantedEdgeReference)

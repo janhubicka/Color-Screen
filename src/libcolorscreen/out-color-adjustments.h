@@ -9,6 +9,7 @@
 namespace colorscreen
 {
 struct render_parameters;
+struct render_output_parameters;
 class image_data;
 class progress_info;
 
@@ -27,6 +28,7 @@ public:
      spectral data processing.  Report progress to PROGRESS.  Return false
      on failure.  */
   nodiscard_attr bool precompute (render_parameters &rparam,
+                                  const render_output_parameters &output,
 				  const image_data *img,
 				  bool normalized_patches,
 				  rgbdata patch_proportions,

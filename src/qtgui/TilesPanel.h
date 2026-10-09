@@ -5,6 +5,7 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QWidget>
+#include <functional>
 #include <vector>
 
 namespace colorscreen {
@@ -14,8 +15,14 @@ class image_data;
 class TilesPanel : public ParameterPanel {
   Q_OBJECT
 public:
+  using TileVisibilityGetter = std::function<bool(int, int)>;
+  using TileVisibilitySetter = std::function<void(int, int, bool)>;
+
   explicit TilesPanel(StateGetter stateGetter, StateSetter stateSetter,
-                      ImageGetter imageGetter, QWidget *parent = nullptr);
+                      ImageGetter imageGetter,
+                      TileVisibilityGetter tileVisibilityGetter,
+                      TileVisibilitySetter tileVisibilitySetter,
+                      QWidget *parent = nullptr);
   ~TilesPanel() override;
 
   // Called when the image changes so the panel can rebuild the tile grid
@@ -31,6 +38,10 @@ private:
   void refreshTileSliders();
   int  currentTileX() const;
   int  currentTileY() const;
+
+  /* View-local render visibility, independent of saved ParameterState. */
+  TileVisibilityGetter m_tileVisibilityGetter;
+  TileVisibilitySetter m_tileVisibilitySetter;
 
   // stitch grid dimensions at last rebuild
   int m_gridW = 0;

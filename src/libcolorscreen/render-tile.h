@@ -49,6 +49,7 @@ bool render_img_normal(render_type_parameters rtparam,
 		       progress_info *progress)
 {
   T render (param, img, rparam, 255);
+  render.set_output_parameters (rtparam.output);
   render.set_render_type (rtparam);
   if (progress)
     progress->set_task ("precomputing", 1);
@@ -95,6 +96,7 @@ bool render_img_downscale(render_type_parameters rtparam,
 			  progress_info *progress)
 {
   T render (param, img, rparam, 255);
+  render.set_output_parameters (rtparam.output);
   render.set_render_type (rtparam);
   if (progress)
     progress->set_task ("precomputing", 1);
@@ -148,6 +150,7 @@ bool render_img_gray_downscale(render_type_parameters rtparam,
 			       progress_info *progress)
 {
   T render (param, img, rparam, 255);
+  render.set_output_parameters (rtparam.output);
   render.set_render_type (rtparam);
   if (progress)
     progress->set_task ("precomputing", 1);
@@ -192,6 +195,7 @@ template<typename T,typename P,typename RP> T*
 init_render_scr (RP &rtparam, render_parameters &my_rparam, image_data &img, scr_to_img_parameters &param, P &oparam, progress_info *progress)
 {
   T *r = new T (param, img, my_rparam, 255);
+  r->set_output_parameters (rtparam.output);
   r->set_render_type (rtparam);
   if (!r->precompute_all (progress))
     {
@@ -209,6 +213,7 @@ template<typename T,typename P,typename RP> T*
 init_render_img (RP &rtparam, render_parameters &my_rparam, image_data &img, scr_to_img_parameters &param, P &oparam, progress_info *progress)
 {
   T *r = new T (oparam, img, my_rparam, 255);
+  r->set_output_parameters (rtparam.output);
   r->set_render_type (rtparam);
   if (!r->precompute_all (progress))
     {
@@ -345,7 +350,7 @@ void render_stitched(RP &rtparam, P &outer_param,
 	    {
 	      int ix, iy;
 	      point_t scr = stitch.common_scr_to_img.final_to_scr ({(x + xoffset) * step + xmin, py});
-	      if (stitch.tile_for_scr (&rparam, scr.x, scr.y, &ix, &iy, true))
+	      if (stitch.tile_for_scr (&rtparam.output, scr.x, scr.y, &ix, &iy, true))
 		renders[iy * stitch.params.width + ix] = (T *)(size_t)1;
 	    }
 	if (progress)
@@ -390,7 +395,7 @@ void render_stitched(RP &rtparam, P &outer_param,
 	    int ix, iy;
 
 	    /* If no tile was found, just render black pixel. */
-	    if (!stitch.tile_for_scr (&rparam, scr.x, scr.y, &ix, &iy, true))
+	    if (!stitch.tile_for_scr (&rtparam.output, scr.x, scr.y, &ix, &iy, true))
 	      {
 		putpixel (pixels, pixelbytes, rowstride, x, y, 0, 0, 0);
 		continue;

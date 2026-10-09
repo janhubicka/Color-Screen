@@ -2,6 +2,7 @@
 #define PARAMETER_ARCHIVE_H
 #include "include/dllpublic.h"
 #include "include/render-parameters.h"
+#include "include/render-type-parameters.h"
 #include "include/scr-to-img-parameters.h"
 
 #include <cstdio>
@@ -26,8 +27,8 @@ struct parameter_archive_render_overrides
   render_parameters::demosaiced_scaling_t demosaiced_scaling
       = render_parameters::default_scaling;
   xy_t observer_whitepoint = d50_white;
-  render_parameters::output_profile_t output_profile
-      = render_parameters::output_profile_sRGB;
+  render_output_parameters::output_profile_t output_profile
+      = render_output_parameters::output_profile_sRGB;
   luminosity_t output_gamma = -1;
   bool gamut_warning = false;
 };

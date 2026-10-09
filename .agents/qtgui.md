@@ -1202,27 +1202,49 @@ weak progress identity; an older coordinate-stage completion therefore cannot
 clear the newer point-discovery stage after handoff. Completion/cancellation
 restores the ordinary state-derived recommendation.
 
-### View-local display colours (2.0alpha)
+### Render request versus document calibration (2.0alpha)
 
-The preview gamut-warning overlay and display output colourspace belong to each
-`ImageWidget`, not to the shared document's `ParameterState` or Undo stack.
-The document may have multiple simultaneous image views displaying different
-colourspaces or gamut diagnostics. At the rendering boundary,
-`ImageWidget::requestRender()` takes the numerical document snapshot and
-then overrides only the rendering request's `gamut_warning` and
-`output_profile` with that view's selected values. The renderer and profile
-pipeline still consume `render_parameters` as their *operation arguments*;
-that type does not imply that every member is a persisted image-calibration
-input. The document-owned View menu tracks the currently inspected ordinary
-view through `syncInspectorViewActions()`. Export-to-file chooses its own
-output profile in the Render dialog; the active view's profile is only the
-initial suggestion, not a mutation of the saved document.
+`render_parameters` owns **saved reconstruction state**. One
+`render_type_parameters::output` is an independent
+`render_output_parameters` snapshot containing the output colourspace,
+transfer/gamma, gamut warning and optional stitched-tile visibility mask.
+Constructed renderers receive it through `set_output_parameters()` **before**
+`precompute_all()`; the colour/output LUT cache keys include transfer and
+destination precision. `ImageWidget::requestRender()` captures the per-view
+settings in the immutable request handed to its mutex-protected background
+renderer. Do not reintroduce source-document output gamma or profile fields.
 
-Existing `render-overrides-v1` archives still contain legacy output-profile
-and gamut keys. Older readers need these required fields, so do not break the
-format handshake merely to omit them. A later distinct schema feature can
-remove these non-calibration values from persisted documents while preserving
-v1 read compatibility. Production GUI display already ignores v1 legacy
-values for view-local presentation. The numeric output gamma, tone curve and
-process-colour calibration remain separate concerns and must not be reclassified
-without auditing their dependencies.
+The current Qt canvas is `QImage::Format_RGB888` and is tagged sRGB, so
+the View menu deliberately offers **no XYZ/raw Display colourspace selector**:
+those output values are not properly monitor-colour-managed pixels. It retains
+the independent per-view **Gamut Warning** diagnostic. Future calibrated
+wide-gamut and 10/16-bit HDR monitors can use this output-request boundary
+after adding target ICC, transfer and display-surface support. Render-to-File
+still has its own explicit profile selector, while avoiding gamut-warning
+overlays in exports.
+
+The Tiles checkbox is a per-view output mask, not an Undoable
+`tile_adjustment::enabled` input. Underlying stitch calibration still saves
+exposure, dark-point and blur. Actual loading availability is determined independently of the mask:
+`stitch_image::img` is allocated before pixels are decoded, so the library
+publishes a release-store ready bit **only after** `load_part` completes
+and validates dimensions/colour channels. Render lookups acquire-load that
+bit before reading the tile. The GUI calls `keep_all_images()` on its
+stitched project before dispatching parallel loads to prevent background
+LRU eviction while a view renders. Completion refreshes primary and peer
+renders through `imageTilesChanged()`, without altering `ParameterState`,
+Undo or dirty state. A file export can explicitly
+reuse the active view's mask, but never saves it in CSP.
+
+Schema-v1 `render-overrides-v1` retains **three required compatibility
+keys** (`output_profile`, `output_gamma`, `gamut_warning`). Strictly validate
+old typed values but ignore them as document state; new archives emit the
+neutral sRGB/-1/false values. The three authoritative structured processing
+inputs remain `ignore_infrared`, `demosaiced_scaling` and
+`observer_whitepoint`. Saved appearance tone curve and physical colour
+calibration remain document-owned.
+
+Keep `demosaic` saved for reopening the original capture. A future on-demand
+`image_data` raw/demosaic resource cache must retain a lossless original
+mosaic, key reconstructed results by decoder inputs, bound memory usage, and
+isolate in-flight results across image-load generations.

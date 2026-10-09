@@ -836,7 +836,7 @@ render::precompute_all (int flags, rgbdata patch_proportions,
           = std::make_unique<precomputed_function<luminosity_t>> (
               lmin, lmax, yvals, steps);
     }
-  return out_color.precompute (m_params, &m_img, normalized_patches,
+  return out_color.precompute (m_params, m_output, &m_img, normalized_patches,
                                patch_proportions, progress);
 }
 
@@ -1000,7 +1000,7 @@ get_linearized_pixel (const image_data &img, render_parameters &rparam, int xx,
       int tx, ty;
       point_t scr = img.stitch->common_scr_to_img.final_to_scr (
           { (coord_t)(xx + img.xmin), (coord_t)(yy + img.ymin) });
-      if (!img.stitch->tile_for_scr (&rparam, scr.x, scr.y, &tx, &ty, true))
+      if (!img.stitch->tile_for_scr (nullptr, scr.x, scr.y, &tx, &ty, true))
         return color;
       point_t p = img.stitch->images[ty][tx].common_scr_to_img (scr);
       xx = nearest_int (p.x);
@@ -1035,7 +1035,9 @@ std::vector <rgbdata>
 hd_y_to_rgb (render_parameters &rparam, int steps, luminosity_t miny, luminosity_t maxy, rgbdata patch_proportions, hd_axis_type axis_type)
 {
   out_color_adjustments a (256);
-  if (!a.precompute (rparam, nullptr, false, patch_proportions, nullptr))
+  render_output_parameters output;
+  if (!a.precompute (rparam, output, nullptr, false, patch_proportions,
+                     nullptr))
     return {};
   std::vector <rgbdata> data (steps);
   for (int i = 0 ; i < steps; i++)

@@ -1,11 +1,13 @@
 #ifndef STITCH_H
 #define STITCH_H
 #include <pthread.h>
+#include <atomic>
 #include <string>
 #include <memory>
 #include "imagedata.h"
 #include "scr-to-img.h"
 #include "colorscreen.h"
+#include "render-type-parameters.h"
 struct tiff;
 typedef struct tiff TIFF;
 
@@ -106,7 +108,14 @@ public:
   std::string filename;
   std::string screen_filename;
   std::string known_screen_filename;
+  /* The image pointer is installed when decoding begins, not when image
+     bytes are ready. Use image_ready_p() for concurrent rendering rather
+     than testing IMG, which may still be undergoing load_part(). */
   std::unique_ptr<image_data> img;
+  bool image_ready_p () const noexcept
+  {
+    return m_image_ready.load (std::memory_order_acquire);
+  }
   std::shared_ptr<mesh> mesh_trans;
   image_data::demosaicing_t demosaic;
   scr_to_img_parameters param;
@@ -231,8 +240,11 @@ public:
                                      const char **error);
 
 private:
-  static uint64_t current_time;
-  static int nloaded;
+  static std::atomic<uint64_t> current_time;
+  static std::atomic<int> nloaded;
+  /* Release-store only after image decoding and validation have completed.
+     Renderers acquire-load before using IMG on a still-live GUI project. */
+  std::atomic<bool> m_image_ready {false};
   uint64_t lastused;
   int refcount;
   stitch_project *m_prj;
@@ -276,7 +288,7 @@ public:
     release_images = false;
   }
   bool
-  tile_for_scr (const render_parameters *rparams, coord_t sx, coord_t sy, int *x,
+  tile_for_scr (const render_output_parameters *output, coord_t sx, coord_t sy, int *x,
                 int *y, bool only_loaded)
   {
 #if 0
@@ -285,8 +297,9 @@ public:
     for (iy = 0 ; iy < params.height; iy++)
       {
 	for (ix = 0 ; ix < params.width; ix++)
-	  if ((!only_loaded || images[iy][ix].img)
-	      && (!rparams || rparams->get_tile_adjustment (this, ix, iy).enabled)
+	  if ((!only_loaded || images[iy][ix].image_ready_p ())
+	      && (!output || output->tile_enabled_p (ix, iy, params.width,
+                                              params.height))
 	      && images[iy][ix].pixel_known_p (sx, sy))
 	    break;
 	if (ix != params.width)
@@ -306,9 +319,10 @@ public:
     for (iy = 0; iy < params.height; iy++)
       {
         for (ix = 0; ix < params.width; ix++)
-          if ((!only_loaded || images[iy][ix].img)
-              && (!rparams
-                  || rparams->get_tile_adjustment (this, ix, iy).enabled)
+          if ((!only_loaded || images[iy][ix].image_ready_p ())
+              && (!output
+                  || output->tile_enabled_p (ix, iy, params.width,
+                                             params.height))
               && images[iy][ix].pixel_maybe_in_range_p ({ sx, sy }))
             {
               /* Compute image coordinates.  */
@@ -359,7 +373,7 @@ public:
     params.scan_ydpi = new_ydpi;
     for (int iy = 0; iy < params.height; iy++)
       for (int ix = 0; ix < params.width; ix++)
-        if (images[iy][ix].img)
+        if (images[iy][ix].image_ready_p ())
           images[iy][ix].img->set_dpi (new_xdpi, new_ydpi);
   }
 
