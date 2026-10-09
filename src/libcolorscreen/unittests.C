@@ -10570,6 +10570,126 @@ test_stitch_tile_adjustment_grid ()
 }
 
 
+/* Round-trip all image-layer and colour-screen reconstruction inputs,
+   including denoise settings that are currently inactive but saved for Undo. */
+static bool
+test_native_json_v2_reconstruction ()
+{
+  render_parameters original;
+  original.ignore_infrared = true;
+  original.mix_red = 0.125f;
+  original.mix_green = 0.5f;
+  original.mix_blue = 0.875f;
+  original.mix_dark = {-0.01f, 0.005f, 0.02f};
+  original.collection_quality
+      = render_parameters::simulated_screen_collection;
+  original.screen_demosaic = render_parameters::amaze_demosaic;
+  original.demosaiced_scaling = render_parameters::lanczos3_scaling;
+  original.screen_blur_radius = 0.875;
+  original.collection_threshold = 0.3125f;
+  original.screen_denoise.mode = denoise_parameters::nl_fast;
+  original.screen_denoise.strength = 0.135f;
+  original.screen_denoise.noise_variance_floor = 0.001f;
+  original.screen_denoise.noise_variance_slope = 0.01f;
+  original.screen_denoise.patch_radius = 3;
+  original.screen_denoise.search_radius = 7;
+  original.screen_denoise.bilateral_sigma_s = 5.5f;
+  original.screen_denoise.bilateral_sigma_r = 0.09f;
+  original.demosaiced_denoise.mode = denoise_parameters::bilateral;
+  original.demosaiced_denoise.strength = 0.23f;
+  original.demosaiced_denoise.noise_variance_floor = 0;
+  original.demosaiced_denoise.noise_variance_slope = -0.02f;
+  original.demosaiced_denoise.patch_radius = 2;
+  original.demosaiced_denoise.search_radius = 11;
+  original.demosaiced_denoise.bilateral_sigma_s = 4.25f;
+  original.demosaiced_denoise.bilateral_sigma_r = 0.013f;
+
+  std::string first, error;
+  if (!encode_parameter_json_v2_reconstruction (
+          original, &first, &error)
+      || first.find ("\"legacy_csp\"") != std::string::npos)
+    return false;
+
+  render_parameters decoded;
+  decoded.gamma = 2.75f;
+  decoded.brightness = 0.91f;
+  if (!decode_parameter_json_v2_reconstruction (first, &decoded, &error))
+    {
+      fprintf (stderr, "Native v2 reconstruction decode failed: %s\n",
+               error.c_str ());
+      return false;
+    }
+  if (decoded.ignore_infrared != original.ignore_infrared
+      || decoded.mix_red != original.mix_red
+      || decoded.mix_green != original.mix_green
+      || decoded.mix_blue != original.mix_blue
+      || decoded.mix_dark != original.mix_dark
+      || decoded.collection_quality != original.collection_quality
+      || decoded.screen_demosaic != original.screen_demosaic
+      || decoded.demosaiced_scaling != original.demosaiced_scaling
+      || decoded.screen_blur_radius != original.screen_blur_radius
+      || decoded.collection_threshold != original.collection_threshold
+      || !decoded.screen_denoise.equal_p (original.screen_denoise)
+      || !decoded.demosaiced_denoise.equal_p (original.demosaiced_denoise)
+      || decoded.gamma != 2.75f || decoded.brightness != 0.91f)
+    {
+      fprintf (stderr, "Native v2 reconstruction lost saved control\n");
+      return false;
+    }
+  std::string second;
+  if (!encode_parameter_json_v2_reconstruction (
+          decoded, &second, &error) || first != second)
+    return false;
+
+  /* Reject malformed algorithm names and the wrong numeric/array types
+     without applying even the earlier, individually valid settings. */
+  render_parameters unchanged = decoded;
+  auto replace_one = [] (std::string &text, const std::string &before,
+                         const std::string &after) -> bool
+    {
+      size_t at = text.find (before);
+      if (at == std::string::npos)
+        return false;
+      text.replace (at, before.size (), after);
+      return true;
+    };
+  for (const auto &substitution :
+       {std::pair<std::string, std::string> {
+            "\"screen_demosaic\": \"amaze\"",
+            "\"screen_demosaic\": \"unsupported\""},
+        {"\"mix_weights\": [0.125, 0.5, 0.875]",
+         "\"mix_weights\": [0.125, 0.5]"},
+        {"\"patch_radius\": 3", "\"patch_radius\": 3.2"},
+        {"\"collection_threshold\": 0.3125",
+         "\"collection_threshold\": 1e999"},
+        {"\"ignore_infrared\": true", "\"ignore_infrared\": \"true\""}})
+    {
+      std::string bad = first;
+      if (!replace_one (bad, substitution.first, substitution.second))
+        {
+          fprintf (stderr, "V2 reconstruction test replacement missing\n");
+          return false;
+        }
+      if (decode_parameter_json_v2_reconstruction (bad, &decoded, &error)
+          || decoded.ignore_infrared != unchanged.ignore_infrared
+          || decoded.screen_demosaic != unchanged.screen_demosaic
+          || decoded.mix_red != unchanged.mix_red
+          || !decoded.screen_denoise.equal_p (unchanged.screen_denoise)
+          || decoded.gamma != unchanged.gamma)
+        {
+          fprintf (stderr, "Invalid v2 reconstruction mutated state\n");
+          return false;
+        }
+    }
+
+  original.mix_blue = my_quiet_nan<luminosity_t> ();
+  std::string untouched = "unchanged";
+  if (encode_parameter_json_v2_reconstruction (
+          original, &untouched, &error) || untouched != "unchanged")
+    return false;
+  return true;
+}
+
 /* Validate native v2 capture scalars and both independent image bounds.
    This codec is only a component; the full v2 writer must also save the
    remaining correction, reconstruction, sharpness and colour sections. */
@@ -11016,6 +11136,8 @@ main (int argc, char **argv)
     { "mesh_inversion", "mesh inversion tests", [] () { return test_mesh_inversion (); } },
     { "cow_points", "cow points tests", [] () { return test_cow_points (); } },
     { "image_area", "image area tests", [] () { return test_image_area (); } },
+    { "json_v2_reconstruction", "native JSON schema-v2 reconstruction codec",
+      [] () { return test_native_json_v2_reconstruction (); } },
     { "json_v2_capture", "native JSON schema-v2 capture codec",
       [] () { return test_native_json_v2_capture (); } },
     { "json_v2_registration", "native JSON schema-v2 registration codec",
