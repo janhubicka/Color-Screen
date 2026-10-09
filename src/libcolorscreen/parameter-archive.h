@@ -186,6 +186,22 @@ decode_parameter_json_v2_capture (
     const std::string &input, render_parameters *capture,
     std::string *error);
 
+/* Encode image-layer and colour-screen reconstruction controls as native
+   JSON. Includes the infrared policy, RGB mixer, collection and demosaicing
+   selections, screen blur/threshold, and both independent denoising stages.
+   This remains a component: no full v2 .cspar writer exists yet. */
+DLL_PUBLIC bool
+encode_parameter_json_v2_reconstruction (
+    const render_parameters &render, std::string *output,
+    std::string *error);
+
+/* Decode the reconstruction component transactionally into RENDER while
+   leaving unrelated capture, sharpening and colour state untouched. */
+DLL_PUBLIC bool
+decode_parameter_json_v2_reconstruction (
+    const std::string &input, render_parameters *render,
+    std::string *error);
+
 /* Parse the native JSON v2 registration component into independent temporary
    state, committing only when all fields and bounds are valid. This prevents
    a malformed field from partially mutating a live document. ERROR gives a
