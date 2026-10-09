@@ -83,6 +83,13 @@ public:
     return m_viewOutputProfile;
   }
 
+  /** Temporary inclusion of a stitched tile in this particular view.
+      It is independent of image-load readiness and never enters Undo/save. */
+  bool tileVisible(int x, int y) const;
+  void setTileVisible(int x, int y, bool visible);
+  /** Refresh pixels after a staged tile finishes loading, without an edit. */
+  void refreshRendering() { requestRender(); }
+
   void setImage(std::shared_ptr<colorscreen::image_data> scan,
                 colorscreen::render_parameters *rparams,
                 colorscreen::scr_to_img_parameters *scrToImg,
@@ -366,6 +373,7 @@ signals:
   void profileSpotRemoveRequested(int index);
   /** Emitted when the view-local Scan/Screen canvas choice changes. */
   void viewCoordinateSpaceChanged(int coordinateSpace);
+  void tileVisibilityChanged();
 
 private:
   // Drawing helpers to keep paintEvent clean
@@ -484,6 +492,7 @@ private:
   bool m_viewGamutWarning = false;
   colorscreen::render_output_parameters::output_profile_t m_viewOutputProfile =
       colorscreen::render_output_parameters::output_profile_sRGB;
+  colorscreen::render_output_parameters m_viewTileVisibility;
   colorscreen::scr_to_img_parameters *m_scrToImg = nullptr;
   colorscreen::scr_detect_parameters *m_scrDetect = nullptr;
   colorscreen::render_type_parameters *m_renderType = nullptr;
