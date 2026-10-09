@@ -1053,6 +1053,9 @@ private:
         document continues to use the same input file. */
     std::shared_ptr<colorscreen::image_data> rawSource;
     QString rawSourceFile;
+    /** One in-flight image decode can be cancelled when a newer Open or
+        Reload request supersedes it. The worker owns the strong reference. */
+    std::weak_ptr<colorscreen::progress_info> activeProgress;
   };
   ImageLoadState m_imageLoad;
 
