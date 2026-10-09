@@ -350,7 +350,7 @@ void render_stitched(RP &rtparam, P &outer_param,
 	    {
 	      int ix, iy;
 	      point_t scr = stitch.common_scr_to_img.final_to_scr ({(x + xoffset) * step + xmin, py});
-	      if (stitch.tile_for_scr (&rparam, scr.x, scr.y, &ix, &iy, true))
+	      if (stitch.tile_for_scr (&rtparam.output, scr.x, scr.y, &ix, &iy, true))
 		renders[iy * stitch.params.width + ix] = (T *)(size_t)1;
 	    }
 	if (progress)
@@ -395,7 +395,7 @@ void render_stitched(RP &rtparam, P &outer_param,
 	    int ix, iy;
 
 	    /* If no tile was found, just render black pixel. */
-	    if (!stitch.tile_for_scr (&rparam, scr.x, scr.y, &ix, &iy, true))
+	    if (!stitch.tile_for_scr (&rtparam.output, scr.x, scr.y, &ix, &iy, true))
 	      {
 		putpixel (pixels, pixelbytes, rowstride, x, y, 0, 0, 0);
 		continue;
