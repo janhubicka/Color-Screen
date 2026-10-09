@@ -221,18 +221,23 @@ required features can then migrate state incrementally without bumping the whole
 schema merely because one domain gains an authoritative structured
 representation.
 
-The first migration is `render-overrides-v1`. It exists specifically for six
-persistent `render_parameters` fields that legacy CSP has no keyword for:
+The first migration is `render-overrides-v1`. Its historical schema has six
+required typed fields, but only four are persistent processing state missing
+from legacy CSP:
 
 - `ignore_infrared`;
 - `demosaiced_scaling`;
 - `observer_whitepoint`;
-- `output_profile`;
-- `output_gamma`;
-- `gamut_warning`.
+- `output_gamma`.
+
+The remaining two keys, `output_profile` and `gamut_warning`, originally
+described display/render intent. They **remain required for schema-v1
+compatibility**, but current readers validate and ignore their values rather
+than applying them to the document. Current writers emit the neutral
+compatibility values shown in the manifest example above.
 
 A reader that understands the feature parses the legacy CSP mirror first and
-then applies these six validated structured values. A reader that does not
+then applies the four authoritative processing values. A reader that does not
 understand the feature must reject the archive. A manifest containing
 `state.render_overrides` without declaring the feature is invalid, as is a
 manifest declaring the feature without the complete structured object. This
@@ -311,7 +316,8 @@ Implementation status in the alpha tree:
 - genuinely new Save As/no-sidecar targets now default to `.cspar`;
   established Archive/Legacy targets remain format-preserving;
 - `render-overrides-v1` is the first authoritative structured-state feature,
-  closing the known legacy-CSP gap for six saved render fields.
+  preserving four processing parameters absent from legacy CSP while
+  retaining two neutral historical schema keys for compatibility.
 
 Remaining rollout sequence:
 
