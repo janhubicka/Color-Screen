@@ -3001,9 +3001,9 @@ void ImageWidget::setViewGamutWarning(bool enabled) {
 
 /** Change this viewport's output colour space without editing the document. */
 void ImageWidget::setViewOutputProfile(
-    colorscreen::render_parameters::output_profile_t profile) {
-  if (profile < colorscreen::render_parameters::output_profile_sRGB ||
-      profile >= colorscreen::render_parameters::output_profile_max ||
+    colorscreen::render_output_parameters::output_profile_t profile) {
+  if (profile < colorscreen::render_output_parameters::output_profile_sRGB ||
+      profile >= colorscreen::render_output_parameters::output_profile_max ||
       m_viewOutputProfile == profile)
     return;
   m_viewOutputProfile = profile;
@@ -3039,16 +3039,17 @@ void ImageWidget::requestRender() {
     data.h = reqH;
     data.coordinateSpace = (int)m_coordinateSpace;
     data.params = *m_rparams;
-    // These are view-level rendering choices, never document parameter edits.
-    data.params.gamut_warning = m_viewGamutWarning;
-    data.params.output_profile = m_viewOutputProfile;
     data.scrToImg = m_scrToImg ? *m_scrToImg
                                : colorscreen::scr_to_img_parameters();
     data.scrDetect = m_scrDetect ? *m_scrDetect
                                  : colorscreen::scr_detect_parameters();
     data.renderType = m_renderType ? *m_renderType
                                    : colorscreen::render_type_parameters();
-    
+    // Presentation and output encoding are immutable per-render inputs, not
+    // properties of the underlying photograph.
+    data.renderType.output.gamut_warning = m_viewGamutWarning;
+    data.renderType.output.output_profile = m_viewOutputProfile;
+
     int reqId = m_renderQueue.requestRender(QVariant::fromValue(data));
     qCDebug(lcRenderSync) << "ImageWidget::requestRender - Created ID:" << reqId << " scale:" << m_scale;
 }
