@@ -10579,7 +10579,7 @@ test_native_json_v2_process ()
   original.color_model = render_parameters::color_model_autochrome_lavedrine2;
   original.age = {0.125f, 0.25f, 0.75f};
   original.dye_density = {1.125f, 0.875f, 1.25f};
-  original.red_strip_width = 0.325;
+  original.red_strip_width = 0.3125;
   original.green_strip_width = 0.4125;
   original.contact_copy.simulate = false;
   original.contact_copy.preflash = 0.125f;
@@ -10636,7 +10636,7 @@ test_native_json_v2_process ()
         {"\"simulate\": false", "\"simulate\": \"false\""},
         {"\"preflash\": 0.125", "\"preflash\": 1e999"},
         {"\"min\": [-4.5, 5.5]", "\"min\": [-4.5]"},
-        {"\"red\": 0.325", "\"red\": 0.325, \"red\": 0.3"}})
+        {"\"red\": 0.3125", "\"red\": 0.3125, \"red\": 0.3"}})
     {
       std::string bad = json;
       size_t at = bad.find (substitution.first);
