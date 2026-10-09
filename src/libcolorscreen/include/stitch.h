@@ -1,6 +1,7 @@
 #ifndef STITCH_H
 #define STITCH_H
 #include <pthread.h>
+#include <atomic>
 #include <string>
 #include <memory>
 #include "imagedata.h"
@@ -107,7 +108,14 @@ public:
   std::string filename;
   std::string screen_filename;
   std::string known_screen_filename;
+  /* The image pointer is installed when decoding begins, not when image
+     bytes are ready. Use image_ready_p() for concurrent rendering rather
+     than testing IMG, which may still be undergoing load_part(). */
   std::unique_ptr<image_data> img;
+  bool image_ready_p () const noexcept
+  {
+    return m_image_ready.load (std::memory_order_acquire);
+  }
   std::shared_ptr<mesh> mesh_trans;
   image_data::demosaicing_t demosaic;
   scr_to_img_parameters param;
@@ -232,8 +240,11 @@ public:
                                      const char **error);
 
 private:
-  static uint64_t current_time;
-  static int nloaded;
+  static std::atomic<uint64_t> current_time;
+  static std::atomic<int> nloaded;
+  /* Release-store only after image decoding and validation have completed.
+     Renderers acquire-load before using IMG on a still-live GUI project. */
+  std::atomic<bool> m_image_ready {false};
   uint64_t lastused;
   int refcount;
   stitch_project *m_prj;
@@ -286,7 +297,7 @@ public:
     for (iy = 0 ; iy < params.height; iy++)
       {
 	for (ix = 0 ; ix < params.width; ix++)
-	  if ((!only_loaded || images[iy][ix].img)
+	  if ((!only_loaded || images[iy][ix].image_ready_p ())
 	      && (!output || output->tile_enabled_p (ix, iy, params.width,
                                               params.height))
 	      && images[iy][ix].pixel_known_p (sx, sy))
@@ -308,7 +319,7 @@ public:
     for (iy = 0; iy < params.height; iy++)
       {
         for (ix = 0; ix < params.width; ix++)
-          if ((!only_loaded || images[iy][ix].img)
+          if ((!only_loaded || images[iy][ix].image_ready_p ())
               && (!output
                   || output->tile_enabled_p (ix, iy, params.width,
                                              params.height))
