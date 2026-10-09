@@ -1824,6 +1824,134 @@ image_data::load (const char *name, bool preload_all, const char **error,
   return false;
 }
 
+/* Reuse the original unpacked sensor mosaic for an independently owned
+   demosaiced image. Each variant has a distinct image id/cache identity.
+   The retained LibRaw processor is mutable, so all postprocessing, copying
+   and weak-cache operations are serialized by the source mutex. */
+bool
+image_data::can_redemosaic () const
+{
+  return static_cast<bool> (m_raw_capture);
+}
+
+std::shared_ptr<image_data>
+image_data::demosaiced_variant (demosaicing_t mode, const char **error,
+                                progress_info *progress)
+{
+  if (!m_raw_capture)
+    {
+      if (error)
+        *error = "source image has no retained unpacked RAW data";
+      return nullptr;
+    }
+  if (mode < demosaic_default || mode >= demosaic_max)
+    {
+      if (error)
+        *error = "invalid RAW demosaicing algorithm";
+      return nullptr;
+    }
+  if (progress && progress->cancel_requested ())
+    {
+      if (error)
+        *error = "cancelled";
+      return nullptr;
+    }
+  const std::shared_ptr<raw_capture_source> capture = m_raw_capture;
+  std::lock_guard<std::mutex> lock (capture->mutex);
+  if (auto cached = capture->variants[(int)mode].lock ())
+    return cached;
+  if (progress && progress->cancel_requested ())
+    {
+      if (error)
+        *error = "cancelled";
+      return nullptr;
+    }
+
+  std::shared_ptr<image_data> result = std::make_shared<image_data> ();
+  /* Preserve capture properties while allocating independent pixel buffers.
+     No external file read or EXIF parse occurs for the alternate decode. */
+  result->xdpi = xdpi;
+  result->ydpi = ydpi;
+  result->exif_xdpi = exif_xdpi;
+  result->exif_ydpi = exif_ydpi;
+  result->primary_red = primary_red;
+  result->primary_green = primary_green;
+  result->primary_blue = primary_blue;
+  result->backlight_corr = backlight_corr;
+  result->gamma = gamma;
+  result->f_stop = f_stop;
+  result->focal_plane_x_resolution = focal_plane_x_resolution;
+  result->focal_plane_y_resolution = focal_plane_y_resolution;
+  result->focal_plane_resolution_unit = focal_plane_resolution_unit;
+  result->focal_length = focal_length;
+  result->focal_length_in_35mm = focal_length_in_35mm;
+  result->pixel_pitch = pixel_pitch;
+  result->sensor_fill_factor = sensor_fill_factor;
+  result->full_res_width = full_res_width;
+  result->wavelengths = wavelengths;
+  result->rotation = rotation;
+  result->mirror = mirror;
+  result->standard_bayer_cfa = standard_bayer_cfa;
+  result->camera_make = camera_make;
+  result->camera_model = camera_model;
+  result->lens = lens;
+  result->software = software;
+  result->to_linear = to_linear;
+  result->demosaic = mode;
+  result->m_requested_demosaic = mode;
+  if (icc_profile && icc_profile_size)
+    {
+      result->icc_profile = malloc (icc_profile_size);
+      if (!result->icc_profile)
+        {
+          if (error)
+            *error = "out of memory copying RAW ICC profile";
+          return nullptr;
+        }
+      memcpy (result->icc_profile, icc_profile, icc_profile_size);
+      result->icc_profile_size = icc_profile_size;
+    }
+
+  result->loader = std::make_unique<raw_image_data_loader> (result.get (),
+                                                             capture);
+  auto *raw = static_cast<raw_image_data_loader *> (result->loader.get ());
+  const char *local_error = nullptr;
+  if (!raw->reprocess_unpacked (mode, &local_error, progress))
+    {
+      if (error)
+        *error = local_error;
+      return nullptr;
+    }
+  if (!result->allocate ()
+      || (raw->rgb && !result->m_rgbdata)
+      || (raw->grayscale && !result->m_data))
+    {
+      if (error)
+        *error = "out of memory allocating demosaiced image";
+      return nullptr;
+    }
+  int permille = 0;
+  if (!raw->load_part (&permille, &local_error, progress) || permille != 1000)
+    {
+      if (error)
+        *error = local_error ? local_error : "incomplete RAW demosaicing";
+      return nullptr;
+    }
+  if (progress && progress->cancel_requested ())
+    {
+      if (error)
+        *error = "cancelled";
+      return nullptr;
+    }
+  result->loader.reset ();
+  result->m_raw_capture = capture;
+  capture->processor->free_image ();
+  capture->variants[(int)mode] = result;
+  if (error)
+    *error = nullptr;
+  return result;
+}
+
 /* Set DPI of the image to NEW_XDPI and NEW_YDPI.  */
 void
 image_data::set_dpi (coord_t new_xdpi, coord_t new_ydpi)
