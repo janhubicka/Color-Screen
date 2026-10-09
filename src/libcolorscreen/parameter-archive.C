@@ -3708,4 +3708,440 @@ decode_parameter_json_v2_sharpness (const std::string &input,
   return true;
 }
 
+
+/* Native v2 spatial calibration grids, including stitched per-tile scanner
+   optics. The legacy CSP writer serializes these through nested FILE* saves;
+   this codec reads the actual calibration resources instead. */
+namespace
+{
+constexpr size_t v2_max_backlight_cells = 262144;
+constexpr size_t v2_max_blur_cells = 1000000;
+constexpr size_t v2_max_tile_cells = 65536;
+constexpr size_t v2_max_grids_bytes = 128 * 1024 * 1024;
+constexpr size_t v2_max_grids_nodes = 8000000;
+
+/* Reject overflow and unreasonable allocation before multiplying dimensions.
+   An empty 0x0 tile grid is the only permitted empty grid. */
+bool
+v2_grid_size (int w, int h, size_t limit, bool allow_empty,
+              size_t *count)
+{
+  if (allow_empty && w == 0 && h == 0)
+    {
+      *count = 0;
+      return true;
+    }
+  if (w <= 0 || h <= 0 || (size_t)w > limit / (size_t)h)
+    return false;
+  *count = (size_t)w * (size_t)h;
+  return true;
+}
+
+/* Parse the exact grid shape as signed integers, with allocation limits. */
+bool
+v2_parse_grid_dimensions (const json_value &object,
+                          size_t limit, bool allow_empty,
+                          int *width, int *height, size_t *count,
+                          std::string *error)
+{
+  const json_value *dims
+      = v2_required (object, "dimensions", json_value::kind::array, error);
+  if (!dims || dims->array_value.size () != 2
+      || !v2_json_int (dims->array_value[0], width)
+      || !v2_json_int (dims->array_value[1], height)
+      || !v2_grid_size (*width, *height, limit, allow_empty, count))
+    return archive_fail (error, "invalid v2 calibration-grid dimensions");
+  return true;
+}
+
+/* Validate one scanner-blur correction grid and all saved cell values.
+   Per-cell reduction diagnostics are derived analytics, separately exported
+   as CSV, and are not part of original CSP persistence. */
+bool
+v2_valid_blur_grid (
+    const std::shared_ptr<scanner_blur_correction_parameters> &blur,
+    std::string *error)
+{
+  if (!blur)
+    return true;
+  size_t count = 0;
+  if (!v2_grid_size (blur->get_width (), blur->get_height (),
+                     v2_max_blur_cells, false, &count)
+      || (int)blur->get_mode () < 0
+      || (int)blur->get_mode ()
+             >= scanner_blur_correction_parameters::max_correction)
+    return archive_fail (error, "invalid v2 scanner blur correction shape/mode");
+  for (size_t i = 0; i < count; ++i)
+    if (!my_isfinite (blur->get_correction (
+            (int)(i % blur->get_width ()),
+            (int)(i / blur->get_width ()))))
+      return archive_fail (error, "nonfinite v2 scanner blur correction");
+  return true;
+}
+
+/* Append a nullable scanner-blur grid, including the explicit physical mode.
+   Multiple tile grids may have distinct modes and dimensions. */
+bool
+v2_append_blur_grid (
+    const std::shared_ptr<scanner_blur_correction_parameters> &blur,
+    std::string *text, std::string *error)
+{
+  if (!v2_valid_blur_grid (blur, error))
+    return false;
+  if (!blur)
+    {
+      *text += "null";
+      return true;
+    }
+  const int w = blur->get_width (), h = blur->get_height ();
+  *text += "{\"mode\": \"";
+  *text += json_escape (scanner_blur_correction_parameters::correction_names
+                            [(int)blur->get_mode ()]);
+  *text += "\", \"dimensions\": [" + std::to_string (w)
+           + ", " + std::to_string (h) + "], \"values\": [";
+  for (int y = 0; y < h; ++y)
+    for (int x = 0; x < w; ++x)
+      {
+        if (x || y)
+          *text += ", ";
+        *text += json_number (blur->get_correction (x, y));
+      }
+  *text += "]}";
+  if (text->size () > v2_max_grids_bytes)
+    return archive_fail (error, "v2 spatial corrections exceed size limit");
+  return true;
+}
+
+/* Validate all directly stored per-tile, black-reference and blur data.
+   Do not inadvertently serialize cache-only blur diagnostics or view masks. */
+bool
+v2_valid_grids (const render_parameters &render, std::string *error)
+{
+  size_t cells = 0;
+  if (!v2_grid_size (render.tile_adjustments_width,
+                     render.tile_adjustments_height,
+                     v2_max_tile_cells, true, &cells)
+      || cells != render.tile_adjustments.size ())
+    return archive_fail (error, "invalid v2 stitched-tile correction grid");
+  if (!v2_valid_blur_grid (render.scanner_blur_correction, error))
+    return false;
+  for (const render_parameters::tile_adjustment &tile :
+       render.tile_adjustments)
+    if (!my_isfinite (tile.exposure)
+        || !my_isfinite (tile.dark_point)
+        || !v2_valid_blur_grid (tile.scanner_blur_correction, error))
+      return archive_fail (error, "invalid v2 stitched-tile calibration");
+
+  if (render.backlight_correction)
+    {
+      const backlight_correction_parameters &light
+          = *render.backlight_correction;
+      if (!v2_grid_size (light.get_width (), light.get_height (),
+                         v2_max_backlight_cells, false, &cells))
+        return archive_fail (error, "invalid v2 backlight dimensions");
+      for (size_t i = 0; i < cells; ++i)
+        for (int channel = 0; channel < 4; ++channel)
+          {
+            const int x = (int)(i % light.get_width ());
+            const int y = (int)(i / light.get_width ());
+            auto c = (backlight_correction_parameters::channel)channel;
+            if (!my_isfinite (light.get_luminosity (x, y, c))
+                || !my_isfinite (light.get_sub (x, y, c)))
+              return archive_fail (error, "nonfinite v2 backlight calibration");
+          }
+    }
+  return true;
+}
+
+/* Parse nullable blur corrections into a new resource. Caller owns no
+   half-decoded data on failure. */
+bool
+v2_parse_blur_grid (
+    const json_value &value,
+    std::shared_ptr<scanner_blur_correction_parameters> *output,
+    std::string *error)
+{
+  if (value.type == json_value::kind::null_value)
+    {
+      output->reset ();
+      return true;
+    }
+  if (value.type != json_value::kind::object)
+    return archive_fail (error, "v2 scanner blur grid must be null/object");
+  const json_value *mode
+      = v2_required (value, "mode", json_value::kind::string, error);
+  const json_value *values
+      = v2_required (value, "values", json_value::kind::array, error);
+  if (!mode || !values)
+    return false;
+
+  int selected_mode = -1;
+  for (int i = 0;
+       i < scanner_blur_correction_parameters::max_correction; ++i)
+    if (mode->text
+        == scanner_blur_correction_parameters::correction_names[i])
+      selected_mode = i;
+  if (selected_mode < 0)
+    return archive_fail (error, "unknown v2 scanner blur correction mode");
+  int w = 0, h = 0;
+  size_t count = 0;
+  if (!v2_parse_grid_dimensions (value, v2_max_blur_cells, false,
+                                 &w, &h, &count, error)
+      || values->array_value.size () != count)
+    return archive_fail (error, "invalid v2 scanner blur data dimensions");
+
+  auto result = std::make_shared<scanner_blur_correction_parameters> ();
+  if (!result->alloc (
+          w, h, (scanner_blur_correction_parameters::correction_mode)selected_mode))
+    return archive_fail (error, "could not allocate v2 scanner blur grid");
+  for (size_t i = 0; i < count; ++i)
+    {
+      luminosity_t sample;
+      if (!v2_real (values->array_value[i], &sample))
+        return archive_fail (error, "invalid v2 scanner blur cell");
+      result->set_correction ((int)(i % w), (int)(i / w), sample);
+    }
+  *output = std::move (result);
+  return true;
+}
+
+/* Parse nullable backlight data with exact channel and subtraction samples.
+   Non-enabled channels are retained as numeric data so a later calibration
+   mode switch can reproduce the accepted original table. */
+bool
+v2_parse_backlight (
+    const json_value &value,
+    std::shared_ptr<backlight_correction_parameters> *output,
+    std::string *error)
+{
+  if (value.type == json_value::kind::null_value)
+    {
+      output->reset ();
+      return true;
+    }
+  if (value.type != json_value::kind::object)
+    return archive_fail (error, "v2 backlight grid must be null/object");
+  const json_value *channels
+      = v2_required (value, "channels", json_value::kind::array, error);
+  const json_value *lum
+      = v2_required (value, "luminosities", json_value::kind::array, error);
+  const json_value *sub
+      = v2_required (value, "subtractions", json_value::kind::array, error);
+  bool black = false;
+  if (!channels || !lum || !sub || channels->array_value.size () != 4
+      || !v2_field_bool (value, "black_correction", &black, error))
+    return archive_fail (error, "invalid v2 backlight channel metadata");
+  bool enabled[4];
+  for (int c = 0; c < 4; ++c)
+    {
+      if (channels->array_value[c].type != json_value::kind::boolean)
+        return archive_fail (error, "invalid v2 backlight channel flag");
+      enabled[c] = channels->array_value[c].boolean_value;
+    }
+  int w = 0, h = 0;
+  size_t count = 0;
+  if (!v2_parse_grid_dimensions (value, v2_max_backlight_cells, false,
+                                 &w, &h, &count, error)
+      || lum->array_value.size () != count
+      || sub->array_value.size () != count)
+    return archive_fail (error, "invalid v2 backlight sample dimensions");
+  auto result = std::make_shared<backlight_correction_parameters> ();
+  if (!result->alloc (w, h, enabled))
+    return archive_fail (error, "could not allocate v2 backlight correction");
+  result->black_correction = black;
+  for (size_t i = 0; i < count; ++i)
+    {
+      const json_value &lum_row = lum->array_value[i];
+      const json_value &sub_row = sub->array_value[i];
+      if (lum_row.type != json_value::kind::array
+          || sub_row.type != json_value::kind::array
+          || lum_row.array_value.size () != 4
+          || sub_row.array_value.size () != 4)
+        return archive_fail (error, "invalid v2 backlight sample tuple");
+      for (int c = 0; c < 4; ++c)
+        {
+          luminosity_t brightness, offset;
+          if (!v2_real (lum_row.array_value[c], &brightness)
+              || !v2_real (sub_row.array_value[c], &offset))
+            return archive_fail (error, "invalid v2 backlight sample");
+          auto channel = (backlight_correction_parameters::channel)c;
+          const int x = (int)(i % w), y = (int)(i / w);
+          result->set_luminosity (x, y, brightness, channel);
+          result->set_sub (x, y, offset, channel);
+        }
+    }
+  *output = std::move (result);
+  return true;
+}
+} // anonymous namespace
+
+/* Encode the original calibration tables directly as stable, typed numeric
+   JSON arrays; do not use backlight/save() or scanner_blur/save() streams. */
+bool
+encode_parameter_json_v2_correction_grids (
+    const render_parameters &render, std::string *output, std::string *error)
+{
+  if (error)
+    error->clear ();
+  if (!output)
+    return archive_fail (error, "missing v2 corrections output");
+  if (!v2_valid_grids (render, error))
+    return false;
+
+  std::string text;
+  text.reserve (2048);
+  text += "{\n  \"correction_grids\": {\n    \"backlight\": ";
+  if (!render.backlight_correction)
+    text += "null";
+  else
+    {
+      const backlight_correction_parameters &light
+          = *render.backlight_correction;
+      const int w = light.get_width (), h = light.get_height ();
+      text += "{\"dimensions\": [" + std::to_string (w) + ", "
+              + std::to_string (h) + "], \"channels\": [";
+      for (int c = 0; c < 4; ++c)
+        {
+          if (c)
+            text += ", ";
+          text += light.channel_enabled (
+              (backlight_correction_parameters::channel)c) ? "true" : "false";
+        }
+      text += "], \"black_correction\": ";
+      text += light.black_correction ? "true" : "false";
+      text += ", \"luminosities\": [";
+      for (int y = 0; y < h; ++y)
+        for (int x = 0; x < w; ++x)
+          {
+            if (x || y)
+              text += ", ";
+            text += "[";
+            for (int c = 0; c < 4; ++c)
+              {
+                if (c)
+                  text += ", ";
+                text += json_number (light.get_luminosity (
+                    x, y, (backlight_correction_parameters::channel)c));
+              }
+            text += "]";
+          }
+      text += "], \"subtractions\": [";
+      for (int y = 0; y < h; ++y)
+        for (int x = 0; x < w; ++x)
+          {
+            if (x || y)
+              text += ", ";
+            text += "[";
+            for (int c = 0; c < 4; ++c)
+              {
+                if (c)
+                  text += ", ";
+                text += json_number (light.get_sub (
+                    x, y, (backlight_correction_parameters::channel)c));
+              }
+            text += "]";
+          }
+      text += "]}";
+      if (text.size () > v2_max_grids_bytes)
+        return archive_fail (error, "v2 backlight data exceeds size limit");
+    }
+  text += ",\n    \"scanner_blur\": ";
+  if (!v2_append_blur_grid (render.scanner_blur_correction, &text, error))
+    return false;
+  text += ",\n    \"tiles\": {\"dimensions\": ["
+          + std::to_string (render.tile_adjustments_width) + ", "
+          + std::to_string (render.tile_adjustments_height)
+          + "], \"adjustments\": [";
+  for (size_t i = 0; i < render.tile_adjustments.size (); ++i)
+    {
+      if (i)
+        text += ", ";
+      const render_parameters::tile_adjustment &tile
+          = render.tile_adjustments[i];
+      text += "{\"exposure\": " + json_number (tile.exposure)
+              + ", \"dark_point\": " + json_number (tile.dark_point)
+              + ", \"scanner_blur\": ";
+      if (!v2_append_blur_grid (tile.scanner_blur_correction, &text, error))
+        return false;
+      text += "}";
+    }
+  text += "]}\n  }\n}\n";
+  if (text.size () > v2_max_grids_bytes || !valid_utf8 (text))
+    return archive_fail (error, "v2 calibration JSON exceeds size/UTF-8 limit");
+  *output = std::move (text);
+  return true;
+}
+
+/* Decode all correction resources privately and commit only when every
+   sample and every nested stitched-tile grid is present and valid. */
+bool
+decode_parameter_json_v2_correction_grids (
+    const std::string &input, render_parameters *render, std::string *error)
+{
+  if (error)
+    error->clear ();
+  if (!render)
+    return archive_fail (error, "missing v2 corrections destination");
+  if (input.size () > v2_max_grids_bytes || !valid_utf8 (input))
+    return archive_fail (error, "invalid v2 calibration JSON UTF-8/size");
+  json_parser parser (input.data (), input.data () + input.size (),
+                      v2_max_grids_nodes);
+  json_value root;
+  if (!parser.parse (&root))
+    return archive_fail (error, "invalid v2 calibration JSON: "
+                         + parser.error ());
+  const json_value *object
+      = v2_required (root, "correction_grids",
+                     json_value::kind::object, error);
+  if (!object)
+    return false;
+  const json_value *light = object_member (*object, "backlight");
+  const json_value *blur = object_member (*object, "scanner_blur");
+  const json_value *tile_grid
+      = v2_required (*object, "tiles", json_value::kind::object, error);
+  if (!light || !blur || !tile_grid)
+    return archive_fail (error, "missing required v2 calibration grid");
+
+  render_parameters parsed = *render;
+  if (!v2_parse_backlight (*light, &parsed.backlight_correction, error)
+      || !v2_parse_blur_grid (*blur, &parsed.scanner_blur_correction, error))
+    return false;
+
+  int w = 0, h = 0;
+  size_t count = 0;
+  const json_value *tiles
+      = v2_required (*tile_grid, "adjustments",
+                     json_value::kind::array, error);
+  if (!tiles || !v2_parse_grid_dimensions (
+          *tile_grid, v2_max_tile_cells, true, &w, &h, &count, error)
+      || tiles->array_value.size () != count)
+    return archive_fail (error, "invalid v2 stitched-tile grid shape");
+
+  parsed.tile_adjustments.clear ();
+  parsed.tile_adjustments_width = 0;
+  parsed.tile_adjustments_height = 0;
+  if (count)
+    parsed.set_tile_adjustments_dimensions (w, h);
+  for (size_t i = 0; i < count; ++i)
+    {
+      const json_value &entry = tiles->array_value[i];
+      if (entry.type != json_value::kind::object)
+        return archive_fail (error, "invalid v2 stitched-tile entry");
+      render_parameters::tile_adjustment &tile
+          = parsed.tile_adjustments[i];
+      if (!v2_field_real (entry, "exposure", &tile.exposure, error)
+          || !v2_field_real (entry, "dark_point", &tile.dark_point, error))
+        return false;
+      const json_value *tile_blur = object_member (entry, "scanner_blur");
+      if (!tile_blur
+          || !v2_parse_blur_grid (*tile_blur,
+                                  &tile.scanner_blur_correction, error))
+        return archive_fail (error, "invalid or absent v2 tile blur grid");
+    }
+  if (!v2_valid_grids (parsed, error))
+    return false;
+  *render = std::move (parsed);
+  return true;
+}
+
 }
