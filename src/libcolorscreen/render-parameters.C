@@ -959,7 +959,6 @@ render_parameters::set_tile_adjustments_dimensions (int w, int h)
   for (tile_adjustment &adj : tile_adjustments)
     {
       adj = tile_adjustment ();
-      assert (adj.enabled);
     }
   tile_adjustments_width = w;
   tile_adjustments_height = h;
@@ -969,7 +968,6 @@ const render_parameters::tile_adjustment&
 render_parameters::get_tile_adjustment (const stitch_project *stitch, int x, int y) const
 {
   static tile_adjustment default_tile_adjustment;
-  assert (default_tile_adjustment.enabled);
   assert (x >= 0 && x < stitch->params.width && y >= 0 && y < stitch->params.height);
   if (tile_adjustments_width != stitch->params.width || tile_adjustments_height != stitch->params.height)
     return default_tile_adjustment;
