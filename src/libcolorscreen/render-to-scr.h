@@ -80,9 +80,14 @@ private:
 class saturation_loss_table
 {
 public:
-  /* Initialize saturation loss table for SCREEN_TABLE, COLLECTION_SCREEN, IMG_WIDTH, IMG_HEIGHT, MAP, COLLECTION_THRESHOLD and SHARPEN.
-     Update PROGRESS.  */
-  saturation_loss_table (screen_table *screen_table, screen *collection_screen, int img_width, int img_height, scr_to_img *map, luminosity_t collection_threshold, const sharpen_parameters &sharpen, progress_info *progress);
+  /* Initialize saturation loss for SCREEN_TABLE, COLLECTION_SCREEN,
+     IMG_WIDTH, IMG_HEIGHT, MAP, COLLECTION_THRESHOLD and SHARPEN.
+     WAVELENGTH_NM is the optical capture wavelength; PROGRESS tracks work.  */
+  saturation_loss_table (screen_table *screen_table, screen *collection_screen,
+                         int img_width, int img_height, scr_to_img *map,
+                         luminosity_t collection_threshold,
+                         const sharpen_parameters &sharpen,
+                         double wavelength_nm, progress_info *progress);
   
   /* Return saturation loss matrix at X, Y.  */
   pure_attr color_matrix &get_saturation_loss (int x, int y)
