@@ -5688,7 +5688,7 @@ finetune (const render_parameters &rparam, const scr_to_img_parameters &param,
               { (coord_t)(x[tileid] + img.xmin),
                 (coord_t)(y[tileid] + img.ymin) });
           pixel_size = img.stitch->pixel_size;
-          if (!img.stitch->tile_for_scr (&rparam, scr.x, scr.y, &tx, &ty,
+          if (!img.stitch->tile_for_scr (nullptr, scr.x, scr.y, &tx, &ty,
                                          true))
             {
               ret.err = "no tile for given coordinates";
