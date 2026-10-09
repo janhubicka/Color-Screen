@@ -1457,13 +1457,14 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
           first->m_profilePanel->setShowProfileSpots(
               view->imageWidget()->profileSpotsVisible());
 
-          ParameterState outputOnly = profileDiagnosticBaseline;
-          outputOnly.rparams.output_profile =
-              profileDiagnosticBaseline.rparams.output_profile ==
-                      colorscreen::render_parameters::output_profile_sRGB
-                  ? colorscreen::render_parameters::output_profile_xyz
-                  : colorscreen::render_parameters::output_profile_sRGB;
-          first->applyState(outputOnly);
+          // Presentation belongs to this view, not to the profile inputs
+          // that determine whether an accepted calibration remains valid.
+          const auto previousProfile = first->m_imageWidget->viewOutputProfile();
+          const auto alternateProfile =
+              previousProfile == colorscreen::render_output_parameters::output_profile_sRGB
+                  ? colorscreen::render_output_parameters::output_profile_xyz
+                  : colorscreen::render_output_parameters::output_profile_sRGB;
+          first->m_imageWidget->setViewOutputProfile(alternateProfile);
           if (first->m_profileCalibration.spotResults.size() != 1 ||
               first->m_profileCalibration.averageDeltaE != match.deltaE ||
               first->m_imageWidget->profileSpotResultCount() != 1 ||
@@ -1474,7 +1475,12 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
                 "Output-only edit incorrectly expired profile diagnostics"));
             return;
           }
-          first->applyState(profileDiagnosticBaseline);
+          first->m_imageWidget->setViewOutputProfile(previousProfile);
+          if (first->documentStateSnapshot() != profileDiagnosticBaseline) {
+            fail(QStringLiteral(
+                "Output colourspace selection modified document parameters"));
+            return;
+          }
 
           ParameterState staleProfileInputs = profileDiagnosticBaseline;
           staleProfileInputs.rparams.brightness += 0.125;
