@@ -10606,8 +10606,8 @@ test_native_json_v2_sharpness ()
   source.image_layer = true;
   source.wavelength = 546.1;
   source.same_capture = false;
-  source.name = "M\xC4\x9B\xC5\x99en\xC3\xAD: original \xC2\xB5 & \"\xC4\x8Derven\xC3\xA1\"";
-  source.source_filename = "C:\\\\scans\\\\\xC4\x8Cesk\xC3\xA1 fotografie\\\\edge 01.tif";
+  source.name = u8"Měření: original µ & \"červená\"";
+  source.source_filename = u8"C:\\scans\\Česká fotografie\\edge 01.tif";
   source.source_width = 2048;
   source.source_height = 1536;
   source.roi = {22, 31, 95, 45};
