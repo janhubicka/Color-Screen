@@ -365,6 +365,7 @@ produce_file (render_to_file_params &rfparams,
 {
   T render (param, img, rparam, 65535);
   render.compute_final_range ();
+  render.set_output_parameters (rtparam.output);
   render.set_render_type (rtparam);
   if (progress)
     progress->set_task ("precomputing", 1);
