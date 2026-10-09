@@ -111,24 +111,27 @@ Readers distinguish three cases:
 
 Schema v1 currently defines three independently negotiated required features:
 
-- `render-overrides-v1`: `state.render_overrides` is present. Its four
+- `render-overrides-v1`: `state.render_overrides` is present. Its three
   authoritative document inputs are `ignore_infrared`,
-  `demosaiced_scaling`, `observer_whitepoint`, and `output_gamma`.
-  Historical `output_profile` and `gamut_warning` keys remain required
-  but are strictly validated compatibility placeholders, not document state.
+  `demosaiced_scaling`, and `observer_whitepoint`. Historical
+  `output_profile`, `output_gamma`, and `gamut_warning` keys remain
+  required but are strictly validated compatibility placeholders, not
+  document state.
 - `geometry-final-frame-v1`: `state.geometry_final_frame` supplies the
   authoritative final-image frame angle and axis ratio absent from legacy CSP.
 - `image-area-v1`: `state.image_area` is the separately selected bounding
   rectangle of photographic content, distinct from the physical-object crop
   and absent from legacy CSP.
 
-The per-view migration moved preview output colourspace and gamut warnings to
-individual image views. New archives write the required schema-v1 compatibility
-values `"output_profile":"sRGB"` and `"gamut_warning":false`, irrespective
-of the view's current display. Historical archives with nondefault typed
-values remain readable, but those values cannot override a view or an
-explicit Render-to-File export. Output gamma, tone curve, adapted whitepoint,
-and process-colour calibration remain separate processing controls.
+The per-render migration moved output colourspace, encoding gamma, gamut
+warnings, and stitched-tile visibility outside document calibration. New
+archives write the required schema-v1 compatibility values
+`"output_profile":"sRGB"`, `"output_gamma":-1`, and
+`"gamut_warning":false`, irrespective of the current view or export.
+Historical archives with nondefault typed values remain readable, but those
+values cannot override a view or an explicit Render-to-File request.
+The appearance tone curve, adapted observer whitepoint, and process-colour
+calibration remain persistent processing controls.
 
 Future manifests may add other independently negotiated features, for example a
 typed mesh payload. An unknown required feature is a hard error even when the
@@ -231,21 +234,22 @@ schema merely because one domain gains an authoritative structured
 representation.
 
 The first migration is `render-overrides-v1`. Its historical schema
-requires six typed values, but only four are persistent processing inputs
+requires six typed values, but only three are persistent processing inputs
 missing from legacy CSP:
 
 - `ignore_infrared`;
 - `demosaiced_scaling`;
-- `observer_whitepoint`;
-- `output_gamma`.
+- `observer_whitepoint`.
 
-The remaining two required keys, `output_profile` and `gamut_warning`,
-previously carried display intent. Current readers validate and ignore
-their values rather than apply them to the document. Current writers emit
-neutral compatibility values to remain readable by older schema-v1 code.
+The remaining three required keys, `output_profile`, `output_gamma`
+and `gamut_warning`, previously controlled an output/rendering request.
+Current readers strictly validate these historical keys and ignore them
+rather than apply them to the document. Current writers emit neutral
+compatibility values so older schema-v1 readers continue to accept the
+archive.
 
 A reader that understands the feature parses the legacy CSP mirror first
-and applies the four authoritative processing values. A reader that does not
+and applies the three authoritative processing values. A reader that does not
 understand the feature must reject the archive. A manifest containing
 `state.render_overrides` without declaring the feature is invalid, as is a
 manifest declaring the feature without the complete structured object. This
@@ -352,8 +356,8 @@ Implementation status in the alpha tree:
 - genuinely new Save As/no-sidecar targets now default to `.cspar`;
   established Archive/Legacy targets remain format-preserving;
 - `render-overrides-v1` is the first authoritative structured-state feature,
-  retaining four saved processing fields missing from legacy CSP and two
-  neutral view-compatibility keys;
+  retaining three saved processing fields missing from legacy CSP and three
+  neutral output-compatibility keys;
 - `geometry-final-frame-v1` preserves two final-image geometry fields
   missing from the legacy mirror;
 - `image-area-v1` preserves the independently selectable photographic area
