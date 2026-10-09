@@ -617,6 +617,10 @@ stitch_project::write_tiles (render_parameters rparam, render_to_file_params *rf
   for (int y = 0; y < params.height; y++)
     for (int x = 0; x < params.width; x++)
       {
+        /* Cancellation still applies if every tile was hidden by the
+           operation-local mask. It must not report a successful empty export. */
+        if (progress && progress->cancel_requested ())
+          return false;
         /* Individual-tile export uses the same request-only visibility mask
            as interactive stitching; a hidden tile is not an image setting. */
         if (!rtparam.output.tile_enabled_p (x, y, params.width,
