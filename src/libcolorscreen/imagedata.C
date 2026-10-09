@@ -1839,6 +1839,138 @@ image_data::load (const char *name, bool preload_all, const char **error,
   return false;
 }
 
+/* Produce another complete image from the same unpacked Bayer source.
+   A caller is free to keep returned variants when the bounded cache evicts
+   them. The current source image stays unchanged on success or failure.
+   LibRaw's repeated dcraw_process calls are serialized, since its working
+   output and processing parameters are mutable. */
+std::shared_ptr<image_data>
+image_data::demosaiced_variant (demosaicing_t method, const char **error,
+                               progress_info *progress)
+{
+  const char *ignored_error = nullptr;
+  if (!error)
+    error = &ignored_error;
+  *error = nullptr;
+  if (method < demosaic_default || method >= demosaic_max)
+    {
+      *error = "invalid RAW demosaicing algorithm";
+      return {};
+    }
+
+  std::shared_ptr<unpacked_raw_source> source = m_unpacked_raw_source;
+  if (!source || !source->processor)
+    {
+      *error = "unpacked Bayer sensor samples are not cached";
+      return {};
+    }
+
+  /* A shared source may also be used by a non-heap image_data in a test,
+     where weak_from_this simply returns empty. Recompute in that case. */
+  if (method == demosaic)
+    if (auto original = weak_from_this ().lock ())
+      return original;
+
+  std::lock_guard<std::mutex> lock (source->processing_mutex);
+  if (progress && progress->cancel_requested ())
+    {
+      *error = "cancelled";
+      return {};
+    }
+  for (auto it = source->variants.begin (); it != source->variants.end ();
+       ++it)
+    if (it->method == method)
+      {
+        std::shared_ptr<image_data> image = it->image;
+        source->variants.splice (source->variants.begin (), source->variants,
+                                 it);
+        return image;
+      }
+
+  auto variant = std::make_shared<image_data> ();
+  /* The retained processor's rawdata is immutable; only the temporary
+     postprocessing buffer and LibRaw params change under the mutex. */
+  source->processor->free_image ();
+  variant->loader
+      = std::make_unique<raw_image_data_loader> (variant.get (), source);
+  if (!variant->loader->init_loader (source->source_filename.c_str (), error,
+                                    progress, method))
+    {
+      variant->loader.reset ();
+      source->processor->free_image ();
+      return {};
+    }
+  if (!variant->allocate ())
+    {
+      *error = "out of memory allocating demosaiced variant";
+      variant->loader.reset ();
+      source->processor->free_image ();
+      return {};
+    }
+
+  int permille = 0;
+  for (;;)
+    {
+      if (progress && progress->cancel_requested ())
+        {
+          *error = "cancelled";
+          variant->loader.reset ();
+          source->processor->free_image ();
+          return {};
+        }
+      if (!variant->load_part (&permille, error, progress))
+        {
+          variant->loader.reset ();
+          source->processor->free_image ();
+          return {};
+        }
+      if (permille == 1000)
+        break;
+      if (progress)
+        progress->set_progress (permille);
+    }
+  if (progress && progress->cancel_requested ())
+    {
+      *error = "cancelled";
+      return {};
+    }
+
+  /* A derivative is an independent image with no strong pointer back to its
+     source. Two completed variants per source are sufficient for comparing
+     algorithms without retaining every large image encountered. */
+  const uint64_t w = (uint64_t)variant->width;
+  const uint64_t h = (uint64_t)variant->height;
+  const uint64_t bytes_per_pixel
+      = variant->has_rgb () ? sizeof (pixel) : sizeof (gray);
+  uint64_t needed = 0;
+  if (w && h && w <= raw_variant_budget / bytes_per_pixel / h)
+    needed = w * h * bytes_per_pixel;
+
+  if (needed)
+    {
+      /* Evict only cache ownership; external users of an old image keep its
+         pixels. Never hold more than two finished variants per source. */
+      while (source->variants.size () >= 2)
+        {
+          auto &old = source->variants.back ();
+          retained_raw_variant_bytes.fetch_sub (
+              old.reserved_bytes, std::memory_order_relaxed);
+          source->variants.pop_back ();
+        }
+      uint64_t used = retained_raw_variant_bytes.load (
+          std::memory_order_relaxed);
+      while (used <= raw_variant_budget - needed)
+        if (retained_raw_variant_bytes.compare_exchange_weak (
+                used, used + needed, std::memory_order_relaxed,
+                std::memory_order_relaxed))
+          {
+            source->variants.push_front ({ method, variant, needed });
+            break;
+          }
+    }
+  return variant;
+}
+
 /* Set DPI of the image to NEW_XDPI and NEW_YDPI.  */
 void
 image_data::set_dpi (coord_t new_xdpi, coord_t new_ydpi)
