@@ -249,6 +249,22 @@ decode_parameter_json_v2_sharpness (
     const std::string &input, render_parameters *render,
     std::string *error);
 
+/* Encode all persistent spatial calibration grids directly into JSON:
+   backlight luminosity/subtraction samples, scanner blur correction cells,
+   and the full stitched-tile exposure/dark-point/blur grid. Reduction
+   diagnostics are derived and excluded. No legacy text or ZIP intermediary. */
+DLL_PUBLIC bool
+encode_parameter_json_v2_correction_grids (
+    const render_parameters &render, std::string *output,
+    std::string *error);
+
+/* Parse the complete correction-grid component into newly allocated
+   resources, then commit to RENDER only on total success. */
+DLL_PUBLIC bool
+decode_parameter_json_v2_correction_grids (
+    const std::string &input, render_parameters *render,
+    std::string *error);
+
 /* Parse the native JSON v2 registration component into independent temporary
    state, committing only when all fields and bounds are valid. This prevents
    a malformed field from partially mutating a live document. ERROR gives a
