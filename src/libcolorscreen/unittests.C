@@ -10569,6 +10569,53 @@ test_stitch_tile_adjustment_grid ()
   return true;
 }
 
+/* Only a completed RAW decoder may retain an unpacked sensor source.
+   Manually created buffers and ordinary TIFF decodes do not represent a CFA,
+   and must not silently claim to support on-demand RAW reprocessing. */
+static bool
+test_raw_source_retention_contract ()
+{
+  image_data synthetic;
+  if (synthetic.has_unpacked_raw_source ()
+      || !synthetic.set_dimensions (8, 8, true, false))
+    {
+      fprintf (stderr, "Synthetic image unexpectedly carries RAW source\n");
+      return false;
+    }
+  for (int y = 0; y < 8; ++y)
+    for (int x = 0; x < 8; ++x)
+      synthetic.put_rgb_pixel (x, y, { (image_data::gray)(x * 5000),
+                                       (image_data::gray)(y * 5000), 30000 });
+
+  const char *name = "raw-source-retention-test.tiff";
+  std::remove (name);
+  if (!synthetic.save_tiff (name))
+    {
+      fprintf (stderr, "Could not make non-RAW source test TIFF\n");
+      return false;
+    }
+
+  image_data loaded;
+  const char *error = nullptr;
+  const bool ok = loaded.load (name, true, &error);
+  std::remove (name);
+  if (!ok)
+    {
+      fprintf (stderr, "Could not reopen TIFF: %s\n",
+               error ? error : "unknown error");
+      return false;
+    }
+  if (loaded.has_unpacked_raw_source ()
+      || !loaded.has_rgb ()
+      || loaded.get_rgb_pixel (3, 5).r
+             != synthetic.get_rgb_pixel (3, 5).r)
+    {
+      fprintf (stderr, "Non-RAW decode acquired raw source or lost pixels\n");
+      return false;
+    }
+  return true;
+}
+
 /* Verify conservative detection of monochromatic data that was initially
    rendered as RGB from a standard Bayer RAW file.  Channel gains/offsets and
    small noise are allowed; real chromatic structure, flat data and non-Bayer
@@ -10726,6 +10773,8 @@ main (int argc, char **argv)
     { "image_area", "image area tests", [] () { return test_image_area (); } },
     { "stitch_tile_grid", "stitch tile adjustment grid persistence tests",
       [] () { return test_stitch_tile_adjustment_grid (); } },
+    { "raw_source_retention", "decoded source lifetime and non-RAW isolation tests",
+      [] () { return test_raw_source_retention_contract (); } },
     { "channel_sharpening", "per-channel scanner sharpening tests",
       [] () { return test_channel_sharpening (); } },
     { "slanted_edge", "slanted edge MTF tests", [] () { return test_slanted_edge_mtf (); } },
