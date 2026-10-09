@@ -10504,7 +10504,7 @@ test_stitch_tile_adjustment_grid ()
       || project->tile_for_scr (nullptr, 0, 0, &tile_x, &tile_y, true))
     {
       fprintf (stderr,
-               "Unfinished stitched tile was published to rendering\\n");
+               "Unfinished stitched tile was published to rendering\n");
       return false;
     }
 
