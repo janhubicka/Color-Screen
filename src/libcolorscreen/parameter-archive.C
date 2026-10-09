@@ -3039,4 +3039,252 @@ decode_parameter_json_v2_process (const std::string &input,
   return true;
 }
 
+
+/* Stored colour calibration and appearance. The profile describes the
+   scanned object and its historical dyes; output ICC/gamma/gamut belong
+   to the independent runtime render request, not this JSON component. */
+namespace
+{
+constexpr size_t v2_max_tone_points = 100000;
+constexpr size_t v2_max_color_json_bytes = 16 * 1024 * 1024;
+constexpr size_t v2_max_color_json_nodes = 500000;
+
+/* Return true only for finite XYZ camera/scanner primaries. */
+bool
+v2_finite_xyz (xyz c)
+{
+  return my_isfinite (c.x) && my_isfinite (c.y)
+         && my_isfinite (c.z);
+}
+
+/* Serialize a scanner XYZ triplet in its original binary32 precision. */
+std::string
+v2_xyz_text (xyz c)
+{
+  return "[" + json_number (c.x) + ", " + json_number (c.y)
+         + ", " + json_number (c.z) + "]";
+}
+
+/* Decode one RGB/XYZ triplet, preserving the stored luminosity_t type. */
+bool
+v2_xyz (const json_value &value, xyz *result)
+{
+  if (value.type != json_value::kind::array
+      || value.array_value.size () != 3)
+    return false;
+  xyz parsed;
+  if (!v2_real (value.array_value[0], &parsed.x)
+      || !v2_real (value.array_value[1], &parsed.y)
+      || !v2_real (value.array_value[2], &parsed.z))
+    return false;
+  *result = parsed;
+  return true;
+}
+
+/* Check all saved calibration/tone inputs, even if an appearance adjustment
+   is currently disabled. A value outside a UI slider's range need not be
+   discarded when importing old parameter files. */
+bool
+v2_valid_color (const render_parameters &p, std::string *error)
+{
+  if ((int)p.dye_balance < 0
+      || (int)p.dye_balance >= render_parameters::dye_balance_max
+      || (int)p.output_tone_curve < 0
+      || (int)p.output_tone_curve >= tone_curve::tone_curve_max)
+    return archive_fail (error, "unknown v2 color/curve algorithm");
+  if (!v2_finite_xyz (p.scanner_red)
+      || !v2_finite_xyz (p.scanner_green)
+      || !v2_finite_xyz (p.scanner_blue)
+      || !v2_finite_colour (p.profiled_dark)
+      || !v2_finite_colour (p.profiled_red)
+      || !v2_finite_colour (p.profiled_green)
+      || !v2_finite_colour (p.profiled_blue)
+      || !v2_finite_colour (p.white_balance)
+      || !my_isfinite (p.presaturation)
+      || !my_isfinite (p.temperature)
+      || !my_isfinite (p.backlight_temperature)
+      || !my_isfinite (p.observer_whitepoint.x)
+      || !my_isfinite (p.observer_whitepoint.y)
+      || !my_isfinite (p.saturation)
+      || !my_isfinite (p.brightness))
+    return archive_fail (error, "nonfinite v2 color/appearance value");
+  if (p.output_tone_curve_control_points.size () > v2_max_tone_points)
+    return archive_fail (error, "v2 tone curve has too many points");
+  for (point_t point : p.output_tone_curve_control_points)
+    if (!v2_finite_point (point))
+      return archive_fail (error, "nonfinite v2 tone-curve control point");
+  return true;
+}
+
+/* Decode one XYZ member from a three-component JSON array. */
+bool
+v2_field_xyz (const json_value &object, const char *key,
+              xyz *out, std::string *error)
+{
+  const json_value *value
+      = v2_required (object, key, json_value::kind::array, error);
+  if (!value)
+    return false;
+  if (!v2_xyz (*value, out))
+    return archive_fail (error, std::string ("invalid v2 XYZ: ") + key);
+  return true;
+}
+
+/* Decode one RGB member from a three-component JSON array. */
+bool
+v2_field_rgb (const json_value &object, const char *key,
+              rgbdata *out, std::string *error)
+{
+  const json_value *value
+      = v2_required (object, key, json_value::kind::array, error);
+  if (!value)
+    return false;
+  if (!v2_colour (*value, out))
+    return archive_fail (error, std::string ("invalid v2 RGB: ") + key);
+  return true;
+}
+} // anonymous namespace
+
+/* Encode the native colour section directly from saved render parameters.
+   The precision and order are deterministic; no CSP output is generated. */
+bool
+encode_parameter_json_v2_color (const render_parameters &render,
+                                std::string *output, std::string *error)
+{
+  if (error)
+    error->clear ();
+  if (!output)
+    return archive_fail (error, "missing v2 colour output");
+  if (!v2_valid_color (render, error))
+    return false;
+  std::string text;
+  text.reserve (1400 + render.output_tone_curve_control_points.size () * 48);
+  text += "{\n  \"color\": {\n    \"scanner_primaries\": {\n";
+  text += "      \"red\": " + v2_xyz_text (render.scanner_red);
+  text += ",\n      \"green\": " + v2_xyz_text (render.scanner_green);
+  text += ",\n      \"blue\": " + v2_xyz_text (render.scanner_blue);
+  text += "\n    },\n    \"process_profile\": {\n";
+  text += "      \"dark\": " + v2_colour_text (render.profiled_dark);
+  text += ",\n      \"red\": " + v2_colour_text (render.profiled_red);
+  text += ",\n      \"green\": " + v2_colour_text (render.profiled_green);
+  text += ",\n      \"blue\": " + v2_colour_text (render.profiled_blue);
+  text += "\n    },\n    \"white_balance\": "
+          + v2_colour_text (render.white_balance);
+  text += ",\n    \"presaturation\": " + json_number (render.presaturation);
+  text += ",\n    \"temperature\": " + json_number (render.temperature);
+  text += ",\n    \"backlight_temperature\": "
+          + json_number (render.backlight_temperature);
+  text += ",\n    \"observer_whitepoint\": "
+          + v2_lum_pair_text (render.observer_whitepoint.x,
+                              render.observer_whitepoint.y);
+  text += ",\n    \"dye_balance\": \"";
+  text += json_escape (render_parameters::dye_balance_names
+                           [(int)render.dye_balance].name);
+  text += "\",\n    \"saturation\": " + json_number (render.saturation);
+  text += ",\n    \"brightness\": " + json_number (render.brightness);
+  text += ",\n    \"tone_curve\": {\n      \"type\": \"";
+  text += json_escape (tone_curve::tone_curve_names
+                           [(int)render.output_tone_curve].name);
+  text += "\",\n      \"control_points\": [";
+  for (size_t i = 0; i < render.output_tone_curve_control_points.size (); ++i)
+    {
+      if (i)
+        text += ", ";
+      text += v2_point_text (render.output_tone_curve_control_points[i]);
+    }
+  text += "]\n    }\n  }\n}\n";
+  if (text.size () > v2_max_color_json_bytes)
+    return archive_fail (error, "v2 colour JSON exceeds size limit");
+  *output = std::move (text);
+  return true;
+}
+
+/* Parse saved colour calibration and appearance transactionally. No renderer
+   output profile/transfer or view-specific gamut warning is touched. */
+bool
+decode_parameter_json_v2_color (const std::string &input,
+                                render_parameters *render, std::string *error)
+{
+  if (error)
+    error->clear ();
+  if (!render)
+    return archive_fail (error, "missing v2 colour destination");
+  if (input.size () > v2_max_color_json_bytes || !valid_utf8 (input))
+    return archive_fail (error, "invalid v2 colour UTF-8/size");
+  json_parser parser (input.data (), input.data () + input.size (),
+                      v2_max_color_json_nodes);
+  json_value root;
+  if (!parser.parse (&root))
+    return archive_fail (error, "invalid v2 colour JSON: " + parser.error ());
+  const json_value *object
+      = v2_required (root, "color", json_value::kind::object, error);
+  if (!object)
+    return false;
+  const json_value *primaries
+      = v2_required (*object, "scanner_primaries",
+                     json_value::kind::object, error);
+  const json_value *profile
+      = v2_required (*object, "process_profile",
+                     json_value::kind::object, error);
+  const json_value *tone
+      = v2_required (*object, "tone_curve", json_value::kind::object, error);
+  if (!primaries || !profile || !tone)
+    return false;
+
+  render_parameters parsed = *render;
+  int balance = 0, curve_type = 0;
+  if (!v2_field_xyz (*primaries, "red", &parsed.scanner_red, error)
+      || !v2_field_xyz (*primaries, "green", &parsed.scanner_green, error)
+      || !v2_field_xyz (*primaries, "blue", &parsed.scanner_blue, error)
+      || !v2_field_rgb (*profile, "dark", &parsed.profiled_dark, error)
+      || !v2_field_rgb (*profile, "red", &parsed.profiled_red, error)
+      || !v2_field_rgb (*profile, "green", &parsed.profiled_green, error)
+      || !v2_field_rgb (*profile, "blue", &parsed.profiled_blue, error)
+      || !v2_field_rgb (*object, "white_balance",
+                        &parsed.white_balance, error)
+      || !v2_field_real (*object, "presaturation",
+                         &parsed.presaturation, error)
+      || !v2_field_real (*object, "temperature",
+                         &parsed.temperature, error)
+      || !v2_field_real (*object, "backlight_temperature",
+                         &parsed.backlight_temperature, error)
+      || !v2_enum (*object, "dye_balance",
+                   v2_property_names (render_parameters::dye_balance_names,
+                                      render_parameters::dye_balance_max),
+                   &balance, error)
+      || !v2_field_real (*object, "saturation", &parsed.saturation, error)
+      || !v2_field_real (*object, "brightness", &parsed.brightness, error)
+      || !v2_enum (*tone, "type",
+                   v2_property_names (tone_curve::tone_curve_names,
+                                      tone_curve::tone_curve_max),
+                   &curve_type, error))
+    return false;
+  parsed.dye_balance = (render_parameters::dye_balance_t)balance;
+  parsed.output_tone_curve = (tone_curve::tone_curves)curve_type;
+
+  const json_value *white
+      = v2_required (*object, "observer_whitepoint",
+                     json_value::kind::array, error);
+  if (!white || !v2_lum_pair (*white, &parsed.observer_whitepoint.x,
+                              &parsed.observer_whitepoint.y))
+    return archive_fail (error, "invalid v2 observer whitepoint");
+  const json_value *points
+      = v2_required (*tone, "control_points", json_value::kind::array, error);
+  if (!points || points->array_value.size () > v2_max_tone_points)
+    return archive_fail (error, "invalid v2 output tone-curve point count");
+  parsed.output_tone_curve_control_points.clear ();
+  parsed.output_tone_curve_control_points.reserve (points->array_value.size ());
+  for (const json_value &sample : points->array_value)
+    {
+      point_t point;
+      if (!v2_point (sample, &point))
+        return archive_fail (error, "invalid v2 tone-curve point");
+      parsed.output_tone_curve_control_points.push_back (point);
+    }
+  if (!v2_valid_color (parsed, error))
+    return false;
+  *render = std::move (parsed);
+  return true;
+}
+
 }
