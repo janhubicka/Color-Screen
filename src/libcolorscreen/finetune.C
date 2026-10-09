@@ -7195,7 +7195,10 @@ render_screen (image_data &img, const scr_to_img_parameters &param,
   screen_sampling sampling = screen_sampling::integrate_pixel;
   std::shared_ptr<screen> scr = render_to_scr::get_screen (
       param.type, false, false, sharpen, rparam.red_strip_width,
-      rparam.green_strip_width, nullptr, nullptr, &sampling);
+      rparam.green_strip_width, nullptr, nullptr, &sampling, nullptr,
+      rparam.get_image_layer_wavelength (&img));
+  if (!scr)
+    return false;
   for (int y = 0; y < height; y++)
     for (int x = 0; x < width; x++)
       {
