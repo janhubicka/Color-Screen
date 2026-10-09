@@ -41,11 +41,12 @@ full v2 parameter file.
 
 ### Implemented native JSON v2 components
 
-Draft PR #538 now has four native core-only codecs (with focused regression
+Draft PR #538 now has five native core-only codecs (with focused regression
 tests): `encode/decode_parameter_json_v2_registration`,
 `encode/decode_parameter_json_v2_capture`,
-`encode/decode_parameter_json_v2_reconstruction`, and
-`encode/decode_parameter_json_v2_process`. They operate **directly
+`encode/decode_parameter_json_v2_reconstruction`,
+`encode/decode_parameter_json_v2_process`, and
+`encode/decode_parameter_json_v2_color`. They operate **directly
 on C++ state** without using `save_csp` or `load_csp`, and emit component
 objects for a future complete document. No component is a standalone v2
 `.cspar` file.
@@ -84,6 +85,12 @@ objects for a future complete document. No component is a standalone v2
   identifier, dye aging and density triplets, and all editable contact-copy
   settings: simulate, preflash, exposure, boost and four paired H&D curve
   coordinates. The complete curve is retained even when simulation is off.
+- `color` saves RGB process calibration, scanner XYZ primaries, white balance,
+  observer and backlight temperatures, observer whitepoint, dye balance,
+  saturation/brightness and user output tone-curve selection and all control
+  points (including unused/custom control points). **It does not save the
+  output/display ICC profile, transfer gamma, view gamut diagnostic or other
+  per-render output settings.**
 
 All component codecs require finite scalars, stable known enum identifiers,
 valid array shapes and representable numeric conversions. Geometry additionally
@@ -161,10 +168,10 @@ or Save As selection; switch new projects to v2 only after the gates below.
 - [x] Decide plain-JSON v2 representation, independent of ZIP.
 - [x] Start native, transaction-safe, separately tested components for
       geometry/detection/registration/profile spots, core capture scalars,
-      image-layer reconstruction/denoising and historical-process/contact-copy
-      controls.
+      image-layer reconstruction/denoising, historical-process/contact-copy,
+      and colour/appearance controls.
 - [ ] Implement the remaining capture data/correction grids and native typed
-      sharpness/MTF and colour serializers; complete and
+      sharpness/MTF serializers; complete and
       audit mapping of every persisted field. No partial default writer.
 - [ ] Compose full v2 root and robust content-based dispatch.
 - [ ] Integrate GUI Save/Save As, CLI read/rewrite and private recovery.
