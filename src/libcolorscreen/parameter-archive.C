@@ -2622,4 +2622,220 @@ decode_parameter_json_v2_capture (const std::string &input,
   return true;
 }
 
+
+/* Native JSON reconstruction state: the analysed scalar image layer and
+   the material-screen demosaicing pipeline, including both independent noise
+   removal stages. Parameters remain saved even when their mode is off. */
+namespace
+{
+/* Validate all denoise fields, including inactive ones. Those are genuine
+   undoable user settings and must survive a v2 round trip unchanged. */
+bool
+v2_valid_denoise (const denoise_parameters &p)
+{
+  return (int)p.mode >= 0 && (int)p.mode < denoise_parameters::denoise_mode_max
+         && my_isfinite (p.strength)
+         && my_isfinite (p.noise_variance_floor)
+         && my_isfinite (p.noise_variance_slope)
+         && my_isfinite (p.bilateral_sigma_s)
+         && my_isfinite (p.bilateral_sigma_r);
+}
+
+/* Format one typed denoise stage. Caller has checked finite fields. */
+std::string
+v2_denoise_text (const denoise_parameters &p)
+{
+  std::string text = "{\n      \"mode\": \"";
+  text += json_escape (denoise_parameters::denoise_mode_names[(int)p.mode].name);
+  text += "\",\n      \"strength\": " + json_number (p.strength);
+  text += ",\n      \"noise_variance_floor\": "
+          + json_number (p.noise_variance_floor);
+  text += ",\n      \"noise_variance_slope\": "
+          + json_number (p.noise_variance_slope);
+  text += ",\n      \"patch_radius\": " + std::to_string (p.patch_radius);
+  text += ",\n      \"search_radius\": " + std::to_string (p.search_radius);
+  text += ",\n      \"bilateral_sigma_s\": "
+          + json_number (p.bilateral_sigma_s);
+  text += ",\n      \"bilateral_sigma_r\": "
+          + json_number (p.bilateral_sigma_r);
+  text += "\n    }";
+  return text;
+}
+
+/* Decode a complete denoise object into an independent value. */
+bool
+v2_decode_denoise (const json_value &object, denoise_parameters *out,
+                   std::string *error)
+{
+  if (object.type != json_value::kind::object)
+    return archive_fail (error, "v2 denoise stage must be an object");
+  denoise_parameters p;
+  int mode = 0;
+  if (!v2_enum (object, "mode",
+                v2_property_names (denoise_parameters::denoise_mode_names,
+                                   denoise_parameters::denoise_mode_max),
+                &mode, error)
+      || !v2_field_real (object, "strength", &p.strength, error)
+      || !v2_field_real (object, "noise_variance_floor",
+                         &p.noise_variance_floor, error)
+      || !v2_field_real (object, "noise_variance_slope",
+                         &p.noise_variance_slope, error)
+      || !v2_field_int (object, "patch_radius", &p.patch_radius, error)
+      || !v2_field_int (object, "search_radius", &p.search_radius, error)
+      || !v2_field_real (object, "bilateral_sigma_s",
+                         &p.bilateral_sigma_s, error)
+      || !v2_field_real (object, "bilateral_sigma_r",
+                         &p.bilateral_sigma_r, error))
+    return false;
+  p.mode = (denoise_parameters::denoise_mode)mode;
+  if (!v2_valid_denoise (p))
+    return archive_fail (error, "invalid v2 denoising parameters");
+  *out = p;
+  return true;
+}
+
+/* Validate reconstruction enums and finite scalars before serialization. */
+bool
+v2_valid_reconstruction (const render_parameters &p, std::string *error)
+{
+  if ((int)p.collection_quality < 0
+      || (int)p.collection_quality >= render_parameters::max_collection_quality
+      || (int)p.screen_demosaic < 0
+      || (int)p.screen_demosaic >= render_parameters::max_screen_demosaic
+      || (int)p.demosaiced_scaling < 0
+      || (int)p.demosaiced_scaling >= render_parameters::max_demosaiced_scaling)
+    return archive_fail (error, "invalid v2 reconstruction algorithm");
+  if (!my_isfinite (p.mix_red) || !my_isfinite (p.mix_green)
+      || !my_isfinite (p.mix_blue) || !v2_finite_colour (p.mix_dark)
+      || !my_isfinite (p.screen_blur_radius)
+      || !my_isfinite (p.collection_threshold)
+      || !v2_valid_denoise (p.screen_denoise)
+      || !v2_valid_denoise (p.demosaiced_denoise))
+    return archive_fail (error, "invalid v2 reconstruction scalar");
+  return true;
+}
+} // anonymous namespace
+
+/* Serialize a complete image-layer and screen-reconstruction component
+   without invoking any legacy CSP writer. */
+bool
+encode_parameter_json_v2_reconstruction (const render_parameters &render,
+                                         std::string *output,
+                                         std::string *error)
+{
+  if (error)
+    error->clear ();
+  if (!output)
+    return archive_fail (error, "missing v2 reconstruction output");
+  if (!v2_valid_reconstruction (render, error))
+    return false;
+
+  std::string text;
+  text.reserve (1900);
+  text += "{\n  \"reconstruction\": {\n    \"ignore_infrared\": ";
+  text += render.ignore_infrared ? "true" : "false";
+  text += ",\n    \"mix_weights\": [";
+  text += json_number (render.mix_red) + ", "
+          + json_number (render.mix_green) + ", "
+          + json_number (render.mix_blue) + "]";
+  text += ",\n    \"mix_dark\": " + v2_colour_text (render.mix_dark);
+  text += ",\n    \"collection_quality\": \"";
+  text += json_escape (render_parameters::collection_quality_names
+                           [(int)render.collection_quality].name);
+  text += "\",\n    \"screen_demosaic\": \"";
+  text += json_escape (render_parameters::screen_demosaic_names
+                           [(int)render.screen_demosaic].name);
+  text += "\",\n    \"demosaiced_scaling\": \"";
+  text += json_escape (render_parameters::demosaiced_scaling_names
+                           [(int)render.demosaiced_scaling].name);
+  text += "\",\n    \"screen_blur_radius\": "
+          + json_number (render.screen_blur_radius);
+  text += ",\n    \"collection_threshold\": "
+          + json_number (render.collection_threshold);
+  text += ",\n    \"screen_denoise\": "
+          + v2_denoise_text (render.screen_denoise);
+  text += ",\n    \"demosaiced_denoise\": "
+          + v2_denoise_text (render.demosaiced_denoise);
+  text += "\n  }\n}\n";
+  if (text.size () > v2_max_capture_json_bytes)
+    return archive_fail (error, "v2 reconstruction JSON exceeds size limit");
+  *output = std::move (text);
+  return true;
+}
+
+/* Parse native reconstruction controls into a copy. The independent input,
+   output and MTF/correction settings already in RENDER are not changed. */
+bool
+decode_parameter_json_v2_reconstruction (const std::string &input,
+                                         render_parameters *render,
+                                         std::string *error)
+{
+  if (error)
+    error->clear ();
+  if (!render)
+    return archive_fail (error, "missing v2 reconstruction destination");
+  if (input.size () > v2_max_capture_json_bytes || !valid_utf8 (input))
+    return archive_fail (error, "invalid v2 reconstruction UTF-8/size");
+
+  json_parser parser (input.data (), input.data () + input.size ());
+  json_value root;
+  if (!parser.parse (&root))
+    return archive_fail (error, "invalid v2 reconstruction JSON: "
+                         + parser.error ());
+  const json_value *object
+      = v2_required (root, "reconstruction", json_value::kind::object, error);
+  if (!object)
+    return false;
+
+  render_parameters parsed = *render;
+  int collection = 0, screen = 0, scaling = 0;
+  const json_value *mix
+      = v2_required (*object, "mix_weights", json_value::kind::array, error);
+  const json_value *dark
+      = v2_required (*object, "mix_dark", json_value::kind::array, error);
+  if (!mix || !dark || mix->array_value.size () != 3)
+    return archive_fail (error, "invalid v2 image-layer RGB mixer");
+  if (!v2_real (mix->array_value[0], &parsed.mix_red)
+      || !v2_real (mix->array_value[1], &parsed.mix_green)
+      || !v2_real (mix->array_value[2], &parsed.mix_blue)
+      || !v2_colour (*dark, &parsed.mix_dark))
+    return archive_fail (error, "invalid v2 image-layer coefficients");
+
+  if (!v2_field_bool (*object, "ignore_infrared",
+                      &parsed.ignore_infrared, error)
+      || !v2_enum (*object, "collection_quality",
+                   v2_property_names (render_parameters::collection_quality_names,
+                                      render_parameters::max_collection_quality),
+                   &collection, error)
+      || !v2_enum (*object, "screen_demosaic",
+                   v2_property_names (render_parameters::screen_demosaic_names,
+                                      render_parameters::max_screen_demosaic),
+                   &screen, error)
+      || !v2_enum (*object, "demosaiced_scaling",
+                   v2_property_names (render_parameters::demosaiced_scaling_names,
+                                      render_parameters::max_demosaiced_scaling),
+                   &scaling, error)
+      || !v2_field_real (*object, "screen_blur_radius",
+                         &parsed.screen_blur_radius, error)
+      || !v2_field_real (*object, "collection_threshold",
+                         &parsed.collection_threshold, error))
+    return false;
+  parsed.collection_quality = (render_parameters::collection_quality_t)collection;
+  parsed.screen_demosaic = (render_parameters::screen_demosaic_t)screen;
+  parsed.demosaiced_scaling = (render_parameters::demosaiced_scaling_t)scaling;
+
+  const json_value *pre
+      = v2_required (*object, "screen_denoise", json_value::kind::object, error);
+  const json_value *post
+      = v2_required (*object, "demosaiced_denoise",
+                     json_value::kind::object, error);
+  if (!pre || !post
+      || !v2_decode_denoise (*pre, &parsed.screen_denoise, error)
+      || !v2_decode_denoise (*post, &parsed.demosaiced_denoise, error)
+      || !v2_valid_reconstruction (parsed, error))
+    return false;
+  *render = std::move (parsed);
+  return true;
+}
+
 }
