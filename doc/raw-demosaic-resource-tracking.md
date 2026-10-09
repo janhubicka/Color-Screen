@@ -14,7 +14,7 @@ LibRaw permits repeated processing of already unpacked data with different
 processing parameters. This should be used for on-demand demosaicing rather
 than caching only the finished RGB image.
 
-## Ownership stage: PR #536
+## Implemented ownership: PR #536
 
 - `image_data` now has a private, opaque `unpacked_raw_source` handle.
   Only successful RAW loading can publish the handle.
@@ -37,15 +37,31 @@ than caching only the finished RGB image.
   RAW context. The active decoded pixel buffers are always owned
   independently of the LibRaw postprocessing arrays.
 
-## Next implementation: bounded on-demand variants
+## Bounded on-demand variants and Qt reload path (PR #536)
 
-The source resource will eventually own a small LRU of completed,
-independently allocated image variants keyed by an explicit demosaicing
-request (algorithm and any relevant future decoder parameters). Do not
-include presentation/output profile, gamut diagnostics or screen
-reconstruction controls in this key.
+The source resource now has a per-source LRU of up to two completed,
+independently allocated image variants, with a separate process-wide 256 MiB
+strong-cache budget. The key is the RAW demosaicing algorithm. An evicted
+variant stays valid for external viewers. Output profile, gamut diagnostics
+and reconstruction settings are not cache keys.
 
-The following invariants must be tested before exposing this API to Qt:
+Qt retains the successfully loaded original RAW image as a source owner while
+showing a derivative. An explicit **Reload and demosaic** on the same input
+path asks for `demosaiced_variant()` on its background worker, preserving the
+existing generation, cancellation, failure-restoration, parameter/Undo and
+slanted-edge reference reload behavior. The `QFuture` owns the finished image
+result; the worker never modifies `m_scan` or the output pointer of its GUI
+callback. An ordinary Open deliberately rereads the file, while non-Bayer,
+over-budget and EIP inputs use the established full-file decode path.
+
+Because retaining the original owner also retains that original decoded pixel
+buffer, the extra per-document resident-image cost needs measuring on large
+RAW scans. The global mosaic and variant budgets do not count the source
+owner's already-rendered RGB buffer. If this proves expensive, factor an opaque
+source-only handle out of `image_data` rather than sharing a LibRaw processor
+through a reference cycle.
+
+Invariants for final validation:
 
 1. **Exclusive processing:** serialize `dcraw_process()` on a shared LibRaw
    source. It overwrites its working `imgdata.image` and is not safe to
@@ -76,19 +92,26 @@ The following invariants must be tested before exposing this API to Qt:
    capture/decode selection. A cache hit must not silently change the
    parameter file, saved working crop or the accepted source identity.
 
-## Verification to add
+## Verification state and remaining work
 
-- A small real CFA RAW/DNG fixture: prove
-  `has_unpacked_raw_source()` on completion and false on early failure,
-  cancellation and non-RAW paths.
-- Compare two algorithms with repeated `dcraw_process()` against two fresh
-  file decodes pixel for pixel (including monochrome/Bayer compensation and
-  half-size mode), with proper metadata comparison.
-- Concurrent same-source variant requests, cache admission/eviction, and
-  failed/cancelled decode regression tests.
-- Qt smoke: rapid demosaic selection during loading, two independent
-  views, undo/save/restore, and released image while an old worker is in
-  flight.
+- `raw-demosaic-cache.test` creates a small CFA DNG without external assets.
+  It compares AHD, PPG, half-size and linear requests against independent
+  file decodes, tests repeated cache hits, original-pixel immutability,
+  cancellation followed by a valid decode, concurrent same-method requests,
+  and independence of separately opened RAW sources.
+- `raw_source_retention` verifies that synthetic data and ordinary TIFFs
+  cannot claim an unpacked sensor source. Extend the fixture to check early
+  failure and mid-processing cancellation on real CFA data.
+- Add dedicated cache-budget admission/eviction and cache lifetime tests,
+  including an externally held variant surviving source destruction.
+- Add Qt lifecycle smoke for rapid demosaic changes during loading, independent
+  document views, failed reload recovery, and close with an old worker in flight.
+  The existing generation gates are kept, but targeted tests are still needed.
+- Compare monochromatic/Bayer-corrected results and relevant metadata with
+  independent file decodes; validate half-size geometry and pixel pitch.
+- Run the full Ubuntu (including checking and distcheck), macOS, Windows and
+  sanitizer CI matrix before making this draft ready to merge.
 
-This note describes the agreed architecture; PR #536 supplies only the
-retained-source ownership stage, not the full public variant API.
+Keep the product at **2.0alpha** and continue persisting `demosaic` as a
+capture-input choice; none of these resources belongs in the YAML/archive
+parameter serialization.
