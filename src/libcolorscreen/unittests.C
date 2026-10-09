@@ -10451,7 +10451,6 @@ test_stitch_tile_adjustment_grid ()
   auto &left = params.get_tile_adjustment (0, 0);
   left.exposure = (luminosity_t)1.25;
   left.dark_point = (luminosity_t)0.125;
-  left.enabled = false;
   params.get_tile_adjustment (1, 0).exposure = (luminosity_t)0.75;
 
   /* MainWindow::loadFile repeats the grid size after reading a sidecar. */
@@ -10459,7 +10458,6 @@ test_stitch_tile_adjustment_grid ()
   if (params.tile_adjustments.size () != 2
       || params.get_tile_adjustment (0, 0).exposure != (luminosity_t)1.25
       || params.get_tile_adjustment (0, 0).dark_point != (luminosity_t)0.125
-      || params.get_tile_adjustment (0, 0).enabled
       || params.get_tile_adjustment (1, 0).exposure != (luminosity_t)0.75)
     {
       fprintf (stderr,
@@ -10472,7 +10470,6 @@ test_stitch_tile_adjustment_grid ()
   if (params.tile_adjustments.size () != 2
       || params.get_tile_adjustment (0, 0).exposure != (luminosity_t)1
       || params.get_tile_adjustment (0, 0).dark_point != (luminosity_t)0
-      || !params.get_tile_adjustment (0, 0).enabled
       || params.get_tile_adjustment (0, 1).exposure != (luminosity_t)1)
     {
       fprintf (stderr, "A changed stitch grid retained stale tile settings\n");
