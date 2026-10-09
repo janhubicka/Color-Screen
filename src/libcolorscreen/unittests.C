@@ -10570,6 +10570,98 @@ test_stitch_tile_adjustment_grid ()
 }
 
 
+/* Historical material settings must survive as native structured values,
+   including the disabled contact-copy simulation's full editable H&D curve. */
+static bool
+test_native_json_v2_process ()
+{
+  render_parameters original;
+  original.color_model = render_parameters::color_model_autochrome_lavedrine2;
+  original.age = {0.125f, 0.25f, 0.75f};
+  original.dye_density = {1.125f, 0.875f, 1.25f};
+  original.red_strip_width = 0.325;
+  original.green_strip_width = 0.4125;
+  original.contact_copy.simulate = false;
+  original.contact_copy.preflash = 0.125f;
+  original.contact_copy.exposure = 1.75f;
+  original.contact_copy.boost = 0.925f;
+  auto &curve = original.contact_copy.emulsion_characteristic_curve;
+  curve.minx = -4.5f;
+  curve.miny = 5.5f;
+  curve.linear1x = -3.25f;
+  curve.linear1y = 3.75f;
+  curve.linear2x = 4.25f;
+  curve.linear2y = -3.75f;
+  curve.maxx = 6.5f;
+  curve.maxy = -5.25f;
+
+  std::string json, error;
+  if (!encode_parameter_json_v2_process (original, &json, &error)
+      || json.find ("\"emulsion_curve\"") == std::string::npos
+      || json.find ("\"legacy_csp\"") != std::string::npos)
+    return false;
+  render_parameters parsed;
+  parsed.gamma = 2.75f;
+  parsed.mix_green = 0.625f;
+  if (!decode_parameter_json_v2_process (json, &parsed, &error))
+    {
+      fprintf (stderr, "Native v2 process decode failed: %s\n", error.c_str ());
+      return false;
+    }
+  if (parsed.color_model != original.color_model
+      || parsed.age != original.age
+      || parsed.dye_density != original.dye_density
+      || parsed.red_strip_width != original.red_strip_width
+      || parsed.green_strip_width != original.green_strip_width
+      || !(parsed.contact_copy == original.contact_copy)
+      || parsed.gamma != 2.75f || parsed.mix_green != 0.625f)
+    {
+      fprintf (stderr, "Native v2 process roundtrip lost saved input\n");
+      return false;
+    }
+
+  std::string second;
+  if (!encode_parameter_json_v2_process (parsed, &second, &error)
+      || second != json)
+    return false;
+
+  /* Do not publish any part of a malformed/unsupported process descriptor. */
+  render_parameters unchanged = parsed;
+  for (const auto &substitution :
+       {std::pair<std::string, std::string> {
+            "\"color_model\": \"autochrome_lavedrine2\"",
+            "\"color_model\": \"imaginary_model\""},
+        {"\"age\": [0.125, 0.25, 0.75]",
+         "\"age\": [0.125, 0.25]"},
+        {"\"simulate\": false", "\"simulate\": \"false\""},
+        {"\"preflash\": 0.125", "\"preflash\": 1e999"},
+        {"\"min\": [-4.5, 5.5]", "\"min\": [-4.5]"},
+        {"\"red\": 0.325", "\"red\": 0.325, \"red\": 0.3"}})
+    {
+      std::string bad = json;
+      size_t at = bad.find (substitution.first);
+      if (at == std::string::npos)
+        {
+          fprintf (stderr, "v2 process test replacement not found\n");
+          return false;
+        }
+      bad.replace (at, substitution.first.size (), substitution.second);
+      if (decode_parameter_json_v2_process (bad, &parsed, &error)
+          || parsed.color_model != unchanged.color_model
+          || parsed.age != unchanged.age
+          || !(parsed.contact_copy == unchanged.contact_copy)
+          || parsed.gamma != unchanged.gamma)
+        return false;
+    }
+
+  original.dye_density.red = my_quiet_nan<luminosity_t> ();
+  std::string untouched = "keep";
+  if (encode_parameter_json_v2_process (original, &untouched, &error)
+      || untouched != "keep")
+    return false;
+  return true;
+}
+
 /* Round-trip all image-layer and colour-screen reconstruction inputs,
    including denoise settings that are currently inactive but saved for Undo. */
 static bool
@@ -11136,6 +11228,8 @@ main (int argc, char **argv)
     { "mesh_inversion", "mesh inversion tests", [] () { return test_mesh_inversion (); } },
     { "cow_points", "cow points tests", [] () { return test_cow_points (); } },
     { "image_area", "image area tests", [] () { return test_image_area (); } },
+    { "json_v2_process", "native JSON schema-v2 historical process codec",
+      [] () { return test_native_json_v2_process (); } },
     { "json_v2_reconstruction", "native JSON schema-v2 reconstruction codec",
       [] () { return test_native_json_v2_reconstruction (); } },
     { "json_v2_capture", "native JSON schema-v2 capture codec",
