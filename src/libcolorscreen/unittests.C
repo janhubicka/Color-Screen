@@ -9787,15 +9787,25 @@ test_parameter_archive ()
     }
   parameter_archive_manifest old_manifest;
   std::string old_payload;
-  if (!read_parameter_archive (historical.c_str (), &old_payload,
-                               &old_manifest, &error)
+  const bool historical_loaded
+      = read_parameter_archive (historical.c_str (), &old_payload,
+                                &old_manifest, &error);
+  if (!historical_loaded
       || !old_manifest.render_overrides.present
       || old_manifest.render_overrides.output_profile
              != render_output_parameters::output_profile_xyz
       || !old_manifest.render_overrides.gamut_warning
       || old_manifest.render_overrides.output_gamma != 2.4)
     {
-      fprintf (stderr, "Historical schema-v1 view keys are not readable: %s\\n",
+      fprintf (stderr,
+               "Historical v1 output settings: loaded=%d present=%d "
+               "profile=%d (want %d) gamut=%d gamma=%.17g (want 2.4), error=%s\n",
+               (int)historical_loaded,
+               (int)old_manifest.render_overrides.present,
+               (int)old_manifest.render_overrides.output_profile,
+               (int)render_output_parameters::output_profile_xyz,
+               (int)old_manifest.render_overrides.gamut_warning,
+               (double)old_manifest.render_overrides.output_gamma,
                error.c_str ());
       std::remove (historical.c_str ());
       return false;
