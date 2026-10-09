@@ -3168,7 +3168,7 @@ test_screen_simulation ()
                              dummy_screen, dummy_screen, &collected,
                              screen_sampling::point_sample, 0, no_sharpening,
                              dummy_map,
-                             {1, 0, 1, 2}))
+                             {1, 0, 1, 2}, 550))
     {
       fprintf (stderr, "Finite colour-loss simulation failed\n");
       ok = false;
