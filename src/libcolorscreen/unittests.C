@@ -10521,6 +10521,33 @@ test_stitch_tile_adjustment_grid ()
       fprintf (stderr, "Resizing a tile mask did not reset its old mapping\n");
       return false;
     }
+
+  /* Output colourspace, transfer, gamut diagnostics and tile selection all
+     belong to the request. Copies must be independent from one another and
+     from the document's calibration state, including its Undo equality. */
+  const render_parameters unchanged_document = params;
+  render_type_parameters first_view;
+  render_type_parameters second_view;
+  first_view.output = primary;
+  first_view.output.output_profile
+      = render_output_parameters::output_profile_xyz;
+  first_view.output.output_gamma = 1;
+  first_view.output.gamut_warning = true;
+  render_type_parameters copied_view = first_view;
+  copied_view.output.set_tile_enabled (1, 2, 0, 1, true);
+  if (params != unchanged_document
+      || second_view.output.output_profile
+             != render_output_parameters::output_profile_sRGB
+      || second_view.output.output_gamma != -1
+      || second_view.output.gamut_warning
+      || !second_view.output.tile_enabled.empty ()
+      || copied_view.output.tile_enabled_p (0, 1, 1, 2) == false
+      || first_view.output.tile_enabled_p (0, 1, 1, 2) != false)
+    {
+      fprintf (stderr,
+               "Render-request presentation mutated a sibling or document\n");
+      return false;
+    }
   return true;
 }
 
