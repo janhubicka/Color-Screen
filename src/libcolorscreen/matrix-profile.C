@@ -410,6 +410,9 @@ optimize_color_model_colors_collect (scr_to_img_parameters *param,
   /* First renderer is interpolated with normal data collection with unadjusted
      mode.  */
   render_interpolate r (*param, *cimg, my_rparam, 255);
+  render_output_parameters comparison_output;
+  comparison_output.output_profile = render_output_parameters::output_profile_xyz;
+  r.set_output_parameters (comparison_output);
   r.set_unadjusted ();
 
   /* Second renderer is interpolated with original color collection with
@@ -417,6 +420,7 @@ optimize_color_model_colors_collect (scr_to_img_parameters *param,
   //render_parameters my_rparam2;
   //my_rparam2.original_render_from (my_rparam, true, true);
   render_interpolate r2 (*param, *cimg, my_rparam, 255);
+  r2.set_output_parameters (comparison_output);
   r2.set_unadjusted ();
   r2.original_color (false);
 
@@ -474,7 +478,6 @@ optimize_color_model_colors (scr_to_img_parameters *param, image_data &img,
   bool verbose = false;
   int n = points.size ();
   render_parameters my_rparam = rparam;
-  my_rparam.output_profile = render_parameters::output_profile_xyz;
   std::vector<rgbdata> colors (points.size ());
   std::vector<rgbdata> targets (points.size ());
   rgbdata proportions;
@@ -520,6 +523,10 @@ optimize_color_model_colors (scr_to_img_parameters *param, image_data &img,
   if (n >= 4)
     {
       render r (img, my_rparam, 255);
+      render_output_parameters comparison_output;
+      comparison_output.output_profile =
+          render_output_parameters::output_profile_xyz;
+      r.set_output_parameters (comparison_output);
       if (!r.precompute_all (NORMALIZED_PATCHES, proportions, progress))
 	return false;
       color_matrix c = determine_color_matrix (
