@@ -11,7 +11,13 @@ if test -z "$srcdir"; then
     test "${VERBOSE+set}" != set && VERBOSE=1
 fi
 
-../src/libcolorscreen/unittests
+# Make a deterministic Bayer/DNG capture in the build directory. RAW unit
+# tests opt into it through a path so stand-alone libcolorscreen unittest runs
+# remain possible without external files or test data downloads.
+raw_fixture=./demosaic-variants-test.dng
+trap 'rm -f "$raw_fixture"' EXIT HUP INT TERM
+python3 "$srcdir/generate-bayer-dng.py" "$raw_fixture" || exit 1
+COLORSCREEN_TEST_RAW_FIXTURE="$raw_fixture" ../src/libcolorscreen/unittests
 
 # Exercise the serializer as a complete document-state round trip, not only the
 # focused field groups covered by the C++ unit tests.  Start from a real Dufay
@@ -27,6 +33,7 @@ test_program=./csp-persistence-roundtrip${EXEEXT}
 
 cleanup ()
 {
+    rm -f "$raw_fixture"
     "$top_builddir/libtool" --mode=clean rm -f "$test_object" "$test_program" \
         >/dev/null 2>&1 || rm -f "$test_object" "$test_program"
     rm -f "$test_source"
