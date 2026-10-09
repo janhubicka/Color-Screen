@@ -3287,4 +3287,425 @@ decode_parameter_json_v2_color (const std::string &input,
   return true;
 }
 
+
+/* Schema-v2 capture sharpness/MTF component. An MTF curve contains not only
+   numerical frequencies and contrasts but the accepted image ROI, edge
+   quality, channel/wavelength and independently editable provenance. None of
+   that persistent evidence may disappear because a model is currently off. */
+namespace
+{
+constexpr size_t v2_max_mtf_measurements = 256;
+constexpr size_t v2_max_mtf_samples = 1000000;
+constexpr size_t v2_max_sharpness_bytes = 128 * 1024 * 1024;
+constexpr size_t v2_max_sharpness_nodes = 5000000;
+
+/* Stable project-file spellings already used by loadsave.C, without
+   exporting that legacy serializer's private tables. */
+const std::vector<std::string> &
+v2_mtf_models ()
+{
+  static const std::vector<std::string> names
+      = {"automatic", "physical-diffraction", "empirical-fallback"};
+  return names;
+}
+
+/* Stable native sensor/measurement channel names, with -1 as unknown. */
+const std::vector<std::string> &
+v2_mtf_channels ()
+{
+  static const std::vector<std::string> names
+      = {"unknown", "red", "green", "blue", "ir"};
+  return names;
+}
+
+/* Preserve even the sentinel-valued ROI coordinates from old imported MTF
+   records. The ROI is unavailable when WIDTH or HEIGHT is nonpositive. */
+std::string
+v2_rectangle_text (int_image_area area)
+{
+  return "[" + std::to_string (area.x) + ", "
+         + std::to_string (area.y) + ", "
+         + std::to_string (area.width) + ", "
+         + std::to_string (area.height) + "]";
+}
+
+/* Decode one exact four-integer rectangle without silently normalizing
+   unavailable legacy-provenance ROI values. */
+bool
+v2_rectangle (const json_value &value, int_image_area *area)
+{
+  if (!area || value.type != json_value::kind::array
+      || value.array_value.size () != 4)
+    return false;
+  int values[4];
+  for (int i = 0; i < 4; ++i)
+    if (!v2_json_int (value.array_value[i], &values[i]))
+      return false;
+  *area = {values[0], values[1], values[2], values[3]};
+  return true;
+}
+
+/* Preserve finite, individually editable sample/provenance data and bound
+   cumulative complexity before producing an MTF JSON document. */
+bool
+v2_valid_mtf (const mtf_parameters &mtf, std::string *error)
+{
+  const int mode = (int)mtf.model;
+  if (mode < 0 || (size_t)mode >= v2_mtf_models ().size ())
+    return archive_fail (error, "unknown v2 scanner MTF model");
+  if (!my_isfinite (mtf.sigma)
+      || !my_isfinite (mtf.halo_fraction)
+      || !my_isfinite (mtf.halo_sigma)
+      || !my_isfinite (mtf.blur_diameter)
+      || !my_isfinite (mtf.defocus) || !my_isfinite (mtf.f_stop)
+      || !my_isfinite (mtf.pixel_pitch)
+      || !my_isfinite (mtf.sensor_fill_factor)
+      || !my_isfinite (mtf.scan_dpi))
+    return archive_fail (error, "nonfinite v2 scanner MTF parameter");
+  for (double wavelength : mtf.wavelengths)
+    if (!my_isfinite (wavelength))
+      return archive_fail (error, "nonfinite v2 channel wavelength");
+  if (mtf.measurements.size () > v2_max_mtf_measurements
+      || mtf.measured_mtf_idx < -1
+      || (mtf.measured_mtf_idx >= 0
+          && (size_t)mtf.measured_mtf_idx >= mtf.measurements.size ()))
+    return archive_fail (error, "invalid v2 scanner MTF measurement selection");
+
+  size_t total_samples = 0;
+  for (const mtf_measurement &measurement : mtf.measurements)
+    {
+      if (measurement.channel < -1 || measurement.channel > 3
+          || !my_isfinite (measurement.wavelength)
+          || !my_isfinite (measurement.edge_angle)
+          || !my_isfinite (measurement.edge_fit_rms)
+          || !my_isfinite (measurement.edge_contrast)
+          || !my_isfinite (measurement.edge_snr)
+          || !my_isfinite (measurement.phase_coverage)
+          || !v2_finite_point (measurement.edge_p1)
+          || !v2_finite_point (measurement.edge_p2)
+          || !valid_utf8 (measurement.name)
+          || !valid_utf8 (measurement.source_filename))
+        return archive_fail (error, "invalid v2 measured MTF metadata");
+      if (measurement.size () > v2_max_mtf_samples - total_samples)
+        return archive_fail (error, "v2 measured MTF sample budget exceeded");
+      total_samples += measurement.size ();
+      for (size_t i = 0; i < measurement.size (); ++i)
+        if (!my_isfinite (measurement.get_freq ((int)i))
+            || !my_isfinite (measurement.get_contrast ((int)i))
+            || !my_isfinite (measurement.get_uncertainty ((int)i)))
+          return archive_fail (error, "nonfinite v2 measured MTF sample");
+      /* A selected ROI must not overflow pixel-coordinate arithmetic. Old
+         measurement records may retain an unavailable negative-size sentinel. */
+      if (measurement.has_spatial_metadata ()
+          && ((int64_t)measurement.roi.x + measurement.roi.width
+                  > std::numeric_limits<int>::max ()
+              || (int64_t)measurement.roi.y + measurement.roi.height
+                  > std::numeric_limits<int>::max ()))
+        return archive_fail (error, "invalid v2 measured MTF ROI bounds");
+    }
+  return true;
+}
+
+/* Check all persisted capture-sharpening values, even values ignored by the
+   currently selected algorithm, without enforcing GUI slider ranges. */
+bool
+v2_valid_sharpness (const render_parameters &rparam, std::string *error)
+{
+  const sharpen_parameters &p = rparam.sharpen;
+  if ((int)p.mode < 0 || (int)p.mode >= sharpen_parameters::sharpen_mode_max
+      || (int)p.resampling < 0
+      || (int)p.resampling >= sharpen_parameters::resampling_kernel_max)
+    return archive_fail (error, "unknown v2 sharpening/resampling mode");
+  if (!my_isfinite (p.usm_radius) || !my_isfinite (p.usm_amount)
+      || !my_isfinite (p.scanner_snr)
+      || !my_isfinite (p.scanner_mtf_scale)
+      || !my_isfinite (p.richardson_lucy_sigma))
+    return archive_fail (error, "nonfinite v2 sharpening parameter");
+  return v2_valid_mtf (p.scanner_mtf, error);
+}
+
+/* Decode a finite JSON numeric tuple with exactly N values. */
+bool
+v2_number_tuple (const json_value &value, size_t n, double *out)
+{
+  if (value.type != json_value::kind::array
+      || value.array_value.size () != n)
+    return false;
+  for (size_t i = 0; i < n; ++i)
+    if (!v2_real (value.array_value[i], &out[i]))
+      return false;
+  return true;
+}
+} // anonymous namespace
+
+/* Encode all persistent sharpening, scanner model and measured-MTF evidence
+   without using CSP text, while retaining deterministic array order. */
+bool
+encode_parameter_json_v2_sharpness (const render_parameters &render,
+                                    std::string *output, std::string *error)
+{
+  if (error)
+    error->clear ();
+  if (!output)
+    return archive_fail (error, "missing v2 sharpness output");
+  if (!v2_valid_sharpness (render, error))
+    return false;
+
+  const sharpen_parameters &p = render.sharpen;
+  const mtf_parameters &mtf = p.scanner_mtf;
+  std::string text;
+  text.reserve (2048);
+  text += "{\n  \"sharpness\": {\n    \"mode\": \"";
+  text += json_escape (sharpen_parameters::sharpen_mode_names[(int)p.mode].name);
+  text += "\",\n    \"unsharp_radius\": " + json_number (p.usm_radius);
+  text += ",\n    \"unsharp_amount\": " + json_number (p.usm_amount);
+  text += ",\n    \"scanner_snr\": " + json_number (p.scanner_snr);
+  text += ",\n    \"scanner_mtf_scale\": " + json_number (p.scanner_mtf_scale);
+  text += ",\n    \"richardson_lucy_iterations\": "
+          + std::to_string (p.richardson_lucy_iterations);
+  text += ",\n    \"richardson_lucy_sigma\": "
+          + json_number (p.richardson_lucy_sigma);
+  text += ",\n    \"deconvolution_supersample\": "
+          + std::to_string (p.supersample);
+  text += ",\n    \"resampling_kernel\": \"";
+  text += json_escape (sharpen_parameters::resampling_kernel_names
+                           [(int)p.resampling].name);
+  text += "\",\n    \"mtf\": {\n      \"model\": \""
+          + json_escape (v2_mtf_models ()[(int)mtf.model]) + "\"";
+  text += ",\n      \"sigma_px\": " + json_number (mtf.sigma);
+  text += ",\n      \"halo_fraction\": " + json_number (mtf.halo_fraction);
+  text += ",\n      \"halo_sigma_px\": " + json_number (mtf.halo_sigma);
+  text += ",\n      \"blur_diameter_px\": "
+          + json_number (mtf.blur_diameter);
+  text += ",\n      \"defocus_mm\": " + json_number (mtf.defocus);
+  text += ",\n      \"f_stop\": " + json_number (mtf.f_stop);
+  text += ",\n      \"pixel_pitch_um\": " + json_number (mtf.pixel_pitch);
+  text += ",\n      \"sensor_fill_factor\": "
+          + json_number (mtf.sensor_fill_factor);
+  text += ",\n      \"scan_dpi\": " + json_number (mtf.scan_dpi);
+  text += ",\n      \"wavelengths_nm\": [";
+  for (int i = 0; i < 4; ++i)
+    {
+      if (i)
+        text += ", ";
+      text += json_number (mtf.wavelengths[i]);
+    }
+  text += "]";
+  text += ",\n      \"selected_measurement\": "
+          + std::to_string (mtf.measured_mtf_idx);
+  text += ",\n      \"measurements\": [";
+
+  for (size_t j = 0; j < mtf.measurements.size (); ++j)
+    {
+      const mtf_measurement &m = mtf.measurements[j];
+      if (j)
+        text += ",";
+      text += "\n        {\n          \"channel\": \""
+              + json_escape (v2_mtf_channels ()[(size_t)(m.channel + 1)])
+              + "\",\n          \"image_layer\": ";
+      text += m.image_layer ? "true" : "false";
+      text += ",\n          \"wavelength_nm\": " + json_number (m.wavelength);
+      text += ",\n          \"same_capture\": ";
+      text += m.same_capture ? "true" : "false";
+      text += ",\n          \"name\": \"" + json_escape (m.name) + "\"";
+      text += ",\n          \"source_filename\": \""
+              + json_escape (m.source_filename) + "\"";
+      text += ",\n          \"source_dimensions\": ["
+              + std::to_string (m.source_width) + ", "
+              + std::to_string (m.source_height) + "]";
+      text += ",\n          \"roi\": " + v2_rectangle_text (m.roi);
+      text += ",\n          \"edge\": ["
+              + v2_point_text (m.edge_p1) + ", "
+              + v2_point_text (m.edge_p2) + "]";
+      text += ",\n          \"edge_quality\": ["
+              + json_number (m.edge_angle) + ", "
+              + json_number (m.edge_fit_rms) + ", "
+              + json_number (m.edge_contrast) + ", "
+              + json_number (m.edge_snr) + ", "
+              + json_number (m.phase_coverage) + "]";
+      text += ",\n          \"samples\": [";
+      for (size_t i = 0; i < m.size (); ++i)
+        {
+          if (i)
+            text += ", ";
+          text += "[" + json_number (m.get_freq ((int)i)) + ", "
+                  + json_number (m.get_contrast ((int)i)) + ", "
+                  + json_number (m.get_uncertainty ((int)i)) + "]";
+        }
+      text += "]\n        }";
+      if (text.size () > v2_max_sharpness_bytes)
+        return archive_fail (error, "v2 sharpness JSON exceeds size limit");
+    }
+
+  text += "\n      ]\n    }\n  }\n}\n";
+  if (text.size () > v2_max_sharpness_bytes || !valid_utf8 (text))
+    return archive_fail (error, "v2 sharpness JSON exceeds size/UTF-8 limit");
+  *output = std::move (text);
+  return true;
+}
+
+/* Read all MTF and sharpening inputs as one transaction. A malformed
+   measurement, nested array, ROI, or unknown channel cannot modify the
+   caller's accepted parameters. */
+bool
+decode_parameter_json_v2_sharpness (const std::string &input,
+                                    render_parameters *render,
+                                    std::string *error)
+{
+  if (error)
+    error->clear ();
+  if (!render)
+    return archive_fail (error, "missing v2 sharpness destination");
+  if (input.size () > v2_max_sharpness_bytes || !valid_utf8 (input))
+    return archive_fail (error, "invalid v2 sharpness JSON UTF-8/size");
+
+  json_parser parser (input.data (), input.data () + input.size (),
+                      v2_max_sharpness_nodes);
+  json_value root;
+  if (!parser.parse (&root))
+    return archive_fail (error, "invalid v2 sharpness JSON: "
+                         + parser.error ());
+  const json_value *object
+      = v2_required (root, "sharpness", json_value::kind::object, error);
+  if (!object)
+    return false;
+  const json_value *mtf_obj
+      = v2_required (*object, "mtf", json_value::kind::object, error);
+  if (!mtf_obj)
+    return false;
+
+  render_parameters parsed = *render;
+  sharpen_parameters &p = parsed.sharpen;
+  mtf_parameters &mtf = p.scanner_mtf;
+  int mode = 0, kernel = 0, model = 0;
+  if (!v2_enum (*object, "mode",
+                v2_property_names (sharpen_parameters::sharpen_mode_names,
+                                   sharpen_parameters::sharpen_mode_max),
+                &mode, error)
+      || !v2_enum (*object, "resampling_kernel",
+                   v2_property_names (sharpen_parameters::resampling_kernel_names,
+                                      sharpen_parameters::resampling_kernel_max),
+                   &kernel, error)
+      || !v2_field_real (*object, "unsharp_radius", &p.usm_radius, error)
+      || !v2_field_real (*object, "unsharp_amount", &p.usm_amount, error)
+      || !v2_field_real (*object, "scanner_snr", &p.scanner_snr, error)
+      || !v2_field_real (*object, "scanner_mtf_scale",
+                         &p.scanner_mtf_scale, error)
+      || !v2_field_int (*object, "richardson_lucy_iterations",
+                        &p.richardson_lucy_iterations, error)
+      || !v2_field_real (*object, "richardson_lucy_sigma",
+                         &p.richardson_lucy_sigma, error)
+      || !v2_field_int (*object, "deconvolution_supersample",
+                        &p.supersample, error)
+      || !v2_enum (*mtf_obj, "model", v2_mtf_models (), &model, error))
+    return false;
+  p.mode = (sharpen_parameters::sharpen_mode)mode;
+  p.resampling = (sharpen_parameters::resampling_kernel)kernel;
+  mtf.model = (mtf_model)model;
+
+  if (!v2_field_real (*mtf_obj, "sigma_px", &mtf.sigma, error)
+      || !v2_field_real (*mtf_obj, "halo_fraction",
+                         &mtf.halo_fraction, error)
+      || !v2_field_real (*mtf_obj, "halo_sigma_px",
+                         &mtf.halo_sigma, error)
+      || !v2_field_real (*mtf_obj, "blur_diameter_px",
+                         &mtf.blur_diameter, error)
+      || !v2_field_real (*mtf_obj, "defocus_mm", &mtf.defocus, error)
+      || !v2_field_real (*mtf_obj, "f_stop", &mtf.f_stop, error)
+      || !v2_field_real (*mtf_obj, "pixel_pitch_um",
+                         &mtf.pixel_pitch, error)
+      || !v2_field_real (*mtf_obj, "sensor_fill_factor",
+                         &mtf.sensor_fill_factor, error)
+      || !v2_field_real (*mtf_obj, "scan_dpi", &mtf.scan_dpi, error)
+      || !v2_field_int (*mtf_obj, "selected_measurement",
+                        &mtf.measured_mtf_idx, error))
+    return false;
+
+  const json_value *wavelengths
+      = v2_required (*mtf_obj, "wavelengths_nm",
+                     json_value::kind::array, error);
+  if (!wavelengths || !v2_number_tuple (*wavelengths, 4,
+                                        mtf.wavelengths.data ()))
+    return archive_fail (error, "invalid v2 channel wavelengths");
+
+  const json_value *measurements
+      = v2_required (*mtf_obj, "measurements", json_value::kind::array, error);
+  if (!measurements || measurements->array_value.size () > v2_max_mtf_measurements)
+    return archive_fail (error, "too many v2 MTF measurements");
+  mtf.measurements.clear ();
+  mtf.measurements.reserve (measurements->array_value.size ());
+  size_t total_samples = 0;
+  for (const json_value &element : measurements->array_value)
+    {
+      if (element.type != json_value::kind::object)
+        return archive_fail (error, "v2 MTF measurement must be an object");
+      mtf_measurement m;
+      int channel = 0;
+      const json_value *name
+          = v2_required (element, "name", json_value::kind::string, error);
+      const json_value *source
+          = v2_required (element, "source_filename",
+                         json_value::kind::string, error);
+      if (!name || !source
+          || !v2_enum (element, "channel", v2_mtf_channels (), &channel,
+                       error)
+          || !v2_field_bool (element, "image_layer", &m.image_layer, error)
+          || !v2_field_bool (element, "same_capture",
+                             &m.same_capture, error)
+          || !v2_field_real (element, "wavelength_nm",
+                             &m.wavelength, error))
+        return false;
+      m.channel = channel - 1;
+      m.name = name->text;
+      m.source_filename = source->text;
+
+      const json_value *dimensions
+          = v2_required (element, "source_dimensions",
+                         json_value::kind::array, error);
+      const json_value *roi
+          = v2_required (element, "roi", json_value::kind::array, error);
+      const json_value *edge
+          = v2_required (element, "edge", json_value::kind::array, error);
+      const json_value *quality
+          = v2_required (element, "edge_quality",
+                         json_value::kind::array, error);
+      const json_value *samples
+          = v2_required (element, "samples",
+                         json_value::kind::array, error);
+      if (!dimensions || !roi || !edge || !quality || !samples)
+        return false;
+      if (dimensions->array_value.size () != 2
+          || !v2_json_int (dimensions->array_value[0], &m.source_width)
+          || !v2_json_int (dimensions->array_value[1], &m.source_height)
+          || !v2_rectangle (*roi, &m.roi)
+          || edge->array_value.size () != 2
+          || !v2_point (edge->array_value[0], &m.edge_p1)
+          || !v2_point (edge->array_value[1], &m.edge_p2))
+        return archive_fail (error, "invalid v2 MTF spatial provenance");
+      double diagnostics[5];
+      if (!v2_number_tuple (*quality, 5, diagnostics))
+        return archive_fail (error, "invalid v2 MTF edge quality tuple");
+      m.edge_angle = diagnostics[0];
+      m.edge_fit_rms = diagnostics[1];
+      m.edge_contrast = diagnostics[2];
+      m.edge_snr = diagnostics[3];
+      m.phase_coverage = diagnostics[4];
+      if (samples->array_value.size () > v2_max_mtf_samples - total_samples)
+        return archive_fail (error, "v2 MTF samples exceed memory budget");
+      total_samples += samples->array_value.size ();
+      for (const json_value &sample : samples->array_value)
+        {
+          double values[3];
+          if (!v2_number_tuple (sample, 3, values))
+            return archive_fail (error, "invalid v2 measured MTF sample");
+          m.add_value (values[0], values[1], values[2]);
+        }
+      mtf.measurements.push_back (std::move (m));
+    }
+  if (!v2_valid_sharpness (parsed, error))
+    return false;
+  *render = std::move (parsed);
+  return true;
+}
+
 }
