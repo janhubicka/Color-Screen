@@ -27,11 +27,11 @@ Do not automatically migrate every member into `.cspar`.
 | --- | --- | --- |
 | `render_parameters::image_area` | Independent photographic-image bounding area, distinct from the physical-object crop. Used by focus/finetune and pixel-size estimation but not represented in legacy CSP. | **Keep.** GUI selection and structured archive persistence are implemented and full-CI tested separately in PR #531 (stacked on #528); `scan_crop` may include bindings and tapes. |
 | `render_parameters::tile_adjustment::{x,y}` | The adjustment array is indexed by row/column and stores dimensions; per-element bytes were not initialized, compared or saved. | **Removed in this branch**, retaining real tile adjustment values. |
-| `render_parameters::tile_adjustment::enabled` | **User-facing** Tiles checkbox, used to select tiles in stitched rendering; not written by legacy CSP. The Qt background-loader also sets all tiles disabled before loading, then re-enables each successful tile as an Undoable document change. | **Unresolved ownership/round-trip bug, not obsolete.** Separate user visibility intent from runtime tile readiness before adding versioned archive persistence. A failed or slow tile load must not change saved visibility or dirty the document; deliberately disabled tiles must remain disabled when loading completes. |
+| `render_parameters::tile_adjustment::enabled` | Former Tiles checkbox and asynchronous readiness flag, never in legacy CSP. | **Removed in PR #535.** User visibility is a view-local render-request mask; physical readiness comes from loaded tile data and triggers no Undo/dirty change. Saved per-tile exposure, dark-point and blur remain untouched. |
 | `solver_parameters::copy_without_points()` and `solver_mesh(..., sparam2, smap, ...)` | Mesh code copies lens/tilt policy to a scratch `solver_parameters`, but the local fit uses nearby points and its own weighted homography. | **Deferred at user's request.** No saving impact; leave the API alone for now. |
 | `render_parameters::demosaic` | An image-loading choice, rather than a rendering step. Correctly persisted so RAW capture can be reopened with the same demosaicer. | **Keep unchanged** in this alpha. |
-| `render_parameters::output_profile` | View/display/output colourspace selection, not a property of the scanned object. Older schema-v1 `render-overrides-v1` manifests nonetheless require a typed field. | **Per-view/operation** in PR #533; PR #534 writes `sRGB` as the neutral schema-v1 compatibility value. Do not conflate this with the persistent output tone curve, gamma, or adapted whitepoint without a separate semantic decision. |
-| `render_parameters::gamut_warning` | Diagnostic intent for an individual preview. The core renderer still consumes the flag on its temporary render-request copy. | **View-owned** in PR #533; PR #534 accepts historical schema-v1 values strictly but emits a neutral compatibility key and does not restore it into document state. Neither PR is part of this cleanup branch. |
+| `render_parameters::output_profile` | Output colourspace selection, not a property of the scanned object. | **Moved to `render_output_parameters` in PR #535.** The View menu sets each display; Render to File chooses an export target. Historical v1 archives require a neutral typed key. |
+| `render_parameters::gamut_warning` | View/render-only gamut diagnostic. | **Moved to `render_output_parameters` in PR #535.** Independent of saved calibration and Undo. Historical schema-v1 keys still validate. |
 
 ## Output-request ownership decision (2.0alpha)
 
@@ -114,17 +114,12 @@ branch now makes same-dimension calls idempotent, with a
 `stitch_tile_grid` regression group; genuine dimension changes still reset
 the grid.
 
-**Separate unresolved issue:** the legacy writer never persists
-`tile_adjustment::enabled`. This is not an algorithm-local scratch value:
-Tiles exposes it as an editable checkbox and the stitch renderer uses it.
-The GUI also temporarily drives this very same field from asynchronous
-tile-loading completion, creating Undo/dirty-state churn and overriding
-operator visibility choices. The renderer already distinguishes loaded tile
-images in its `tile_for_scr(..., only_loaded)` lookup. A subsequent change
-should give the loader its own readiness publication/generation mechanism
-and only then decide the versioned archive representation for persistent
-user-disabled tiles. It would be incorrect to serialize transient
-`enabled=false` values from a load in progress.
+**Resolved in PR #535:** removing `tile_adjustment::enabled` avoids both a
+false promise of persistence and Undo/dirty changes during tile loading.
+The Tiles checkbox controls the current view's render mask, and successful
+background loads notify canvases without modifying `ParameterState`.
+`tile_for_scr(..., only_loaded)` continues checking physical readiness.
+Per-tile calibration is unaffected.
 
 ## Confirmed user decisions for the next GUI work
 
@@ -136,11 +131,12 @@ user-disabled tiles. It would be incorrect to serialize transient
   already determine position.
 - Defer `copy_without_points()`, which has no impact on saving.
 - Keep `demosaic` in its current structure.
-- `gamut_warning` and the preview `output_profile` are **per-view**, without
-  modifying the shared document or Undo, in PR #533. PR #534 makes their
-  historical archive keys neutral compatibility placeholders, while retaining
-  the four genuine structured inputs including `output_gamma`. Explicit
-  Render-to-File output choice remains separate from view display choices.
+- `output_profile`, `output_gamma`, `gamut_warning` and tile visibility
+  are **render-request-only** in PR #535, on top of the per-view GUI in
+  merged PRs #533/#534. All three historical output keys are neutral schema-v1
+  compatibility placeholders; genuine structured saved fields are
+  `ignore_infrared`, `demosaiced_scaling`, and `observer_whitepoint`.
+  Explicit Render-to-File encoding remains separate from display choice.
 
 ## Fields checked and intentionally retained
 
