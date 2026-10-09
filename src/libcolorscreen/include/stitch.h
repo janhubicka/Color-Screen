@@ -373,7 +373,7 @@ public:
     params.scan_ydpi = new_ydpi;
     for (int iy = 0; iy < params.height; iy++)
       for (int ix = 0; ix < params.width; ix++)
-        if (images[iy][ix].img)
+        if (images[iy][ix].image_ready_p ())
           images[iy][ix].img->set_dpi (new_xdpi, new_ydpi);
   }
 
