@@ -11,6 +11,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
+#include <mutex>
 #include <lcms2.h>
 #include <tiffio.h>
 #include <turbojpeg.h>
@@ -47,6 +48,27 @@ const property_t image_data::demosaic_names[(int)demosaic_max]
   { "DHT", "Directional Homogeneity and Thresholding (DHT)", "DHT (Directional Homogeneity and Thresholding) is an edge-aware demosaicing algorithm that minimizes image artifacts by reconstructing the green channel through competing horizontal and vertical interpolations. It evaluates directional homogeneity to determine which orientation best preserves local textures, using mathematical thresholds to suppress \"zipper\" effects and false color fringing. This approach makes DHT particularly effective at producing sharp, crisp edges in images with strong geometric patterns or fine architectural details." },
   { "AAHD", "Adaptive Homogeneity-Directed (AAHD)", "AAHD (Adaptive Homogeneity-Directed) is a sophisticated demosaicing algorithm that improves upon standard directional methods by evaluating the \"homogeneity\"—or uniformity—of color and luminance in local pixel neighborhoods. It performs separate interpolations along horizontal and vertical directions and then selects the result that maintains the highest level of local consistency, which significantly reduces \"zipper\" artifacts and aliasing. Frequently paired with a Luminance/Chrominance refinement pass, AAHD is highly regarded for its ability to produce sharp, natural-looking edges while effectively suppressing the \"rainbow\" color moiré often found in high-frequency textures." },
   { "none", "No demosaicing", "" },
+};
+
+/* One RAW sensor capture retained past the initial image_data_loader
+   lifetime. The LibRaw processor owns the unpacked mosaic. Its output
+   image[] is reusable scratch that dcraw_process rebuilds for each mode.
+   All access, including cache lookup, is serialized by mutex. The original
+   EIP subfile buffer must remain live until the LibRaw object is destroyed. */
+struct raw_capture_source
+{
+  std::mutex mutex;
+  std::unique_ptr<LibRaw> processor = std::make_unique<LibRaw> ();
+  void *eip_buffer = nullptr;
+  image_data::demosaicing_t initial_mode = image_data::demosaic_default;
+  int full_res_width = 0;
+  std::array<std::weak_ptr<image_data>, image_data::demosaic_max> variants;
+
+  ~raw_capture_source ()
+  {
+    processor.reset ();
+    free (eip_buffer);
+  }
 };
 
 class image_data_loader
@@ -128,11 +150,34 @@ private:
 class raw_image_data_loader : public image_data_loader
 {
 public:
-  raw_image_data_loader (image_data *img) : m_backlight_corr (nullptr), m_img (img), m_buffer (nullptr), m_processor (std::make_unique<LibRaw> ()) {}
+  raw_image_data_loader (image_data *img)
+      : m_backlight_corr (nullptr), m_img (img), m_buffer (nullptr),
+        m_capture (std::make_shared<raw_capture_source> ()),
+        m_processor (m_capture->processor.get ()) {}
+  raw_image_data_loader (image_data *img,
+                         std::shared_ptr<raw_capture_source> capture)
+      : m_backlight_corr (nullptr), m_img (img), m_buffer (nullptr),
+        m_capture (std::move (capture)),
+        m_processor (m_capture->processor.get ()) {}
   virtual bool init_loader (const char *name, const char **error,
                             progress_info *, image_data::demosaicing_t);
   virtual bool load_part (int *permille, const char **error,
                           progress_info *progress);
+
+  /* Transfer ownership of any extracted EIP buffer when the first full
+     image is complete; raw bytes must outlive LibRaw's open_buffer state. */
+  std::shared_ptr<raw_capture_source> retain_capture ()
+  {
+    m_capture->eip_buffer = m_buffer;
+    m_buffer = nullptr;
+    return m_capture;
+  }
+
+  /* Run a new rendering pass on the retained unpacked mosaic, with the
+     caller holding m_capture->mutex. No file open or unpack is repeated. */
+  bool reprocess_unpacked (image_data::demosaicing_t mode,
+                           const char **error, progress_info *progress);
+
   virtual ~raw_image_data_loader ()
   {
     /*if (lcc)
@@ -146,7 +191,9 @@ private:
   image_data *m_img;
   void *m_buffer;
   /* Do not put it on the stack since it is rather large.  */
-  std::unique_ptr<LibRaw> m_processor;
+  std::shared_ptr<raw_capture_source> m_capture;
+  LibRaw *m_processor;
+  void configure_demosaic (image_data::demosaicing_t mode);
   bool monochromatic = false;
   bool bayer_correction = false;
 };
