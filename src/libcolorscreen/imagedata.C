@@ -33,6 +33,24 @@ namespace colorscreen
 extern void prune_render_caches ();
 extern void prune_render_scr_detect_caches ();
 
+/* Own LibRaw's decoded sensor samples after the initial loader has gone.
+   The processed image buffer is released on transfer: source data needed
+   for a future demosaicing pass remains, without duplicating the current
+   RGB/grayscale image. EIP open_buffer input must remain alive as long as
+   LibRaw may retain its input datastream. */
+class unpacked_raw_source
+{
+public:
+  std::unique_ptr<LibRaw> processor;
+  void *input_buffer = nullptr;
+
+  ~unpacked_raw_source ()
+  {
+    if (input_buffer)
+      free (input_buffer);
+  }
+};
+
 const property_t image_data::demosaic_names[(int)demosaic_max]
      = {
   { "default", "Default", "Automatically choose demosaicing algorithm" },
@@ -60,6 +78,12 @@ public:
                           progress_info *progress)
       = 0;
   virtual ~image_data_loader () {}
+  /* Only successful RAW loads return a decoded sensor source. */
+  virtual std::shared_ptr<unpacked_raw_source>
+  take_unpacked_raw_source ()
+  {
+    return {};
+  }
   bool grayscale = false;
   bool rgb = false;
 };
@@ -139,6 +163,24 @@ public:
       delete lcc;*/
     if (m_buffer)
       free (m_buffer);
+  }
+
+  std::shared_ptr<unpacked_raw_source>
+  take_unpacked_raw_source () override
+  {
+    if (!m_processor)
+      return {};
+
+    /* libraw::free_image releases only the processed image allocation;
+       unpacked rawdata and metadata remain available for dcraw_process()
+       with another demosaic configuration. Our image_data pixel buffers
+       already contain an independent copy of the completed output. */
+    m_processor->free_image ();
+    auto source = std::make_shared<unpacked_raw_source> ();
+    source->processor = std::move (m_processor);
+    source->input_buffer = m_buffer;
+    m_buffer = nullptr;
+    return source;
   }
 
 private:
@@ -1325,6 +1367,12 @@ image_data::load_part (int *permille, const char **error,
   bool ret = loader->load_part (permille, error, progress);
   if (!ret || *permille == 1000)
     {
+      /* The loader normally dies after load_part() finishes. LibRaw's
+         unpacked CFA buffer is reusable for future demosaicing variants,
+         whereas its postprocessed image has already been copied to our
+         independent pixel storage. Keep that source only on success. */
+      if (ret && *permille == 1000)
+        m_unpacked_raw_source = loader->take_unpacked_raw_source ();
       loader = NULL;
       /* If color profile is available, parse it.  */
       if (icc_profile)
