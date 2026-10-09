@@ -156,11 +156,13 @@ bool saveParameterPayloadAtomically(
 
   const colorscreen::parameter_archive_render_overrides renderOverrides =
       colorscreen::parameter_archive_render_overrides_from(render);
+  const colorscreen::parameter_archive_geometry_final_frame geometryFrame =
+      colorscreen::parameter_archive_geometry_final_frame_from(scrToImg);
   std::string archiveError;
   const QByteArray targetName = path.toUtf8();
   const bool written = colorscreen::write_parameter_payload_file(
       targetName.constData(), payload, true, versionBytes.constData(),
-      &archiveError, &renderOverrides);
+      &archiveError, &renderOverrides, &geometryFrame);
   if (!written && error)
     *error = QString::fromUtf8(archiveError);
   else if (written && error)
@@ -222,9 +224,12 @@ bool loadParameterPayload(
     return false;
   }
 
-  if (archive)
+  if (archive) {
     colorscreen::apply_parameter_archive_render_overrides(
         archiveManifest.render_overrides, &loadedState.rparams);
+    colorscreen::apply_parameter_archive_geometry_final_frame(
+        archiveManifest.geometry_final_frame, &loadedState.scrToImg);
+  }
 
   *state = std::move(loadedState);
   if (spotResults)
@@ -527,6 +532,13 @@ bool MainWindow::saveReproducibilityReportToFile(const QString &fileName,
                          state.rparams.gamut_warning);
   metadata.insert(QStringLiteral("render_overrides"), renderOverrides);
 
+  QJsonObject geometryFinalFrame;
+  geometryFinalFrame.insert(QStringLiteral("final_angle"),
+                            state.scrToImg.final_angle);
+  geometryFinalFrame.insert(QStringLiteral("final_ratio"),
+                            state.scrToImg.final_ratio);
+  metadata.insert(QStringLiteral("geometry_final_frame"), geometryFinalFrame);
+
   metadata.insert(QStringLiteral("workflow"), workflow);
   metadata.insert(QStringLiteral("provenance"), provenance);
 
@@ -538,7 +550,7 @@ bool MainWindow::saveReproducibilityReportToFile(const QString &fileName,
   const QByteArray payloadMarker =
       QByteArrayLiteral(
           "\n# Legacy-compatible Color-Screen parameter payload follows.\n"
-          "# Structured-only render values are recorded in the JSON metadata.\n"
+          "# Structured-only render and final geometry values are in JSON metadata.\n"
           "# The legacy payload starts at the next screen_alignment_version line.\n");
 
   const QString absoluteFileName = QFileInfo(fileName).absoluteFilePath();

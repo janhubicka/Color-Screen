@@ -2,6 +2,7 @@
 #define PARAMETER_ARCHIVE_H
 #include "include/dllpublic.h"
 #include "include/render-parameters.h"
+#include "include/scr-to-img-parameters.h"
 
 #include <cstdio>
 #include <string>
@@ -37,12 +38,34 @@ apply_parameter_archive_render_overrides (
     const parameter_archive_render_overrides &overrides,
     render_parameters *rparam);
 
+/* Authoritative final-frame geometry omitted by the legacy CSP serializer.
+
+   PRESENT is false for plain CSP and earlier schema-v1 archives. An archive
+   advertising geometry-final-frame-v1 must provide both values. */
+struct parameter_archive_geometry_final_frame
+{
+  bool present = false;
+  coord_t final_angle = 90;
+  coord_t final_ratio = 1;
+};
+
+/* Extract the final geometry frame from PARAM for archive serialization. */
+DLL_PUBLIC parameter_archive_geometry_final_frame
+parameter_archive_geometry_final_frame_from (const scr_to_img_parameters &param);
+
+/* Apply a validated final-frame supplement after loading legacy CSP. */
+DLL_PUBLIC void
+apply_parameter_archive_geometry_final_frame (
+    const parameter_archive_geometry_final_frame &frame,
+    scr_to_img_parameters *param);
+
 /* Parsed compatibility information from a Color-Screen parameter archive.  */
 struct parameter_archive_manifest
 {
   int schema_version = 0;
   std::string legacy_csp_path;
   parameter_archive_render_overrides render_overrides;
+  parameter_archive_geometry_final_frame geometry_final_frame;
 };
 
 /* Return true if UTF-8 host path NAME starts with a ZIP signature and may
@@ -83,7 +106,8 @@ DLL_PUBLIC bool
 write_parameter_archive (
     const char *name, const std::string &legacy_csp,
     const char *generator_version, std::string *error,
-    const parameter_archive_render_overrides *render_overrides = nullptr);
+    const parameter_archive_render_overrides *render_overrides = nullptr,
+    const parameter_archive_geometry_final_frame *geometry_final_frame = nullptr);
 
 /* Atomically replace UTF-8 host path NAME with PAYLOAD.
 
@@ -96,7 +120,8 @@ DLL_PUBLIC bool
 write_parameter_payload_file (
     const char *name, const std::string &payload, bool archive,
     const char *generator_version, std::string *error,
-    const parameter_archive_render_overrides *render_overrides = nullptr);
+    const parameter_archive_render_overrides *render_overrides = nullptr,
+    const parameter_archive_geometry_final_frame *geometry_final_frame = nullptr);
 
 }
 

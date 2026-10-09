@@ -9411,7 +9411,8 @@ test_parameter_archive ()
   if (!parameter_archive_signature_p (roundtrip.c_str ())
       || !read_parameter_archive (roundtrip.c_str (), &loaded, &parsed, &error)
       || loaded != legacy || parsed.schema_version != 1
-      || parsed.legacy_csp_path != "state/legacy.par")
+      || parsed.legacy_csp_path != "state/legacy.par"
+      || parsed.geometry_final_frame.present)
     {
       fprintf (stderr, "Parameter archive round trip failed: %s\n",
                error.c_str ());
@@ -9454,13 +9455,18 @@ test_parameter_archive ()
   structured_source.gamut_warning = true;
   const parameter_archive_render_overrides structured_overrides
       = parameter_archive_render_overrides_from (structured_source);
+  scr_to_img_parameters structured_geometry;
+  structured_geometry.final_angle = 108.375;
+  structured_geometry.final_ratio = 0.803158;
+  const parameter_archive_geometry_final_frame geometry_frame
+      = parameter_archive_geometry_final_frame_from (structured_geometry);
   const std::string structured
       = parameter_archive_test_path ("render-overrides");
   std::remove (structured.c_str ());
   error.clear ();
   if (!write_parameter_archive (structured.c_str (), legacy,
                                 "2.0alpha-structured", &error,
-                                &structured_overrides))
+                                &structured_overrides, &geometry_frame))
     {
       fprintf (stderr, "Structured parameter archive writer failed: %s\n",
                error.c_str ());
@@ -9481,7 +9487,12 @@ test_parameter_archive ()
       || parsed.render_overrides.output_gamma
              != structured_source.output_gamma
       || parsed.render_overrides.gamut_warning
-             != structured_source.gamut_warning)
+             != structured_source.gamut_warning
+      || !parsed.geometry_final_frame.present
+      || parsed.geometry_final_frame.final_angle
+             != structured_geometry.final_angle
+      || parsed.geometry_final_frame.final_ratio
+             != structured_geometry.final_ratio)
     {
       fprintf (stderr, "Structured parameter archive round trip failed: %s\n",
                error.c_str ());
@@ -9494,7 +9505,8 @@ test_parameter_archive ()
   payload_stream = open_parameter_payload (
       structured.c_str (), &opened_archive, &error, &opened_manifest);
   if (!payload_stream || !opened_archive
-      || !opened_manifest.render_overrides.present)
+      || !opened_manifest.render_overrides.present
+      || !opened_manifest.geometry_final_frame.present)
     {
       fprintf (stderr, "Structured payload opener lost manifest state: %s\n",
                error.c_str ());
@@ -9519,6 +9531,16 @@ test_parameter_archive ()
       || structured_target.gamut_warning != structured_source.gamut_warning)
     {
       fprintf (stderr, "Structured render overrides did not apply exactly\n");
+      std::remove (structured.c_str ());
+      return false;
+    }
+  scr_to_img_parameters geometry_target;
+  apply_parameter_archive_geometry_final_frame (
+      opened_manifest.geometry_final_frame, &geometry_target);
+  if (geometry_target.final_angle != structured_geometry.final_angle
+      || geometry_target.final_ratio != structured_geometry.final_ratio)
+    {
+      fprintf (stderr, "Structured geometry final frame did not apply exactly\n");
       std::remove (structured.c_str ());
       return false;
     }
@@ -9674,6 +9696,34 @@ test_parameter_archive ()
     if (bytes != "stable-old-target")
       {
         fprintf (stderr, "Failed atomic archive write changed old target\n");
+        remove_unicode (atomic_target);
+        return false;
+      }
+  }
+
+  // A malformed structured geometry value must fail before replacement,
+  // just like an invalid ZIP generator name or an I/O failure.
+  parameter_archive_geometry_final_frame invalid_frame = geometry_frame;
+  invalid_frame.final_ratio = 0;
+  error.clear ();
+  if (write_parameter_payload_file (atomic_target.c_str (), legacy, true,
+                                    "2.0alpha-geometry", &error,
+                                    nullptr, &invalid_frame)
+      || error.find ("invalid structured geometry final frame")
+             == std::string::npos)
+    {
+      fprintf (stderr, "Invalid geometry unexpectedly replaced archive target\n");
+      remove_unicode (atomic_target);
+      return false;
+    }
+  {
+    std::ifstream preserved (std::filesystem::u8path (atomic_target),
+                             std::ios::binary);
+    std::string bytes ((std::istreambuf_iterator<char> (preserved)),
+                       std::istreambuf_iterator<char> ());
+    if (bytes != "stable-old-target")
+      {
+        fprintf (stderr, "Invalid geometry write changed old target\n");
         remove_unicode (atomic_target);
         return false;
       }
@@ -9879,6 +9929,52 @@ test_parameter_archive ()
   if (!expect_read ("render-invalid-numeric", invalid_render_numeric,
                     {{"state/legacy.par", legacy}}, false,
                     "invalid numeric state.render_overrides"))
+    return false;
+
+  // A geometry frame is authoritative only with a recognized required
+  // feature, so no old reader can silently discard altered final geometry.
+  const std::string geometry_section_without_feature = R"({
+    "format": "org.colorscreen.parameters", "schema_version": 1,
+    "state": {"legacy_csp":"state/legacy.par",
+              "geometry_final_frame":{"final_angle":108.375,"final_ratio":0.803158}}
+  })";
+  if (!expect_read ("geometry-without-feature",
+                    geometry_section_without_feature,
+                    {{"state/legacy.par", legacy}}, false,
+                    "requires geometry-final-frame-v1"))
+    return false;
+
+  const std::string geometry_feature_without_section = R"({
+    "format": "org.colorscreen.parameters", "schema_version": 1,
+    "required_features":["geometry-final-frame-v1"],
+    "state":{"legacy_csp":"state/legacy.par"}
+  })";
+  if (!expect_read ("geometry-feature-without-section",
+                    geometry_feature_without_section,
+                    {{"state/legacy.par", legacy}}, false,
+                    "requires state.geometry_final_frame"))
+    return false;
+
+  const std::string invalid_geometry_numeric = R"({
+    "format": "org.colorscreen.parameters", "schema_version": 1,
+    "required_features":["geometry-final-frame-v1"],
+    "state":{"legacy_csp":"state/legacy.par",
+             "geometry_final_frame":{"final_angle":108.375,"final_ratio":0}}
+  })";
+  if (!expect_read ("geometry-invalid-numeric", invalid_geometry_numeric,
+                    {{"state/legacy.par", legacy}}, false,
+                    "invalid numeric state.geometry_final_frame"))
+    return false;
+
+  const std::string incomplete_geometry = R"({
+    "format": "org.colorscreen.parameters", "schema_version": 1,
+    "required_features":["geometry-final-frame-v1"],
+    "state":{"legacy_csp":"state/legacy.par",
+             "geometry_final_frame":{"final_angle":108.375}}
+  })";
+  if (!expect_read ("geometry-incomplete", incomplete_geometry,
+                    {{"state/legacy.par", legacy}}, false,
+                    "missing a required typed field"))
     return false;
 
   const std::string wrong_format

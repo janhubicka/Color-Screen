@@ -59,13 +59,14 @@ payload += (
 manifest = {
     "format": "org.colorscreen.parameters",
     "schema_version": 1,
-    "required_features": ["render-overrides-v1"],
+    "required_features": ["render-overrides-v1", "geometry-final-frame-v1"],
     "generator": {
         "application": "Color-Screen testsuite",
         "version": "2.0alpha",
     },
     "state": {
         "legacy_csp": "state/legacy.par",
+        "geometry_final_frame": {"final_angle": 108.375, "final_ratio": 0.803158},
         "render_overrides": {
             "ignore_infrared": False,
             "demosaiced_scaling": "nearest",
@@ -115,6 +116,11 @@ with zipfile.ZipFile(path, "r") as z:
     manifest = json.loads(z.read("manifest.json"))
 if "render-overrides-v1" not in manifest.get("required_features", []):
     raise SystemExit("adjust-par dropped structured render feature")
+if "geometry-final-frame-v1" not in manifest.get("required_features", []):
+    raise SystemExit("adjust-par dropped structured geometry feature")
+geometry = manifest.get("state", {}).get("geometry_final_frame", {})
+if geometry != {"final_angle": 108.375, "final_ratio": 0.803158}:
+    raise SystemExit("adjust-par changed the authoritative final geometry frame")
 overrides = manifest.get("state", {}).get("render_overrides", {})
 if overrides.get("demosaiced_scaling") != "nearest":
     raise SystemExit("adjust-par did not preserve structured render state")

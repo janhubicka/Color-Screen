@@ -137,9 +137,15 @@ load_parameter_filename (const char *filename, scr_to_img_parameters *param,
       return false;
     }
 
-  if (archive && rparam)
-    apply_parameter_archive_render_overrides (
-        archive_manifest.render_overrides, rparam);
+  if (archive)
+    {
+      if (rparam)
+        apply_parameter_archive_render_overrides (
+            archive_manifest.render_overrides, rparam);
+      if (param)
+        apply_parameter_archive_geometry_final_frame (
+            archive_manifest.geometry_final_frame, param);
+    }
 
   std::string trailing;
   if (trailing_payload)
@@ -275,8 +281,16 @@ save_parameter_filename (const char *filename, bool archive,
       render_overrides = parameter_archive_render_overrides_from (*rparam);
       structured = &render_overrides;
     }
+  parameter_archive_geometry_final_frame geometry_frame;
+  const parameter_archive_geometry_final_frame *structured_geometry = nullptr;
+  if (archive && param)
+    {
+      geometry_frame = parameter_archive_geometry_final_frame_from (*param);
+      structured_geometry = &geometry_frame;
+    }
   return write_parameter_payload_file (filename, payload, archive,
-                                       PACKAGE_VERSION, error, structured);
+                                       PACKAGE_VERSION, error, structured,
+                                       structured_geometry);
 }
 
 static enum subhelp {

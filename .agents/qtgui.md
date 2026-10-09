@@ -94,7 +94,12 @@ each document has independent:
   writer finalizes a sibling staging file and atomically replaces the target
   using the platform-native rename primitive already exercised by core Unicode
   and failure-preservation tests. A failed serializer/write/replace must leave
-  any previous usable target unchanged. Private recovery parameters use
+  any previous usable target unchanged. Archive state includes independently
+  negotiated `render-overrides-v1` and `geometry-final-frame-v1` sections:
+  legacy CSP does not represent the final screen-coordinate angle/axis ratio.
+  Read those supplements only after the full legacy and manifest validation
+  succeeds; preserve them on ordinary Save, Save As, CLI rewrites and private
+  recovery. Private recovery parameters use
   `recovery_params.cspar` with the same structured/atomic archive writer.
   `recovery_params.par` is accepted only when no archive exists. Recovery
   metadata still preserves the user's Archive/Legacy target identity

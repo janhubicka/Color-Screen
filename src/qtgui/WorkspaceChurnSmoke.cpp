@@ -481,6 +481,8 @@ void startWorkspaceChurnSmoke(ColorScreenApplication &app,
             !reportBytes.contains(QByteArray("\"workflow\"")) ||
             !reportBytes.contains(QByteArray("\"provenance\"")) ||
             !reportBytes.contains(QByteArray("\"render_overrides\"")) ||
+            !reportBytes.contains(QByteArray("\"geometry_final_frame\"")) ||
+            !reportBytes.contains(QByteArray("\"final_ratio\"")) ||
             !reportBytes.contains(
                 QByteArray("\"demosaiced_scaling\"")) ||
             !reportBytes.contains(QByteArray("screen_alignment_version: 1")) ||
@@ -3006,6 +3008,9 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
                                "\u6D4B\u8BD5.cspar"));
         ParameterState archiveState = savedSecondState;
         archiveState.rparams.saturation += 0.07;
+        // These two final-image geometry values are not in legacy CSP.
+        archiveState.scrToImg.final_angle = 108.375;
+        archiveState.scrToImg.final_ratio = 0.803158;
         // These saved fields deliberately have no legacy CSP keywords. A
         // complete archive round trip therefore proves render-overrides-v1 is
         // authoritative rather than merely re-reading the legacy mirror.
