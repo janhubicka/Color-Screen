@@ -78,8 +78,8 @@ public:
   bool viewGamutWarning() const { return m_viewGamutWarning; }
 
   /** Select a color space for the onscreen view, not for its source file. */
-  void setViewOutputProfile(colorscreen::render_parameters::output_profile_t profile);
-  colorscreen::render_parameters::output_profile_t viewOutputProfile() const {
+  void setViewOutputProfile(colorscreen::render_output_parameters::output_profile_t profile);
+  colorscreen::render_output_parameters::output_profile_t viewOutputProfile() const {
     return m_viewOutputProfile;
   }
 
@@ -482,8 +482,8 @@ private:
   colorscreen::render_parameters *m_rparams = nullptr;
   // View-local display intent: never enters document parameters or Undo.
   bool m_viewGamutWarning = false;
-  colorscreen::render_parameters::output_profile_t m_viewOutputProfile =
-      colorscreen::render_parameters::output_profile_sRGB;
+  colorscreen::render_output_parameters::output_profile_t m_viewOutputProfile =
+      colorscreen::render_output_parameters::output_profile_sRGB;
   colorscreen::scr_to_img_parameters *m_scrToImg = nullptr;
   colorscreen::scr_detect_parameters *m_scrDetect = nullptr;
   colorscreen::render_type_parameters *m_renderType = nullptr;
