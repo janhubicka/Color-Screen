@@ -40,6 +40,8 @@ EXTRA_DIST              = defs.sh $(TESTS) \
 			  slanted-gaussian-soft-mtf.txt \
 			  generate-slanted-edge-tests.sh \
 			  validate-mtf-physical-model.py \
+			  check-parameter-v2-inventory.py \
+			  parameter-v2-key-inventory.tsv \
 			  benchmark-screen-detection.py
 
 TEST_LOG_DRIVER = env AM_TAP_AWK='$(AWK)' $(SHELL) \
