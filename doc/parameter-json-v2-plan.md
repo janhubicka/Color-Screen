@@ -30,7 +30,8 @@ Illustrative *shape*, not yet a valid complete v2 sample:
   "reconstruction": {},
   "sharpness": {},
   "color": {},
-  "profile": {}
+  "profile": {},
+  "correction_grids": {}
 }
 ~~~
 
@@ -41,12 +42,13 @@ full v2 parameter file.
 
 ### Implemented native JSON v2 components
 
-Draft PR #538 now has five native core-only codecs (with focused regression
-tests): `encode/decode_parameter_json_v2_registration`,
-`encode/decode_parameter_json_v2_capture`,
-`encode/decode_parameter_json_v2_reconstruction`,
-`encode/decode_parameter_json_v2_process`, and
-`encode/decode_parameter_json_v2_color`. They operate **directly
+Draft PR #538 has seven directly typed core components (registration,
+capture, reconstruction, process, colour, complete sharpening/MTF and
+calibration grids), plus an in-memory **complete v2 document codec**. It
+composes a single UTF-8 JSON root and decodes one syntax tree into new
+temporary C++ state. This is not yet wired to on-disk Save or CLI/recovery.
+The old v1 ZIP continues to be the application's default until the full
+platform/compatibility gates pass. They operate **directly
 on C++ state** without using `save_csp` or `load_csp`, and emit component
 objects for a future complete document. No component is a standalone v2
 `.cspar` file.
@@ -91,6 +93,17 @@ objects for a future complete document. No component is a standalone v2
   points (including unused/custom control points). **It does not save the
   output/display ICC profile, transfer gamma, view gamut diagnostic or other
   per-render output settings.**
+- `sharpness` now stores capture deconvolution and unsharp settings,
+  MTF model and optical coefficients, four native channel wavelengths,
+  the selected measured-curve index, and every measured curve with its
+  frequency/contrast/uncertainty samples, channel, source filename/dimensions,
+  ROI, accepted edge, edge-quality metrics and same-capture metadata.
+  Fit-request flags and computed chart curves remain runtime-only.
+- `correction_grids` stores complete backlight channel flags, luminosity
+  and subtraction tables (including disabled channels), black-reference
+  state, global scanner-blur cells with physical mode and per-tile
+  exposure/dark point and nested scanner-blur grids. Per-cell scanner-blur
+  reduction diagnostics are exported separately, not persistent CSP inputs.
 
 All component codecs require finite scalars, stable known enum identifiers,
 valid array shapes and representable numeric conversions. Geometry additionally
@@ -166,14 +179,13 @@ or Save As selection; switch new projects to v2 only after the gates below.
 ## Execution checklist
 
 - [x] Decide plain-JSON v2 representation, independent of ZIP.
-- [x] Start native, transaction-safe, separately tested components for
-      geometry/detection/registration/profile spots, core capture scalars,
-      image-layer reconstruction/denoising, historical-process/contact-copy,
-      and colour/appearance controls.
-- [ ] Implement the remaining capture data/correction grids and native typed
-      sharpness/MTF serializers; complete and
-      audit mapping of every persisted field. No partial default writer.
-- [ ] Compose full v2 root and robust content-based dispatch.
+- [x] Implement all seven core/Qt-spot native components, including
+      complete MTF/provenance and spatial correction tables.
+- [x] Compose a complete schema-v2 JSON root in memory with one-pass,
+      transactionally decoded typed C++ state.
+- [ ] Audit native field coverage against every persistent C++ member and
+      nested legacy/Qt serializer, not only literal CSP keyword names.
+- [ ] Add content-based on-disk dispatch with preserved v1/legacy imports.
 - [ ] Integrate GUI Save/Save As, CLI read/rewrite and private recovery.
 - [ ] Add explicit conversion from legacy and ZIP v1; preserve existing
       target formats and old-file loaders.
