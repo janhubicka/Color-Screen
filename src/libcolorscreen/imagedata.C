@@ -701,6 +701,146 @@ has_suffix (const char *name, const char *suffix)
   return !strcasecmp (suffix, name + l1 - l2);
 }
 
+/* Configure the processing of one unpacked RAW capture. This may be
+   called repeatedly after a single open_file/unpack cycle. */
+void
+raw_image_data_loader::configure_demosaic (image_data::demosaicing_t mode)
+{
+  /* Parameters are reset before *each* postprocess: a prior mode may
+     have halved image dimensions or disabled interpolation. */
+  m_img->demosaiced_by = image_data::demosaic_max;
+  m_processor->imgdata.params.half_size = 0;
+  m_processor->imgdata.params.no_interpolation = 0;
+  m_processor->imgdata.params.gamm[0] = m_processor->imgdata.params.gamm[1]
+      = m_processor->imgdata.params.no_auto_bright = 1;
+  m_processor->imgdata.params.use_camera_matrix = 0;
+  m_processor->imgdata.params.output_color = 0;
+  m_processor->imgdata.params.highlight = 0;
+  switch (mode)
+    {
+    case image_data::demosaic_linear:
+    case image_data::demosaic_half:
+      m_processor->imgdata.params.user_qual = 0;
+      break;
+
+    /* The following use no demosaicing; any value is good.  */
+    case image_data::demosaic_monochromatic:
+    case image_data::demosaic_monochromatic_bayer_corrected:
+    case image_data::demosaic_none: 
+      m_processor->imgdata.params.user_qual = 0;
+      break;
+    case image_data::demosaic_VNG:
+      m_processor->imgdata.params.user_qual = 1;
+      m_img->demosaiced_by = image_data::demosaic_VNG;
+      break;
+    case image_data::demosaic_PPG:
+      m_processor->imgdata.params.user_qual = 2;
+      m_img->demosaiced_by = image_data::demosaic_PPG;
+      break;
+    /* AHD seems to go well on demosaicing photo of Paget screen.  */
+    case image_data::demosaic_default:
+    case image_data::demosaic_AHD:
+      m_processor->imgdata.params.user_qual = 3;
+      m_img->demosaiced_by = image_data::demosaic_AHD;
+      break;
+    case image_data::demosaic_DCB:
+      m_processor->imgdata.params.user_qual = 4;
+      m_img->demosaiced_by = image_data::demosaic_DCB;
+      break;
+    case image_data::demosaic_DHT:
+      m_processor->imgdata.params.user_qual = 11;
+      m_img->demosaiced_by = image_data::demosaic_DHT;
+      break;
+    case image_data::demosaic_AAHD:
+      m_processor->imgdata.params.user_qual = 12;
+      m_img->demosaiced_by = image_data::demosaic_AAHD;
+      break;
+    case image_data::demosaic_max:
+      abort ();
+    }
+  m_processor->imgdata.params.use_auto_wb = 0;
+  m_processor->imgdata.params.use_camera_wb = 0;
+  m_processor->imgdata.params.use_camera_matrix = 0;
+  m_processor->imgdata.rawparams.max_raw_memory_mb = 10000;
+  if (mode == image_data::demosaic_half)
+    {
+      m_processor->imgdata.params.half_size = 1;
+      m_img->demosaiced_by = image_data::demosaic_half;
+    }
+  m_processor->imgdata.params.no_auto_bright = 1;
+  m_processor->imgdata.params.fbdd_noiserd = 0;
+
+  monochromatic
+      = (mode == image_data::demosaic_monochromatic
+         || mode == image_data::demosaic_monochromatic_bayer_corrected);
+  bayer_correction
+      = mode == image_data::demosaic_monochromatic_bayer_corrected;
+  if (monochromatic)
+    m_img->demosaiced_by = mode;
+  /* TODO figure out threshold.  */
+  m_processor->imgdata.params.threshold = 0;
+  if (mode == image_data::demosaic_none || monochromatic)
+    m_processor->imgdata.params.no_interpolation = 1;
+}
+
+/* Reprocess a retained RAW mosaic without reopening or unpacking it.
+   The caller owns the capture mutex throughout processing and copying the
+   resulting scratch image. */
+bool
+raw_image_data_loader::reprocess_unpacked (image_data::demosaicing_t mode,
+                                           const char **error,
+                                           progress_info *progress)
+{
+  if (mode < image_data::demosaic_default || mode >= image_data::demosaic_max)
+    {
+      *error = "invalid RAW demosaicing algorithm";
+      return false;
+    }
+  m_img->standard_bayer_cfa = m_processor->imgdata.idata.filters >= 1000;
+  if (mode == image_data::demosaic_monochromatic_bayer_corrected
+      && !m_img->standard_bayer_cfa)
+    {
+      *error = "monochromatic Bayer compensation requires a standard 2x2 Bayer RAW image";
+      return false;
+    }
+  if (progress && progress->cancel_requested ())
+    {
+      *error = "cancelled";
+      return false;
+    }
+
+  configure_demosaic (mode);
+  if (progress)
+    progress->set_task ("demosaicing cached RAW mosaic", 1);
+  const int ret = m_processor->dcraw_process ();
+  if (ret != LIBRAW_SUCCESS)
+    {
+      *error = libraw_strerror (ret);
+      return false;
+    }
+  if (progress && progress->cancel_requested ())
+    {
+      *error = "cancelled";
+      return false;
+    }
+
+  if (!m_processor->imgdata.image)
+    {
+      *error = "RAW demosaicing produced no image";
+      return false;
+    }
+  m_img->full_res_width = m_capture->full_res_width;
+  m_img->gamma = 1;
+  if (monochromatic && m_processor->imgdata.idata.colors != 3)
+    monochromatic = false;
+  rgb = m_processor->imgdata.idata.colors == 3 && !monochromatic;
+  grayscale = m_processor->imgdata.idata.colors == 1 || monochromatic;
+  m_img->width = m_processor->imgdata.sizes.width;
+  m_img->height = m_processor->imgdata.sizes.height;
+  m_img->maxval = 65535;
+  return true;
+}
+
 /* Initialize RAW loader for file NAME.
    On failure, set ERROR to the error message.
    PROGRESS is used for progress reporting.
@@ -817,76 +957,8 @@ raw_image_data_loader::init_loader (const char *name, const char **error,
         }
       zip_close (zip);
     }
-  m_processor->imgdata.params.gamm[0] = m_processor->imgdata.params.gamm[1]
-      = m_processor->imgdata.params.no_auto_bright = 1;
-  m_processor->imgdata.params.use_camera_matrix = 0;
-  m_processor->imgdata.params.output_color = 0;
-  m_processor->imgdata.params.highlight = 0;
-  switch (demosaic)
-    {
-    case image_data::demosaic_linear:
-    case image_data::demosaic_half:
-      m_processor->imgdata.params.user_qual = 0;
-      break;
-
-    /* The following use no demosaicing; any value is good.  */
-    case image_data::demosaic_monochromatic:
-    case image_data::demosaic_monochromatic_bayer_corrected:
-    case image_data::demosaic_none: 
-      m_processor->imgdata.params.user_qual = 0;
-      break;
-    case image_data::demosaic_VNG:
-      m_processor->imgdata.params.user_qual = 1;
-      m_img->demosaiced_by = image_data::demosaic_VNG;
-      break;
-    case image_data::demosaic_PPG:
-      m_processor->imgdata.params.user_qual = 2;
-      m_img->demosaiced_by = image_data::demosaic_PPG;
-      break;
-    /* AHD seems to go well on demosaicing photo of Paget screen.  */
-    case image_data::demosaic_default:
-    case image_data::demosaic_AHD:
-      m_processor->imgdata.params.user_qual = 3;
-      m_img->demosaiced_by = image_data::demosaic_AHD;
-      break;
-    case image_data::demosaic_DCB:
-      m_processor->imgdata.params.user_qual = 4;
-      m_img->demosaiced_by = image_data::demosaic_DCB;
-      break;
-    case image_data::demosaic_DHT:
-      m_processor->imgdata.params.user_qual = 11;
-      m_img->demosaiced_by = image_data::demosaic_DHT;
-      break;
-    case image_data::demosaic_AAHD:
-      m_processor->imgdata.params.user_qual = 12;
-      m_img->demosaiced_by = image_data::demosaic_AAHD;
-      break;
-    case image_data::demosaic_max:
-      abort ();
-    }
-  m_processor->imgdata.params.use_auto_wb = 0;
-  m_processor->imgdata.params.use_camera_wb = 0;
-  m_processor->imgdata.params.use_camera_matrix = 0;
-  m_processor->imgdata.rawparams.max_raw_memory_mb = 10000;
-  if (demosaic == image_data::demosaic_half)
-    {
-      m_processor->imgdata.params.half_size = 1;
-      m_img->demosaiced_by = image_data::demosaic_half;
-    }
-  m_processor->imgdata.params.no_auto_bright = 1;
-  m_processor->imgdata.params.fbdd_noiserd = 0;
-
-  monochromatic
-      = (demosaic == image_data::demosaic_monochromatic
-         || demosaic == image_data::demosaic_monochromatic_bayer_corrected);
-  bayer_correction
-      = demosaic == image_data::demosaic_monochromatic_bayer_corrected;
-  if (monochromatic)
-    m_img->demosaiced_by = demosaic;
-  /* TODO figure out threshold.  */
-  m_processor->imgdata.params.threshold = 0;
-  if (demosaic == image_data::demosaic_none || monochromatic)
-    m_processor->imgdata.params.no_interpolation = 1;
+  configure_demosaic (demosaic);
+  m_capture->initial_mode = demosaic;
   int ret;
   if (m_buffer)
     ret = m_processor->open_buffer (m_buffer, buffer_size);
@@ -943,6 +1015,7 @@ raw_image_data_loader::init_loader (const char *name, const char **error,
      halve dimensions in half-size mode.  This is needed to correct
      FocalPlaneResolution-based pixel pitch for downsampled output.  */
   m_img->full_res_width = m_processor->imgdata.sizes.width;
+  m_capture->full_res_width = m_img->full_res_width;
   if (progress)
     progress->set_task ("demosaicing", 1);
   if ((ret = m_processor->dcraw_process ()) != LIBRAW_SUCCESS)
