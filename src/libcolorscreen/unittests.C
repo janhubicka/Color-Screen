@@ -1450,6 +1450,49 @@ test_finetune_focus_screen_cache ()
                (double)delta);
       return false;
     }
+  /* The final filtered-screen cache has no separate optical argument.
+     A wavelength change in an otherwise identical fitted physical model
+     must miss that cache, while the prepared immutable source stays valid.  */
+  std::array<sharpen_parameters, 3> other_wavelength = upper_physical;
+  other_wavelength[0].scanner_mtf.wavelengths[0] = 600;
+  bool other_wavelength_hit = true;
+  std::shared_ptr<screen> other_wavelength_screen
+      = finetune_get_cached_screen_for_test (
+          Dufay, (coord_t)0.45, (coord_t)0.35, false, other_wavelength,
+          false, &other_wavelength_hit);
+  if (!other_wavelength_screen || other_wavelength_hit
+      || other_wavelength_screen.get () == upper_screen.get ())
+    {
+      fprintf (stderr,
+               "Changed physical wavelength reused the previous screen\n");
+      return false;
+    }
+  sharpen_parameters *other_wavelength_channels[3]
+      = { &other_wavelength[0], &other_wavelength[1],
+          &other_wavelength[2] };
+  screen other_wavelength_reference;
+  if (!other_wavelength_reference.initialize_with_sharpen_parameters (
+          prepared_physical_source, other_wavelength_channels, false, false)
+      || !other_wavelength_reference.almost_equal_p (
+          *other_wavelength_screen, &delta, (luminosity_t)1e-8))
+    {
+      fprintf (stderr,
+               "Cached screen at new wavelength differs from direct build\\n");
+      return false;
+    }
+  other_wavelength_hit = false;
+  std::shared_ptr<screen> repeated_wavelength_screen
+      = finetune_get_cached_screen_for_test (
+          Dufay, (coord_t)0.45, (coord_t)0.35, false, other_wavelength,
+          false, &other_wavelength_hit);
+  if (!other_wavelength_hit
+      || repeated_wavelength_screen.get () != other_wavelength_screen.get ())
+    {
+      fprintf (stderr,
+               "Unchanged explicit-wavelength screen was not reused\\n");
+      return false;
+    }
+
   sharpen_parameters *target_channels[3]
       = { &target_physical[0], &target_physical[1], &target_physical[2] };
   if (!exact_target.initialize_with_sharpen_parameters (
