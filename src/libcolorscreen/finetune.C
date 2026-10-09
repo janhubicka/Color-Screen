@@ -6892,7 +6892,8 @@ finetune_area (solver_parameters *solver, render_parameters &rparam,
    the data collection.  SIMULATED_SCREEN is optional simulated screen.
    SAMPLING specifies whether SCR still needs capture-pixel integration.
    THRESHOLD is the collection threshold.  SHARPEN_PARAM are sharpen
-   parameters. MAP is the scr-to-img map.  AREA defines the area.  */
+   parameters. MAP is the scr-to-img map.  AREA defines the area.
+   WAVELENGTH_NM is the capture-transfer wavelength for this operation.  */
 
 bool
 determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
@@ -6900,7 +6901,7 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
                       simulated_screen *simulated_screen,
                       screen_sampling sampling, luminosity_t threshold,
                       const sharpen_parameters &sharpen_param, scr_to_img &map,
-                      int_image_area area)
+                      int_image_area area, double wavelength_nm)
 {
   double_rgbdata red = { 0, 0, 0 }, green = { 0, 0, 0 }, blue = { 0, 0, 0 };
   double wr = 0, wg = 0, wb = 0;
@@ -6992,8 +6993,7 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
       if (sharpen_param.deconvolution_p ())
         {
           std::shared_ptr<mtf> cur_mtf
-              = mtf::get_mtf (sharpen_param.scanner_mtf,
-                              sharpen_param.scanner_mtf.get_channel_wavelength (1),
+              = mtf::get_mtf (sharpen_param.scanner_mtf, wavelength_nm,
                               nullptr);
           if (!cur_mtf || !cur_mtf->precompute ())
             return false;
@@ -7030,7 +7030,7 @@ determine_color_loss (rgbdata *ret_red, rgbdata *ret_green, rgbdata *ret_blue,
         {
           if (!deconvolve_rgb<rgbdata, rgbdata, rgbdata *, int, getdata_helper> (
 		      rendered2.data (), rendered.data (), xsize, ysize, ysize,
-		      sharpen_param, nullptr, false))
+		      sharpen_param, nullptr, false, wavelength_nm))
 	    return false;
         }
 
