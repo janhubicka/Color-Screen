@@ -8,6 +8,7 @@
 #include <zip.h>
 
 #include <atomic>
+#include <charconv>
 #include <cerrno>
 #include <cstdint>
 #include <cmath>
@@ -2391,6 +2392,233 @@ decode_parameter_json_v2_registration (
   *detection = std::move (parsed_d);
   *solver = std::move (parsed_r);
   *profile_spots = std::move (parsed_spots);
+  return true;
+}
+
+
+/* Capture-input scalar values are one independently testable component of
+   the proposed full v2 JSON document. They intentionally exclude colour
+   adjustments, scanner MTF and calibration grids; those need native codecs
+   before a new .cspar writer may be exposed. */
+namespace
+{
+constexpr size_t v2_max_capture_json_bytes = 128 * 1024;
+
+/* Decode a JSON integer exactly, rejecting fractional/exponent spellings
+   and any signed 32-bit overflow. std::from_chars does not use locale. */
+bool
+v2_json_int (const json_value &value, int *out)
+{
+  if (!out || value.type != json_value::kind::number)
+    return false;
+  int converted = 0;
+  const char *start = value.text.data ();
+  const char *end = start + value.text.size ();
+  const auto result = std::from_chars (start, end, converted);
+  if (result.ec != std::errc () || result.ptr != end)
+    return false;
+  *out = converted;
+  return true;
+}
+
+/* Decode a required numeric integer property. */
+bool
+v2_field_int (const json_value &object, const char *name, int *out,
+              std::string *error)
+{
+  const json_value *value
+      = v2_required (object, name, json_value::kind::number, error);
+  if (!value)
+    return false;
+  if (!v2_json_int (*value, out))
+    return archive_fail (error, std::string ("invalid v2 integer: ") + name);
+  return true;
+}
+
+/* Canonical JSON rectangle: the physical object crop and the separately
+   selected photographic bounds are both image-pixel rectangles. */
+std::string
+v2_optional_area_text (const int_optional_image_area &area)
+{
+  return std::string ("{\"enabled\": ")
+         + (area.set ? "true" : "false") + ", \"rect\": ["
+         + std::to_string (area.set ? area.x : 0) + ", "
+         + std::to_string (area.set ? area.y : 0) + ", "
+         + std::to_string (area.set ? area.width : 0) + ", "
+         + std::to_string (area.set ? area.height : 0) + "]}";
+}
+
+/* A selected area must have positive dimensions and a representable final
+   corner. Nonnegative origins are required for photographic image bounds;
+   physical-object crop origins may be signed for imported legacy projects. */
+bool
+v2_valid_area (const int_optional_image_area &area, bool photo)
+{
+  if (!area.set)
+    return true;
+  return area.width > 0 && area.height > 0
+         && (!photo || (area.x >= 0 && area.y >= 0))
+         && (int64_t)area.x + area.width
+                <= std::numeric_limits<int>::max ()
+         && (int64_t)area.y + area.height
+                <= std::numeric_limits<int>::max ();
+}
+
+/* Parse enabled/rect data without normalizing an invalid input silently.
+   Unselected areas use canonical [0,0,0,0] in JSON and the default sentinel
+   representation internally. */
+bool
+v2_parse_area (const json_value &value, bool photo,
+               int_optional_image_area *out, std::string *error)
+{
+  if (value.type != json_value::kind::object)
+    return archive_fail (error, "v2 crop must be a JSON object");
+  bool enabled = false;
+  if (!v2_field_bool (value, "enabled", &enabled, error))
+    return false;
+  const json_value *rect
+      = v2_required (value, "rect", json_value::kind::array, error);
+  if (!rect || rect->array_value.size () != 4)
+    return archive_fail (error, "v2 crop rect must have four integers");
+  int components[4] {};
+  for (int i = 0; i < 4; ++i)
+    if (!v2_json_int (rect->array_value[i], &components[i]))
+      return archive_fail (error, "invalid v2 crop coordinate");
+  if (!enabled)
+    {
+      for (int component : components)
+        if (component != 0)
+          return archive_fail (error,
+                               "disabled v2 crop must use zero coordinates");
+      *out = int_optional_image_area ();
+      return true;
+    }
+  int_optional_image_area area (
+      int_image_area (components[0], components[1],
+                      components[2], components[3]));
+  if (!v2_valid_area (area, photo))
+    return archive_fail (error, "invalid v2 selected crop bounds");
+  *out = area;
+  return true;
+}
+
+/* Validate the selected capture scalars before writing any output. */
+bool
+v2_valid_capture (const render_parameters &capture, std::string *error)
+{
+  if ((int)capture.capture_type < 0
+      || (int)capture.capture_type >= render_parameters::capture_max
+      || (int)capture.demosaic < 0
+      || (int)capture.demosaic >= image_data::demosaic_max)
+    return archive_fail (error, "unknown v2 capture or demosaic choice");
+  if (!my_isfinite (capture.gamma)
+      || !my_isfinite (capture.scan_exposure)
+      || !my_isfinite (capture.dark_point)
+      || !my_isfinite (capture.backlight_correction_black))
+    return archive_fail (error, "nonfinite v2 capture scalar");
+  if (!v2_valid_area (capture.scan_crop, false)
+      || !v2_valid_area (capture.image_area, true))
+    return archive_fail (error, "invalid v2 input crop/photographic area");
+  return true;
+}
+} // anonymous namespace
+
+/* Serialize selected capture inputs independently of old CSP keywords or
+   schema-v1 ZIP supplements. OUTPUT is unchanged on failure. */
+bool
+encode_parameter_json_v2_capture (const render_parameters &capture,
+                                  std::string *output, std::string *error)
+{
+  if (error)
+    error->clear ();
+  if (!output)
+    return archive_fail (error, "missing v2 capture output");
+  if (!v2_valid_capture (capture, error))
+    return false;
+  std::string text;
+  text.reserve (620);
+  text += "{\n  \"capture\": {\n    \"capture_type\": \"";
+  text += json_escape (render_parameters::capture_properties
+                           [(int)capture.capture_type].name);
+  text += "\",\n    \"demosaic\": \"";
+  text += json_escape (image_data::demosaic_names
+                           [(int)capture.demosaic].name);
+  text += "\",\n    \"gamma\": " + json_number (capture.gamma);
+  text += ",\n    \"scan_rotation_quarter_turns\": "
+          + std::to_string (capture.scan_rotation);
+  text += ",\n    \"scan_mirror\": ";
+  text += capture.scan_mirror ? "true" : "false";
+  text += ",\n    \"scan_crop\": "
+          + v2_optional_area_text (capture.scan_crop);
+  text += ",\n    \"image_area\": "
+          + v2_optional_area_text (capture.image_area);
+  text += ",\n    \"scan_exposure\": "
+          + json_number (capture.scan_exposure);
+  text += ",\n    \"dark_point\": " + json_number (capture.dark_point);
+  text += ",\n    \"backlight_correction_black\": "
+          + json_number (capture.backlight_correction_black);
+  text += "\n  }\n}\n";
+  if (text.size () > v2_max_capture_json_bytes)
+    return archive_fail (error, "v2 capture JSON exceeds size limit");
+  *output = std::move (text);
+  return true;
+}
+
+/* Decode a native capture component while preserving unrelated colour,
+   sharpness, reconstruction and grid controls in CAPTURE. No output changes
+   until the complete document has passed strict validation. */
+bool
+decode_parameter_json_v2_capture (const std::string &input,
+                                  render_parameters *capture,
+                                  std::string *error)
+{
+  if (error)
+    error->clear ();
+  if (!capture)
+    return archive_fail (error, "missing v2 capture destination");
+  if (input.size () > v2_max_capture_json_bytes || !valid_utf8 (input))
+    return archive_fail (error, "invalid v2 capture UTF-8/size");
+  json_parser parser (input.data (), input.data () + input.size ());
+  json_value root;
+  if (!parser.parse (&root))
+    return archive_fail (error, "invalid v2 capture JSON: " + parser.error ());
+  const json_value *object
+      = v2_required (root, "capture", json_value::kind::object, error);
+  if (!object)
+    return false;
+
+  render_parameters parsed = *capture;
+  int kind = 0, method = 0;
+  if (!v2_enum (*object, "capture_type",
+                v2_property_names (render_parameters::capture_properties,
+                                   render_parameters::capture_max),
+                &kind, error)
+      || !v2_enum (*object, "demosaic",
+                   v2_property_names (image_data::demosaic_names,
+                                      image_data::demosaic_max),
+                   &method, error)
+      || !v2_field_real (*object, "gamma", &parsed.gamma, error)
+      || !v2_field_int (*object, "scan_rotation_quarter_turns",
+                        &parsed.scan_rotation, error)
+      || !v2_field_bool (*object, "scan_mirror", &parsed.scan_mirror, error)
+      || !v2_field_real (*object, "scan_exposure",
+                         &parsed.scan_exposure, error)
+      || !v2_field_real (*object, "dark_point", &parsed.dark_point, error)
+      || !v2_field_real (*object, "backlight_correction_black",
+                         &parsed.backlight_correction_black, error))
+    return false;
+  parsed.capture_type = (enum render_parameters::capture_type)kind;
+  parsed.demosaic = (image_data::demosaicing_t)method;
+
+  const json_value *crop
+      = v2_required (*object, "scan_crop", json_value::kind::object, error);
+  const json_value *image
+      = v2_required (*object, "image_area", json_value::kind::object, error);
+  if (!crop || !image || !v2_parse_area (*crop, false, &parsed.scan_crop, error)
+      || !v2_parse_area (*image, true, &parsed.image_area, error)
+      || !v2_valid_capture (parsed, error))
+    return false;
+  *capture = std::move (parsed);
   return true;
 }
 
