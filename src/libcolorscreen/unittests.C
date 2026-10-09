@@ -10570,6 +10570,138 @@ test_stitch_tile_adjustment_grid ()
 }
 
 
+/* Validate native v2 capture scalars and both independent image bounds.
+   This codec is only a component; the full v2 writer must also save the
+   remaining correction, reconstruction, sharpness and colour sections. */
+static bool
+test_native_json_v2_capture ()
+{
+  render_parameters original;
+  original.capture_type
+      = render_parameters::capture_transparency_with_screen;
+  original.demosaic = image_data::demosaic_half;
+  original.gamma = 2.17f;
+  original.scan_rotation = 3;
+  original.scan_mirror = true;
+  original.scan_crop = int_image_area (12, 4, 1500, 900);
+  original.image_area = int_image_area (18, 8, 1400, 700);
+  original.scan_exposure = 1.2345f;
+  original.dark_point = 0.0035f;
+  original.backlight_correction_black = 0.0125f;
+
+  std::string json, error;
+  if (!encode_parameter_json_v2_capture (original, &json, &error)
+      || json.find ("\"capture\"") == std::string::npos
+      || json.find ("\"legacy_csp\"") != std::string::npos)
+    {
+      fprintf (stderr, "Native v2 capture encoding failed: %s\n",
+               error.c_str ());
+      return false;
+    }
+
+  render_parameters decoded;
+  decoded.brightness = 1.625f;
+  decoded.mix_red = 0.75f;
+  if (!decode_parameter_json_v2_capture (json, &decoded, &error))
+    {
+      fprintf (stderr, "Native v2 capture decoding failed: %s\n",
+               error.c_str ());
+      return false;
+    }
+  if (decoded.capture_type != original.capture_type
+      || decoded.demosaic != original.demosaic
+      || decoded.gamma != original.gamma
+      || decoded.scan_rotation != original.scan_rotation
+      || decoded.scan_mirror != original.scan_mirror
+      || !(decoded.scan_crop == original.scan_crop)
+      || !(decoded.image_area == original.image_area)
+      || decoded.scan_exposure != original.scan_exposure
+      || decoded.dark_point != original.dark_point
+      || decoded.backlight_correction_black
+             != original.backlight_correction_black
+      || decoded.brightness != 1.625f || decoded.mix_red != 0.75f)
+    {
+      fprintf (stderr, "Native v2 capture roundtrip changed state\n");
+      return false;
+    }
+
+  std::string second;
+  if (!encode_parameter_json_v2_capture (decoded, &second, &error)
+      || second != json)
+    return false;
+
+  /* Invalid input must not mutate the destination, including unrelated
+     processing controls. Require strict typed integer and crop semantics. */
+  render_parameters unchanged = decoded;
+  auto invalid = json;
+  auto replace_one = [] (std::string &text, const std::string &before,
+                         const std::string &after) -> bool
+    {
+      size_t at = text.find (before);
+      if (at == std::string::npos)
+        return false;
+      text.replace (at, before.size (), after);
+      return true;
+    };
+  for (const auto &substitution :
+       {std::pair<std::string, std::string> {
+            "\"scan_rotation_quarter_turns\": 3",
+            "\"scan_rotation_quarter_turns\": 3.5"},
+        {"\"scan_rotation_quarter_turns\": 3",
+         "\"scan_rotation_quarter_turns\": 2147483648"},
+        {"\"image_area\": {\"enabled\": true, \"rect\": [18, 8, 1400, 700]}",
+         "\"image_area\": {\"enabled\": true, \"rect\": [-1, 8, 1400, 700]}"},
+        {"\"scan_crop\": {\"enabled\": true, \"rect\": [12, 4, 1500, 900]}",
+         "\"scan_crop\": {\"enabled\": true, \"rect\": [2147483640, 4, 1500, 900]}"},
+        {"\"scan_crop\": {\"enabled\": true, \"rect\": [12, 4, 1500, 900]}",
+         "\"scan_crop\": {\"enabled\": false, \"rect\": [12, 4, 1500, 900]}"},
+        {"\"gamma\": 2.1700000762939453", "\"gamma\": 1e999"}})
+    {
+      invalid = json;
+      if (!replace_one (invalid, substitution.first, substitution.second))
+        {
+          fprintf (stderr, "Invalid-v2 capture test replacement not found\n");
+          return false;
+        }
+      if (decode_parameter_json_v2_capture (invalid, &decoded, &error)
+          || decoded.gamma != unchanged.gamma
+          || decoded.scan_rotation != unchanged.scan_rotation
+          || !(decoded.scan_crop == unchanged.scan_crop)
+          || !(decoded.image_area == unchanged.image_area)
+          || decoded.brightness != unchanged.brightness)
+        {
+          fprintf (stderr, "Invalid v2 capture changed live state\n");
+          return false;
+        }
+    }
+
+  invalid = json;
+  if (!replace_one (invalid, "\"demosaic\": \"half\"",
+                    "\"demosaic\": \"unknown-algorithm\"")
+      || decode_parameter_json_v2_capture (invalid, &decoded, &error))
+    return false;
+
+  /* Disabled bounds have an explicit stable canonical representation. */
+  original.scan_crop = int_optional_image_area ();
+  original.image_area = int_optional_image_area ();
+  original.scan_rotation = -1;
+  if (!encode_parameter_json_v2_capture (original, &json, &error)
+      || json.find ("\"enabled\": false, \"rect\": [0, 0, 0, 0]")
+             == std::string::npos
+      || !decode_parameter_json_v2_capture (json, &decoded, &error)
+      || decoded.scan_rotation != -1
+      || !(decoded.scan_crop == original.scan_crop)
+      || !(decoded.image_area == original.image_area))
+    return false;
+
+  original.scan_exposure = my_quiet_nan<luminosity_t> ();
+  std::string untouched = "unchanged";
+  if (encode_parameter_json_v2_capture (original, &untouched, &error)
+      || untouched != "unchanged")
+    return false;
+  return true;
+}
+
 /* Round-trip v2 registration directly through JSON, without the legacy CSP
    parser or ZIP container. Include enough points to exceed the small v1
    manifest's JSON node budget. */
@@ -10884,6 +11016,8 @@ main (int argc, char **argv)
     { "mesh_inversion", "mesh inversion tests", [] () { return test_mesh_inversion (); } },
     { "cow_points", "cow points tests", [] () { return test_cow_points (); } },
     { "image_area", "image area tests", [] () { return test_image_area (); } },
+    { "json_v2_capture", "native JSON schema-v2 capture codec",
+      [] () { return test_native_json_v2_capture (); } },
     { "json_v2_registration", "native JSON schema-v2 registration codec",
       [] () { return test_native_json_v2_registration (); } },
     { "stitch_tile_grid", "stitch tile adjustment grid persistence tests",
