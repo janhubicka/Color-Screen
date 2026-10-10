@@ -56,8 +56,11 @@ platform/compatibility gates pass. The Qt editor now recognizes JSON v2 by
 content, records its physical file identity, and offers an explicit **JSON
 parameters v2** Save-As filter alongside the v1 ZIP and legacy text filters.
 The CLI `adjust-par` can explicitly convert ZIP v1 or legacy .par to native
-JSON using `--json-v2 --out path.cspar`, preserves native JSON on in-place
-rewrites, and can explicitly downgrade to v1 with `--zip-v1`. These paths
+JSON using `--json-v2 --out path.cspar`, preserves the input format on
+in-place rewrites, and can explicitly downgrade to v1 with `--zip-v1`.
+Implicit `--out` to an existing `.cspar` additionally preserves the
+**destination's** actual ZIP-v1/JSON-v2 encoding by content, regardless of
+the source file's encoding, unless the caller selects an explicit conversion. These paths
 retain imported Qt profile spots; they do not silently discard unknown
 legacy trailing metadata. Private crash-recovery snapshots now contain complete native JSON v2,
 while their separate metadata preserves the user's original JSON-v2, ZIP-v1
