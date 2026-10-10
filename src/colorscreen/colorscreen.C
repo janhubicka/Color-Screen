@@ -7,6 +7,9 @@
 #include <string>
 #include <string_view>
 #include <charconv>
+#include <sstream>
+#include <iomanip>
+#include <locale>
 #include <unistd.h>
 #include <sys/time.h>
 #ifdef _OPENMP
@@ -103,6 +106,95 @@ windows_utf8_argv (std::vector<std::string> *storage,
 }
 #endif
 
+/* Convert a recognized, complete GUI metadata postamble to native v2 spot
+   coordinates without accidentally dropping an extension we cannot decode.
+   Old CLI round trips keep all unknown postamble bytes unchanged; conversion
+   to v2 is intentionally stricter because v2 has no opaque legacy mirror. */
+static bool
+parse_cli_profile_spot_postamble (const std::string &trailing,
+                                 std::vector<point_t> *spots,
+                                 std::string *error)
+{
+  if (!spots)
+    return false;
+  std::istringstream source (trailing);
+  source.imbue (std::locale::classic ());
+  std::vector<point_t> parsed;
+  std::string line;
+  bool started = false, finished = false;
+  while (std::getline (source, line))
+    {
+      std::istringstream item (line);
+      item.imbue (std::locale::classic ());
+      std::string keyword;
+      if (!(item >> keyword))
+        continue;
+      if (finished)
+        {
+          if (error)
+            *error = "unexpected data after Qt profile metadata end";
+          return false;
+        }
+      if (!started)
+        {
+          int version;
+          if (keyword != "colorscreen_qt_metadata_version:"
+              || !(item >> version) || version != 1
+              || !(item >> std::ws).eof ())
+            {
+              if (error)
+                *error = "cannot convert unrecognized trailing metadata to JSON v2";
+              return false;
+            }
+          started = true;
+          continue;
+        }
+      if (keyword == "colorscreen_qt_metadata_end")
+        {
+          if (!(item >> std::ws).eof ())
+            {
+              if (error)
+                *error = "invalid Qt profile metadata terminator";
+              return false;
+            }
+          finished = true;
+          continue;
+        }
+      double x = 0, y = 0;
+      if (keyword != "profile_spot:" || !(item >> x >> y)
+          || !(item >> std::ws).eof ()
+          || !my_isfinite (x) || !my_isfinite (y))
+        {
+          if (error)
+            *error = "invalid Qt profile spot metadata for JSON v2 conversion";
+          return false;
+        }
+      parsed.push_back ({x, y});
+    }
+  if (started && !finished)
+    {
+      if (error)
+        *error = "truncated Qt profile spot metadata";
+      return false;
+    }
+  *spots = std::move (parsed);
+  return true;
+}
+
+/* Write the portable Qt-only profile-spots postamble when explicitly
+   converting native JSON back to an old ZIP archive or .par output. */
+static std::string
+serialize_cli_profile_spot_postamble (const std::vector<point_t> &spots)
+{
+  std::ostringstream output;
+  output.imbue (std::locale::classic ());
+  output << std::setprecision (17) << "colorscreen_qt_metadata_version: 1\n";
+  for (point_t p : spots)
+    output << "profile_spot: " << p.x << " " << p.y << "\n";
+  output << "colorscreen_qt_metadata_end\n";
+  return output.str ();
+}
+
 /* Load one user-supplied parameter filename through the shared legacy/archive
    dispatch, then parse the ordinary CSP payload.  This keeps every CLI command
    on the same content-based format semantics as the Qt frontend.  */
@@ -112,8 +204,43 @@ load_parameter_filename (const char *filename, scr_to_img_parameters *param,
                          render_parameters *rparam,
                          solver_parameters *sparam, std::string *error,
                          bool *is_archive = nullptr,
-                         std::string *trailing_payload = nullptr)
+                         std::string *trailing_payload = nullptr,
+                         bool *is_json_v2 = nullptr,
+                         std::vector<point_t> *profile_spots = nullptr)
 {
+  // Native JSON files share .cspar with ZIP v1. Dispatch by content instead
+  // of passing JSON text to load_csp's legacy FILE* parser.
+  if (parameter_json_v2_signature_p (filename))
+    {
+      scr_to_img_parameters g;
+      scr_detect_parameters d;
+      render_parameters r;
+      solver_parameters solver;
+      std::vector<point_t> spots;
+      if (!read_parameter_json_v2_file (
+              filename, &g, &d, &r, &solver, &spots, error))
+        return false;
+      if (param)
+        *param = std::move (g);
+      if (dparam)
+        *dparam = std::move (d);
+      if (rparam)
+        *rparam = std::move (r);
+      if (sparam)
+        *sparam = std::move (solver);
+      if (profile_spots)
+        *profile_spots = std::move (spots);
+      if (is_archive)
+        *is_archive = true;
+      if (is_json_v2)
+        *is_json_v2 = true;
+      if (trailing_payload)
+        trailing_payload->clear ();
+      if (error)
+        error->clear ();
+      return true;
+    }
+
   std::string open_error;
   bool archive = false;
   parameter_archive_manifest archive_manifest;
@@ -177,6 +304,10 @@ load_parameter_filename (const char *filename, scr_to_img_parameters *param,
 
   if (is_archive)
     *is_archive = archive;
+  if (is_json_v2)
+    *is_json_v2 = false;
+  if (profile_spots)
+    profile_spots->clear ();
   if (trailing_payload)
     *trailing_payload = std::move (trailing);
   if (error)
