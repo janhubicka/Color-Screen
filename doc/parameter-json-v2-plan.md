@@ -55,8 +55,10 @@ The CLI `adjust-par` can explicitly convert ZIP v1 or legacy .par to native
 JSON using `--json-v2 --out path.cspar`, preserves native JSON on in-place
 rewrites, and can explicitly downgrade to v1 with `--zip-v1`. These paths
 retain imported Qt profile spots; they do not silently discard unknown
-legacy trailing metadata. Recovery snapshots still use ZIP v1 while retaining
-the user's JSON-v2 target identity in metadata. They operate **directly
+legacy trailing metadata. Private crash-recovery snapshots now contain complete native JSON v2,
+while their separate metadata preserves the user's original JSON-v2, ZIP-v1
+or legacy target identity. Recovery can still read previous ZIP-v1 and
+legacy .par snapshots without a silent fallback if a newer .cspar is corrupt. They operate **directly
 on C++ state** without using `save_csp` or `load_csp`, and emit component
 objects for a future complete document. No component is a standalone v2
 `.cspar` file.
@@ -197,8 +199,9 @@ or Save As selection; switch new projects to v2 only after the gates below.
 - [x] Add explicit GUI native JSON v2 Save As/Open and format-preserving
       ordinary Save; opt-in CLI adjust-par conversion, native replay and
       legacy ZIP interoperability, with a dedicated GUI/CLI smoke test.
-- [ ] Migrate private recovery snapshot output itself to native JSON v2,
-      keeping v1 ZIP and legacy .par recovery readers.
+- [x] Save complete native JSON v2 private recovery snapshots, preserving
+      independent user-target metadata and reading old ZIP-v1/.par snapshots.
+      Crash-recovery smoke verifies state restoration and no-stale-fallback.
 - [ ] Add explicit conversion from legacy and ZIP v1; preserve existing
       target formats and old-file loaders.
 - [ ] Verify all field families and cross-format round trips, huge point sets,
