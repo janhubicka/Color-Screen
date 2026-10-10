@@ -186,6 +186,11 @@ parse_cli_profile_spot_postamble (const std::string &trailing,
 static std::string
 serialize_cli_profile_spot_postamble (const std::vector<point_t> &spots)
 {
+  /* A legacy parameter file without Qt profiling points has no mandatory
+     GUI postamble. Omitting the empty marker gives byte-identical normalized
+     legacy round trips through native JSON v2, without inventing metadata. */
+  if (spots.empty ())
+    return {};
   std::ostringstream output;
   output.imbue (std::locale::classic ());
   output << std::setprecision (17) << "colorscreen_qt_metadata_version: 1\n";
