@@ -1097,8 +1097,10 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
     std::vector<colorscreen::color_match> spotResults;
     QString loadedPath;
     bool loadedArchive = false;
+    bool loadedJsonV2 = false;
     QString suggestedPath;
     bool suggestedArchive = false;
+    bool suggestedJsonV2 = false;
     std::optional<ParameterState> baseline;
   };
   auto sidecarStaging = std::make_shared<SidecarLoadStaging>();
@@ -1245,9 +1247,11 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
                           std::move(sidecarStaging->spotResults);
                       m_parameterFile.setLoaded(
                           sidecarStaging->loadedPath,
-                          sidecarStaging->loadedArchive
-                              ? ParameterFileState::Format::Archive
-                              : ParameterFileState::Format::LegacyCsp);
+                          sidecarStaging->loadedJsonV2
+                              ? ParameterFileState::Format::JsonV2
+                              : (sidecarStaging->loadedArchive
+                                     ? ParameterFileState::Format::Archive
+                                     : ParameterFileState::Format::LegacyCsp));
                       addToRecentParams(sidecarStaging->loadedPath);
 
                       if (colorscreen::screen_geometry_configured_p(
@@ -1257,9 +1261,11 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
                     } else {
                       m_parameterFile.setSuggested(
                           sidecarStaging->loadedPath,
-                          sidecarStaging->loadedArchive
-                              ? ParameterFileState::Format::Archive
-                              : ParameterFileState::Format::LegacyCsp);
+                          sidecarStaging->loadedJsonV2
+                              ? ParameterFileState::Format::JsonV2
+                              : (sidecarStaging->loadedArchive
+                                     ? ParameterFileState::Format::Archive
+                                     : ParameterFileState::Format::LegacyCsp));
                       inspectorStatusBar()->showMessage(
                           tr("Image loaded; sidecar parameters were not applied "
                              "because settings changed while the image was loading."),
@@ -1268,9 +1274,11 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
                   } else if (!sidecarStaging->suggestedPath.isEmpty()) {
                     m_parameterFile.setSuggested(
                         sidecarStaging->suggestedPath,
-                        sidecarStaging->suggestedArchive
-                            ? ParameterFileState::Format::Archive
-                            : ParameterFileState::Format::LegacyCsp);
+                        sidecarStaging->suggestedJsonV2
+                            ? ParameterFileState::Format::JsonV2
+                            : (sidecarStaging->suggestedArchive
+                                   ? ParameterFileState::Format::Archive
+                                   : ParameterFileState::Format::LegacyCsp));
                   }
                 }
 
@@ -1527,27 +1535,35 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
               ParameterState sidecarState;
               std::vector<colorscreen::color_match> sidecarSpotResults;
               bool sidecarArchive = false;
+              bool sidecarJsonV2 = false;
               QString loadError;
               if (!loadParameterPayload(sidecarFile, &sidecarState,
                                         &sidecarSpotResults, &sidecarArchive,
-                                        &loadError)) {
+                                        &loadError, &sidecarJsonV2)) {
                 // Parsing failed, so the named sidecar is at most a later
                 // Save-As suggestion. Publish that suggestion only if the
                 // image itself opens successfully.
                 sidecarStaging->suggestedPath = sidecarFile;
                 sidecarStaging->suggestedArchive = haveArchive;
+                sidecarStaging->suggestedJsonV2 =
+                    haveArchive && colorscreen::parameter_json_v2_signature_p(
+                                       sidecarFile.toUtf8().constData());
                 showParameterLoadFailure(this, loadError);
               } else {
                 sidecarStaging->state = std::move(sidecarState);
                 sidecarStaging->spotResults = std::move(sidecarSpotResults);
                 sidecarStaging->loadedPath = sidecarFile;
                 sidecarStaging->loadedArchive = sidecarArchive;
+                sidecarStaging->loadedJsonV2 = sidecarJsonV2;
               }
             } else {
               // Declining the optional question retains the chosen existing
               // sidecar only as a format-aware Save-As suggestion.
               sidecarStaging->suggestedPath = sidecarFile;
               sidecarStaging->suggestedArchive = haveArchive;
+              sidecarStaging->suggestedJsonV2 =
+                  haveArchive && colorscreen::parameter_json_v2_signature_p(
+                                     sidecarFile.toUtf8().constData());
             }
 
             startImageRead();
@@ -2007,9 +2023,10 @@ bool MainWindow::loadParameterFile(const QString &fileName) {
   ParameterState loadedState;
   std::vector<colorscreen::color_match> loadedSpotResults;
   bool loadedArchive = false;
+  bool loadedJsonV2 = false;
   QString loadError;
   if (!loadParameterPayload(fileName, &loadedState, &loadedSpotResults,
-                            &loadedArchive, &loadError)) {
+                            &loadedArchive, &loadError, &loadedJsonV2)) {
     showParameterLoadFailure(this, loadError);
     return false;
   }
@@ -2054,8 +2071,9 @@ bool MainWindow::loadParameterFile(const QString &fileName) {
   const QString absoluteFileName = QFileInfo(fileName).absoluteFilePath();
   m_parameterFile.setLoaded(
       absoluteFileName,
-      loadedArchive ? ParameterFileState::Format::Archive
-                    : ParameterFileState::Format::LegacyCsp);
+      loadedJsonV2 ? ParameterFileState::Format::JsonV2
+                   : (loadedArchive ? ParameterFileState::Format::Archive
+                                    : ParameterFileState::Format::LegacyCsp));
   rememberFileDialogDirectory(QStringLiteral("lastParameterDir"),
                               absoluteFileName);
 
