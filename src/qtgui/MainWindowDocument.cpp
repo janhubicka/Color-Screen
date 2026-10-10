@@ -1840,12 +1840,14 @@ void MainWindow::saveRecoveryState() {
   const QDir directory(m_recoveryDir);
   const QString paramsPath =
       directory.filePath(QStringLiteral("recovery_params.cspar"));
-  const bool hasRgb = m_scan->has_rgb();
   QString paramsError;
+  // A recovery snapshot must contain every persistent input even if the
+  // user's normal target remains ZIP-v1 or .par. The complete native JSON v2
+  // codec and existing atomic staging preserve that invariant without a
+  // second, lossy CSP representation.
   if (!saveParameterPayloadAtomically(
-          paramsPath, true, m_scrToImgParams,
-          hasRgb ? &m_detectParams : nullptr, m_rparams, m_solverParams,
-          m_profileSpots, &paramsError)) {
+          paramsPath, false, m_scrToImgParams, &m_detectParams, m_rparams,
+          m_solverParams, m_profileSpots, &paramsError, true)) {
     // Preserve the previous usable recovery snapshot and its image/target
     // metadata rather than publishing metadata for a snapshot we did not save.
     qWarning() << "Could not atomically save recovery parameters to" << paramsPath
@@ -1853,8 +1855,8 @@ void MainWindow::saveRecoveryState() {
     return;
   }
 
-  // A newly complete archive supersedes the old per-document legacy snapshot.
-  // Remove it only after archive commit succeeds, so an interrupted migration
+  // A newly complete native JSON snapshot supersedes the old .par recovery.
+  // Remove it only after a successful atomic commit, so an interrupted migration
   // can still restore the older snapshot.
   const QString oldParamsPath =
       directory.filePath(QStringLiteral("recovery_params.par"));
@@ -1887,9 +1889,9 @@ void MainWindow::saveRecoveryState() {
 
 /** Restore this document from its private recovery payload.
 
-   Prefer complete .cspar snapshots, falling back to old .par snapshots only
-   when no archive exists. Parse transactionally, preserve structured render
-   values, and keep invalid/incomplete recoveries dirty. Returns false only
+   Prefer complete native JSON or legacy ZIP .cspar snapshots, falling back
+   to old .par snapshots only when no .cspar exists. Parse transactionally,
+   preserve structured render state, and keep invalid recoveries dirty. Returns false only
    when the directory contains no usable recovery reference. */
 bool MainWindow::restoreRecoveryState() {
   if (m_recoveryDir.isEmpty())
@@ -1923,8 +1925,8 @@ bool MainWindow::restoreRecoveryState() {
   if (QFile::exists(paramsPath)) {
     // A present archive is authoritative. Never silently fall back to an
     // obsolete .par if the archive is corrupt: that would recover stale state.
-    // The shared loader parses into private defaults, validates the full ZIP
-    // manifest and Qt postamble, then applies required structured render state.
+    // The shared loader validates native JSON v2 or the old ZIP-v1
+    // manifest + Qt postamble into private state before publication.
     ParameterState recoveredState;
     std::vector<colorscreen::color_match> recoveredSpotResults;
     bool recoveredArchive = false;
