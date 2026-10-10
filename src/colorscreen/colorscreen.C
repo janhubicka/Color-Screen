@@ -313,7 +313,7 @@ load_parameter_filename (const char *filename, scr_to_img_parameters *param,
      to a rewritten .par while JSON v2, which has no opaque CSP mirror,
      correctly omits it. Keep any actual trailing extension bytes verbatim,
      even if preceded by whitespace. */
-  if (trailing.find_first_not_of (" \\t\\r\\n\\f\\v")
+  if (trailing.find_first_not_of (" \t\r\n\f\v")
       == std::string::npos)
     trailing.clear ();
 
