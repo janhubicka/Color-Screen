@@ -3806,9 +3806,6 @@ void MainWindow::updateWorkflowSummary() {
   const bool screenDetectionAvailable =
       colorDetection && m_scan && m_scan->has_rgb() &&
       colorscreen::screen_present_p(type);
-  const ImageWidget *workflowImage = inspectorImageWidget();
-  const bool registrationPointsVisible =
-      workflowImage && workflowImage->registrationPointsVisible();
 
   QString captureName = tr("Unknown");
   const int captureIndex = static_cast<int>(capture);
