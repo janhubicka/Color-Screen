@@ -379,12 +379,13 @@ Remaining pre-beta rollout sequence (updated decision):
 2. Complete **native plain JSON v2** serialization of every persistent
    C++ and Qt parameter, as specified in
    [parameter-json-v2-plan.md](parameter-json-v2-plan.md).
-   The registration component is only the first building block, not a
-   standalone v2 file. Account for all legacy keys and structured-only
-   fields in the tracked migration inventory.
-3. Integrate full v2 into CLI, GUI, Save As and recovery after
+   The seven direct codecs and complete v2 document/file writer are now
+   implemented, with 121 legacy keys and 10 supplementary fields classified.
+   Independently audit all nested C++/Qt state before declaring the
+   migration complete.
+3. Validate the opt-in CLI, GUI, Save As and recovery integration with
    native round-trip, malformed-input, Unicode-path, atomic-save,
-   full-platform and sanitizer coverage passes. Preserve loaded v1/legacy
+   full-platform and sanitizer coverage. Preserve loaded v1/legacy
    format identity until explicit conversion.
 4. Switch **new** saves to v2 only after full coverage passes; keep
    the product in 2.0alpha until GUI and format field testing completes.
