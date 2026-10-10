@@ -484,6 +484,31 @@ void MainWindow::cancelStaleRegistrationDiscovery(
         3000);
 }
 
+/** Publish an accepted geometry fit from progressive registration discovery.
+
+    Successful solving is provenance even if the result is numerically
+    unchanged. Keep both the exact accepted state and its source scan so
+    Workflow does not suggest fitting again after Detect screen. */
+void MainWindow::acceptRegistrationDiscoveryGeometry(
+    const colorscreen::scr_to_img_parameters &geometry,
+    const QString &description) {
+  const ParameterState oldState = getCurrentState();
+  ParameterState newState = oldState;
+  newState.scrToImg.merge_solver_solution(geometry);
+  if (newState != oldState) {
+    // Updating the expected state before pushing Undo prevents the new fit
+    // from cancelling the progressive registration request as an outside edit.
+    m_registrationDiscovery.expectedState = newState;
+    changeParameters(newState, description);
+  }
+  m_geometryFit.baseline = getCurrentState();
+  m_geometryFit.acceptedScan = m_scan;
+  m_geometryFit.failureInputs.reset();
+  m_geometryFit.failureScan.reset();
+  updateScreenCoordinateToolPresentation();
+  updateWorkflowSummary();
+}
+
 /** Launch one progressive point/geometry discovery request over AREA.
 
     Worker-owned batches advance EXPECTEDSTATE before they are applied through
@@ -579,18 +604,7 @@ void MainWindow::startRegistrationDiscovery(
           return;
         }
 
-        const ParameterState oldState = getCurrentState();
-        ParameterState newState = oldState;
-        newState.scrToImg.merge_solver_solution(result);
-        if (newState == oldState)
-          return;
-
-        m_registrationDiscovery.expectedState = newState;
-        changeParameters(newState, geometryDescription);
-        m_geometryFit.baseline = getCurrentState();
-        m_geometryFit.failureInputs.reset();
-        updateScreenCoordinateToolPresentation();
-        updateWorkflowSummary();
+        acceptRegistrationDiscoveryGeometry(result, geometryDescription);
       });
 
   connect(

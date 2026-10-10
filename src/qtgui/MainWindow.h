@@ -941,6 +941,13 @@ private slots:
       bool screenAutodetection, bool allowRegistrationBootstrap,
       bool selectedArea);
 
+  /** Accept fitted GEOMETRY from the current registration-discovery worker.
+      Publish session provenance even when the mapping is unchanged; DESCRIPTION
+      is used for Undo only when the geometry actually changes. */
+  void acceptRegistrationDiscoveryGeometry(
+      const colorscreen::scr_to_img_parameters &geometry,
+      const QString &description);
+
   /** Return true while GENERATION/PROGRESS own the evolving registration
       request and the live document still equals its expected accepted state. */
   bool registrationDiscoveryRequestCurrent(
