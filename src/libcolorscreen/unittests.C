@@ -10825,6 +10825,57 @@ test_native_json_v2_document ()
         return false;
     }
 
+  /* Unexpected but syntactically valid members are dangerous: if decoded as
+     optional extensions they would silently disappear on the next Save. Test
+     the root, several nested parameter sections and variable-length records
+     independently, including an MTF measurement and a stitched tile. */
+  for (const auto &substitution :
+       {std::pair<std::string, std::string> {
+            "\"schema_version\": 2",
+            "\"schema_version\": 2, \"future_property\": 17"},
+        {"\"capture_type\": \"",
+         "\"unknown_capture_setting\": true, \"capture_type\": \""},
+        {"\"scan_crop\": {",
+         "\"scan_crop\": {\"future_crop_value\": 1, "},
+        {"\"contact_copy\": {",
+         "\"contact_copy\": {\"future_emulsion_model\": 7, "},
+        {"\"mesh\": {",
+         "\"mesh\": {\"future_mesh_mapping\": 3, "},
+        {"\"image\": [",
+         "\"future_point_metadata\": 5, \"image\": ["},
+        {"\"screen_denoise\": {",
+         "\"screen_denoise\": {\"future_filter_setting\": 9, "},
+        {"\"edge_quality\": [",
+         "\"unrecognized_mtf_quality\": 8, \"edge_quality\": ["},
+        {"\"tone_curve\": {",
+         "\"tone_curve\": {\"unrecognized_curve_knob\": 0, "},
+        {"\"backlight\": {",
+         "\"backlight\": {\"future_backlight_model\": 1, "},
+        {"\"scanner_blur\": {",
+         "\"scanner_blur\": {\"future_blur_mode\": 1, "},
+        {"\"correction_grids\": {",
+         "\"correction_grids\": {\"future_tile_layout\": 7, "}})
+    {
+      std::string bad = first;
+      const size_t pos = bad.find (substitution.first);
+      if (pos == std::string::npos)
+        {
+          fprintf (stderr,
+                   "Native v2 unknown-field test insertion not found: %s\n",
+                   substitution.first.c_str ());
+          return false;
+        }
+      bad.replace (pos, substitution.first.size (), substitution.second);
+      if (!reject_unchanged (bad)
+          || error.find ("unsupported v2 field") == std::string::npos)
+        {
+          fprintf (stderr,
+                   "Native v2 unknown field was accepted/dropped: %s (%s)\n",
+                   substitution.first.c_str (), error.c_str ());
+          return false;
+        }
+    }
+
   /* Unknown required features are not optional metadata and cannot be
      silently dropped by an older v2 reader. */
   std::string extra = first;
