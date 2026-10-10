@@ -423,13 +423,9 @@ save_parameter_filename (const char *filename, bool archive,
           filename, *param, *dparam, *rparam, *sparam,
           *profile_spots, error);
     }
-  if (!archive && rparam && rparam->image_area.set)
-    {
-      if (error)
-        *error = "Legacy .par cannot preserve photographic image area; "
-                 "choose .cspar or clear the inner image bounds";
-      return false;
-    }
+  if (!archive
+      && !legacy_csp_can_represent_parameters (param, rparam, error))
+    return false;
   std::string payload;
   if (!serialize_parameter_payload (param, dparam, rparam, sparam, trailing,
                                     &payload, error))
