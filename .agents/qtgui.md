@@ -20,9 +20,15 @@ weights and whether nonzero dark offsets are configured. Derive this only from
 the current `image_data` capabilities and `render_parameters`; never cache a
 second authoritative image-layer choice in the GUI. Dynamic Workflow labels
 must keep the horizontal `QSizePolicy::Ignored` contract so changing text
-cannot move the main image/inspector splitter. The `Next:` paragraph uses the same typography and tight line spacing as the
-preceding state summary. Its optional **Open stage** button is managed in a
-separate, bottom-right-aligned row *under* the wrapped text. Show this action
+cannot move the main image/inspector splitter. The status and `Next:`
+paragraphs use zero-margin rich-text blocks with explicit 100% line-height;
+both labels have `QSizePolicy::Maximum` vertically and `Ignored` horizontally
+so surplus inspector height does not stretch wrapped Next lines. **Bold only
+the captions** (Process, Image layer, Registration, Sharpening, Capture MTF,
+Profile, Next), leaving values at normal weight. HTML-escape document-derived
+values before adding markup, and keep machine-readable plain strings as the
+source of truth (no saved HTML state). The optional **Open stage** button stays
+in a separate, bottom-right-aligned row *under* the wrapped text. Show this action
 only when the recommendation has one unambiguous inspector target. Store the
 target as a stable `MultiLineTabWidget` semantic key, never as a numeric tab
 index. Clicking it is explicit user navigation and updates

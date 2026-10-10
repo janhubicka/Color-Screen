@@ -41,6 +41,7 @@
 #include <QString>
 #include <QStringList>
 #include <QTemporaryDir>
+#include <QTextDocumentFragment>
 #include <QTimer>
 #include <QThread>
 #include <QToolBar>
@@ -59,6 +60,14 @@
 namespace {
 
 constexpr int workspaceChurnFailure = 18;
+
+/** The Workflow uses HTML only for caption emphasis and tight leading.
+    Tests should inspect the *rendered words*, not HTML implementation tags. */
+QString workflowPlainText(const QLabel *label) {
+  return label
+             ? QTextDocumentFragment::fromHtml(label->text()).toPlainText()
+             : QString();
+}
 
 /** Live objects, document-local processing-state sentinels, and completion
     callback shared by the staged smoke test. */
@@ -942,12 +951,12 @@ const bool expectedNativeImageLayer =
      !first->documentStateSnapshot().rparams.ignore_infrared);
 const bool imageLayerSummaryMatches =
     imageLayerSummary &&
-    imageLayerSummary->text().startsWith(QStringLiteral("Image layer:")) &&
+    workflowPlainText(imageLayerSummary).startsWith(QStringLiteral("Image layer:")) &&
     (expectedNativeImageLayer
-         ? imageLayerSummary->text().contains(
+         ? workflowPlainText(imageLayerSummary).contains(
                QStringLiteral("native grayscale/IR"))
          : (!first->sharedImageData()->has_rgb() ||
-            imageLayerSummary->text().contains(QStringLiteral("simulated RGB"))));
+            workflowPlainText(imageLayerSummary).contains(QStringLiteral("simulated RGB"))));
 
 if (!workflowSummary || !workflowToggle || !workflowStages ||
     !processSummary || !imageLayerSummary || !registrationSummary ||
@@ -958,19 +967,19 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
     !workflowStages->text().contains(QStringLiteral("Sharpen")) ||
     !workflowStages->text().contains(QStringLiteral("Image layer")) ||
     !workflowStages->text().contains(QStringLiteral("Register")) ||
-    !processSummary->text().startsWith(QStringLiteral("Process:")) ||
-    !registrationSummary->text().startsWith(
+    !workflowPlainText(processSummary).startsWith(QStringLiteral("Process:")) ||
+    !workflowPlainText(registrationSummary).startsWith(
         QStringLiteral("Registration:")) ||
-    !calibrationSummary->text().contains(QStringLiteral("Sharpening:")) ||
-    !calibrationSummary->text().contains(
+    !workflowPlainText(calibrationSummary).contains(QStringLiteral("Sharpening:")) ||
+    !workflowPlainText(calibrationSummary).contains(
         QStringLiteral("Capture MTF:")) ||
-    calibrationSummary->text().contains(QStringLiteral("Profile:")) ||
+    workflowPlainText(calibrationSummary).contains(QStringLiteral("Profile:")) ||
     profileSummary->property("workflowApplicable").toBool() !=
         profileApplicable ||
     (profileApplicable
-         ? !profileSummary->text().startsWith(QStringLiteral("Profile:"))
-         : !profileSummary->text().isEmpty()) ||
-    !nextStepSummary->text().startsWith(QStringLiteral("Next:")) ||
+         ? !workflowPlainText(profileSummary).startsWith(QStringLiteral("Profile:"))
+         : !workflowPlainText(profileSummary).isEmpty()) ||
+    !workflowPlainText(nextStepSummary).startsWith(QStringLiteral("Next:")) ||
     !nextWorkflowBlock || !openWorkflowStageButton ||
     nextStepSummary->parentWidget() != nextWorkflowBlock ||
     openWorkflowStageButton->parentWidget() != nextWorkflowBlock ||
@@ -982,15 +991,34 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
     nextWorkflowBlock->sizePolicy().verticalPolicy() != QSizePolicy::Maximum ||
     nextStepSummary->font() != processSummary->font() ||
     !captureChoicesCompatible ||
+    // Keep the two textual paragraphs compact, with real bold captions and
+    // normal-weight values; never rely on a globally bold QLabel font.
+    processSummary->textFormat() != Qt::RichText ||
+    nextStepSummary->textFormat() != Qt::RichText ||
+    nextStepSummary->sizePolicy().verticalPolicy() != QSizePolicy::Maximum ||
+    processSummary->sizePolicy().verticalPolicy() != QSizePolicy::Maximum ||
+    !processSummary->text().contains(QStringLiteral("<b>Process:</b>")) ||
+    !imageLayerSummary->text().contains(
+        QStringLiteral("<b>Image layer:</b>")) ||
+    !registrationSummary->text().contains(
+        QStringLiteral("<b>Registration:</b>")) ||
+    !calibrationSummary->text().contains(
+        QStringLiteral("<b>Sharpening:</b>")) ||
+    !calibrationSummary->text().contains(
+        QStringLiteral("<b>Capture MTF:</b>")) ||
+    !nextStepSummary->text().contains(QStringLiteral("<b>Next:</b>")) ||
+    !nextStepSummary->text().contains(
+        QStringLiteral("line-height:100%")) ||
+    processSummary->font().weight() != QFont::Normal ||
+    nextStepSummary->font().weight() != QFont::Normal ||
     captureTypeCombo->findData(
         (int)colorscreen::render_parameters::capture_unknown) < 0 ||
     captureTypeCombo->findData(
         (int)colorscreen::render_parameters::capture_plain_image) < 0 ||
-    processSummary->font().weight() < QFont::DemiBold ||
-    imageLayerSummary->font().weight() < QFont::DemiBold ||
-    registrationSummary->font().weight() < QFont::DemiBold ||
-    calibrationSummary->font().weight() < QFont::DemiBold ||
-    profileSummary->font().weight() < QFont::DemiBold) {
+    imageLayerSummary->font().weight() != QFont::Normal ||
+    registrationSummary->font().weight() != QFont::Normal ||
+    calibrationSummary->font().weight() != QFont::Normal ||
+    profileSummary->font().weight() != QFont::Normal) {
   const QString detail = QStringLiteral(
       "Workspace churn source document lost the persistent workflow "
       "summary; stages=[%1], process=[%2], image-layer=[%3], "
@@ -999,19 +1027,19 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
                                       ? workflowStages->text()
                                       : QStringLiteral("<missing>"),
                                   processSummary
-                                      ? processSummary->text()
+                                      ? workflowPlainText(processSummary)
                                       : QStringLiteral("<missing>"),
                                   imageLayerSummary
-                                      ? imageLayerSummary->text()
+                                      ? workflowPlainText(imageLayerSummary)
                                       : QStringLiteral("<missing>"),
                                   registrationSummary
-                                      ? registrationSummary->text()
+                                      ? workflowPlainText(registrationSummary)
                                       : QStringLiteral("<missing>"),
                                   calibrationSummary
-                                      ? calibrationSummary->text()
+                                      ? workflowPlainText(calibrationSummary)
                                       : QStringLiteral("<missing>"),
                                   nextStepSummary
-                                      ? nextStepSummary->text()
+                                      ? workflowPlainText(nextStepSummary)
                                       : QStringLiteral("<missing>"));
   if (retryOrFail(detail))
     return;
@@ -1052,14 +1080,14 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
               colorscreen::render_parameters::capture_transparency;
           first->m_scrToImgParams.type = colorscreen::Random;
           first->updateWorkflowSummary();
-          if (!imageLayerSummary->text().contains(
+          if (!workflowPlainText(imageLayerSummary).contains(
                   QStringLiteral("native grayscale/IR")) ||
-              !imageLayerSummary->text().contains(QStringLiteral("550 nm")) ||
-              registrationSummary->text().contains(
+              !workflowPlainText(imageLayerSummary).contains(QStringLiteral("550 nm")) ||
+              workflowPlainText(registrationSummary).contains(
                   QStringLiteral("reconstruct from detected screen colours")) ||
-              !registrationSummary->text().contains(
+              !workflowPlainText(registrationSummary).contains(
                   QStringLiteral("monochrome capture")) ||
-              !nextStepSummary->text().contains(
+              !workflowPlainText(nextStepSummary).contains(
                   QStringLiteral("original regular Screen type")) ||
               openWorkflowStageButton->property("targetPanelKey").toString() !=
                   QStringLiteral("screen")) {
@@ -1072,11 +1100,11 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
           // action in Screen that finds points and fits the geometry.
           first->m_scrToImgParams.type = colorscreen::Joly;
           first->updateWorkflowSummary();
-          if (!registrationSummary->text().contains(
+          if (!workflowPlainText(registrationSummary).contains(
                   QStringLiteral("geometry not configured")) ||
-              !nextStepSummary->text().contains(
+              !workflowPlainText(nextStepSummary).contains(
                   QStringLiteral("Screen → Detect screen")) ||
-              !nextStepSummary->text().contains(
+              !workflowPlainText(nextStepSummary).contains(
                   QStringLiteral("fit geometry automatically")) ||
               openWorkflowStageButton->property("targetPanelKey").toString() !=
                   QStringLiteral("screen")) {
@@ -1099,12 +1127,12 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
                   capture_transparency_with_screen_and_infrared;
           first->m_scrToImgParams.type = colorscreen::Paget;
           first->updateWorkflowSummary();
-          if (!imageLayerSummary->text().contains(
+          if (!workflowPlainText(imageLayerSummary).contains(
                   QStringLiteral("native grayscale/IR")) ||
-              !imageLayerSummary->text().contains(QStringLiteral("850 nm")) ||
-              !nextStepSummary->text().contains(
+              !workflowPlainText(imageLayerSummary).contains(QStringLiteral("850 nm")) ||
+              !workflowPlainText(nextStepSummary).contains(
                   QStringLiteral("auto-detected screen filter")) ||
-              !nextStepSummary->text().contains(
+              !workflowPlainText(nextStepSummary).contains(
                   QStringLiteral("Screen → Detect screen")) ||
               !openWorkflowStageButton->isHidden()) {
             fail(QStringLiteral(
@@ -1114,9 +1142,9 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
 
           first->m_rparams.ignore_infrared = true;
           first->updateWorkflowSummary();
-          if (!imageLayerSummary->text().contains(
+          if (!workflowPlainText(imageLayerSummary).contains(
                   QStringLiteral("simulated RGB")) ||
-              !nextStepSummary->text().contains(
+              !workflowPlainText(nextStepSummary).contains(
                   QStringLiteral("auto-detected screen filter")) ||
               !openWorkflowStageButton->isHidden()) {
             fail(QStringLiteral(
@@ -1140,9 +1168,9 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
               colorscreen::render_parameters::capture_negative_with_screen;
           first->m_scrToImgParams.type = colorscreen::Paget;
           first->updateWorkflowSummary();
-          if (!processSummary->text().contains(
+          if (!workflowPlainText(processSummary).contains(
                   QStringLiteral("positive conversion off")) ||
-              !nextStepSummary->text().contains(
+              !workflowPlainText(nextStepSummary).contains(
                   QStringLiteral("enable Contact copy simulation")) ||
               openWorkflowStageButton->property("targetPanelKey").toString() !=
                   QStringLiteral("contact_copy")) {
@@ -1153,9 +1181,9 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
 
           first->m_rparams.contact_copy.simulate = true;
           first->updateWorkflowSummary();
-          if (!processSummary->text().contains(
+          if (!workflowPlainText(processSummary).contains(
                   QStringLiteral("positive conversion active")) ||
-              !nextStepSummary->text().contains(
+              !workflowPlainText(nextStepSummary).contains(
                   QStringLiteral("auto-detected screen filter")) ||
               !openWorkflowStageButton->isHidden()) {
             fail(QStringLiteral(
@@ -1182,7 +1210,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         sharpeningOff.rparams.sharpen.mode =
             colorscreen::sharpen_parameters::none;
         first->applyState(sharpeningOff);
-        if (!calibrationSummary->text().contains(
+        if (!workflowPlainText(calibrationSummary).contains(
                 QStringLiteral("Sharpening: off"))) {
           fail(QStringLiteral(
               "Workflow summary did not report disabled sharpening"));
@@ -1198,9 +1226,9 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         unsharpActive.rparams.sharpen.scanner_mtf.f_stop = 0;
         unsharpActive.rparams.sharpen.scanner_mtf.scan_dpi = 0;
         first->applyState(unsharpActive);
-        if (!calibrationSummary->text().contains(
+        if (!workflowPlainText(calibrationSummary).contains(
                 QStringLiteral("Sharpening: Unsharp mask active")) ||
-            calibrationSummary->text().contains(QStringLiteral("needs"))) {
+            workflowPlainText(calibrationSummary).contains(QStringLiteral("needs"))) {
           fail(QStringLiteral(
               "Workflow summary incorrectly required MTF metadata for Unsharp mask"));
           return;
@@ -1212,9 +1240,9 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         rlInactive.rparams.sharpen.scanner_mtf_scale = 1.0;
         rlInactive.rparams.sharpen.richardson_lucy_iterations = 0;
         first->applyState(rlInactive);
-        if (!calibrationSummary->text().contains(
+        if (!workflowPlainText(calibrationSummary).contains(
                 QStringLiteral("Richardson-Lucy deconvolution inactive")) ||
-            !calibrationSummary->text().contains(QStringLiteral("iterations"))) {
+            !workflowPlainText(calibrationSummary).contains(QStringLiteral("iterations"))) {
           fail(QStringLiteral(
               "Workflow summary did not explain inactive Richardson-Lucy sharpening"));
           return;
@@ -1245,11 +1273,11 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         measuredCurves.push_back(measuredCurve);
         measuredWiener.rparams.sharpen.scanner_mtf.measured_mtf_idx = 0;
         first->applyState(measuredWiener);
-        if (!calibrationSummary->text().contains(
+        if (!workflowPlainText(calibrationSummary).contains(
                 QStringLiteral("Wiener deconvolution")) ||
-            !calibrationSummary->text().contains(
+            !workflowPlainText(calibrationSummary).contains(
                 QStringLiteral("measured MTF")) ||
-            calibrationSummary->text().contains(
+            workflowPlainText(calibrationSummary).contains(
                 QStringLiteral("physical model needs"))) {
           fail(QStringLiteral(
               "Workflow summary ignored direct measured-MTF sharpening"));
@@ -2422,9 +2450,9 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         first->m_geometryFit.clear();
         first->m_renderTypeParams.type = colorscreen::render_type_original;
         first->updateWorkflowSummary();
-        if (!nextStepSummary->text().contains(
+        if (!workflowPlainText(nextStepSummary).contains(
                 QStringLiteral("auto-detected screen filter")) ||
-            nextStepSummary->text().contains(
+            workflowPlainText(nextStepSummary).contains(
                 QStringLiteral("Geometry — detect screen coordinates")) ||
             !openWorkflowStageButton->isHidden()) {
           fail(QStringLiteral(
@@ -2450,9 +2478,9 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         }
         first->m_renderTypeParams.type = colorscreen::render_type_realistic_scr;
         first->updateWorkflowSummary();
-        if (!nextStepSummary->text().contains(
+        if (!workflowPlainText(nextStepSummary).contains(
                 QStringLiteral("screen-colour detection is selected")) ||
-            !nextStepSummary->text().contains(
+            !workflowPlainText(nextStepSummary).contains(
                 QStringLiteral("Geometry is optional")) ||
             openWorkflowStageButton->isHidden() ||
             openWorkflowStageButton->property("targetPanelKey").toString() !=
@@ -2636,7 +2664,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         first->m_geometryFit.baseline = workflowFitBaseline;
         first->updateWorkflowSummary();
 
-        const QString hiddenPointGuidance = nextStepSummary->text();
+        const QString hiddenPointGuidance = workflowPlainText(nextStepSummary);
         if (hiddenPointGuidance.contains(QStringLiteral("choose Mode")) ||
             hiddenPointGuidance.contains(QStringLiteral("fit geometry")) ||
             !hiddenPointGuidance.contains(
@@ -2651,7 +2679,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
 
         first->m_imageWidget->setShowRegistrationPoints(true);
         QCoreApplication::processEvents();
-        if (nextStepSummary->text() != hiddenPointGuidance) {
+        if (workflowPlainText(nextStepSummary) != hiddenPointGuidance) {
           fail(QStringLiteral(
               "View-only registration overlay changed Workflow's next step"));
           return;
@@ -2664,7 +2692,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
             std::make_shared<colorscreen::progress_info>();
         first->setScreenAutodetectionProgress(coordinateDetectionProgress,
                                               false);
-        const QString coordinateDetectionHint = nextStepSummary->text();
+        const QString coordinateDetectionHint = workflowPlainText(nextStepSummary);
         if (!coordinateDetectionHint.contains(QStringLiteral("screen detection"))
             || !coordinateDetectionHint.contains(QStringLiteral("Cancel"))) {
           fail(QStringLiteral(
@@ -2672,7 +2700,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
           return;
         }
         first->updateRegistrationActions();
-        if (nextStepSummary->text() != coordinateDetectionHint) {
+        if (workflowPlainText(nextStepSummary) != coordinateDetectionHint) {
           fail(QStringLiteral(
               "Registration refresh changed active screen-detection guidance"));
           return;
@@ -2681,7 +2709,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         auto pointDetectionProgress =
             std::make_shared<colorscreen::progress_info>();
         first->setScreenAutodetectionProgress(pointDetectionProgress, true);
-        const QString pointDetectionHint = nextStepSummary->text();
+        const QString pointDetectionHint = workflowPlainText(nextStepSummary);
         if (!pointDetectionHint.contains(QStringLiteral("screen detection"))
             || !pointDetectionHint.contains(QStringLiteral("Stop"))) {
           fail(QStringLiteral(
@@ -2695,7 +2723,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         first->m_geometryFit.pendingNonlinearEnabled =
             first->m_geometryPanel->isNonlinearEnabled();
         first->updateWorkflowSummary();
-        if (nextStepSummary->text() != pointDetectionHint) {
+        if (workflowPlainText(nextStepSummary) != pointDetectionHint) {
           fail(QStringLiteral(
               "Geometry fitting changed active screen-detection guidance"));
           return;
@@ -2705,7 +2733,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         // The coordinate stage completes after handing off to point discovery.
         // Its old completion must not clear the newer request's guidance.
         first->clearScreenAutodetectionProgress(coordinateDetectionProgress);
-        if (nextStepSummary->text() != pointDetectionHint) {
+        if (workflowPlainText(nextStepSummary) != pointDetectionHint) {
           fail(QStringLiteral(
               "Older detection stage cleared newer point-discovery guidance"));
           return;
@@ -2713,13 +2741,13 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
 
         pointDetectionProgress->cancel();
         first->updateWorkflowSummary();
-        if (!nextStepSummary->text().contains(QStringLiteral("stopping"))) {
+        if (!workflowPlainText(nextStepSummary).contains(QStringLiteral("stopping"))) {
           fail(QStringLiteral(
               "Workflow did not acknowledge Stop during screen detection"));
           return;
         }
         first->clearScreenAutodetectionProgress(pointDetectionProgress);
-        if (nextStepSummary->text().contains(QStringLiteral("screen detection is"))) {
+        if (workflowPlainText(nextStepSummary).contains(QStringLiteral("screen detection is"))) {
           fail(QStringLiteral(
               "Workflow kept screen-detection guidance after completion"));
           return;
@@ -2780,7 +2808,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
             first->m_geometryFit.pendingScan ||
             first->m_geometryFit.pendingNonlinearEnabled ||
             first->m_geometryFit.pendingRequestId ||
-            nextStepSummary->text().contains(
+            workflowPlainText(nextStepSummary).contains(
                 QStringLiteral("Geometry fit is running")) ||
             geometryFitStatus->text().contains(
                 QStringLiteral("Fitting geometry"))) {
