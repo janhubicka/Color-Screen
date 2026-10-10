@@ -11209,6 +11209,24 @@ test_native_json_v2_sharpness ()
 static bool
 test_native_json_v2_color ()
 {
+  /* Photograph temperature and backlight temperature are independent
+     persistent inputs. GUI dirty/undo uses exact render_parameters equality. */
+  render_parameters baseline;
+  render_parameters changed = baseline;
+  changed.temperature += 125;
+  if (changed == baseline)
+    {
+      fprintf (stderr, "Photo temperature edit was invisible to document equality\n");
+      return false;
+    }
+  changed = baseline;
+  changed.backlight_temperature += 125;
+  if (changed == baseline)
+    {
+      fprintf (stderr, "Backlight temperature edit was invisible to document equality\n");
+      return false;
+    }
+
   render_parameters original;
   original.scanner_red = {0.4125f, 0.2125f, 0.0125f};
   original.scanner_green = {0.325f, 0.715f, 0.065f};
