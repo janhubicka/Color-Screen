@@ -82,7 +82,7 @@ each document has independent:
 - worker objects, `TaskQueue` instances, progress entries, and render
   cancellation state;
 - current image filename, one `ParameterFileState` (path + suggested/loaded
-  status + physical LegacyCsp/Archive format), and a UUID-named recovery
+  status + physical LegacyCsp/Archive/JsonV2 format), and a UUID-named recovery
   directory. A fresh target defaults to Archive; an explicit loaded or suggested
   legacy target remains LegacyCsp. Never let a suggested parameter filename
   become an overwrite target without an explicit save/load transition. An
@@ -111,6 +111,23 @@ each document has independent:
   metadata still preserves the user's Archive/Legacy target identity
   independently of its private recovery payload. Keep lightweight QSaveFile
   smoke for legacy writes and core/Qt archive failure tests.
+
+**Native JSON v2 alpha migration:** the Qt document loader recognizes the
+plain JSON .cspar by content signature and parses the entire native document
+transactionally; a schema-v1 ZIP and legacy CSP still use their existing
+readers. `ParameterFileState::Format::JsonV2` is a *physical file identity*,
+not a document processing property: ordinary Save never changes JSON v2 to
+ZIP v1 just because both paths end with .cspar. Save As explicitly offers
+compatible ZIP v1, native JSON v2 and legacy .par, while fresh documents
+still default to ZIP v1 during alpha testing. JSON saves bypass legacy CSP
+serialization and include persistent profile spots. Asynchronous sidecar
+staging preserves this format when applying or suggesting a file, and
+crash-recovery target metadata records `json-v2` independently of the
+currently ZIP-v1 recovery snapshot. The document lifecycle smoke verifies
+native JSON Save/Open/ordinary Save, corrupt-input failure nonmutation and
+return to the v1 compatibility target. See
+`doc/parameter-json-v2-plan.md` for outstanding recovery, field-audit and
+cross-platform gates.
 
 Workspace geometry, image/parameter file-dialog directory history, and
 recent-file lists remain application preferences in `QSettings`; they are not
