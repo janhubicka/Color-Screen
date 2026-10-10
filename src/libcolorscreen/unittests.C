@@ -10749,6 +10749,14 @@ test_native_json_v2_document ()
       fprintf (stderr, "Native v2 full decode failed: %s\n", error.c_str ());
       return false;
     }
+  /* A physical JSON reload creates fresh resource objects. Equal saved
+     mappings and calibration grids must still compare as equal document
+     state, or Qt's dirty/Undo machinery would see a false change.  */
+  if (!(parsed_geometry == geometry) || !(parsed_render == render))
+    {
+      fprintf (stderr, "Native v2 full document equality mismatch\n");
+      return false;
+    }
   if (parsed_geometry.final_ratio != geometry.final_ratio
       || parsed_geometry.type != geometry.type
       || !parsed_geometry.mesh_trans
@@ -10840,6 +10848,19 @@ test_native_json_v2_document ()
                error.c_str ());
       return false;
     }
+  /* Independently loaded resources compare by value, while an actual
+     calibration edit must be visible. This also checks mesh and backlight
+     data rather than just the pointer identities.  */
+  if (!(loaded_geometry == geometry) || !(loaded_render == render))
+    return false;
+  loaded_geometry.mesh_trans->set_point ({1, 1}, {3.125, 2.25});
+  if (loaded_geometry == geometry)
+    return false;
+  loaded_render.backlight_correction->set_luminosity (
+      0, 0, 0.75f, backlight_correction_parameters::red);
+  if (loaded_render == render)
+    return false;
+
   /* A failed attempted replacement must leave the last good file byte
      for byte intact, never even opening the target for truncation. */
   render_parameters invalid_render = render;
@@ -11108,6 +11129,33 @@ test_native_json_v2_correction_grids ()
   std::string canonical;
   if (!encode_parameter_json_v2_correction_grids (
           decoded, &canonical, &error) || canonical != json)
+    return false;
+
+  /* The decoder created independent resources. Ignoring unrelated scalar
+     values, their persisted data must compare equal, including a nested
+     per-tile blur table and samples from a disabled backlight channel.  */
+  render_parameters expected = original;
+  expected.gamma = decoded.gamma;
+  expected.brightness = decoded.brightness;
+  if (!(expected == decoded))
+    return false;
+  auto nested_blur = decoded.get_tile_adjustment (2, 1).scanner_blur_correction;
+  const luminosity_t old_blur = nested_blur->get_correction (1, 1);
+  nested_blur->set_correction (1, 1, old_blur + 0.125f);
+  if (expected == decoded)
+    return false;
+  nested_blur->set_correction (1, 1, old_blur);
+  if (!(expected == decoded))
+    return false;
+  const auto green = backlight_correction_parameters::green;
+  const luminosity_t old_green
+      = decoded.backlight_correction->get_luminosity (0, 0, green);
+  decoded.backlight_correction->set_luminosity (
+      0, 0, old_green + 0.125f, green);
+  if (expected == decoded)
+    return false;
+  decoded.backlight_correction->set_luminosity (0, 0, old_green, green);
+  if (!(expected == decoded))
     return false;
 
   /* Invalid nested payloads cannot update any accepted calibration. */

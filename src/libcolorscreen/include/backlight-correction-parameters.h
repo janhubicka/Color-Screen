@@ -83,6 +83,28 @@ public:
     return m_luminosities[(size_t)y * m_width + x].sub[(int)which];
   }
 
+  /* Compare all persisted calibration samples, including disabled channels.
+     The cache identity is deliberately not part of document state.  */
+  bool
+  equal_p (const backlight_correction_parameters &other) const
+  {
+    if (black_correction != other.black_correction
+        || m_width != other.m_width || m_height != other.m_height
+        || m_luminosities.size () != other.m_luminosities.size ())
+      return false;
+    for (int channel = 0; channel < 4; ++channel)
+      if (m_channel_enabled[channel] != other.m_channel_enabled[channel])
+        return false;
+    for (size_t i = 0; i < m_luminosities.size (); ++i)
+      for (int channel = 0; channel < 4; ++channel)
+        if (m_luminosities[i].lum[channel]
+                != other.m_luminosities[i].lum[channel]
+            || m_luminosities[i].sub[channel]
+                   != other.m_luminosities[i].sub[channel])
+          return false;
+    return true;
+  }
+
   /* Internal API.  */
   static std::shared_ptr <backlight_correction_parameters>
   load_captureone_lcc (memory_buffer *buf, bool verbose = false);

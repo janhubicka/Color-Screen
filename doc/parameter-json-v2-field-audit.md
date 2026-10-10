@@ -99,6 +99,19 @@ per-view gamut warning, transient solver state and caches, and per-view tile
 visibility are supplied by the renderer/view rather than persisted into
 document parameters.
 
+### Identity versus value for persisted resources
+
+The JSON-v2 decoder reconstructs mesh, backlight-calibration and scanner-blur
+grids as new objects. Previously, the Qt document comparison used
+`shared_ptr` identity for these resources, including per-tile blur grids.
+Consequently a complete serialization roundtrip could have identical JSON
+yet compare unequal as live document state. These comparisons now short-circuit
+on shared identity but compare the full persisted contents for independent
+instances. Mesh inverse caches, calibration cache IDs and scanner-blur reduction
+diagnostics remain intentionally excluded. The full-document JSON regression
+requires exact equality after both in-memory and file reload, and verifies
+that changing a mesh point or calibration sample makes the states unequal.
+
 ## Remaining validation gates
 
 The member audit is stronger than the old-keyword list but **not a formal proof

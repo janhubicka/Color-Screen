@@ -181,6 +181,23 @@ public:
     return m_ystep;
   }
 
+  /* Compare the persisted mapping, not this mesh's cache identity or
+     lazily computed inverse lookup table.  */
+  bool
+  equal_p (const mesh &other) const
+  {
+    if (m_width != other.m_width || m_height != other.m_height
+        || m_xshift != other.m_xshift || m_yshift != other.m_yshift
+        || m_xstep != other.m_xstep || m_ystep != other.m_ystep
+        || m_data.size () != other.m_data.size ())
+      return false;
+    for (size_t i = 0; i < m_data.size (); ++i)
+      if (m_data[i].x != other.m_data[i].x
+          || m_data[i].y != other.m_data[i].y)
+        return false;
+    return true;
+  }
+
   /* Save mesh content to file F.  */
   bool save (FILE *f) const;
 
