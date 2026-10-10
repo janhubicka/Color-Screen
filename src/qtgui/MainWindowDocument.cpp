@@ -392,6 +392,21 @@ bool MainWindow::saveParametersToFile(
       QFileInfo(m_parameterFile.path).absoluteFilePath() == absoluteFileName;
   // Explicit Save As choices take precedence; ordinary Save retains the
   // exact physical format of a loaded target, not merely its .cspar suffix.
+  const bool csparTarget =
+      absoluteFileName.endsWith(QLatin1String(".cspar"), Qt::CaseInsensitive);
+  const QByteArray encodedTarget = absoluteFileName.toUtf8();
+  const bool existingZipV1 =
+      csparTarget && colorscreen::parameter_archive_signature_p(
+                         encodedTarget.constData());
+  const bool existingJsonV2 =
+      csparTarget && colorscreen::parameter_json_v2_signature_p(
+                         encodedTarget.constData());
+  // Never reinterpret an unfamiliar existing .cspar as a fresh JSON file
+  // unless the operator explicitly chose a conversion in Save As.
+  const bool unrecognizedExistingTarget =
+      requestedFormat == ParameterSaveFormat::PreserveOrInfer &&
+      !preservingCurrentTarget && csparTarget &&
+      QFile::exists(absoluteFileName) && !existingZipV1 && !existingJsonV2;
   ParameterFileState::Format format = ParameterFileState::Format::LegacyCsp;
   if (requestedFormat == ParameterSaveFormat::JsonV2)
     format = ParameterFileState::Format::JsonV2;
@@ -401,21 +416,22 @@ bool MainWindow::saveParametersToFile(
     format = ParameterFileState::Format::LegacyCsp;
   else if (preservingCurrentTarget)
     format = m_parameterFile.format;
-  else if (absoluteFileName.endsWith(QLatin1String(".cspar"),
-                                     Qt::CaseInsensitive)) {
+  else if (csparTarget) {
     // An established ZIP-v1 destination keeps its format. A new .cspar
     // defaults to native JSON v2, while ordinary Save above respects the
     // loaded file's format even though both formats use this suffix.
-    format = colorscreen::parameter_archive_signature_p(
-                 absoluteFileName.toUtf8().constData())
-                 ? ParameterFileState::Format::Archive
-                 : ParameterFileState::Format::JsonV2;
+    format = existingZipV1 ? ParameterFileState::Format::Archive
+                           : ParameterFileState::Format::JsonV2;
   }
   const bool jsonV2 = format == ParameterFileState::Format::JsonV2;
   const bool archive = format == ParameterFileState::Format::Archive;
   const bool hasRgb = m_scan && m_scan->has_rgb();
   QString error;
-  if (!saveParameterPayloadAtomically(
+  if (unrecognizedExistingTarget)
+    error = tr("An existing .cspar file has an unrecognized format. "
+               "Select an explicit format in Save As to replace it.");
+  if (unrecognizedExistingTarget ||
+      !saveParameterPayloadAtomically(
           absoluteFileName, archive, m_scrToImgParams,
           (hasRgb || jsonV2) ? &m_detectParams : nullptr,
           m_rparams, m_solverParams, m_profileSpots, &error, jsonV2)) {

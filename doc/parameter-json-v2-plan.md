@@ -60,9 +60,10 @@ The CLI `adjust-par` writes JSON v2 for a *new* `.cspar` target by default,
 can explicitly convert ZIP v1 or legacy .par using `--json-v2`, preserves
 input format on in-place rewrites, and can explicitly produce ZIP v1 using
 `--zip-v1`. Implicit `--out` to an existing `.cspar` preserves the
-**destination's** actual ZIP-v1/JSON-v2 encoding. Existing unrecognized
-`.cspar` files and unsupported trailing legacy metadata are refused rather
-than silently overwritten or discarded. These paths
+**destination's** actual ZIP-v1/JSON-v2 encoding. Both CLI and Qt implicit
+saves refuse to replace an existing `.cspar` with an unrecognized format;
+explicit format selection permits intentional conversion. Unsupported trailing
+legacy metadata is rejected rather than silently discarded. These paths
 retain imported Qt profile spots; they do not silently discard unknown
 legacy trailing metadata. Private crash-recovery snapshots now contain complete native JSON v2,
 while their separate metadata preserves the user's original JSON-v2, ZIP-v1

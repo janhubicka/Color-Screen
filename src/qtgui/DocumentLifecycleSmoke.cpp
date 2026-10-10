@@ -495,6 +495,44 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
       return;
     }
 
+    // A future/unknown .cspar target must not be overwritten by implicit
+    // JSON-v2 default inference. An explicit Save As filter is required.
+    const QString unknownParams = state->temporaryDirectory->filePath(
+        QStringLiteral("unknown-existing-version.cspar"));
+    const QByteArray unknownBytes("future schema: do not overwrite\n");
+    QFile unknownFile(unknownParams);
+    if (!unknownFile.open(QIODevice::WriteOnly) ||
+        unknownFile.write(unknownBytes) != unknownBytes.size()) {
+      qCritical() << "Could not stage unknown .cspar save-guard fixture";
+      app.exit(documentLifecycleFailure);
+      return;
+    }
+    unknownFile.close();
+    const ParameterState beforeUnknownSave = first->documentStateSnapshot();
+    const QString targetBeforeUnknownSave = first->m_parameterFile.path;
+    const auto formatBeforeUnknownSave = first->m_parameterFile.format;
+    const int undoBeforeUnknownSave = first->m_undoStack->index();
+    if (first->saveParametersToFile(unknownParams) ||
+        readFile(unknownParams) != unknownBytes ||
+        first->documentStateSnapshot() != beforeUnknownSave ||
+        first->m_parameterFile.path != targetBeforeUnknownSave ||
+        first->m_parameterFile.format != formatBeforeUnknownSave ||
+        first->m_undoStack->index() != undoBeforeUnknownSave) {
+      qCritical() << "Implicit Save overwrote unknown .cspar or changed state";
+      app.exit(documentLifecycleFailure);
+      return;
+    }
+    QMessageBox *unknownWarning = first->findChild<QMessageBox *>(
+        QStringLiteral("ParameterSaveFailureDialog"));
+    if (!unknownWarning ||
+        !unknownWarning->text().contains(
+            QStringLiteral("unrecognized format"))) {
+      qCritical() << "Unknown .cspar Save refusal lacks a useful warning";
+      app.exit(documentLifecycleFailure);
+      return;
+    }
+    unknownWarning->close();
+
     // Explicit JSON Save As is also supported; Open and ordinary Save must
     // preserve the complete native state and use the same physical encoding.
     const QString jsonParams = state->temporaryDirectory->filePath(
