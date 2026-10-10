@@ -4530,10 +4530,15 @@ do_adjust_par (int argc, char **argv)
 {
   const char *cspname = NULL, *error = NULL, *outcspname = NULL;
   std::vector<const char *> csps;
+  bool force_json_v2 = false, force_zip_v1 = false;
   for (int i = 0; i < argc; i++)
     {
       if (parse_common_flags (argc, argv, &i))
         ;
+      else if (!strcmp (argv[i], "--json-v2"))
+        force_json_v2 = true;
+      else if (!strcmp (argv[i], "--zip-v1"))
+        force_zip_v1 = true;
       else if (const char *str = arg_with_param (argc, argv, &i, "merge"))
         csps.push_back (str);
       else if (const char *str = arg_with_param (argc, argv, &i, "out"))
@@ -4555,8 +4560,9 @@ do_adjust_par (int argc, char **argv)
   render_parameters rparam;
   scr_detect_parameters dparam;
   struct solver_parameters solver_param;
-  bool input_archive = false;
+  bool input_archive = false, input_json_v2 = false;
   std::string input_trailing;
+  std::vector<point_t> profile_spots;
   if (cspname)
     {
       if (verbose)
@@ -4566,7 +4572,8 @@ do_adjust_par (int argc, char **argv)
       std::string parameter_error;
       if (!load_parameter_filename (cspname, &param, &dparam, &rparam,
                                     &solver_param, &parameter_error,
-                                    &input_archive, &input_trailing))
+                                    &input_archive, &input_trailing,
+                                    &input_json_v2, &profile_spots))
 	{
 	  fprintf (stderr, "Can not load %s: %s\n", cspname,
                    parameter_error.c_str ());
@@ -4588,20 +4595,54 @@ do_adjust_par (int argc, char **argv)
 	  return 1;
 	}
     }
+  if (force_json_v2 && force_zip_v1)
+    {
+      fprintf (stderr, "Choose only one of --json-v2 and --zip-v1\n");
+      return 1;
+    }
   const bool explicit_parameter_output = outcspname != nullptr;
   if (!outcspname)
     outcspname = cspname;
+  const bool cspar_suffix = parameter_archive_suffix_p (outcspname);
+  // The two .cspar encodings share a filename suffix. Ordinary adjust-par
+  // preserves the input format; an existing JSON output is also retained
+  // unless an explicit --zip-v1 conversion overrides it.
+  const bool output_json_v2 =
+      !force_zip_v1
+      && (force_json_v2
+          || (cspar_suffix
+              && (input_json_v2
+                  || parameter_json_v2_signature_p (outcspname))));
+  if (output_json_v2 && !cspar_suffix)
+    {
+      fprintf (stderr, "JSON v2 parameters require a .cspar target; use --out\n");
+      return 1;
+    }
   const bool output_archive =
-      explicit_parameter_output ? parameter_archive_suffix_p (outcspname)
-                                : input_archive;
+      !output_json_v2
+      && (explicit_parameter_output ? cspar_suffix : input_archive);
+
+  // An explicit v1 -> v2 conversion must account for the GUI's profile-spot
+  // postamble. Unknown metadata is never discarded just to create JSON.
+  if (output_json_v2 && !input_json_v2
+      && !parse_cli_profile_spot_postamble (
+          input_trailing, &profile_spots, &parameter_error))
+    {
+      fprintf (stderr, "Cannot convert metadata: %s\n",
+               parameter_error.c_str ());
+      return 1;
+    }
+  std::string output_trailing = input_trailing;
+  if (!output_json_v2 && input_json_v2)
+    output_trailing = serialize_cli_profile_spot_postamble (profile_spots);
   if (verbose)
     {
       printf ("Saving color screen parameters: %s\n", outcspname);
     }
   std::string save_error;
   if (!save_parameter_filename (outcspname, output_archive, &param, &dparam,
-                                &rparam, &solver_param, input_trailing,
-                                &save_error))
+                                &rparam, &solver_param, output_trailing,
+                                &save_error, output_json_v2, &profile_spots))
     {
       fprintf (stderr, "Cannot save %s: %s\n", outcspname,
                save_error.c_str ());
