@@ -37,47 +37,52 @@ than caching only the finished RGB image.
   RAW context. The active decoded pixel buffers are always owned
   independently of the LibRaw postprocessing arrays.
 
-## Size-aware libcolorscreen cache (post-PR #536)
+## Global RAM-aware libcolorscreen cache (follow-up to #536)
 
-All RAW decoded-variant cache ownership lives in `libcolorscreen`, using
-the existing generic `lru_cache` rather than a parallel per-source list or
-anything in Qt. The cache has an optional byte budget and measures the
-estimated owned pixel buffers (width × height × active channel pixel size,
-plus the image descriptor). The RAW variant cache has a **256 MiB budget for
-cache-owned decoded images**. Its key is the unique *unpacked sensor source
-generation* plus the demosaicing method; output profile, gamut diagnostics,
-Qt view state and rendering adjustments are not part of this key.
+Cache policy is global to **all** libcolorscreen LRU instances, including
+renderers, image processing and the demosaiced RAW variants. A core-only
+registry gathers entry counts, active computations, externally pinned results
+and retained byte-size estimates, and can evict the globally least-recently
+used completed entries across cache types. The Qt GUI does not own a cache
+manager; it simply requests an `image_data::demosaiced_variant()`.
 
-When inserting a result, the shared LRU releases oldest cache-owned values
-until the new result fits. An oversized result still returns successfully
-without being retained. Even if a renderer/view holds a previously cached
-image, eviction only releases the cache's strong reference; that external
-`shared_ptr` remains valid and its memory is no longer charged to the
-cache. Identical concurrent requests coalesce; requests for different
-algorithms on the same LibRaw resource still serialize `dcraw_process()`
-through the source's mutex.
+The available-memory probe is platform-native: Linux uses
+`/proc/meminfo` and respects a cgroup-v2 memory limit, macOS uses
+Mach VM statistics / `sysctl`, and Windows uses `GlobalMemoryStatusEx`.
+The **soft global cache target** is the smaller of one third of total
+physical memory and half of effectively available memory plus pages
+already retained by core caches and RAW source reservations. Consequently,
+a machine with many gigabytes free can retain one or more full 150 MP
+images, while memory-poor systems preferentially evict completed caches.
 
-Each completed image variant now retains the unpacked sensor source in an
-opaque `image_data` handle. The source does not own the cache or variants,
-so **there is no ownership cycle**. Consequently a derivative can request
-another demosaicing method even after the original image is destroyed.
-The separately enforced **256 MiB mosaic-reservation budget** still limits
-how many unpacked RAW sources are retained by live images. Under pressure
-the library first prunes idle decoded variants to free source reservations.
+There is no fixed 256 MiB limit on an unpacked RAW CFA or a decoded variant.
+Both sensor-memory reservations and decoded variants participate in the same
+shared policy. Source admission is optional; if insufficient memory is
+available, normal decoding remains valid without retaining a reusable CFA.
+The existing generic LRU supports optional byte-size callbacks. RAW variants
+report decoded pixel allocation sizes; other cache types currently report
+either measured allocations, at least sizeof(T), or unknown for unbounded
+array types, rather than claiming exact memory accounting for every legacy
+cache.
 
-Qt holds only the currently displayed image (and a short-lived outgoing image
-reference while a worker runs); it does **not** cache original RAW images,
-method variants, or cache-size metadata. Explicit **Reload and demosaic**
-hands the existing `image_data` to its generation-gated asynchronous worker.
-An ordinary Open still rereads the file, and non-Bayer/over-budget/EIP inputs
-use the established independent file-loader path. Qt keeps the same
-cancellation, failure rollback, Undo and slanted-edge-reference behaviour.
+Every decoded variant retains its own shared opaque sensor resource; no
+source points back to its variants, so ownership is acyclic. Qt therefore
+keeps only the currently displayed image and outgoing worker references,
+not a separate cached original RAW. Explicit Reload and demosaic asks the
+core to reuse that source; ordinary Open still performs independent file
+loading, including for unsupported RAW formats.
 
-The size budget measures *cache-owned* buffers, not total resident memory.
-Live images held by frontends, renderers or workers, the original displayed
-decoded image and LibRaw's mutable scratch buffers can use additional memory.
-A hard process RSS cap would require a separate resource manager; do not
-misrepresent the LRU's byte limit as that guarantee.
+**Important:** cache-owned bytes are not total process RSS. A renderer/view
+may retain an image after its cached entry is evicted; LibRaw scratch buffers
+and active decoding also require temporary memory. The global budget cannot
+delete these live references. This is a memory-pressure policy, not a hard
+per-process allocation ceiling.
+
+For development, **Help → Cache Statistics…** presents the read-only
+`get_cache_memory_statistics()` snapshot once per second: installed and
+available RAM, global cache target, cache-owned bytes, RAW sensor bytes, and
+per-LRU entry, in-progress, pinned and byte estimates with a precision flag.
+The API uses only standard C++ types and is reusable by non-Qt frontends.
 
 Invariants for final validation:
 
@@ -121,6 +126,10 @@ Invariants for final validation:
   failure and mid-processing cancellation on real CFA data.
 - `lru_cache_byte_budget` exercises weighted eviction, oversized uncached
   results, pinned-value survival and single-flight callbacks.
+- `lru_global_memory` uses a deterministic tiny global budget to verify
+  eviction across independent caches, pinned-value survival, RAW source
+  reservation and unregister safety. The Qt workspace smoke opens/closes the
+  read-only cache statistics dialog and checks that document state is intact.
 - The synthetic Bayer fixture now exercises variant-source ownership after
   dropping the original image, and still checks independent pixel agreement.
   Extend testing to high-memory cache pressure across independent sources.
@@ -129,8 +138,9 @@ Invariants for final validation:
   The existing generation gates are kept, but targeted tests are still needed.
 - Compare monochromatic/Bayer-corrected results and relevant metadata with
   independent file decodes; validate half-size geometry and pixel pitch.
-- Run the full Ubuntu (including checking and distcheck), macOS, Windows and
-  sanitizer CI matrix on the new sized-cache PR before merging.
+- Run full Ubuntu (including checking and distcheck), macOS, Windows and
+  sanitizer CI on the global cache/GUI statistics revision; then field-test
+  150+ MP captures under actual memory pressure before beta.
 
 Keep the product at **2.0alpha** and continue persisting `demosaic` as a
 capture-input choice; no cache resource belongs in persisted JSON, ZIP-v1 or
