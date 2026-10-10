@@ -65,6 +65,18 @@ The two values already had separate JSON v2 fields and round-trip coverage.
 - Qt `profileSpots` are saved directly in the native `profile` section;
   derived `color_match` results are not document state.
 
+### Lossless compatibility export
+
+Legacy `.par` predates five categories of authoritative structured-only fields:
+final-frame angle/ratio, photographic image area, ignore-infrared choice,
+reconstruction scaling and observer whitepoint. Exporting a nondefault setting
+in any of these categories to `.par` is intrinsically lossy. Qt and CLI now
+call the same `legacy_csp_can_represent_parameters()` preflight **before any
+write**, rejecting the downgrade and directing the user to `.cspar` instead.
+Core tests exercise each setting independently and the CLI negative test checks
+that a requested `.par` target is not created. The ordinary historical `.par`
+workflow remains valid when the structured-only values are at defaults.
+
 ### Runtime-only values (do not reintroduce)
 
 Monitor/export output colourspace/ICC profile and output transfer gamma,
