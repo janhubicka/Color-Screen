@@ -4562,6 +4562,7 @@ do_adjust_par (int argc, char **argv)
   struct solver_parameters solver_param;
   bool input_archive = false, input_json_v2 = false;
   std::string input_trailing;
+  std::string parameter_error;
   std::vector<point_t> profile_spots;
   if (cspname)
     {
@@ -4569,7 +4570,6 @@ do_adjust_par (int argc, char **argv)
 	{
 	  printf ("Loading color screen parameters: %s\n", cspname);
 	}
-      std::string parameter_error;
       if (!load_parameter_filename (cspname, &param, &dparam, &rparam,
                                     &solver_param, &parameter_error,
                                     &input_archive, &input_trailing,
