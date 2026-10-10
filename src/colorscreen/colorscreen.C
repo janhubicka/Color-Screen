@@ -402,8 +402,22 @@ save_parameter_filename (const char *filename, bool archive,
                          const scr_detect_parameters *dparam,
                          const render_parameters *rparam,
                          const solver_parameters *sparam,
-                         const std::string &trailing, std::string *error)
+                         const std::string &trailing, std::string *error,
+                         bool json_v2 = false,
+                         const std::vector<point_t> *profile_spots = nullptr)
 {
+  if (json_v2)
+    {
+      if (!param || !dparam || !rparam || !sparam || !profile_spots)
+        {
+          if (error)
+            *error = "cannot save incomplete parameter state as JSON v2";
+          return false;
+        }
+      return write_parameter_json_v2_file (
+          filename, *param, *dparam, *rparam, *sparam,
+          *profile_spots, error);
+    }
   if (!archive && rparam && rparam->image_area.set)
     {
       if (error)
