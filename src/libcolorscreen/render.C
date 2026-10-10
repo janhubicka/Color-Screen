@@ -37,6 +37,7 @@ std::atomic_uint64_t lru_caches::time;
 namespace
 {
 std::atomic<uint64_t> raw_cache_source_bytes {0};
+std::atomic<uint64_t> test_cache_budget_override {0};
 
 /* A conservative OS memory estimate. These APIs are deliberately implemented
    in libcolorscreen, rather than calling Qt's platform/system services. */
@@ -146,10 +147,14 @@ saturating_add (uint64_t a, uint64_t b)
 uint64_t
 effective_cache_budget (const memory_reading &mem, uint64_t accounted)
 {
+  const uint64_t test_limit
+      = test_cache_budget_override.load (std::memory_order_relaxed);
+  if (test_limit)
+    return test_limit;
   const uint64_t normal = mem.total ? mem.total / 3
                                     : UINT64_C (2) * 1024 * 1024 * 1024;
   if (!mem.available)
-    return normal;
+    return mem.total ? 0 : normal;
   return std::min (normal, saturating_add (mem.available, accounted) / 2);
 }
 } // anonymous namespace
@@ -161,6 +166,12 @@ lru_cache_registry::instance ()
      may unregister during shutdown after render.C's own static destructors. */
   static lru_cache_registry *registry = new lru_cache_registry;
   return *registry;
+}
+
+void
+lru_cache_registry::set_test_budget_bytes (uint64_t bytes)
+{
+  test_cache_budget_override.store (bytes, std::memory_order_relaxed);
 }
 
 void

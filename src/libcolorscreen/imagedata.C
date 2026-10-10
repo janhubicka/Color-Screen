@@ -270,9 +270,9 @@ public:
        reserve this CFA allocation against the OS memory-aware soft budget.
        If the machine cannot safely retain it, the existing decoded image
        remains usable and subsequent demosaic requests simply reopen RAW. */
+    auto source = std::make_shared<unpacked_raw_source> ();
     if (!reserve_raw_source_cache_bytes (needed))
       return {};
-    auto source = std::make_shared<unpacked_raw_source> ();
     source->reserved_bytes = needed;
 
     /* free_image releases the temporary postprocessed image, not unpacked

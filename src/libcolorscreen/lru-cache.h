@@ -60,6 +60,10 @@ public:
   cache_memory_statistics snapshot ();
   void enforce_budget (uint64_t extra_bytes = 0);
 
+  /* Internal deterministic test hook; zero restores the OS-based budget.
+     It is intentionally absent from the installed public cache-stats API. */
+  void set_test_budget_bytes (uint64_t bytes);
+
 private:
   std::mutex registry_mutex;
   std::vector<tracked_lru_cache *> caches;
@@ -215,7 +219,8 @@ protected:
           ++stat.in_progress;
         if (e->val && e->val.use_count () > 1)
           ++stat.externally_pinned;
-        if (e->val && !e->computing && e->last_used < least_recent)
+        if (e->val && e->cached_bytes && !e->computing
+            && e->last_used < least_recent)
           least_recent = e->last_used;
       }
     if (oldest)
