@@ -19,6 +19,7 @@
 #include <exception>
 #include <fcntl.h>
 #include <iomanip>
+#include <initializer_list>
 #include <limits>
 #include <locale>
 #include <map>
@@ -4250,6 +4251,240 @@ v2_append_document_component (const std::string &fragment,
   doc->append (fragment, first_key, last_key - first_key + 1);
   return true;
 }
+/* A future or manually edited field must not be accepted and then lost on
+   resave. Native schema-v2 has a fixed vocabulary; unsupported extensions
+   require a newer schema or a separately negotiated required feature. */
+bool
+v2_check_known_keys (const json_value &object,
+                     std::initializer_list<const char *> allowed,
+                     const std::string &context, std::string *error)
+{
+  if (object.type != json_value::kind::object)
+    return archive_fail (error, "invalid v2 JSON object at " + context);
+  for (const auto &member : object.object_value)
+    {
+      bool known = false;
+      for (const char *name : allowed)
+        if (member.first == name)
+          {
+            known = true;
+            break;
+          }
+      if (!known)
+        return archive_fail (
+            error, "unsupported v2 field " + context + "." + member.first);
+    }
+  return true;
+}
+
+/* Check the key vocabulary of a required nested object. Required VALUE
+   shapes and individual typed fields are still handled by their native
+   component decoders. */
+bool
+v2_check_nested_keys (const json_value &parent, const char *name,
+                      std::initializer_list<const char *> allowed,
+                      const std::string &context, std::string *error)
+{
+  const json_value *nested
+      = v2_required (parent, name, json_value::kind::object, error);
+  return nested && v2_check_known_keys (*nested, allowed, context, error);
+}
+
+/* A nullable mesh or correction resource has no content keys when null. */
+bool
+v2_check_nullable_keys (const json_value &parent, const char *name,
+                        std::initializer_list<const char *> allowed,
+                        const std::string &context, std::string *error)
+{
+  const json_value *nested = object_member (parent, name);
+  if (!nested)
+    return archive_fail (error, "missing v2 field: " + context);
+  return nested->type == json_value::kind::null_value
+         || v2_check_known_keys (*nested, allowed, context, error);
+}
+
+/* Check all objects in ARRAY, not only the first element. This catches
+   unsupported metadata in a later MTF record, registration point or tile
+   without silently discarding that record's extra fields. */
+bool
+v2_check_array_keys (const json_value &parent, const char *name,
+                     std::initializer_list<const char *> allowed,
+                     const std::string &context, std::string *error)
+{
+  const json_value *entries
+      = v2_required (parent, name, json_value::kind::array, error);
+  if (!entries)
+    return false;
+  for (const json_value &entry : entries->array_value)
+    if (!v2_check_known_keys (entry, allowed, context, error))
+      return false;
+  return true;
+}
+
+/* One strict schema-v2 object-tree vocabulary. Unknown values are rejected
+   rather than silently lost on the next Save. Existing component decoders
+   separately enforce presence, enum identifiers, numeric bounds and array
+   dimensions, so this adds no duplicate data representation. */
+bool
+v2_check_document_vocabulary (const json_value &root, std::string *error)
+{
+  if (!v2_check_known_keys (
+          root,
+          {"format", "schema_version", "required_features", "capture",
+           "process", "geometry", "detection", "registration", "profile",
+           "reconstruction", "sharpness", "color", "correction_grids"},
+          "document", error)
+      || !v2_check_nested_keys (
+          root, "capture",
+          {"capture_type", "demosaic", "gamma",
+           "scan_rotation_quarter_turns", "scan_mirror", "scan_crop",
+           "image_area", "scan_exposure", "dark_point",
+           "backlight_correction_black"},
+          "capture", error)
+      || !v2_check_nested_keys (
+          root, "process",
+          {"color_model", "age", "dye_density", "strip_widths",
+           "contact_copy"},
+          "process", error)
+      || !v2_check_nested_keys (
+          root, "geometry",
+          {"screen_type", "scanner_type", "center", "axis_x", "axis_y",
+           "projection_distance", "tilt", "final_rotation", "final_mirror",
+           "final_angle", "final_ratio", "lens", "mesh"},
+          "geometry", error)
+      || !v2_check_nested_keys (
+          root, "detection",
+          {"red", "green", "blue", "black", "min_luminosity", "min_ratio"},
+          "detection", error)
+      || !v2_check_nested_keys (
+          root, "registration",
+          {"optimize_lens", "lens_center_distance", "optimize_tilt",
+           "points"},
+          "registration", error)
+      || !v2_check_nested_keys (root, "profile", {"spots"},
+                                "profile", error)
+      || !v2_check_nested_keys (
+          root, "reconstruction",
+          {"ignore_infrared", "mix_weights", "mix_dark",
+           "collection_quality", "screen_demosaic", "demosaiced_scaling",
+           "screen_blur_radius", "collection_threshold",
+           "screen_denoise", "demosaiced_denoise"},
+          "reconstruction", error)
+      || !v2_check_nested_keys (
+          root, "sharpness",
+          {"mode", "unsharp_radius", "unsharp_amount", "scanner_snr",
+           "scanner_mtf_scale", "richardson_lucy_iterations",
+           "richardson_lucy_sigma", "deconvolution_supersample",
+           "resampling_kernel", "mtf"},
+          "sharpness", error)
+      || !v2_check_nested_keys (
+          root, "color",
+          {"scanner_primaries", "process_profile", "white_balance",
+           "presaturation", "temperature", "backlight_temperature",
+           "observer_whitepoint", "dye_balance", "saturation",
+           "brightness", "tone_curve"},
+          "color", error)
+      || !v2_check_nested_keys (
+          root, "correction_grids",
+          {"backlight", "scanner_blur", "tiles"},
+          "correction_grids", error))
+    return false;
+
+  const json_value &cap = *object_member (root, "capture");
+  const json_value &process = *object_member (root, "process");
+  const json_value &geometry = *object_member (root, "geometry");
+  const json_value &registration = *object_member (root, "registration");
+  const json_value &recon = *object_member (root, "reconstruction");
+  const json_value &sharpness = *object_member (root, "sharpness");
+  const json_value &color = *object_member (root, "color");
+  const json_value &grids = *object_member (root, "correction_grids");
+  if (!v2_check_nested_keys (cap, "scan_crop", {"enabled", "rect"},
+                             "capture.scan_crop", error)
+      || !v2_check_nested_keys (cap, "image_area", {"enabled", "rect"},
+                                "capture.image_area", error)
+      || !v2_check_nested_keys (process, "strip_widths", {"red", "green"},
+                                "process.strip_widths", error)
+      || !v2_check_nested_keys (process, "contact_copy",
+                                {"simulate", "preflash", "exposure", "boost",
+                                 "emulsion_curve"},
+                                "process.contact_copy", error)
+      || !v2_check_nested_keys (geometry, "lens", {"radial", "center"},
+                                "geometry.lens", error)
+      || !v2_check_nullable_keys (
+          geometry, "mesh",
+          {"direction", "shift", "step", "dimensions", "points"},
+          "geometry.mesh", error)
+      || !v2_check_array_keys (
+          registration, "points", {"image", "screen", "color"},
+          "registration.points[]", error)
+      || !v2_check_nested_keys (
+          recon, "screen_denoise",
+          {"mode", "strength", "noise_variance_floor",
+           "noise_variance_slope", "patch_radius", "search_radius",
+           "bilateral_sigma_s", "bilateral_sigma_r"},
+          "reconstruction.screen_denoise", error)
+      || !v2_check_nested_keys (
+          recon, "demosaiced_denoise",
+          {"mode", "strength", "noise_variance_floor",
+           "noise_variance_slope", "patch_radius", "search_radius",
+           "bilateral_sigma_s", "bilateral_sigma_r"},
+          "reconstruction.demosaiced_denoise", error)
+      || !v2_check_nested_keys (
+          sharpness, "mtf",
+          {"model", "sigma_px", "halo_fraction", "halo_sigma_px",
+           "blur_diameter_px", "defocus_mm", "f_stop", "pixel_pitch_um",
+           "sensor_fill_factor", "scan_dpi", "wavelengths_nm",
+           "selected_measurement", "measurements"},
+          "sharpness.mtf", error)
+      || !v2_check_nested_keys (
+          color, "scanner_primaries", {"red", "green", "blue"},
+          "color.scanner_primaries", error)
+      || !v2_check_nested_keys (
+          color, "process_profile", {"dark", "red", "green", "blue"},
+          "color.process_profile", error)
+      || !v2_check_nested_keys (
+          color, "tone_curve", {"type", "control_points"},
+          "color.tone_curve", error)
+      || !v2_check_nullable_keys (
+          grids, "backlight",
+          {"dimensions", "channels", "black_correction",
+           "luminosities", "subtractions"},
+          "correction_grids.backlight", error)
+      || !v2_check_nullable_keys (
+          grids, "scanner_blur", {"mode", "dimensions", "values"},
+          "correction_grids.scanner_blur", error)
+      || !v2_check_nested_keys (
+          grids, "tiles", {"dimensions", "adjustments"},
+          "correction_grids.tiles", error))
+    return false;
+
+  const json_value &contact
+      = *object_member (process, "contact_copy");
+  const json_value &mtf = *object_member (sharpness, "mtf");
+  const json_value &tiles = *object_member (grids, "tiles");
+  if (!v2_check_nested_keys (
+          contact, "emulsion_curve", {"min", "linear1", "linear2", "max"},
+          "process.contact_copy.emulsion_curve", error)
+      || !v2_check_array_keys (
+          mtf, "measurements",
+          {"channel", "image_layer", "wavelength_nm", "same_capture",
+           "name", "source_filename", "source_dimensions", "roi",
+           "edge", "edge_quality", "samples"},
+          "sharpness.mtf.measurements[]", error)
+      || !v2_check_array_keys (
+          tiles, "adjustments", {"exposure", "dark_point", "scanner_blur"},
+          "correction_grids.tiles.adjustments[]", error))
+    return false;
+  const json_value &adjustments
+      = *object_member (tiles, "adjustments");
+  for (const json_value &tile : adjustments.array_value)
+    if (!v2_check_nullable_keys (
+            tile, "scanner_blur", {"mode", "dimensions", "values"},
+            "correction_grids.tiles.adjustments[].scanner_blur", error))
+      return false;
+  return true;
+}
+
 } // anonymous namespace
 
 /* Encode all authoritative persistent processing/calibration domains into
@@ -4345,6 +4580,8 @@ decode_parameter_json_v2_document (
   if (features && (features->type != json_value::kind::array
                    || !features->array_value.empty ()))
     return archive_fail (error, "unsupported required v2 parameter feature");
+  if (!v2_check_document_vocabulary (root, error))
+    return false;
 
   scr_to_img_parameters parsed_geometry;
   scr_detect_parameters parsed_detection;
