@@ -122,8 +122,9 @@ compatible ZIP v1, native JSON v2 and legacy .par, while fresh documents
 still default to ZIP v1 during alpha testing. JSON saves bypass legacy CSP
 serialization and include persistent profile spots. Asynchronous sidecar
 staging preserves this format when applying or suggesting a file, and
-crash-recovery target metadata records `json-v2` independently of the
-currently ZIP-v1 recovery snapshot. The document lifecycle smoke verifies
+crash-recovery target metadata records `json-v2` independently of its
+complete native-JSON v2 snapshot. Existing ZIP-v1 and .par recovery
+snapshots remain supported by content-based parsing. The document lifecycle smoke verifies
 native JSON Save/Open/ordinary Save, corrupt-input failure nonmutation and
 return to the v1 compatibility target. See
 `doc/parameter-json-v2-plan.md` for outstanding recovery, field-audit and
