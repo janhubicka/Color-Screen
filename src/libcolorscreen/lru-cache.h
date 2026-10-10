@@ -8,6 +8,9 @@
 #include <cstddef>
 #include <condition_variable>
 #include <type_traits>
+#include <limits>
+#include <vector>
+#include "include/cache-stats.h"
 #include "include/progress-info.h"
 #include "include/dllpublic.h"
 
@@ -33,6 +36,41 @@ private:
   DLL_PUBLIC static std::atomic_uint64_t time;
 };
 extern class lru_caches lru_caches;
+
+/* The non-template registry coordinates eviction and read-only statistics
+   across every simple and tiled LRU in libcolorscreen. Its implementation
+   lives in the core library, never in a frontend. The registry lock is always
+   acquired BEFORE a cache mutex; caches notify it only after unlocking their
+   own mutex. Returned evicted references are destroyed after releasing the
+   registry lock, so destructors cannot reenter cache pruning under a lock. */
+class tracked_lru_cache
+{
+public:
+  virtual ~tracked_lru_cache () = default;
+  virtual cache_entry_statistics cache_statistics (uint64_t *oldest) = 0;
+  virtual std::shared_ptr<void> discard_oldest_cache_entry () = 0;
+};
+
+class DLL_PUBLIC lru_cache_registry
+{
+public:
+  static lru_cache_registry &instance ();
+  void register_cache (tracked_lru_cache *);
+  void unregister_cache (tracked_lru_cache *);
+  cache_memory_statistics snapshot ();
+  void enforce_budget (uint64_t extra_bytes = 0);
+
+private:
+  std::mutex registry_mutex;
+  std::vector<tracked_lru_cache *> caches;
+};
+
+/* Reserve/release unpacked Bayer CFA memory against the same global cache
+   policy. Reserving requires no Qt-specific memory service. Release is atomic
+   so a retired image can die while another cache lock is still held. */
+DLL_PUBLIC bool reserve_raw_source_cache_bytes (uint64_t bytes);
+DLL_PUBLIC void release_raw_source_cache_bytes (uint64_t bytes);
+DLL_PUBLIC uint64_t raw_source_cache_bytes ();
 
 /* LRU cache used keep various data between invocations of renderers.
    P represents parameters which are used to produce T.
@@ -135,7 +173,7 @@ struct computing_guard
    ENTRY is the entry structure.
    DERIVED is the final class type.  */
 template <typename P, typename T, typename Entry, typename Derived>
-class abstract_lru_cache
+class abstract_lru_cache : public tracked_lru_cache
 {
   static const bool verbose = false;
 
@@ -158,6 +196,53 @@ protected:
       : entries (NULL), cache_size (base_size), name (n),
         max_cached_bytes (max_bytes), value_bytes (weight)
   {
+    lru_cache_registry::instance ().register_cache (this);
+  }
+
+  cache_entry_statistics
+  cache_statistics (uint64_t *oldest) override
+  {
+    std::unique_lock<std::mutex> guard (lock);
+    cache_entry_statistics stat;
+    stat.name = name ? name : "unnamed";
+    stat.retained_bytes = cached_bytes;
+    stat.precise_size = value_bytes != nullptr;
+    uint64_t least_recent = std::numeric_limits<uint64_t>::max ();
+    for (Entry *e = entries; e; e = e->next)
+      {
+        ++stat.entries;
+        if (e->computing)
+          ++stat.in_progress;
+        if (e->val && e->val.use_count () > 1)
+          ++stat.externally_pinned;
+        if (e->val && !e->computing && e->last_used < least_recent)
+          least_recent = e->last_used;
+      }
+    if (oldest)
+      *oldest = least_recent;
+    return stat;
+  }
+
+  /* Detach the oldest owned result, even if a renderer independently pins
+     it. The aliasing shared_ptr defers any image destruction until after
+     global registry locks have been released by the caller. */
+  std::shared_ptr<void>
+  discard_oldest_cache_entry () override
+  {
+    std::unique_lock<std::mutex> guard (lock);
+    Entry **victim = nullptr;
+    for (Entry **slot = &entries; *slot; slot = &(*slot)->next)
+      if ((*slot)->val && !(*slot)->computing
+          && (!victim || (*slot)->last_used < (*victim)->last_used))
+        victim = slot;
+    if (!victim)
+      return {};
+    Entry *old = *victim;
+    *victim = old->next;
+    cached_bytes -= old->cached_bytes;
+    std::shared_ptr<void> detached (old->val, nullptr);
+    delete old;
+    return detached;
   }
 
   /* Release the least recently used completed entries until NEED bytes
@@ -187,6 +272,7 @@ protected:
 
   virtual ~abstract_lru_cache ()
   {
+    lru_cache_registry::instance ().unregister_cache (this);
     prune ();
     if (entries)
       fprintf (stderr, "Claimed entries in cache %s. Leaking memory\n", name);
@@ -323,24 +409,27 @@ protected:
        Releasing cache ownership of an externally pinned victim does not
        invalidate that owner's shared_ptr. */
     const uint64_t entry_id = e->id;
-    if (ret_val && max_cached_bytes)
+    if (ret_val)
       {
-        /* Some historical caches use T = float[] (array-owned lookup
-           tables). They have no generic sizeof(T) or T& conversion from a
-           shared_ptr<T> element. Keep those caches count-only; the new byte
-           budgets apply only to explicitly sized non-array value types. */
+        /* Historical caches of float[] remain count-only: an unbounded
+           array has neither sizeof(T) nor a generic per-value size. For
+           every ordinary object, track at least its descriptor size, or use
+           the supplied complete byte-size callback. This measurement is
+           also visible in the global statistics panel. */
         size_t weight = 0;
         if constexpr (!std::is_array<T>::value)
           weight = value_bytes ? value_bytes (*ret_val) : sizeof (T);
-        if (weight <= max_cached_bytes)
+        if (!max_cached_bytes || weight <= max_cached_bytes)
           {
-            make_room_for_bytes (weight, e);
+            if (max_cached_bytes)
+              make_room_for_bytes (weight, e);
             e->cached_bytes = weight;
             cached_bytes += weight;
           }
         else
           {
-            /* Oversized values remain returnable but are never retained. */
+            /* The caller receives a completed oversized result even when
+               the cache itself cannot retain it. */
             for (Entry **slot = &entries; *slot; slot = &(*slot)->next)
               if (*slot == e)
                 {
@@ -367,6 +456,13 @@ protected:
     if (verbose && ret_val)
       fprintf (stderr, "Cache %s: added id %i size %i\n", name,
                (int)entry_id, (int)size);
+
+    /* Global eviction may inspect *other* cache instances. Never take the
+       registry lock while holding this cache's mutex. The returned image
+       already has its own shared_ptr so even immediate eviction is safe. */
+    guard.unlock ();
+    if (ret_val)
+      lru_cache_registry::instance ().enforce_budget ();
     return ret_val;
   }
 
