@@ -1275,8 +1275,11 @@ calibration remain document-owned.
 
 Keep `demosaic` saved for reopening the original capture. Core
 `image_data::demosaiced_variant()` retains the reusable Bayer source and
-uses a byte-budgeted `libcolorscreen::lru_cache`; the Qt frontend does not
-own a duplicate RAW decoder cache or control its memory budget. Cache keys
+uses the OS-memory-aware global `libcolorscreen::lru_cache` registry;
+the Qt frontend does not own a duplicate RAW decoder cache or control the
+memory budget. Help → Cache Statistics… is a read-only dialog that displays
+the core's installed/available memory, shared budget, retained Bayer source
+bytes and per-cache entry/byte/pin estimates, with no Qt cache policy. Cache keys
 include source generation and demosaic method, and old worker generations
 cannot publish into the current image view. Remain frontend-neutral so
 other applications can use exactly the same image-loading resources.
