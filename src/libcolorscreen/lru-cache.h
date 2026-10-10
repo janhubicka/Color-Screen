@@ -325,7 +325,13 @@ protected:
     const uint64_t entry_id = e->id;
     if (ret_val && max_cached_bytes)
       {
-        const size_t weight = value_bytes ? value_bytes (*ret_val) : sizeof (T);
+        /* Some historical caches use T = float[] (array-owned lookup
+           tables). They have no generic sizeof(T) or T& conversion from a
+           shared_ptr<T> element. Keep those caches count-only; the new byte
+           budgets apply only to explicitly sized non-array value types. */
+        size_t weight = 0;
+        if constexpr (!std::is_array<T>::value)
+          weight = value_bytes ? value_bytes (*ret_val) : sizeof (T);
         if (weight <= max_cached_bytes)
           {
             make_room_for_bytes (weight, e);
