@@ -5884,6 +5884,89 @@ test_lru_cache_byte_budget ()
   return true;
 }
 
+/* Force a tiny global budget to validate eviction *across* otherwise
+   independent LRU instances without allocating gigabytes or relying on the
+   machine's free memory. The override is internal to libcolorscreen tests. */
+bool
+test_lru_global_memory_budget ()
+{
+  lru_cache_registry &registry = lru_cache_registry::instance ();
+  struct restore_budget
+  {
+    lru_cache_registry &cache_registry;
+    ~restore_budget () { cache_registry.set_test_budget_bytes (0); }
+  } restore {registry};
+  registry.set_test_budget_bytes (10);
+
+  bool hit = true;
+  test_params five {5}, six {6};
+  {
+    lru_cache<test_params, weighted_test_value,
+              get_new_weighted_test, 16>
+        first ("global weight five", 0, weighted_test_bytes);
+    lru_cache<test_params, weighted_test_value,
+              get_new_weighted_test, 16>
+        second ("global weight six", 0, weighted_test_bytes);
+
+    auto externally_pinned = first.get (five, nullptr, nullptr, &hit);
+    if (!externally_pinned || hit || first.retained_bytes () != 5)
+      return false;
+    auto held_six = second.get (six, nullptr, nullptr, &hit);
+    if (!held_six || hit || first.retained_bytes () != 0
+        || second.retained_bytes () != 6
+        || externally_pinned->weight != 5)
+      {
+        fprintf (stderr,
+                 "Global LRU did not evict the oldest independent cache\n");
+        return false;
+      }
+
+    const cache_memory_statistics report = get_cache_memory_statistics ();
+    bool saw_first = false, saw_second = false;
+    for (const auto &entry : report.caches)
+      {
+        if (entry.name == "global weight five")
+          saw_first = entry.entries == 0 && entry.retained_bytes == 0;
+        if (entry.name == "global weight six")
+          saw_second = entry.entries == 1 && entry.retained_bytes == 6
+                       && entry.precise_size && entry.externally_pinned == 1;
+      }
+    if (report.cache_budget_bytes != 10 || !saw_first || !saw_second
+        || report.cached_bytes + report.retained_raw_source_bytes > 10)
+      {
+        fprintf (stderr,
+                 "Global LRU per-cache report/budget does not match ownership\n");
+        return false;
+      }
+
+    /* Sensor resources share the SAME admission/eviction budget. A large
+       source reservation displaces the decoded cache rather than being
+       restricted to an unrelated hardcoded 256 MiB quota. */
+    if (!reserve_raw_source_cache_bytes (8))
+      {
+        fprintf (stderr, "Global LRU failed to admit a source reservation\n");
+        return false;
+      }
+    const auto reserved = get_cache_memory_statistics ();
+    release_raw_source_cache_bytes (8);
+    if (reserved.retained_raw_source_bytes < 8
+        || reserved.cached_bytes + reserved.retained_raw_source_bytes > 10
+        || held_six->weight != 6)
+      {
+        fprintf (stderr,
+                 "Global LRU source reservation did not evict decoded bytes\n");
+        return false;
+      }
+  }
+
+  /* Registry metadata must not retain references to a destructed cache. */
+  for (const auto &entry : get_cache_memory_statistics ().caches)
+    if (entry.name == "global weight five"
+        || entry.name == "global weight six")
+      return false;
+  return true;
+}
+
 /* test_spectrum_dyes_to_xyz performs unit tests for the spectrum_dyes_to_xyz class.  */
 bool
 test_spectrum_dyes_to_xyz ()
@@ -11092,6 +11175,8 @@ main (int argc, char **argv)
     { "lru_cache", "lru cache concurrency tests", [] () { return test_lru_cache_concurrency (); } },
     { "lru_cache_byte_budget", "size-aware LRU eviction and concurrent generation",
       [] () { return test_lru_cache_byte_budget (); } },
+    { "lru_global_memory", "global LRU eviction, diagnostics and RAM admission",
+      [] () { return test_lru_global_memory_budget (); } },
     { "spectrum", "spectrum to xyz tests", [] () { return test_spectrum_dyes_to_xyz (); } },
     { "whitepoint", "whitepoint consistency tests", [] () { return test_whitepoint_constants (); } },
     { "darkroom", "darkroom simulation tests", [] () { return test_darkroom (); } },
