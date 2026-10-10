@@ -7,6 +7,10 @@
 #include "lru-cache.h"
 #include "mapalloc.h"
 #include <array>
+#include <atomic>
+#include <cstdint>
+#include <list>
+#include <mutex>
 #include <assert.h>
 #include <cmath>
 #include <cstdlib>
@@ -32,6 +36,61 @@ namespace colorscreen
 {
 extern void prune_render_caches ();
 extern void prune_render_scr_detect_caches ();
+
+/* RAW mosaics remain sizeable even after freeing processed RGB output.
+   Retain at most 256 MiB across live images. This is a global, opportunistic
+   cache budget, not a limit on the image that Color-Screen may decode. */
+static constexpr uint64_t raw_source_budget = UINT64_C (256) * 1024 * 1024;
+static std::atomic<uint64_t> retained_raw_source_bytes {0};
+/* Count only variants held alive by the cache, not external view owners.
+   Source mosaics have a separate 256 MiB reservation. */
+static constexpr uint64_t raw_variant_budget = UINT64_C (256) * 1024 * 1024;
+static std::atomic<uint64_t> retained_raw_variant_bytes {0};
+
+/* Own LibRaw's decoded sensor samples after the initial loader has gone.
+   The processed image buffer is released on transfer. Retention is currently
+   limited to Bayer CFA data: other RAW formats may use substantially larger
+   multicomponent buffers and will be supported once their memory accounting
+   and reprocessing tests are established. */
+class unpacked_raw_source
+{
+public:
+  /* Future dcraw_process() calls must be serialized on this single mutable
+     LibRaw instance; finished image_data variants own independent pixels. */
+  std::mutex processing_mutex;
+  std::shared_ptr<LibRaw> processor;
+  std::string source_filename;
+  int full_res_width = 0;
+  void *input_buffer = nullptr;
+  uint64_t reserved_bytes = 0;
+  struct cached_variant
+  {
+    image_data::demosaicing_t method;
+    std::shared_ptr<image_data> image;
+    uint64_t reserved_bytes;
+  };
+  /* Most recently used first; at most two finished derivatives. A derivative
+     never holds a strong source pointer after its loader has finished. */
+  std::list<cached_variant> variants;
+
+  ~unpacked_raw_source ()
+  {
+    /* LibRaw may still own a datastream referring to the EIP input
+       buffer. Destroy its processor before returning that memory. */
+    /* Drop cached derivative ownership before releasing source storage. */
+    for (const cached_variant &variant : variants)
+      if (variant.reserved_bytes)
+        retained_raw_variant_bytes.fetch_sub (
+            variant.reserved_bytes, std::memory_order_relaxed);
+    variants.clear ();
+    processor.reset ();
+    if (input_buffer)
+      free (input_buffer);
+    if (reserved_bytes)
+      retained_raw_source_bytes.fetch_sub (reserved_bytes,
+                                           std::memory_order_relaxed);
+  }
+};
 
 const property_t image_data::demosaic_names[(int)demosaic_max]
      = {
@@ -60,6 +119,12 @@ public:
                           progress_info *progress)
       = 0;
   virtual ~image_data_loader () {}
+  /* Only successful RAW loads return a decoded sensor source. */
+  virtual std::shared_ptr<unpacked_raw_source>
+  take_unpacked_raw_source ()
+  {
+    return {};
+  }
   bool grayscale = false;
   bool rgb = false;
 };
@@ -128,7 +193,13 @@ private:
 class raw_image_data_loader : public image_data_loader
 {
 public:
-  raw_image_data_loader (image_data *img) : m_backlight_corr (nullptr), m_img (img), m_buffer (nullptr), m_processor (std::make_unique<LibRaw> ()) {}
+  raw_image_data_loader (image_data *img)
+      : m_backlight_corr (nullptr), m_img (img), m_buffer (nullptr),
+        m_processor (std::make_shared<LibRaw> ()) {}
+  raw_image_data_loader (image_data *img,
+                         std::shared_ptr<unpacked_raw_source> source)
+      : m_backlight_corr (nullptr), m_img (img), m_buffer (nullptr),
+        m_processor (source->processor), m_reuse_source (std::move (source)) {}
   virtual bool init_loader (const char *name, const char **error,
                             progress_info *, image_data::demosaicing_t);
   virtual bool load_part (int *permille, const char **error,
@@ -141,12 +212,66 @@ public:
       free (m_buffer);
   }
 
+  std::shared_ptr<unpacked_raw_source>
+  take_unpacked_raw_source () override
+  {
+    /* A second pass borrows the source rather than taking ownership. */
+    if (m_reuse_source)
+      {
+        m_processor->free_image ();
+        return {};
+      }
+    if (!m_processor || !m_img->standard_bayer_cfa || m_buffer)
+      return {};
+
+    /* Only Bayer's one-sample-per-sensel RAW buffer is accounted for here.
+       EIP's separate open_buffer allocation and non-Bayer layouts require
+       more extensive accounting, so keep the legacy release behaviour for
+       them rather than accidentally pinning unbounded memory. */
+    const auto &raw = m_processor->imgdata.rawdata;
+    const uint64_t w = (uint64_t)m_processor->imgdata.sizes.raw_width;
+    const uint64_t h = (uint64_t)m_processor->imgdata.sizes.raw_height;
+    if (!raw.raw_image || !w || !h || w > raw_source_budget / 2 / h)
+      return {};
+    const uint64_t needed = w * h * 2;
+    auto source = std::make_shared<unpacked_raw_source> ();
+
+    /* Atomically reserve from the process-wide budget. Multiple documents
+       may finish loading concurrently. Under memory pressure source
+       retention is optional; the already-decoded image is still valid. */
+    uint64_t used = retained_raw_source_bytes.load (std::memory_order_relaxed);
+    do
+      {
+        if (used > raw_source_budget - needed)
+          return {};
+      }
+    while (!retained_raw_source_bytes.compare_exchange_weak (
+        used, used + needed, std::memory_order_relaxed,
+        std::memory_order_relaxed));
+    source->reserved_bytes = needed;
+
+    /* free_image releases the temporary postprocessed image, not unpacked
+       CFA samples. A future dcraw_process may reprocess the same samples.
+       The active image_data already owns a separate pixel copy. */
+    m_processor->free_image ();
+    source->processor = std::move (m_processor);
+    source->source_filename = std::move (m_source_filename);
+    source->full_res_width = m_img->full_res_width;
+    source->input_buffer = m_buffer;
+    m_buffer = nullptr;
+    return source;
+  }
+
 private:
   std::shared_ptr<backlight_correction_parameters> m_backlight_corr;
   image_data *m_img;
   void *m_buffer;
   /* Do not put it on the stack since it is rather large.  */
-  std::unique_ptr<LibRaw> m_processor;
+  std::shared_ptr<LibRaw> m_processor;
+  /* Kept alive across this borrowed reprocessing pass, with the resource
+     mutex held by image_data::demosaiced_variant(). */
+  std::shared_ptr<unpacked_raw_source> m_reuse_source;
+  std::string m_source_filename;
   bool monochromatic = false;
   bool bayer_correction = false;
 };
@@ -663,9 +788,12 @@ raw_image_data_loader::init_loader (const char *name, const char **error,
                                     progress_info *progress,
                                     image_data::demosaicing_t demosaic)
 {
+  /* Retain the actual external identity before an EIP archive rewrites NAME
+     to its internal IIQ entry (EIP caching is currently not admitted). */
+  m_source_filename = name;
   size_t buffer_size = 0;
   m_buffer = NULL;
-  if (has_suffix (name, ".eip"))
+  if (!m_reuse_source && has_suffix (name, ".eip"))
     {
       int errcode;
       zip_t *zip = NULL;
@@ -770,6 +898,13 @@ raw_image_data_loader::init_loader (const char *name, const char **error,
         }
       zip_close (zip);
     }
+  /* dcraw_process() supports multiple passes after unpack(), but parameters
+     retained from the previous pass must be reset before selecting the new
+     algorithm (especially half-size and noninterpolating modes). */
+  m_processor->imgdata.params.half_size = 0;
+  m_processor->imgdata.params.no_interpolation = 0;
+  m_img->demosaiced_by = image_data::demosaic_max;
+  m_img->demosaic = demosaic;
   m_processor->imgdata.params.gamm[0] = m_processor->imgdata.params.gamm[1]
       = m_processor->imgdata.params.no_auto_bright = 1;
   m_processor->imgdata.params.use_camera_matrix = 0;
@@ -840,11 +975,14 @@ raw_image_data_loader::init_loader (const char *name, const char **error,
   m_processor->imgdata.params.threshold = 0;
   if (demosaic == image_data::demosaic_none || monochromatic)
     m_processor->imgdata.params.no_interpolation = 1;
-  int ret;
-  if (m_buffer)
-    ret = m_processor->open_buffer (m_buffer, buffer_size);
-  else
-    ret = m_processor->open_file (name);
+  int ret = LIBRAW_SUCCESS;
+  if (!m_reuse_source)
+    {
+      if (m_buffer)
+        ret = m_processor->open_buffer (m_buffer, buffer_size);
+      else
+        ret = m_processor->open_file (name);
+    }
   if (ret != LIBRAW_SUCCESS)
     {
       if (m_buffer)
@@ -881,8 +1019,10 @@ raw_image_data_loader::init_loader (const char *name, const char **error,
       return false;
     }
   if (progress)
-    progress->set_task ("unpacking RAW data", 1);
-  if ((ret = m_processor->unpack ()) != LIBRAW_SUCCESS)
+    progress->set_task (m_reuse_source
+                            ? "reusing unpacked RAW data"
+                            : "unpacking RAW data", 1);
+  if (!m_reuse_source && (ret = m_processor->unpack ()) != LIBRAW_SUCCESS)
     {
       if (m_buffer)
         {
@@ -895,7 +1035,9 @@ raw_image_data_loader::init_loader (const char *name, const char **error,
   /* Save the full-resolution usable width before dcraw_process which may
      halve dimensions in half-size mode.  This is needed to correct
      FocalPlaneResolution-based pixel pitch for downsampled output.  */
-  m_img->full_res_width = m_processor->imgdata.sizes.width;
+  m_img->full_res_width = m_reuse_source
+                              ? m_reuse_source->full_res_width
+                              : m_processor->imgdata.sizes.width;
   if (progress)
     progress->set_task ("demosaicing", 1);
   if ((ret = m_processor->dcraw_process ()) != LIBRAW_SUCCESS)
@@ -1325,6 +1467,12 @@ image_data::load_part (int *permille, const char **error,
   bool ret = loader->load_part (permille, error, progress);
   if (!ret || *permille == 1000)
     {
+      /* The loader normally dies after load_part() finishes. LibRaw's
+         unpacked CFA buffer is reusable for future demosaicing variants,
+         whereas its postprocessed image has already been copied to our
+         independent pixel storage. Keep that source only on success. */
+      if (ret && *permille == 1000)
+        m_unpacked_raw_source = loader->take_unpacked_raw_source ();
       loader = NULL;
       /* If color profile is available, parse it.  */
       if (icc_profile)
@@ -1689,6 +1837,138 @@ image_data::load (const char *name, bool preload_all, const char **error,
         }
     }
   return false;
+}
+
+/* Produce another complete image from the same unpacked Bayer source.
+   A caller is free to keep returned variants when the bounded cache evicts
+   them. The current source image stays unchanged on success or failure.
+   LibRaw's repeated dcraw_process calls are serialized, since its working
+   output and processing parameters are mutable. */
+std::shared_ptr<image_data>
+image_data::demosaiced_variant (demosaicing_t method, const char **error,
+                               progress_info *progress)
+{
+  const char *ignored_error = nullptr;
+  if (!error)
+    error = &ignored_error;
+  *error = nullptr;
+  if (method < demosaic_default || method >= demosaic_max)
+    {
+      *error = "invalid RAW demosaicing algorithm";
+      return {};
+    }
+
+  std::shared_ptr<unpacked_raw_source> source = m_unpacked_raw_source;
+  if (!source || !source->processor)
+    {
+      *error = "unpacked Bayer sensor samples are not cached";
+      return {};
+    }
+
+  /* A shared source may also be used by a non-heap image_data in a test,
+     where weak_from_this simply returns empty. Recompute in that case. */
+  if (method == demosaic)
+    if (auto original = weak_from_this ().lock ())
+      return original;
+
+  std::lock_guard<std::mutex> lock (source->processing_mutex);
+  if (progress && progress->cancel_requested ())
+    {
+      *error = "cancelled";
+      return {};
+    }
+  for (auto it = source->variants.begin (); it != source->variants.end ();
+       ++it)
+    if (it->method == method)
+      {
+        std::shared_ptr<image_data> image = it->image;
+        source->variants.splice (source->variants.begin (), source->variants,
+                                 it);
+        return image;
+      }
+
+  auto variant = std::make_shared<image_data> ();
+  /* The retained processor's rawdata is immutable; only the temporary
+     postprocessing buffer and LibRaw params change under the mutex. */
+  source->processor->free_image ();
+  variant->loader
+      = std::make_unique<raw_image_data_loader> (variant.get (), source);
+  if (!variant->loader->init_loader (source->source_filename.c_str (), error,
+                                    progress, method))
+    {
+      variant->loader.reset ();
+      source->processor->free_image ();
+      return {};
+    }
+  if (!variant->allocate ())
+    {
+      *error = "out of memory allocating demosaiced variant";
+      variant->loader.reset ();
+      source->processor->free_image ();
+      return {};
+    }
+
+  int permille = 0;
+  for (;;)
+    {
+      if (progress && progress->cancel_requested ())
+        {
+          *error = "cancelled";
+          variant->loader.reset ();
+          source->processor->free_image ();
+          return {};
+        }
+      if (!variant->load_part (&permille, error, progress))
+        {
+          variant->loader.reset ();
+          source->processor->free_image ();
+          return {};
+        }
+      if (permille == 1000)
+        break;
+      if (progress)
+        progress->set_progress (permille);
+    }
+  if (progress && progress->cancel_requested ())
+    {
+      *error = "cancelled";
+      return {};
+    }
+
+  /* A derivative is an independent image with no strong pointer back to its
+     source. Two completed variants per source are sufficient for comparing
+     algorithms without retaining every large image encountered. */
+  const uint64_t w = (uint64_t)variant->width;
+  const uint64_t h = (uint64_t)variant->height;
+  const uint64_t bytes_per_pixel
+      = variant->has_rgb () ? sizeof (pixel) : sizeof (gray);
+  uint64_t needed = 0;
+  if (w && h && w <= raw_variant_budget / bytes_per_pixel / h)
+    needed = w * h * bytes_per_pixel;
+
+  if (needed)
+    {
+      /* Evict only cache ownership; external users of an old image keep its
+         pixels. Never hold more than two finished variants per source. */
+      while (source->variants.size () >= 2)
+        {
+          auto &old = source->variants.back ();
+          retained_raw_variant_bytes.fetch_sub (
+              old.reserved_bytes, std::memory_order_relaxed);
+          source->variants.pop_back ();
+        }
+      uint64_t used = retained_raw_variant_bytes.load (
+          std::memory_order_relaxed);
+      while (used <= raw_variant_budget - needed)
+        if (retained_raw_variant_bytes.compare_exchange_weak (
+                used, used + needed, std::memory_order_relaxed,
+                std::memory_order_relaxed))
+          {
+            source->variants.push_front ({ method, variant, needed });
+            break;
+          }
+    }
+  return variant;
 }
 
 /* Set DPI of the image to NEW_XDPI and NEW_YDPI.  */

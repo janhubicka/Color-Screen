@@ -13,6 +13,7 @@ namespace colorscreen
 {
 
 class image_data_loader;
+class unpacked_raw_source;
 class stitch_project;
 
 /* Statistics describing whether an RGB RAW rendering is consistent with one
@@ -27,7 +28,7 @@ struct monochrome_bayer_analysis
 };
 
 /* Scanned image descriptor.  */
-class image_data
+class image_data : public std::enable_shared_from_this<image_data>
 {
 public:
   /* Specify spectra or XYZ coordinates of color dyes used in the process.  */
@@ -188,6 +189,29 @@ public:
 						 bool allocate_grayscale = false);
   DLL_PUBLIC bool save_tiff (const char *name, progress_info *progress = NULL);
 
+  /* True when this source image retained LibRaw's unpacked sensor samples.
+     These samples are independent of the selected demosaicing algorithm, so
+     future on-demand variants can reprocess them without reopening the RAW
+     file. Non-RAW images, incomplete loads and synthetic images return false.
+     Retention itself never changes the active image's pixel data. */
+  bool has_unpacked_raw_source () const noexcept
+  {
+    return static_cast<bool> (m_unpacked_raw_source);
+  }
+
+  /* Build or retrieve a demosaiced image variant from the retained unpacked
+     Bayer source without reopening or re-unpacking the RAW file. This method
+     is synchronous: frontends should call it on a worker and discard stale
+     results using their normal generation/cancellation discipline.
+     Completed variants own their own pixels and do not mutate this image.
+     At most a small number of variants are kept by the cache; callers may
+     hold returned images independently of later cache eviction. On failure
+     return null and set ERROR. A cache miss for an uncached source is not a
+     change to the supported RAW formats; callers may use the normal loader. */
+  DLL_PUBLIC std::shared_ptr<image_data>
+  demosaiced_variant (demosaicing_t method, const char **error,
+                      progress_info *progress = nullptr);
+
   pure_attr DLL_PUBLIC bool has_rgb () const;
   pure_attr DLL_PUBLIC bool has_grayscale_or_ir () const;
   /* Analyze a normally demosaiced RGB RAW image and return how closely its
@@ -239,6 +263,10 @@ public:
 
 private:
   std::unique_ptr<image_data_loader> loader;
+  /* LibRaw's unpacked sensor mosaic and metadata, retained only after a
+     successful RAW load. The processed RGB/grayscale output above remains
+     independent of this resource and can be used by existing renderers. */
+  std::shared_ptr<unpacked_raw_source> m_unpacked_raw_source;
   /* True if the data is owned by the structure.  */
   bool own = false;
   bool m_preload_all = false;

@@ -316,7 +316,20 @@ to document, ordinary-view, and slanted-edge reference inspectors: while embedde
 the workspace owns their floating docks; after detaching a presentation, that
 presentation window becomes the dock host. This avoids nested `QMainWindow` dock
 ownership without reintroducing panel-specific wiring. **Reload and demosaic** reloads both the source scan and every associated
-slanted-edge reference from its own filename using the current demosaic mode.
+slanted-edge reference using the current saved demosaic mode. For a conventional
+Bayer RAW whose unpacked sensor mosaic was retained (draft PR #536), the
+primary image may request a cached/on-demand decoder variant instead of
+opening and unpacking the same source file again; the reference images still
+reload independently from their own filenames. The GUI keeps an original
+`image_data` owner for that mosaic across variant displays. Never copy this
+resource into `ParameterState`, Undo or parameter archives: `demosaic`
+itself remains the persistent input choice. The image replacement generation
+gate remains authoritative, including source replacement, cancellation and
+rollback to the outgoing image on failure. Superseding Open/Reload explicitly
+cancels the previous image worker via its weak progress handle; a stale
+completion may never replace the scan or its retained source. Ordinary Open
+must continue to read the current file, and unsupported/over-budget RAW inputs
+use the old disk-loader path.
 
 Reference-image slanted-edge measurements use the source document's public
 `runOneShotOperation()` lifecycle. The reference supplies guarded GUI callbacks

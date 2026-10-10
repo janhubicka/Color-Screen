@@ -10569,6 +10569,229 @@ test_stitch_tile_adjustment_grid ()
   return true;
 }
 
+/* Only a completed RAW decoder may retain an unpacked sensor source.
+   Manually created buffers and ordinary TIFF decodes do not represent a CFA,
+   and must not silently claim to support on-demand RAW reprocessing. */
+static bool
+test_raw_source_retention_contract ()
+{
+  image_data synthetic;
+  if (synthetic.has_unpacked_raw_source ()
+      || !synthetic.set_dimensions (8, 8, true, false))
+    {
+      fprintf (stderr, "Synthetic image unexpectedly carries RAW source\n");
+      return false;
+    }
+  for (int y = 0; y < 8; ++y)
+    for (int x = 0; x < 8; ++x)
+      synthetic.put_rgb_pixel (x, y, { (image_data::gray)(x * 5000),
+                                       (image_data::gray)(y * 5000), 30000 });
+
+  const char *name = "raw-source-retention-test.tiff";
+  std::remove (name);
+  if (!synthetic.save_tiff (name))
+    {
+      fprintf (stderr, "Could not make non-RAW source test TIFF\n");
+      return false;
+    }
+
+  image_data loaded;
+  const char *error = nullptr;
+  const bool ok = loaded.load (name, true, &error);
+  std::remove (name);
+  if (!ok)
+    {
+      fprintf (stderr, "Could not reopen TIFF: %s\n",
+               error ? error : "unknown error");
+      return false;
+    }
+  if (loaded.has_unpacked_raw_source ()
+      || !loaded.has_rgb ()
+      || loaded.get_rgb_pixel (3, 5).r
+             != synthetic.get_rgb_pixel (3, 5).r)
+    {
+      fprintf (stderr, "Non-RAW decode acquired raw source or lost pixels\n");
+      return false;
+    }
+  return true;
+}
+
+/* Exercise real Bayer RAW decoding with independently requested methods.
+   The dedicated testsuite script sets COLORSCREEN_RAW_CACHE_TEST_FILE to
+   its tiny generated CFA DNG fixture. Ordinary direct 'unittests' runs need
+   no external image fixture; this group is inactive when it is absent. */
+static bool
+test_raw_source_variants ()
+{
+  const char *path = std::getenv ("COLORSCREEN_RAW_CACHE_TEST_FILE");
+  if (!path || !*path)
+    return true;
+
+  const char *error = nullptr;
+  image_data source;
+  if (!source.load (path, true, &error, nullptr, image_data::demosaic_linear)
+      || !source.has_unpacked_raw_source () || !source.has_rgb ())
+    {
+      fprintf (stderr, "Could not cache synthetic Bayer source: %s\n",
+               error ? error : "source not retained as Bayer RAW");
+      return false;
+    }
+  const image_data::pixel baseline = source.get_rgb_pixel (47, 61);
+
+  auto same_pixels = [] (const image_data &a, const image_data &b)
+    {
+      if (a.width != b.width || a.height != b.height
+          || a.has_rgb () != b.has_rgb ()
+          || a.has_grayscale_or_ir () != b.has_grayscale_or_ir ())
+        return false;
+      for (int y = 0; y < a.height; y++)
+        for (int x = 0; x < a.width; x++)
+          {
+            if (a.has_rgb ())
+              {
+                auto v = a.get_rgb_pixel (x, y);
+                auto w = b.get_rgb_pixel (x, y);
+                if (v.r != w.r || v.g != w.g || v.b != w.b)
+                  return false;
+              }
+            else if (a.get_pixel (x, y) != b.get_pixel (x, y))
+              return false;
+          }
+      return true;
+    };
+
+  for (image_data::demosaicing_t method :
+       {image_data::demosaic_AHD, image_data::demosaic_PPG,
+        image_data::demosaic_half, image_data::demosaic_linear})
+    {
+      error = nullptr;
+      std::shared_ptr<image_data> computed
+          = source.demosaiced_variant (method, &error);
+      if (!computed)
+        {
+          fprintf (stderr, "Reprocessing Bayer source failed for %i: %s\n",
+                   (int)method, error ? error : "unknown error");
+          return false;
+        }
+      error = nullptr;
+      std::shared_ptr<image_data> cached
+          = source.demosaiced_variant (method, &error);
+      if (cached != computed)
+        {
+          fprintf (stderr, "Repeated RAW variant did not hit cache for %i\n",
+                   (int)method);
+          return false;
+        }
+
+      image_data fresh;
+      error = nullptr;
+      if (!fresh.load (path, true, &error, nullptr, method)
+          || !same_pixels (*computed, fresh))
+        {
+          fprintf (stderr,
+                   "RAW cached %i differs from independent LibRaw decode: %s\n",
+                   (int)method, error ? error : "pixel/geometry mismatch");
+          return false;
+        }
+      if (!source.has_unpacked_raw_source ()
+          || !source.has_rgb ())
+        {
+          fprintf (stderr, "Variant request discarded original source\n");
+          return false;
+        }
+      const image_data::pixel after = source.get_rgb_pixel (47, 61);
+      if (baseline.r != after.r || baseline.g != after.g
+          || baseline.b != after.b)
+        {
+          fprintf (stderr, "Variant request mutated original pixels\n");
+          return false;
+        }
+    }
+  error = nullptr;
+  if (source.demosaiced_variant (image_data::demosaic_max, &error)
+      || !error)
+    {
+      fprintf (stderr, "Invalid RAW variant request was not rejected\n");
+      return false;
+    }
+
+  /* A pre-cancelled request must never publish a variant.  The retained
+     sensor mosaic remains usable for the same algorithm afterwards. */
+  progress_info cancelled;
+  cancelled.cancel ();
+  error = nullptr;
+  if (source.demosaiced_variant (image_data::demosaic_VNG, &error, &cancelled)
+      || !error || strcmp (error, "cancelled"))
+    {
+      fprintf (stderr, "Cancelled RAW request was not rejected\n");
+      return false;
+    }
+  error = nullptr;
+  auto after_cancel = source.demosaiced_variant (image_data::demosaic_VNG,
+                                                 &error);
+  image_data fresh_vng;
+  if (!after_cancel
+      || !fresh_vng.load (path, true, &error, nullptr,
+                          image_data::demosaic_VNG)
+      || !same_pixels (*after_cancel, fresh_vng))
+    {
+      fprintf (stderr, "Cancellation damaged RAW source: %s\n",
+               error ? error : "pixel/geometry mismatch");
+      return false;
+    }
+
+  /* Concurrent requests for the same algorithm must serialize reprocessing
+     and return one published result, not competing partially decoded images. */
+  constexpr int concurrent_requests = 8;
+  std::array<std::shared_ptr<image_data>, concurrent_requests> results;
+  std::array<const char *, concurrent_requests> errors {};
+  std::vector<std::thread> workers;
+  for (int i = 0; i < concurrent_requests; i++)
+    workers.emplace_back ([&source, &results, &errors, i] ()
+      {
+        results[i] = source.demosaiced_variant (image_data::demosaic_AHD,
+                                                &errors[i]);
+      });
+  for (std::thread &worker : workers)
+    worker.join ();
+  for (int i = 0; i < concurrent_requests; i++)
+    if (!results[i] || results[i] != results[0] || errors[i])
+      {
+        fprintf (stderr, "Concurrent RAW requests did not share one variant\n");
+        return false;
+      }
+
+  /* A freshly reopened RAW is a distinct resource: its cached results and
+     identities cannot alias variants from the previous image generation. */
+  image_data other_source;
+  error = nullptr;
+  if (!other_source.load (path, true, &error, nullptr,
+                          image_data::demosaic_linear)
+      || !other_source.has_unpacked_raw_source ())
+    {
+      fprintf (stderr, "Could not reopen independent RAW source: %s\n",
+               error ? error : "missing mosaic");
+      return false;
+    }
+  auto other_variant = other_source.demosaiced_variant (
+      image_data::demosaic_AHD, &error);
+  if (!other_variant || other_variant == results[0]
+      || other_variant->id == results[0]->id
+      || !same_pixels (*other_variant, *results[0]))
+    {
+      fprintf (stderr, "Separate RAW sources alias or decode differently\n");
+      return false;
+    }
+  const image_data::pixel after_threads = source.get_rgb_pixel (47, 61);
+  if (baseline.r != after_threads.r || baseline.g != after_threads.g
+      || baseline.b != after_threads.b)
+    {
+      fprintf (stderr, "Concurrent RAW requests changed source pixels\n");
+      return false;
+    }
+  return true;
+}
+
 /* Verify conservative detection of monochromatic data that was initially
    rendered as RGB from a standard Bayer RAW file.  Channel gains/offsets and
    small noise are allowed; real chromatic structure, flat data and non-Bayer
@@ -10726,6 +10949,10 @@ main (int argc, char **argv)
     { "image_area", "image area tests", [] () { return test_image_area (); } },
     { "stitch_tile_grid", "stitch tile adjustment grid persistence tests",
       [] () { return test_stitch_tile_adjustment_grid (); } },
+    { "raw_source_retention", "decoded source lifetime and non-RAW isolation tests",
+      [] () { return test_raw_source_retention_contract (); } },
+    { "raw_source_variant", "cached Bayer RAW reprocessing tests",
+      [] () { return test_raw_source_variants (); } },
     { "channel_sharpening", "per-channel scanner sharpening tests",
       [] () { return test_channel_sharpening (); } },
     { "slanted_edge", "slanted edge MTF tests", [] () { return test_slanted_edge_mtf (); } },

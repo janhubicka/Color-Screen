@@ -848,6 +848,12 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
         loadProbe->m_adaptiveSharpening.scan = loadProbe->m_scan;
         loadProbe->m_adaptiveSharpening.progress = adaptiveProgress;
 
+        // A superseded RAW/file decode is cancelled at the start of a new
+        // request, not only ignored when its background work completes.
+        auto outgoingImageProgress =
+            std::make_shared<colorscreen::progress_info>();
+        loadProbe->m_imageLoad.activeProgress = outgoingImageProgress;
+
         auto registrationProgress =
             std::make_shared<colorscreen::progress_info>();
         ++loadProbe->m_registrationDiscovery.generation;
@@ -868,6 +874,8 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
             sidecarPrompt->text().contains(
                 QStringLiteral("missing-image-load.par")) ||
             !adaptiveProgress->pool_cancel() ||
+            !outgoingImageProgress->pool_cancel() ||
+            !loadProbe->m_imageLoad.activeProgress.expired() ||
             loadProbe->m_adaptiveSharpening.baseline ||
             loadProbe->m_adaptiveSharpening.scan ||
             !loadProbe->m_adaptiveSharpening.progress.expired() ||
