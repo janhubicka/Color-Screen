@@ -4699,16 +4699,20 @@ legacy_csp_can_represent_parameters (const scr_to_img_parameters *geometry,
 {
   if (error)
     error->clear ();
+  /* A selected inner image area is the most actionable reason to refuse
+     a legacy Save. Give it priority over other non-representable settings,
+     including a nondefault final frame, so the GUI can explain the user's
+     intended crop without obscuring it behind another warning. */
+  if (render && render->image_area.set)
+    return archive_fail (
+        error, "Legacy .par cannot preserve the photographic image area; "
+               "choose .cspar or clear the inner image bounds");
   if (geometry
       && (geometry->final_angle != (coord_t)90
           || geometry->final_ratio != (coord_t)1))
     return archive_fail (
         error, "Legacy .par cannot preserve final screen angle/ratio; "
                "choose .cspar to retain the complete geometry");
-  if (render && render->image_area.set)
-    return archive_fail (
-        error, "Legacy .par cannot preserve the photographic image area; "
-               "choose .cspar or clear the inner image bounds");
   if (render && render->ignore_infrared)
     return archive_fail (
         error, "Legacy .par cannot preserve the ignore-infrared setting; "
