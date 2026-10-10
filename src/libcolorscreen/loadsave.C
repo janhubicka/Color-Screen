@@ -1469,6 +1469,12 @@ load_csp (FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam,
             if (!strcmp (buf2,
                          render_parameters::color_model_properties[j].name))
               break;
+          /* One historical example file uses the old "mesured" spelling
+             of Wagner's measured Miethe-Goerz dye model. Accept the alias
+             during import; new saves use the canonical "measured" name. */
+          if (j == render_parameters::color_model_max
+              && !strcmp (buf2, "Miethe_Goerz_mesured_by_Wagner"))
+            j = render_parameters::color_model_miethe_goerz_original_wager;
           if (j == render_parameters::color_model_max)
             {
               *error = "unknown color model";
