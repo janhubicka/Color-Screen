@@ -8,7 +8,7 @@ if test -z "$srcdir"; then
     test "${VERBOSE+set}" != set && VERBOSE=1
 fi
 
-echo 1..11
+echo 1..12
 . $srcdir/defs.sh
 
 # Dynamic MinGW builds are normally launched through libtool's POSIX wrapper.
@@ -273,4 +273,37 @@ if test -e "$bad_format"; then
 fi
 echo 'ok 11 - incompatible explicit output type is rejected safely'
 
-rm -f "$archive" "$native" "$native_out" "$zip_roundtrip"
+# A legacy .par writer has no representation for the structured final frame.
+# Clear the independent photographic bounds so the negative test exercises
+# final_angle/final_ratio (not merely the existing image-area guard). Even a
+# deliberate --out to .par must refuse the loss before creating the target.
+guard_json=out-parameter-legacy-loss-guard.cspar
+guard_par=out-parameter-legacy-loss-guard.par
+rm -f "$guard_json" "$guard_par"
+python3 - "$native" "$guard_json" <<'PY' || exit 1
+import json
+import pathlib
+import sys
+state = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+state["capture"]["image_area"] = {
+    "enabled": False, "rect": [0, 0, 0, 0]
+}
+pathlib.Path(sys.argv[2]).write_text(
+    json.dumps(state, ensure_ascii=False, indent=2) + "\n",
+    encoding="utf-8",
+)
+PY
+if $RUNCOLORSCREEN adjust-par "$guard_json" --out "$guard_par" \
+    >out-parameter-legacy-loss-guard.log 2>&1; then
+    echo "legacy .par silently accepted unsupported final geometry" >&2
+    exit 1
+fi
+if test -e "$guard_par" ||
+   ! grep -q "final screen angle/ratio" out-parameter-legacy-loss-guard.log; then
+    echo "legacy .par guard failed to preserve nondefault final geometry" >&2
+    cat out-parameter-legacy-loss-guard.log >&2
+    exit 1
+fi
+echo 'ok 12 - legacy export refuses loss of native final geometry'
+
+rm -f "$guard_json" "$guard_par" "$archive" "$native" "$native_out" "$zip_roundtrip"
