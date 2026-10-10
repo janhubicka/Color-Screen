@@ -121,6 +121,10 @@ schema-v2 handling of null/default combinations and imports with old optional
 postambles. Add new fixtures when a genuinely persistent field is added, and
 keep the full 128-file corpus test mandatory.
 
-Before changing the default new-file Save format or merging the PR, run the
-final complete Ubuntu checking, Windows GCC/Clang, macOS and dedicated sanitizer
-matrix and review all platform/Qt smoke results. The product remains 2.0alpha.
+The complete Ubuntu checking, Windows GCC/Clang, macOS and dedicated sanitizer
+matrix passed on commit a718990d. The subsequent new-default switch must pass
+its own full Qt/platform matrix before merging. Fresh Qt/adjust-par targets use
+native v2; established ZIP-v1/JSON-v2 encodings are preserved on ordinary Save
+and implicit rewrites, and legacy .par remains a supported compatibility path.
+Real-project GUI field testing and continued nested-field audit are required
+before beta. The product remains 2.0alpha.

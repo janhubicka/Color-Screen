@@ -229,10 +229,11 @@ temporary stream and feeds the normal CSP loader. Qt then processes its existing
 metadata postamble exactly as for legacy `.par`. The live document is published
 only after the whole archive and parameter payload have parsed successfully.
 
-The archive writer is now the default for genuinely new parameter saves after
-cross-platform core/CLI/GUI round-trip fixtures were established. Explicit
-legacy `.par` export remains available, and an established target always
-preserves its loaded/chosen format on ordinary Save.
+The schema-v1 ZIP writer was the transitional default earlier in 2.0alpha.
+New .cspar targets now use native JSON v2 by default (see the v2 plan), while
+this ZIP-v1 writer remains an explicit compatibility export. Legacy `.par`
+export remains available, and an established target always preserves its
+loaded/chosen physical format on ordinary Save.
 
 ## Structured migration within schema version 1
 
@@ -362,8 +363,8 @@ Implementation status in the alpha tree:
   rewrite, and the Czech/CJK archive fixture are merged;
 - automatic image-sidecar discovery now prefers `.cspar` and falls back to
   legacy `.par`, never merging both;
-- genuinely new Save As/no-sidecar targets now default to `.cspar`;
-  established Archive/Legacy targets remain format-preserving;
+- genuinely new Save As/no-sidecar targets now default to JSON-v2 `.cspar`;
+  established ZIP-v1/JSON-v2/Legacy targets remain format-preserving;
 - `render-overrides-v1` is the first authoritative structured-state feature,
   retaining three saved processing fields missing from legacy CSP and three
   neutral output-compatibility keys;
@@ -374,18 +375,13 @@ Implementation status in the alpha tree:
 
 Remaining pre-beta rollout sequence (updated decision):
 
-1. Keep the existing schema-v1 ZIP format as an importer and temporary
-   default writer throughout the alpha transition.
-2. Complete **native plain JSON v2** serialization of every persistent
-   C++ and Qt parameter, as specified in
-   [parameter-json-v2-plan.md](parameter-json-v2-plan.md).
-   The seven direct codecs and complete v2 document/file writer are now
-   implemented, with 121 legacy keys and 10 supplementary fields classified.
-   Independently audit all nested C++/Qt state before declaring the
-   migration complete.
-3. Validate the opt-in CLI, GUI, Save As and recovery integration with
-   native round-trip, malformed-input, Unicode-path, atomic-save,
-   full-platform and sanitizer coverage. Preserve loaded v1/legacy
-   format identity until explicit conversion.
-4. Switch **new** saves to v2 only after full coverage passes; keep
-   the product in 2.0alpha until GUI and format field testing completes.
+1. Keep schema-v1 ZIP as a supported importer and explicit compatibility
+   writer; do not extend its legacy mirror.
+2. Native plain JSON v2 serializes persistent C++ and Qt state directly;
+   see [parameter-json-v2-plan.md](parameter-json-v2-plan.md). Seven native
+   codecs, the complete document/file writer, a 128-file historical .par
+   corpus and a nested-state audit support the migration.
+3. New Qt/adjust-par .cspar targets default to JSON v2; ordinary Save and
+   in-place rewrites preserve existing ZIP-v1/JSON-v2/legacy encodings.
+4. Complete the new-default CI matrix and real GUI operator field testing
+   before beta. Color-Screen remains 2.0alpha.

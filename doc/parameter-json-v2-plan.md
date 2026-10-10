@@ -8,14 +8,15 @@ sequences, numeric and string types, and is YAML 1.2 compatible without an
 additional parser dependency. The historical `.par` format and ZIP schema-v1
 `.cspar` must remain supported **as import formats**.
 
-**Status (2.0alpha):** new GUI parameter targets still default to compatible
-schema-v1 ZIP, while explicit JSON-v2 Save As, automatic content-detected Open
-and CLI conversion/read/rewrite are implemented. Private crash recovery now
-writes complete native v2 JSON and accepts earlier ZIP-v1 or .par snapshots.
-Do not switch the *default user save* to v2 until the full field/CI audit
-and GUI workflows have been validated on all platforms. This
-document supersedes the former plan to migrate individual fields indefinitely
-within schema v1.
+**Status (2.0alpha):** native JSON v2 is the default for *new* GUI `.cspar`
+saves and `adjust-par --out file.cspar` destinations. The rollout is in draft
+PR #538. The complete Ubuntu/macOS/Windows/sanitizer matrix for the preceding
+native implementation passed on commit a718990d; the new-default revision
+must pass its own CI and operator field testing before merging or beta.
+ZIP-v1 `.cspar`, legacy `.par` and native JSON targets still retain their
+physical formats on ordinary Save/in-place rewrite. Private crash recovery
+writes full native JSON v2 and continues reading older ZIP-v1/.par snapshots.
+This document supersedes incremental schema-v1 migration.
 
 ## Target document
 
@@ -50,17 +51,18 @@ capture, reconstruction, process, colour, complete sharpening/MTF and
 calibration grids), plus a **complete v2 document and atomic file codec**. It composes a single
 UTF-8 JSON root, decodes one syntax tree into private C++ state and supports
 explicit native GUI/CLI I/O plus crash recovery. All old input formats remain
-available; only the default new-file user Save-As format is still ZIP v1.
-The old v1 ZIP continues to be the application's default until the full
-platform/compatibility gates pass. The Qt editor now recognizes JSON v2 by
-content, records its physical file identity, and offers an explicit **JSON
-parameters v2** Save-As filter alongside the v1 ZIP and legacy text filters.
-The CLI `adjust-par` can explicitly convert ZIP v1 or legacy .par to native
-JSON using `--json-v2 --out path.cspar`, preserves the input format on
-in-place rewrites, and can explicitly downgrade to v1 with `--zip-v1`.
-Implicit `--out` to an existing `.cspar` additionally preserves the
-**destination's** actual ZIP-v1/JSON-v2 encoding by content, regardless of
-the source file's encoding, unless the caller selects an explicit conversion. These paths
+available. New parameter targets default to JSON v2, while ZIP v1 remains
+an explicitly selectable compatibility writer and automatic importer.
+The Qt editor recognizes JSON v2 by content, records its physical file
+identity, and offers **JSON parameters v2** first in Save As alongside ZIP
+v1 and legacy text filters.
+The CLI `adjust-par` writes JSON v2 for a *new* `.cspar` target by default,
+can explicitly convert ZIP v1 or legacy .par using `--json-v2`, preserves
+input format on in-place rewrites, and can explicitly produce ZIP v1 using
+`--zip-v1`. Implicit `--out` to an existing `.cspar` preserves the
+**destination's** actual ZIP-v1/JSON-v2 encoding. Existing unrecognized
+`.cspar` files and unsupported trailing legacy metadata are refused rather
+than silently overwritten or discarded. These paths
 retain imported Qt profile spots; they do not silently discard unknown
 legacy trailing metadata. Private crash-recovery snapshots now contain complete native JSON v2,
 while their separate metadata preserves the user's original JSON-v2, ZIP-v1
@@ -237,21 +239,23 @@ to v2 only after the gates below.
       transactionally decoded typed C++ state.
 - [ ] Audit native field coverage against every persistent C++ member and
       nested legacy/Qt serializer, not only literal CSP keyword names.
-- [ ] Add content-based on-disk dispatch with preserved v1/legacy imports.
+- [x] Add content-based on-disk dispatch with preserved v1/legacy imports.
 - [x] Add explicit GUI native JSON v2 Save As/Open and format-preserving
       ordinary Save; opt-in CLI adjust-par conversion, native replay and
       legacy ZIP interoperability, with a dedicated GUI/CLI smoke test.
 - [x] Save complete native JSON v2 private recovery snapshots, preserving
       independent user-target metadata and reading old ZIP-v1/.par snapshots.
       Crash-recovery smoke verifies state restoration and no-stale-fallback.
-- [ ] Add explicit conversion from legacy and ZIP v1; preserve existing
+- [x] Add explicit conversion from legacy and ZIP v1; preserve existing
       target formats and old-file loaders.
 - [ ] Verify all field families and cross-format round trips, huge point sets,
       meshes, MTF and correction grids, deterministic numeric fidelity,
       malformed input, transaction/atomic-failure preservation, Unicode names,
       Qt document/workspace smoke and sanitizer runs.
-- [ ] Switch default new Save to v2 only after a full Ubuntu/macOS/Windows,
-      sanitizer and distcheck matrix is green; then field test before beta.
+- [x] Implement default native JSON v2 for new Qt and adjust-par .cspar saves
+      after the preceding revision passed its full platform/sanitizer matrix.
+- [ ] Validate this new-default revision in full CI, then field test with real
+      operator GUI projects before beta.
 
 The product remains **2.0alpha**. This implementation must not produce a
 file claiming schema version 2 before all content is represented.
