@@ -5858,10 +5858,10 @@ test_lru_cache_byte_budget ()
   std::atomic<int> build_calls {0};
   std::array<std::shared_ptr<weighted_test_value>, 8> results;
   std::vector<std::thread> threads;
-  for (auto &slot : results)
-    threads.emplace_back ([&built, &seven, &slot, &build_calls] ()
+  for (size_t i = 0; i < results.size (); ++i)
+    threads.emplace_back ([&built, &seven, &results, &build_calls, i] ()
       {
-        slot = built.get_or_compute (
+        results[i] = built.get_or_compute (
             seven, nullptr,
             [&build_calls] (test_params &key, progress_info *)
             {
