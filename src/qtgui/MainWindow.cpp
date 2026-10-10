@@ -102,6 +102,33 @@ Q_DECLARE_METATYPE(colorscreen::finetune_result)
 
 namespace {
 
+/** Format a Workflow status paragraph without altering its plain-text state.
+
+    Only short colon-terminated captions are bold; the values remain normal
+    weight, including inactive settings. Escape *before* inserting markup so
+    image names and calibration metadata can never change the label's HTML.
+    The explicit proportional line height keeps wrapped Next guidance as
+    compact as the adjacent one-line status rows across font/DPI choices. */
+QString workflowParagraphHtml(const QString &plain) {
+  if (plain.isEmpty())
+    return QString();
+
+  QStringList formatted;
+  for (const QString &segment : plain.split(QStringLiteral(" • "))) {
+    const qsizetype colon = segment.indexOf(QLatin1Char(':'));
+    if (colon > 0 && colon <= 20) {
+      formatted.append(
+          QStringLiteral("<b>%1</b>%2")
+              .arg(segment.left(colon + 1).toHtmlEscaped(),
+                   segment.mid(colon + 1).toHtmlEscaped()));
+    } else {
+      formatted.append(segment.toHtmlEscaped());
+    }
+  }
+  return QStringLiteral("<p style=\"margin:0; line-height:100%;\">%1</p>")
+      .arg(formatted.join(QStringLiteral(" &#8226; ")));
+}
+
 /** Return the application-level document manager when MainWindow is running
     inside the normal Color-Screen Qt application.  */
 ColorScreenApplication *documentApplication() {
@@ -649,10 +676,15 @@ void MainWindow::setupUi() {
 
   auto configureDynamicWorkflowLabel = [](QLabel *label) {
     label->setWordWrap(true);
-    // Live registration recommendations must wrap inside the current inspector
-    // allocation rather than changing the horizontal splitter size hint.
+    label->setTextFormat(Qt::RichText);
+    label->setAlignment(Qt::AlignLeft | Qt::AlignTop);
+    // Word-wrapped status/recommendation text must use the available width
+    // without influencing the main canvas splitter. Maximum vertical policy
+    // also prevents the Next paragraph from stretching its line spacing to
+    // fill surplus space reserved by the inspector's outer layout.
     QSizePolicy policy = label->sizePolicy();
     policy.setHorizontalPolicy(QSizePolicy::Ignored);
+    policy.setVerticalPolicy(QSizePolicy::Maximum);
     label->setSizePolicy(policy);
     label->setMinimumWidth(0);
   };
@@ -698,8 +730,10 @@ void MainWindow::setupUi() {
       "profile from calibration spots and is not part of sharpening."));
   workflowLayout->addWidget(m_workflowProfileLabel);
 
+  // Normal-weight values and bold field names form a visually scannable
+  // compact status paragraph, rather than making every value semibold.
   QFont workflowSectionFont = m_workflowProcessLabel->font();
-  workflowSectionFont.setWeight(QFont::DemiBold);
+  workflowSectionFont.setWeight(QFont::Normal);
   if (workflowSectionFont.pointSizeF() > 1.0)
     workflowSectionFont.setPointSizeF(workflowSectionFont.pointSizeF() - 0.5);
   m_workflowProcessLabel->setFont(workflowSectionFont);
@@ -3836,7 +3870,7 @@ void MainWindow::updateWorkflowSummary() {
         ? tr(" • positive conversion active")
         : tr(" • positive conversion off");
   }
-  m_workflowProcessLabel->setText(processSummary);
+  m_workflowProcessLabel->setText(workflowParagraphHtml(processSummary));
 
   QString imageLayerSummary;
   if (!m_scan) {
@@ -3864,7 +3898,7 @@ void MainWindow::updateWorkflowSummary() {
       imageLayerSummary = tr("Image layer: unavailable");
     }
   }
-  m_workflowImageLayerLabel->setText(imageLayerSummary);
+  m_workflowImageLayerLabel->setText(workflowParagraphHtml(imageLayerSummary));
 
   QString registration;
   qsizetype pointCount = static_cast<qsizetype>(m_solverParams.n_points());
@@ -3941,7 +3975,7 @@ void MainWindow::updateWorkflowSummary() {
         registration += tr(" • nonlinear correction present");
     }
   }
-  m_workflowRegistrationLabel->setText(registration);
+  m_workflowRegistrationLabel->setText(workflowParagraphHtml(registration));
 
   const auto &sharpen = currentState.rparams.sharpen;
   const auto &mtf = sharpen.scanner_mtf;
@@ -4040,11 +4074,11 @@ void MainWindow::updateWorkflowSummary() {
       profileApplicable ? profileCalibrationSummary() : QString();
   if (m_profilePanel)
     m_profilePanel->setCalibrationStatus(profileSummary);
-  m_workflowCalibrationLabel->setText(
-      sharpenSummary + QStringLiteral(" • ") + mtfSummary);
+  m_workflowCalibrationLabel->setText(workflowParagraphHtml(
+      sharpenSummary + QStringLiteral(" • ") + mtfSummary));
   m_workflowProfileLabel->setProperty("workflowApplicable",
                                       profileApplicable);
-  m_workflowProfileLabel->setText(profileSummary);
+  m_workflowProfileLabel->setText(workflowParagraphHtml(profileSummary));
   m_workflowProfileLabel->setVisible(
       profileApplicable && m_workflowProcessLabel->isVisible());
 
@@ -4171,7 +4205,7 @@ void MainWindow::updateWorkflowSummary() {
   } else {
     nextStep = tr("Next: reconstruct the image and refine Color/Profile.");
   }
-  m_workflowNextStepLabel->setText(nextStep);
+  m_workflowNextStepLabel->setText(workflowParagraphHtml(nextStep));
 
   // Workflow navigation is intentionally conservative. Only expose a button
   // when the recommendation names one unambiguous inspector stage; choices

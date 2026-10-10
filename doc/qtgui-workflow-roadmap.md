@@ -654,7 +654,10 @@ coverage for archive recovery, and field testing of the finished workflow.
   known) or the active simulated RGB mix.
   Negative captures also report whether Contact-copy positive conversion is
   still off or already active, so the persistent state line agrees with the
-  next-step handoff into the simulated darkroom. When a `Next:` recommendation names
+  next-step handoff into the simulated darkroom. Field names in Workflow are
+  emphasized while values remain normal weight. The state and Next paragraphs
+  have the same tightly controlled line height, including when recommendations
+  wrap across multiple lines. When a `Next:` recommendation names
   one unambiguous inspector stage, the card also offers a compact **Open stage**
   action resolved through that stage's stable semantic key. Choice points,
   toolbar-only actions, file loading, and running operations remain text-only;
