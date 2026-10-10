@@ -1055,11 +1055,9 @@ private:
     std::optional<uint64_t> screenAutodetectAfterGeneration;
     QPointer<QMessageBox> sidecarPrompt;
     QPointer<QMessageBox> failurePrompt;
-    /** The original RAW image owns the unpacked mosaic. A demosaiced
-        derivative need not own it, so retain the source as long as this
-        document continues to use the same input file. */
-    std::shared_ptr<colorscreen::image_data> rawSource;
-    QString rawSourceFile;
+    /* Cache ownership, byte-budgeting and source lifetimes live entirely in
+       libcolorscreen::image_data/lru_cache. Qt owns only the displayed scan
+       and short-lived work requests, not an additional RAW resource cache. */
     /** One in-flight image decode can be cancelled when a newer Open or
         Reload request supersedes it. The worker owns the strong reference. */
     std::weak_ptr<colorscreen::progress_info> activeProgress;

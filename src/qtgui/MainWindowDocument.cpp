@@ -1137,15 +1137,14 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
         m_imageLoad.activeProgress = progress;
         addProgress(progress);
 
-        // A manual demosaic reload may reuse this document's retained CFA.
-        // Ordinary Open (even of the same path) still re-reads the disk, and
-        // files without retained Bayer data use the old loader unchanged.
+        // Qt never holds an auxiliary RAW cache: the currently displayed
+        // image_data (including a derived variant) retains its sensor mosaic.
+        // Only an explicit same-file Reload and demosaic asks libcolorscreen
+        // for a variant. Ordinary Open always reloads the file as before.
         const std::shared_ptr<colorscreen::image_data> cachedRawSource =
-            preferCachedRaw && m_imageLoad.rawSourceFile == requestedImageFile &&
-                    m_imageLoad.rawSource &&
-                    m_imageLoad.rawSource->has_unpacked_raw_source()
-                ? m_imageLoad.rawSource
-                : nullptr;
+            preferCachedRaw && outgoingImageFile == requestedImageFile &&
+                    outgoingScan && outgoingScan->has_unpacked_raw_source()
+                ? outgoingScan : nullptr;
         // A staged sidecar may select the demosaic algorithm needed to decode the
         // image, even though the rest of its state remains private until success.
         const colorscreen::image_data::demosaicing_t demosaic =
@@ -1254,14 +1253,9 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
                 m_profileCalibration.clear();
                 if (m_profilePanel)
                   m_profilePanel->setSpotResults(m_profileCalibration.spotResults);
-                // Keep the unpacked RAW owner even after publishing a variant
-                // whose pixels do not themselves own the sensor mosaic.
-                // A new scan replaces the resource only after successful load;
-                // failed or obsolete requests cannot erase the previous owner.
-                m_imageLoad.rawSource = cachedRawSource ? cachedRawSource :
-                    (tempScan->has_unpacked_raw_source() ? tempScan : nullptr);
-                m_imageLoad.rawSourceFile = m_imageLoad.rawSource
-                    ? requestedImageFile : QString();
+                // Every accepted RAW variant owns its reusable sensor source
+                // in libcolorscreen, so no Qt-owned cache or source-file key
+                // is needed. Failed/obsolete generations cannot publish it.
                 m_scan = tempScan;
 
                 /* GUI tile workers publish individually decoded image data
