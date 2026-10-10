@@ -5767,6 +5767,123 @@ test_lru_cache_concurrency ()
   return ok;
 }
 
+/* Test the optional byte budget in libcolorscreen's generic cache.
+   The budget counts cached ownership, not externally pinned shared_ptr data.
+   Oversized values still return to their caller but are not retained. */
+struct weighted_test_value
+{
+  explicit weighted_test_value (int n) : weight ((size_t)n) {}
+  size_t weight;
+};
+
+std::atomic<int> weighted_test_calls {0};
+
+std::unique_ptr<weighted_test_value>
+get_new_weighted_test (test_params &p, progress_info *)
+{
+  ++weighted_test_calls;
+  return std::make_unique<weighted_test_value> (p.x);
+}
+
+size_t
+weighted_test_bytes (const weighted_test_value &v)
+{
+  return v.weight;
+}
+
+bool
+test_lru_cache_byte_budget ()
+{
+  lru_cache<test_params, weighted_test_value, get_new_weighted_test, 32>
+      cache ("weighted test", 10, weighted_test_bytes);
+  test_params four {4}, five {5}, six {6}, large {12};
+  weighted_test_calls = 0;
+  bool hit = true;
+
+  auto v4 = cache.get (four, nullptr, nullptr, &hit);
+  if (!v4 || hit || cache.retained_bytes () != 4)
+    return false;
+  auto v5 = cache.get (five, nullptr, nullptr, &hit);
+  if (!v5 || hit || cache.retained_bytes () != 9)
+    return false;
+  /* A peek is an LRU use, so the older 5-byte value is evicted rather than
+     the newer 4-byte one. Holding V5 must not stop the eviction or destroy it. */
+  auto keep_four = cache.peek (four);
+  auto v6 = cache.get (six, nullptr, nullptr, &hit);
+  if (!v6 || hit || cache.retained_bytes () != 10
+      || cache.peek (five) || !cache.peek (four)
+      || !cache.peek (six) || v5->weight != 5)
+    {
+      fprintf (stderr, "Weighted LRU failed to evict the oldest owned entry\n");
+      return false;
+    }
+  auto v12 = cache.get (large, nullptr, nullptr, &hit);
+  if (!v12 || hit || v12->weight != 12 || cache.peek (large)
+      || cache.retained_bytes () != 10
+      || weighted_test_calls != 4)
+    {
+      fprintf (stderr, "Weighted LRU retained an oversized result\n");
+      return false;
+    }
+
+  /* The evicted but pinned 5-byte value survives independently. Loading
+     its key again must compute a new result rather than resurrecting it. */
+  auto another_five = cache.get (five, nullptr, nullptr, &hit);
+  if (!another_five || hit || another_five == v5
+      || another_five->weight != 5
+      || weighted_test_calls != 5 || cache.retained_bytes () > 10)
+    {
+      fprintf (stderr, "Weighted LRU improperly reused an evicted value\n");
+      return false;
+    }
+
+  v4.reset ();
+  v5.reset ();
+  v6.reset ();
+  v12.reset ();
+  another_five.reset ();
+  keep_four.reset ();
+  cache.prune ();
+  if (cache.retained_bytes () != 0)
+    {
+      fprintf (stderr, "Weighted LRU prune left cache-owned byte charges\n");
+      return false;
+    }
+
+  /* The generator-less form coalesces caller-provided computations and
+     applies the same byte budget without a frontend-specific cache type. */
+  lru_cache<test_params, weighted_test_value, nullptr, 16>
+      built ("callback weighted test", 9, weighted_test_bytes);
+  test_params seven {7};
+  std::atomic<int> build_calls {0};
+  std::array<std::shared_ptr<weighted_test_value>, 8> results;
+  std::vector<std::thread> threads;
+  for (auto &slot : results)
+    threads.emplace_back ([&built, &seven, &slot, &build_calls] ()
+      {
+        slot = built.get_or_compute (
+            seven, nullptr,
+            [&build_calls] (test_params &key, progress_info *)
+            {
+              ++build_calls;
+              std::this_thread::sleep_for (std::chrono::milliseconds (10));
+              return std::make_unique<weighted_test_value> (key.x);
+            });
+      });
+  for (std::thread &worker : threads)
+    worker.join ();
+  for (const auto &slot : results)
+    if (!slot || slot != results[0])
+      return false;
+  if (build_calls != 1 || built.retained_bytes () != 7
+      || built.byte_capacity () != 9)
+    {
+      fprintf (stderr, "Weighted LRU did not coalesce concurrent generation\n");
+      return false;
+    }
+  return true;
+}
+
 /* test_spectrum_dyes_to_xyz performs unit tests for the spectrum_dyes_to_xyz class.  */
 bool
 test_spectrum_dyes_to_xyz ()
@@ -10694,9 +10811,9 @@ test_raw_source_variants ()
           return false;
         }
       if (!source.has_unpacked_raw_source ()
-          || !source.has_rgb ())
+          || !source.has_rgb () || !computed->has_unpacked_raw_source ())
         {
-          fprintf (stderr, "Variant request discarded original source\n");
+          fprintf (stderr, "Variant request discarded reusable RAW source\n");
           return false;
         }
       const image_data::pixel after = source.get_rgb_pixel (47, 61);
@@ -10787,6 +10904,39 @@ test_raw_source_variants ()
       || baseline.b != after_threads.b)
     {
       fprintf (stderr, "Concurrent RAW requests changed source pixels\n");
+      return false;
+    }
+
+  /* The cache must not depend on a Qt document retaining the initial RAW.
+     A displayed derivative can request another algorithm even after the
+     original image_data is gone. No original/derivative ownership cycle. */
+  std::weak_ptr<image_data> original_weak;
+  std::shared_ptr<image_data> retained;
+  {
+    auto original = std::make_shared<image_data> ();
+    if (!original->load (path, true, &error, nullptr,
+                         image_data::demosaic_linear))
+      return false;
+    original_weak = original;
+    retained = original->demosaiced_variant (image_data::demosaic_PPG,
+                                            &error);
+    if (!retained || !retained->has_unpacked_raw_source ())
+      {
+        fprintf (stderr, "RAW derivative does not retain its sensor source\n");
+        return false;
+      }
+  }
+  if (!original_weak.expired ())
+    {
+      fprintf (stderr, "RAW derivative unexpectedly owns original image\n");
+      return false;
+    }
+  auto from_retained = retained->demosaiced_variant (
+      image_data::demosaic_AHD, &error);
+  if (!from_retained || !same_pixels (*from_retained, *results[0]))
+    {
+      fprintf (stderr, "RAW reprocessing after original release failed: %s\n",
+               error ? error : "pixel/geometry mismatch");
       return false;
     }
   return true;
@@ -10940,6 +11090,8 @@ main (int argc, char **argv)
     { "hd_sorting", "hd sorting tests", [] () { return test_hd_sorting (); } },
     { "tone_curve", "custom tone curve tests", [] () { return test_custom_tone_curve (); } },
     { "lru_cache", "lru cache concurrency tests", [] () { return test_lru_cache_concurrency (); } },
+    { "lru_cache_byte_budget", "size-aware LRU eviction and concurrent generation",
+      [] () { return test_lru_cache_byte_budget (); } },
     { "spectrum", "spectrum to xyz tests", [] () { return test_spectrum_dyes_to_xyz (); } },
     { "whitepoint", "whitepoint consistency tests", [] () { return test_whitepoint_constants (); } },
     { "darkroom", "darkroom simulation tests", [] () { return test_darkroom (); } },
