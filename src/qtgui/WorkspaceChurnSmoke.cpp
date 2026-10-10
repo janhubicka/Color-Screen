@@ -41,6 +41,7 @@
 #include <QString>
 #include <QStringList>
 #include <QTemporaryDir>
+#include <QTableWidget>
 #include <QTextDocumentFragment>
 #include <QTimer>
 #include <QThread>
@@ -304,6 +305,48 @@ void startWorkspaceChurnSmoke(ColorScreenApplication &app,
                 MainWindow::ParameterFileState::Format::Archive) {
           fail(QStringLiteral(
               "Loaded parameter-file target lost its explicit archive format"));
+          return;
+        }
+
+        // The diagnostic is a live, read-only view of libcolorscreen's
+        // shared registry, never a separate Qt cache or saved parameter.
+        QAction *cacheAction = nullptr;
+        for (QAction *action : first->m_helpMenu->actions())
+          if (action && action->objectName() ==
+                  QStringLiteral("CacheStatisticsAction"))
+            cacheAction = action;
+        if (!cacheAction) {
+          fail(QStringLiteral(
+              "Core cache statistics action is missing from Help"));
+          return;
+        }
+        const ParameterState beforeCacheStats = first->documentStateSnapshot();
+        cacheAction->trigger();
+        QDialog *cacheDialog = first->findChild<QDialog *>(
+            QStringLiteral("CacheStatisticsDialog"));
+        QTableWidget *cacheTable = cacheDialog
+            ? cacheDialog->findChild<QTableWidget *>(
+                  QStringLiteral("CacheStatisticsTable"))
+            : nullptr;
+        QLabel *cacheSummary = cacheDialog
+            ? cacheDialog->findChild<QLabel *>(
+                  QStringLiteral("CacheStatisticsSummary"))
+            : nullptr;
+        if (!cacheDialog || !cacheTable || !cacheSummary ||
+            cacheTable->columnCount() != 6 ||
+            cacheTable->rowCount() < 1 ||
+            !cacheSummary->text().contains(
+                QStringLiteral("Global cache budget")) ||
+            first->documentStateSnapshot() != beforeCacheStats) {
+          fail(QStringLiteral(
+              "Core cache statistics did not expose a read-only global snapshot"));
+          return;
+        }
+        cacheDialog->close();
+        QCoreApplication::processEvents();
+        if (first->documentStateSnapshot() != beforeCacheStats) {
+          fail(QStringLiteral(
+              "Closing cache statistics unexpectedly changed document state"));
           return;
         }
 
