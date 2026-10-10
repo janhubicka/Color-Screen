@@ -70,6 +70,9 @@ CLEANFILES              = slanted-edge-1.log \
                           paget_lmmse_test.tiff \
                           dufay_rcd_test.tiff \
                           out-parameter-archive.cspar \
+                          out-parameter-native-v2.cspar \
+                          out-parameter-native-v2.tif \
+                          out-parameter-v2-to-v1.cspar \
                           out-parameter-legacy.tif \
                           out-parameter-archive.tif
 
