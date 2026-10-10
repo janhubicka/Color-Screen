@@ -11,11 +11,295 @@
 #include "include/histogram.h"
 #include <array>
 #include <cassert>
+#include <algorithm>
+#include <fstream>
+#include <limits>
+#include <sstream>
+#include <utility>
+
+#if defined(_WIN32) || defined(WIN32)
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#elif defined(__APPLE__)
+#include <mach/mach.h>
+#include <sys/sysctl.h>
+#else
+#include <unistd.h>
+#endif
 
 namespace colorscreen
 {
 class lru_caches lru_caches;
 std::atomic_uint64_t lru_caches::time;
+
+namespace
+{
+std::atomic<uint64_t> raw_cache_source_bytes {0};
+
+/* A conservative OS memory estimate. These APIs are deliberately implemented
+   in libcolorscreen, rather than calling Qt's platform/system services. */
+struct memory_reading
+{
+  uint64_t total = 0;
+  uint64_t available = 0;
+};
+
+memory_reading
+query_host_memory ()
+{
+  memory_reading result;
+#if defined(_WIN32) || defined(WIN32)
+  MEMORYSTATUSEX stat {};
+  stat.dwLength = sizeof (stat);
+  if (GlobalMemoryStatusEx (&stat))
+    {
+      result.total = stat.ullTotalPhys;
+      result.available = stat.ullAvailPhys;
+    }
+#elif defined(__APPLE__)
+  uint64_t physical = 0;
+  size_t length = sizeof (physical);
+  if (sysctlbyname ("hw.memsize", &physical, &length, nullptr, 0) == 0)
+    result.total = physical;
+  mach_port_t host = mach_host_self ();
+  vm_statistics64_data_t vm {};
+  mach_msg_type_number_t count = HOST_VM_INFO64_COUNT;
+  vm_size_t page_size = 0;
+  if (host_page_size (host, &page_size) == KERN_SUCCESS
+      && host_statistics64 (host, HOST_VM_INFO64, (host_info64_t)&vm,
+                            &count) == KERN_SUCCESS)
+    result.available
+        = (uint64_t)(vm.free_count + vm.inactive_count
+                     + vm.speculative_count) * (uint64_t)page_size;
+  mach_port_deallocate (mach_task_self (), host);
+#elif defined(__linux__)
+  std::ifstream input ("/proc/meminfo");
+  std::string line;
+  while (std::getline (input, line))
+    {
+      std::istringstream part (line);
+      std::string key;
+      uint64_t kb = 0;
+      if (!(part >> key >> kb))
+        continue;
+      if (key == "MemTotal:")
+        result.total = kb * UINT64_C (1024);
+      else if (key == "MemAvailable:")
+        result.available = kb * UINT64_C (1024);
+      if (result.total && result.available)
+        break;
+    }
+
+  /* A container may see host MemAvailable despite having a much smaller
+     cgroup memory.max. Respect effective v2 memory pressure where exposed. */
+  std::ifstream max_file ("/sys/fs/cgroup/memory.max");
+  std::ifstream current_file ("/sys/fs/cgroup/memory.current");
+  std::string max_text;
+  uint64_t current = 0;
+  if (max_file >> max_text && max_text != "max"
+      && current_file >> current)
+    {
+      try
+        {
+          const uint64_t limit = std::stoull (max_text);
+          if (limit && limit >= current)
+            {
+              if (!result.total || limit < result.total)
+                result.total = limit;
+              if (!result.available || limit - current < result.available)
+                result.available = limit - current;
+            }
+        }
+      catch (const std::exception &)
+        {
+          /* Unknown cgroup representation: retain physical-host figures. */
+        }
+    }
+#else
+  const long pages = sysconf (_SC_PHYS_PAGES);
+  const long available = sysconf (_SC_AVPHYS_PAGES);
+  const long page_size = sysconf (_SC_PAGESIZE);
+  if (pages > 0 && page_size > 0)
+    result.total = (uint64_t)pages * (uint64_t)page_size;
+  if (available > 0 && page_size > 0)
+    result.available = (uint64_t)available * (uint64_t)page_size;
+#endif
+  if (result.total && result.available > result.total)
+    result.available = result.total;
+  return result;
+}
+
+uint64_t
+saturating_add (uint64_t a, uint64_t b)
+{
+  const uint64_t limit = std::numeric_limits<uint64_t>::max ();
+  return b > limit - a ? limit : a + b;
+}
+
+/* Use at most one third of installed RAM and one half of available memory
+   plus memory already owned by caches/sensor reservations. Adding retained
+   memory back to MemAvailable prevents a cache insertion from shrinking the
+   budget simply because it allocated pages. No fixed 256 MiB cap prevents
+   a 150+ megapixel scan from being cached on a well-equipped machine. */
+uint64_t
+effective_cache_budget (const memory_reading &mem, uint64_t accounted)
+{
+  const uint64_t normal = mem.total ? mem.total / 3
+                                    : UINT64_C (2) * 1024 * 1024 * 1024;
+  if (!mem.available)
+    return normal;
+  return std::min (normal, saturating_add (mem.available, accounted) / 2);
+}
+} // anonymous namespace
+
+lru_cache_registry &
+lru_cache_registry::instance ()
+{
+  /* Deliberately immortal: static cache instances in other translation units
+     may unregister during shutdown after render.C's own static destructors. */
+  static lru_cache_registry *registry = new lru_cache_registry;
+  return *registry;
+}
+
+void
+lru_cache_registry::register_cache (tracked_lru_cache *cache)
+{
+  std::lock_guard<std::mutex> guard (registry_mutex);
+  caches.push_back (cache);
+}
+
+void
+lru_cache_registry::unregister_cache (tracked_lru_cache *cache)
+{
+  std::lock_guard<std::mutex> guard (registry_mutex);
+  caches.erase (std::remove (caches.begin (), caches.end (), cache),
+                caches.end ());
+}
+
+uint64_t
+raw_source_cache_bytes ()
+{
+  return raw_cache_source_bytes.load (std::memory_order_relaxed);
+}
+
+void
+release_raw_source_cache_bytes (uint64_t bytes)
+{
+  if (bytes)
+    raw_cache_source_bytes.fetch_sub (bytes, std::memory_order_relaxed);
+}
+
+cache_memory_statistics
+lru_cache_registry::snapshot ()
+{
+  cache_memory_statistics result;
+  {
+    std::lock_guard<std::mutex> guard (registry_mutex);
+    for (tracked_lru_cache *cache : caches)
+      {
+        cache_entry_statistics entry = cache->cache_statistics (nullptr);
+        result.cached_bytes
+            = saturating_add (result.cached_bytes, entry.retained_bytes);
+        result.caches.push_back (std::move (entry));
+      }
+    result.retained_raw_source_bytes = raw_source_cache_bytes ();
+  }
+  const memory_reading mem = query_host_memory ();
+  result.total_memory_bytes = mem.total;
+  result.available_memory_bytes = mem.available;
+  result.cache_budget_bytes = effective_cache_budget (
+      mem, saturating_add (result.cached_bytes,
+                           result.retained_raw_source_bytes));
+  std::sort (result.caches.begin (), result.caches.end (),
+             [] (const cache_entry_statistics &a,
+                 const cache_entry_statistics &b)
+             { return a.name < b.name; });
+  return result;
+}
+
+void
+lru_cache_registry::enforce_budget (uint64_t extra_bytes)
+{
+  /* Hold the registry lock while selecting/calling a cache to prevent it
+     being destroyed concurrently. Evicted shared_ptrs are destructed ONLY
+     after releasing that lock: image_data destructors may prune other caches.
+     No cache may call this method while holding its own entry mutex. */
+  std::vector<std::shared_ptr<void>> retired;
+  {
+    std::lock_guard<std::mutex> registry_guard (registry_mutex);
+    const memory_reading mem = query_host_memory ();
+    const uint64_t raw_bytes = raw_source_cache_bytes ();
+    uint64_t current = raw_bytes;
+    for (tracked_lru_cache *cache : caches)
+      current = saturating_add (
+          current, cache->cache_statistics (nullptr).retained_bytes);
+    const uint64_t budget = effective_cache_budget (mem, current);
+
+    /* At most the number of completed entries can be detached. A zero-byte
+       array entry is intentionally excluded from global byte-pressure
+       eviction, since its actual backing allocation is not measurable. */
+    while (saturating_add (current, extra_bytes) > budget)
+      {
+        tracked_lru_cache *oldest_cache = nullptr;
+        uint64_t oldest = std::numeric_limits<uint64_t>::max ();
+        for (tracked_lru_cache *cache : caches)
+          {
+            uint64_t age = oldest;
+            const cache_entry_statistics st = cache->cache_statistics (&age);
+            if (st.retained_bytes && age < oldest)
+              {
+                oldest = age;
+                oldest_cache = cache;
+              }
+          }
+        if (!oldest_cache)
+          break;
+        retired.push_back (oldest_cache->discard_oldest_cache_entry ());
+        uint64_t new_total = raw_bytes;
+        for (tracked_lru_cache *cache : caches)
+          new_total = saturating_add (
+              new_total, cache->cache_statistics (nullptr).retained_bytes);
+        if (new_total >= current)
+          break;
+        current = new_total;
+      }
+  }
+  /* 'retired' releases all cache ownership here, outside every mutex. */
+}
+
+bool
+reserve_raw_source_cache_bytes (uint64_t bytes)
+{
+  if (!bytes)
+    return false;
+  /* Serialize admission checks, not cache hits. Source destruction is an
+     atomic subtraction and cannot wait on this lock during LRU eviction. */
+  static std::mutex reservation_mutex;
+  std::lock_guard<std::mutex> admission (reservation_mutex);
+  lru_cache_registry::instance ().enforce_budget (bytes);
+  const cache_memory_statistics s = lru_cache_registry::instance ().snapshot ();
+  if (bytes > s.cache_budget_bytes
+      || saturating_add (saturating_add (s.cached_bytes,
+                                        s.retained_raw_source_bytes), bytes)
+             > s.cache_budget_bytes)
+    return false;
+  raw_cache_source_bytes.fetch_add (bytes, std::memory_order_relaxed);
+  return true;
+}
+
+cache_memory_statistics
+get_cache_memory_statistics ()
+{
+  return lru_cache_registry::instance ().snapshot ();
+}
+
+uint64_t
+cache_memory_budget_bytes ()
+{
+  return get_cache_memory_statistics ().cache_budget_bytes;
+}
 
 /* A wrapper class around precomputed image data which handles allocation and
    deallocation. This is needed for the cache.  */
