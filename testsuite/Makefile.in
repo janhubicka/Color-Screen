@@ -541,7 +541,10 @@ CLEANFILES = slanted-edge-1.log slanted-edge-2.log \
 	paget_rcd_test.tiff paget_lmmse_test.tiff dufay_rcd_test.tiff \
 	out-parameter-archive.cspar out-parameter-native-v2.cspar \
 	out-parameter-native-v2.tif out-parameter-v2-to-v1.cspar \
-	out-parameter-legacy.tif out-parameter-archive.tif
+	out-parameter-legacy-loss-guard.cspar \
+	out-parameter-legacy-loss-guard.par \
+	out-parameter-legacy-loss-guard.log out-parameter-legacy.tif \
+	out-parameter-archive.tif
 TESTS = unittests.test \
                           parameter-v2-corpus.test \
                           parameter-archive-cli.test \
