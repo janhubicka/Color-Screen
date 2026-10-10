@@ -5,6 +5,7 @@
 #include <thread>
 #include <atomic>
 #include <memory>
+#include <cstddef>
 #include <condition_variable>
 #include <type_traits>
 #include "include/progress-info.h"
@@ -90,6 +91,9 @@ struct lru_entry_base
   uint64_t id;
   uint64_t last_used;
   bool computing = false;
+  /* Bytes retained by the cache's strong ownership (not external pins).
+     Zero for an in-flight entry or when no byte budget is configured. */
+  size_t cached_bytes = 0;
 };
 
 /* RAII guard to manage the computing flag and notifications. 
@@ -141,11 +145,44 @@ protected:
   std::mutex lock;
   std::condition_variable cond;
   const char *name;
+  /* An optional cache-owned byte budget; external shared_ptr owners are
+     deliberately excluded from this accounting. Zero disables this limit. */
+  const size_t max_cached_bytes;
+  size_t cached_bytes = 0;
+  size_t (*value_bytes) (const T &);
 
-  /* Initialize the cache with a NAME and BASE_SIZE.  */
-  abstract_lru_cache (const char *n, int base_size)
-      : entries (NULL), cache_size (base_size), name (n)
+  /* Initialize the cache with count and optional byte budgets. */
+  abstract_lru_cache (const char *n, int base_size,
+                      size_t max_bytes = 0,
+                      size_t (*weight) (const T &) = nullptr)
+      : entries (NULL), cache_size (base_size), name (n),
+        max_cached_bytes (max_bytes), value_bytes (weight)
   {
+  }
+
+  /* Release the least recently used completed entries until NEED bytes
+     will fit. Even an externally pinned value can leave this cache; its
+     shared_ptr remains alive for the owner, without counting towards the
+     cache's retained-byte limit. Never remove an in-progress computation
+     or the just-computed PROTECTED entry. Called with LOCK held. */
+  void
+  make_room_for_bytes (size_t need, Entry *protected_entry)
+  {
+    while (cached_bytes > max_cached_bytes - need)
+      {
+        Entry **victim = nullptr;
+        for (Entry **slot = &entries; *slot; slot = &(*slot)->next)
+          if ((*slot) != protected_entry && !(*slot)->computing
+              && (*slot)->val
+              && (!victim || (*slot)->last_used < (*victim)->last_used))
+            victim = slot;
+        if (!victim)
+          break;
+        Entry *old = *victim;
+        *victim = old->next;
+        cached_bytes -= old->cached_bytes;
+        delete old;
+      }
   }
 
   virtual ~abstract_lru_cache ()
@@ -253,6 +290,8 @@ protected:
         e = longest_unused;
         if (verbose)
           fprintf (stderr, "Cache %s: deleting id %i\n", name, (int)e->id);
+        cached_bytes -= e->cached_bytes;
+        e->cached_bytes = 0;
         e->val = nullptr;
       }
     else
@@ -279,22 +318,49 @@ protected:
       ret_val = e->val;
       cguard.finished ();
     }
-    cond.notify_all ();
-
-    if (id_out)
-      *id_out = e->id;
+    /* Preserve the return value independently of cache ownership. A result
+       larger than the byte budget is useful to its caller but is not cached.
+       Releasing cache ownership of an externally pinned victim does not
+       invalidate that owner's shared_ptr. */
+    const uint64_t entry_id = e->id;
+    if (ret_val && max_cached_bytes)
+      {
+        const size_t weight = value_bytes ? value_bytes (*ret_val) : sizeof (T);
+        if (weight <= max_cached_bytes)
+          {
+            make_room_for_bytes (weight, e);
+            e->cached_bytes = weight;
+            cached_bytes += weight;
+          }
+        else
+          {
+            /* Oversized values remain returnable but are never retained. */
+            for (Entry **slot = &entries; *slot; slot = &(*slot)->next)
+              if (*slot == e)
+                {
+                  *slot = e->next;
+                  delete e;
+                  break;
+                }
+          }
+      }
     if (!ret_val)
       {
-        for (Entry **e2 = &entries;; e2 = &(*e2)->next)
-          if (*e2 == e)
+        for (Entry **slot = &entries; *slot; slot = &(*slot)->next)
+          if (*slot == e)
             {
-              *e2 = e->next;
+              *slot = e->next;
               delete e;
               break;
             }
       }
+    cond.notify_all ();
+
+    if (id_out)
+      *id_out = entry_id;
     if (verbose && ret_val)
-      fprintf (stderr, "Cache %s: added id %i size %i\n", name, (int)e->id, (int)size);
+      fprintf (stderr, "Cache %s: added id %i size %i\n", name,
+               (int)entry_id, (int)size);
     return ret_val;
   }
 
@@ -312,12 +378,29 @@ public:
             if (verbose)
               fprintf (stderr, "Cache %s: deleting id %i\n", name, (int)(*e)->id);
             Entry *next = (*e)->next;
+            cached_bytes -= (*e)->cached_bytes;
             delete (*e);
             (*e) = next;
           }
         else
           e = &(*e)->next;
       }
+  }
+
+  /* Current cache-owned memory footprint. This excludes externally
+     retained values which are never invalidated by eviction. */
+  size_t
+  retained_bytes ()
+  {
+    std::unique_lock<std::mutex> guard (lock);
+    return cached_bytes;
+  }
+
+  /* Configured byte budget; zero denotes entry-count-only caching. */
+  size_t
+  byte_capacity () const
+  {
+    return max_cached_bytes;
   }
 
   /* Increase the capacity of the cache to N times the base size.  */
@@ -338,7 +421,9 @@ struct lru_cache_entry : lru_entry_base<P, T, lru_cache_entry<P, T>> {};
    T is the result type.
    GET_NEW is the generator function.
    BASE_CACHE_SIZE is the default size.  */
-template <typename P, typename T, std::unique_ptr<T> get_new (P &, progress_info *progress), int base_cache_size>
+template <typename P, typename T,
+          std::unique_ptr<T> (*get_new) (P &, progress_info *) = nullptr,
+          int base_cache_size = 4>
 class lru_cache : public abstract_lru_cache<P, T, lru_cache_entry<P, T>, lru_cache<P, T, get_new, base_cache_size>>
 {
   using Entry = lru_cache_entry<P, T>;
@@ -346,21 +431,39 @@ class lru_cache : public abstract_lru_cache<P, T, lru_cache_entry<P, T>, lru_cac
 
 public:
   static constexpr int base_size_const = base_cache_size;
-  /* Create an LRU cache named N.  */
-  lru_cache (const char *n) : Base (n, base_cache_size) {}
+  /* Create an LRU cache. MAX_BYTES=0 keeps the old count-only policy.
+     VALUE_BYTES measures a completed value including its owned allocations;
+     if omitted, sizeof(T) is used. */
+  lru_cache (const char *n, size_t max_bytes = 0,
+             size_t (*value_bytes) (const T &) = nullptr)
+      : Base (n, base_cache_size, max_bytes, value_bytes) {}
 
-  /* Fetch the value for parameters P or generate it.
-     Use PROGRESS for task cancellation.
-     ID will receive the unique identifier of the entry.  */
+  /* Fetch the value for parameters P or generate it using GET_NEW. */
   std::shared_ptr<T>
   get (P &p, progress_info *progress, uint64_t *id = NULL,
        bool *cache_hit = NULL)
+  {
+    static_assert (get_new != nullptr,
+                   "a generator-less cache must use get_or_compute");
+    return get_or_compute (p, progress,
+                           [](P &key, progress_info *task) {
+                             return get_new (key, task);
+                           }, id, cache_hit);
+  }
+
+  /* Fetch using an operation-specific generator, with the same per-key
+     coalescing and cancellation as get(). Useful when the generator needs
+     an enclosing image/resource without exposing it in the cache key. */
+  template <typename Fetcher>
+  std::shared_ptr<T>
+  get_or_compute (P &p, progress_info *progress, Fetcher &&fetch,
+                  uint64_t *id = NULL, bool *cache_hit = NULL)
   {
     return this->get_internal (
         p, progress, id, cache_hit,
         [&](Entry *e) { return p == e->params; },
         [](Entry *) {},
-        [&](Entry *e) { return get_new (e->params, progress); });
+        [&](Entry *e) { return fetch (e->params, progress); });
   }
 
   /* Return a completed cached value for P without generating or waiting for
@@ -374,6 +477,7 @@ public:
     for (Entry *e = this->entries; e; e = e->next)
       if (!e->computing && e->val && p == e->params)
         {
+          e->last_used = lru_caches::get ();
           if (id)
             *id = e->id;
           return e->val;
