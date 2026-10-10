@@ -20,12 +20,13 @@ weights and whether nonzero dark offsets are configured. Derive this only from
 the current `image_data` capabilities and `render_parameters`; never cache a
 second authoritative image-layer choice in the GUI. Dynamic Workflow labels
 must keep the horizontal `QSizePolicy::Ignored` contract so changing text
-cannot move the main image/inspector splitter. The `Next:` row may expose a
-compact **Open stage** button only when the recommendation has one unambiguous
-inspector target. Store the target as a stable `MultiLineTabWidget` semantic
-key, never as a numeric tab index. Clicking it is explicit user navigation and
-therefore updates `inspector/activePanel`; ambiguous choices and non-panel
-actions stay text-only.
+cannot move the main image/inspector splitter. The `Next:` paragraph uses the same typography and tight line spacing as the
+preceding state summary. Its optional **Open stage** button is managed in a
+separate, bottom-right-aligned row *under* the wrapped text. Show this action
+only when the recommendation has one unambiguous inspector target. Store the
+target as a stable `MultiLineTabWidget` semantic key, never as a numeric tab
+index. Clicking it is explicit user navigation and updates
+`inspector/activePanel`; ambiguous choices and non-panel actions stay text-only.
  Registration text must obey the same capture-capability distinction as
 `Next:`: stochastic screen-colour recovery is valid only when the effective
 capture supports screen-colour detection. A monochrome-through-screen capture
@@ -857,9 +858,16 @@ coordinate detection selects a reconstruction-capable image mode but must not ar
 independent view choice exposed by **Registration -> Show Registration Points**
 and the Geometry checkbox; point editing remains explicit through **Select (S)**
 and **Add Point (A)**. The workflow summary must recognize when reconstruction is
-already selected instead of asking the operator to select it again. **Swap screen
-colors** belongs in the Screen stage next to detection; do not duplicate a second
-"try luck" detector in Digital Capture.
+already selected instead of asking the operator to select it again. With a
+regular-screen capture and no mapping, direct users to the Screen panel's
+**Detect screen** button, which already discovers points and fits geometry.
+Do not send them to Geometry's coordinate-only autodetection or request another
+fit after successful detection. Progressive discovery must record the accepted
+source-image identity as well as its geometry-fit baseline, including when the
+solver returns unchanged coordinates. Afterwards advise **Swap screen colors**
+for colours wrong globally, or manual registration correction in Geometry for
+local misalignment. Do not duplicate a second "try luck" detector in
+Digital Capture.
 
 Automatic full-image point discovery may use one conservative recovery step when
 the ordinary global mapping stalls before lens fitting has enough point coverage.

@@ -708,19 +708,22 @@ void MainWindow::setupUi() {
   m_workflowCalibrationLabel->setFont(workflowSectionFont);
   m_workflowProfileLabel->setFont(workflowSectionFont);
 
+  // A full-width recommendation paragraph and a separate bottom-right
+  // action row.  Previously the unmanaged button floated over the label.
   QWidget *workflowNextRow = new QWidget(workflowSummary);
-  auto *workflowNextLayout = new QHBoxLayout(workflowNextRow);
-  workflowNextLayout->setContentsMargins(0, 0, 0, 0);
-  workflowNextLayout->setSpacing(6);
+  workflowNextRow->setObjectName(QStringLiteral("WorkflowNextBlock"));
+  workflowNextRow->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Maximum);
+  workflowNextRow->setMinimumWidth(0);
+  auto *workflowNextLayout = new QVBoxLayout(workflowNextRow);
+  workflowNextLayout->setContentsMargins(0, 2, 0, 0);
+  workflowNextLayout->setSpacing(2);
 
   m_workflowNextStepLabel = new QLabel(workflowNextRow);
   m_workflowNextStepLabel->setObjectName(
       QStringLiteral("WorkflowNextStepSummary"));
   configureDynamicWorkflowLabel(m_workflowNextStepLabel);
-  QFont nextStepFont = m_workflowNextStepLabel->font();
-  nextStepFont.setBold(true);
-  m_workflowNextStepLabel->setFont(nextStepFont);
-  workflowNextLayout->addWidget(m_workflowNextStepLabel, 1);
+  m_workflowNextStepLabel->setFont(workflowSectionFont);
+  workflowNextLayout->addWidget(m_workflowNextStepLabel);
 
   m_workflowNextStepButton =
       new QPushButton(tr("Open stage"), workflowNextRow);
@@ -728,6 +731,7 @@ void MainWindow::setupUi() {
       QStringLiteral("WorkflowOpenStageButton"));
   m_workflowNextStepButton->setSizePolicy(QSizePolicy::Maximum,
                                           QSizePolicy::Fixed);
+  workflowNextLayout->addWidget(m_workflowNextStepButton, 0, Qt::AlignRight);
   m_workflowNextStepButton->hide();
   connect(m_workflowNextStepButton, &QPushButton::clicked, this, [this]() {
     if (!m_configTabs || !m_workflowNextStepButton)
@@ -3934,7 +3938,7 @@ void MainWindow::updateWorkflowSummary() {
       } else if (m_geometryFit.baseline) {
         registration += tr(" • geometry stale — refit");
       } else {
-        registration += tr(" • ready to fit geometry");
+        registration += tr(" • geometry present (fit not verified this session)");
       }
       if (m_scrToImgParams.mesh_trans)
         registration += tr(" • nonlinear correction present");
@@ -4099,10 +4103,10 @@ void MainWindow::updateWorkflowSummary() {
   } else if (screenDetectionAvailable && regularScreen &&
              !geometryConfigured) {
     nextStep = tr(
-        "Next: choose a reconstruction path — Mode → Image layer + "
-        "auto-detected screen filter uses the RGB screen colours without "
-        "Geometry, or Geometry → Detect screen coordinates for lattice-based "
-        "reconstruction.");
+        "Next: choose a reconstruction path. Mode → Image layer + "
+        "auto-detected screen filter uses RGB colours directly; for "
+        "lattice reconstruction, Screen → Detect screen discovers "
+        "registration points and fits geometry automatically.");
   } else if (regularScreen && !geometryConfigured && pointCount > 0) {
     nextStep = tr(
         "Next: restore the coordinate system compatible with the existing "
@@ -4110,37 +4114,33 @@ void MainWindow::updateWorkflowSummary() {
         "coordinates.");
     nextPanelKey = QStringLiteral("geometry");
   } else if (regularScreen && !geometryConfigured) {
-    nextStep = tr("Next: Geometry — detect screen coordinates.");
-    nextPanelKey = QStringLiteral("geometry");
+    nextStep = tr(
+        "Next: Screen → Detect screen to find registration points and fit "
+        "geometry automatically.");
+    nextPanelKey = QStringLiteral("screen");
   } else if (regularScreen && m_geometryFit.pendingInputs) {
     nextStep = tr("Next: Geometry fit is running…");
-  } else if (regularScreen && fitCurrent) {
-    const QString pointGuidance = registrationPointsVisible
-        ? tr("The green registration overlay is visible; hide it with "
-             "Registration → Show Registration Points (or Geometry → Show "
-             "registration points) when you want an unobstructed image.")
-        : tr("Show the control points with Registration → Show Registration "
-             "Points (or Geometry → Show registration points) when you want "
-             "to inspect them.");
-    const QString editGuidance = tr(
-        "Use Select (S) to inspect/move points and Add Point (A) for missing "
-        "ones. If the reconstructed screen colours are swapped, use Screen → "
-        "Swap screen colors.");
+  } else if (regularScreen && geometryConfigured &&
+             pointCount >= minimumPoints &&
+             (fitCurrent || (!m_geometryFit.baseline && !failureCurrent))) {
+    // An accepted detection already fitted geometry.  Independently loaded
+    // geometry with enough points remains usable without an obligatory refit.
     if (reconstructionModeSelected) {
-      nextStep = tr("Next: inspect registration. %1 %2 When alignment is clean, "
-                    "continue with Sharpness/Color.")
-                     .arg(pointGuidance, editGuidance);
-      nextPanelKey = QStringLiteral("geometry");
+      nextStep = tr(
+          "Next: check the reconstructed colors. If they are wrong across "
+          "the whole image, press Screen → Swap screen colors. If only local "
+          "regions are misaligned, correct the registration points manually "
+          "in Geometry. Then continue with Sharpness/Color.");
     } else {
       nextStep = tr(
-          "Next: reconstruct — choose Mode → Image layer + screen filter (or "
-          "Image layer + screen filter demosaiced with detail recovery). %1 %2")
-                     .arg(pointGuidance, editGuidance);
+          "Next: select a reconstruction Mode to view the registered image. "
+          "If colors are globally wrong, use Screen → Swap screen colors; "
+          "if local regions are misaligned, correct registration in Geometry.");
     }
   } else if (colorDetection && regularScreen) {
     nextStep = tr(
-        "Next: choose either Geometry-based reconstruction or screen-colour "
-        "detection from the RGB scan.");
+        "Next: choose screen-colour reconstruction from the RGB scan, or "
+        "use Screen → Detect screen to find and fit a regular lattice.");
   } else if (colorscreen::render_parameters::
                  capture_requires_regular_screen_p(capture)
              && !regularScreen) {
@@ -4151,12 +4151,23 @@ void MainWindow::updateWorkflowSummary() {
   } else if (!colorDetection && regularScreen) {
     if (failureCurrent) {
       nextStep = tr(
-          "Next: Geometry — adjust registration points/settings and optimize "
-          "the fit again.");
+          "Next: Geometry — correct registration points and retry fitting.");
+      nextPanelKey = QStringLiteral("geometry");
+    } else if (pointCount < minimumPoints) {
+      nextStep = tr(
+          "Next: Screen → Detect screen to find more registration points "
+          "and fit geometry automatically.");
+      nextPanelKey = QStringLiteral("screen");
+    } else if (m_geometryFit.baseline) {
+      nextStep = tr(
+          "Next: Geometry — registration changed since the last fit; "
+          "refit to update alignment.");
+      nextPanelKey = QStringLiteral("geometry");
     } else {
-      nextStep = tr("Next: Geometry — optimize the fit.");
+      nextStep = tr(
+          "Next: inspect the reconstructed colors. If alignment needs "
+          "improvement, adjust registration manually in Geometry.");
     }
-    nextPanelKey = QStringLiteral("geometry");
   } else if (hasScreen && type == colorscreen::NoScreen) {
     nextStep = tr("Next: choose the physical Screen type.");
     nextPanelKey = QStringLiteral("screen");
