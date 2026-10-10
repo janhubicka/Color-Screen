@@ -521,6 +521,9 @@ EXTRA_DIST = defs.sh $(TESTS) \
 			  slanted-gaussian-soft-mtf.txt \
 			  generate-slanted-edge-tests.sh \
 			  validate-mtf-physical-model.py \
+			  check-parameter-v2-inventory.py \
+			  check-parameter-v2-corpus.py \
+			  parameter-v2-key-inventory.tsv \
 			  benchmark-screen-detection.py
 
 TEST_LOG_DRIVER = env AM_TAP_AWK='$(AWK)' $(SHELL) \
@@ -536,9 +539,11 @@ CLEANFILES = slanted-edge-1.log slanted-edge-2.log \
 	epson-v850-defocused-mtf.txt epson-v850-defocused-mtf-output.log \
 	paget_ha_test.tiff paget_ahd_test.tiff paget_amaze_test.tiff \
 	paget_rcd_test.tiff paget_lmmse_test.tiff dufay_rcd_test.tiff \
-	out-parameter-archive.cspar out-parameter-legacy.tif \
-	out-parameter-archive.tif
+	out-parameter-archive.cspar out-parameter-native-v2.cspar \
+	out-parameter-native-v2.tif out-parameter-v2-to-v1.cspar \
+	out-parameter-legacy.tif out-parameter-archive.tif
 TESTS = unittests.test \
+                          parameter-v2-corpus.test \
                           parameter-archive-cli.test \
 			  dufaycolor_nikon_coolsan9000ED_4000DPI_raw.test  \
 			  dufaycolor_nikon_coolsan9000ED_4000DPI_raw-finetune.test \
