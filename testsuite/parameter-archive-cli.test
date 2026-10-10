@@ -8,7 +8,7 @@ if test -z "$srcdir"; then
     test "${VERBOSE+set}" != set && VERBOSE=1
 fi
 
-echo 1..10
+echo 1..11
 . $srcdir/defs.sh
 
 # Dynamic MinGW builds are normally launched through libtool's POSIX wrapper.
@@ -257,5 +257,20 @@ if b"profile_spot: 0.25 0.5\n" not in mirror:
     raise SystemExit("implicit ZIP-v1 output lost profile spots")
 PY
 echo 'ok 10 - implicit CLI output preserves existing ZIP-v1 encoding'
+
+# JSON and ZIP v1 both use .cspar. An explicit ZIP-v1 request to a .par
+# filename must fail before any write rather than creating disguised data.
+bad_format=out-parameter-invalid-format.par
+rm -f "$bad_format"
+if $RUNCOLORSCREEN adjust-par --zip-v1 --out "$bad_format" "$native" \
+    >/dev/null 2>&1; then
+    echo "explicit ZIP-v1 accepted a legacy .par suffix" >&2
+    exit 1
+fi
+if test -e "$bad_format"; then
+    echo "invalid ZIP-v1 output created an unexpected file" >&2
+    exit 1
+fi
+echo 'ok 11 - incompatible explicit output type is rejected safely'
 
 rm -f "$archive" "$native" "$native_out" "$zip_roundtrip"
