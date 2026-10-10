@@ -73,19 +73,22 @@ completion only triggers canvas updates; it cannot change the document,
 Undo or a deliberate view mask. Per-tile exposure, dark-point and blur
 corrections remain saved.
 
-**Demosaic resource follow-up (draft PR #536):** retain the saved
-`demosaic` choice. A conventional Bayer capture may now retain its unpacked
-sensor mosaic (opportunistic 256 MiB process budget) and generate decoded
-variants on demand (separate 256 MiB strong-cache budget, up to two per
-source). Qt explicitly reuses the same RAW source on **Reload and demosaic**,
-with generation-gated worker publication and cancellation of superseded loads;
-ordinary Open still rereads the input file and unsupported/over-budget sources
-use the old loader. These caches are runtime resources, never additional
-archive/YAML fields. The original decoded source image remains owned while
-variants are shown, so its RGB buffer also consumes memory; this is a known
-memory-pressure tradeoff rather than a saved parameter. Keep this separate
-from the already merged renderer-output split. The draft still requires
-full-matrix validation and expanded Qt RAW lifecycle smoke.
+**Demosaic resource follow-up (PR #536 merged, sized LRU follow-up):**
+keep `demosaic` as a saved capture input. Conventional Bayer RAWs may retain
+the unpacked sensor mosaic under a 256 MiB reservation. Completed
+demosaiced `image_data` variants are cached through `libcolorscreen::lru_cache`
+with an independent **256 MiB cache-owned byte budget** and automatic weighted
+LRU eviction, not an extra Qt-owned cache. Each variant holds its underlying
+sensor resource without keeping the old fully decoded original image alive;
+the source holds no variants, avoiding reference cycles. Frontends only
+hold currently displayed images and in-flight requests. Qt's explicit
+**Reload and demosaic** still uses generation-gated worker publication and
+cancellation, while ordinary Open and unsupported/over-budget sources retain
+the independent file decode. Active external images can exceed the cache's
+byte budget without invalidating a renderer; this is distinct from a hard
+process-memory cap. Neither source nor decoded caches belong in JSON or
+legacy parameter archives. Core and synthetic-Bayer tests cover cache lifetime,
+weighted eviction and decoder pixel fidelity.
 
 ## MTF persistence audit: separate real values from bookkeeping
 

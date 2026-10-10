@@ -3,6 +3,18 @@
 This project, **Color-Screen**, is a high-performance color screening and image processing application. It utilizes a modular C++ architecture with a focus on color accuracy and optimized rendering.
 
 ## Project Core
+
+**Frontend independence is mandatory.** The `libcolorscreen` image-processing,
+image-loading, rendering and cache layers must remain Qt-free. Qt is only one
+frontend; future GUI, CLI and service frontends should use the same core
+`image_data` and `lru_cache` APIs. Cache keys, ownership, LRU eviction,
+entry byte sizing and budgets belong in the library. Never retain an
+independent, frontend-owned RAW decoding/variant cache in `qtgui`.
+Qt may hold displayed images or an in-flight worker's `shared_ptr` and
+control worker cancellation, but must not control core cache policy.
+Cache byte limits bound only cache-owned allocations; views/renderers holding
+independent `shared_ptr` references continue to own their pixels safely.
+
 - **Language:** C++ (Standard: C++17)
 - **Build System:** GNU Autotools (`autoconf`, `automake`, `libtool`)
 - **Primary Goal:** Implement highly optimized tools to reconstruct colors from digitized early color photographs

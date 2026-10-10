@@ -37,29 +37,47 @@ than caching only the finished RGB image.
   RAW context. The active decoded pixel buffers are always owned
   independently of the LibRaw postprocessing arrays.
 
-## Bounded on-demand variants and Qt reload path (PR #536)
+## Size-aware libcolorscreen cache (post-PR #536)
 
-The source resource now has a per-source LRU of up to two completed,
-independently allocated image variants, with a separate process-wide 256 MiB
-strong-cache budget. The key is the RAW demosaicing algorithm. An evicted
-variant stays valid for external viewers. Output profile, gamut diagnostics
-and reconstruction settings are not cache keys.
+All RAW decoded-variant cache ownership lives in `libcolorscreen`, using
+the existing generic `lru_cache` rather than a parallel per-source list or
+anything in Qt. The cache has an optional byte budget and measures the
+estimated owned pixel buffers (width × height × active channel pixel size,
+plus the image descriptor). The RAW variant cache has a **256 MiB budget for
+cache-owned decoded images**. Its key is the unique *unpacked sensor source
+generation* plus the demosaicing method; output profile, gamut diagnostics,
+Qt view state and rendering adjustments are not part of this key.
 
-Qt retains the successfully loaded original RAW image as a source owner while
-showing a derivative. An explicit **Reload and demosaic** on the same input
-path asks for `demosaiced_variant()` on its background worker, preserving the
-existing generation, cancellation, failure-restoration, parameter/Undo and
-slanted-edge reference reload behavior. The `QFuture` owns the finished image
-result; the worker never modifies `m_scan` or the output pointer of its GUI
-callback. An ordinary Open deliberately rereads the file, while non-Bayer,
-over-budget and EIP inputs use the established full-file decode path.
+When inserting a result, the shared LRU releases oldest cache-owned values
+until the new result fits. An oversized result still returns successfully
+without being retained. Even if a renderer/view holds a previously cached
+image, eviction only releases the cache's strong reference; that external
+`shared_ptr` remains valid and its memory is no longer charged to the
+cache. Identical concurrent requests coalesce; requests for different
+algorithms on the same LibRaw resource still serialize `dcraw_process()`
+through the source's mutex.
 
-Because retaining the original owner also retains that original decoded pixel
-buffer, the extra per-document resident-image cost needs measuring on large
-RAW scans. The global mosaic and variant budgets do not count the source
-owner's already-rendered RGB buffer. If this proves expensive, factor an opaque
-source-only handle out of `image_data` rather than sharing a LibRaw processor
-through a reference cycle.
+Each completed image variant now retains the unpacked sensor source in an
+opaque `image_data` handle. The source does not own the cache or variants,
+so **there is no ownership cycle**. Consequently a derivative can request
+another demosaicing method even after the original image is destroyed.
+The separately enforced **256 MiB mosaic-reservation budget** still limits
+how many unpacked RAW sources are retained by live images. Under pressure
+the library first prunes idle decoded variants to free source reservations.
+
+Qt holds only the currently displayed image (and a short-lived outgoing image
+reference while a worker runs); it does **not** cache original RAW images,
+method variants, or cache-size metadata. Explicit **Reload and demosaic**
+hands the existing `image_data` to its generation-gated asynchronous worker.
+An ordinary Open still rereads the file, and non-Bayer/over-budget/EIP inputs
+use the established independent file-loader path. Qt keeps the same
+cancellation, failure rollback, Undo and slanted-edge-reference behaviour.
+
+The size budget measures *cache-owned* buffers, not total resident memory.
+Live images held by frontends, renderers or workers, the original displayed
+decoded image and LibRaw's mutable scratch buffers can use additional memory.
+A hard process RSS cap would require a separate resource manager; do not
+misrepresent the LRU's byte limit as that guarantee.
 
 Invariants for final validation:
 
@@ -75,11 +93,10 @@ Invariants for final validation:
    demosaicing can differ in dimensions, channel availability, pitch and
    selected sharpening domain. Each variant must carry metadata matching
    its own output without modifying the source's accepted metadata.
-4. **Bounded memory:** a small LRU/budget counts both CFA and decoded
-   variants. Eviction must not destroy a variant still referenced by a
-   renderer or view. Avoid strong ownership cycles between the source and
-   variants; cache entries can use weak references with a separately bounded
-   pool of strong entries.
+4. **Bounded cache ownership:** libcolorscreen's source quota and weighted
+   decoded-variant LRU have separate budgets. Eviction drops only cache-held
+   `shared_ptr` references; independently displayed images and their source
+   mosaics remain valid. Variants own sources; sources own no variants.
 5. **Version and cancellation:** the Qt document loads a RAW source once,
    then requests variants through generation-gated asynchronous work. A
    completion belonging to an old image, stale algorithm request or closed
@@ -102,16 +119,19 @@ Invariants for final validation:
 - `raw_source_retention` verifies that synthetic data and ordinary TIFFs
   cannot claim an unpacked sensor source. Extend the fixture to check early
   failure and mid-processing cancellation on real CFA data.
-- Add dedicated cache-budget admission/eviction and cache lifetime tests,
-  including an externally held variant surviving source destruction.
+- `lru_cache_byte_budget` exercises weighted eviction, oversized uncached
+  results, pinned-value survival and single-flight callbacks.
+- The synthetic Bayer fixture now exercises variant-source ownership after
+  dropping the original image, and still checks independent pixel agreement.
+  Extend testing to high-memory cache pressure across independent sources.
 - Add Qt lifecycle smoke for rapid demosaic changes during loading, independent
   document views, failed reload recovery, and close with an old worker in flight.
   The existing generation gates are kept, but targeted tests are still needed.
 - Compare monochromatic/Bayer-corrected results and relevant metadata with
   independent file decodes; validate half-size geometry and pixel pitch.
 - Run the full Ubuntu (including checking and distcheck), macOS, Windows and
-  sanitizer CI matrix before making this draft ready to merge.
+  sanitizer CI matrix on the new sized-cache PR before merging.
 
 Keep the product at **2.0alpha** and continue persisting `demosaic` as a
-capture-input choice; none of these resources belongs in the YAML/archive
-parameter serialization.
+capture-input choice; no cache resource belongs in persisted JSON, ZIP-v1 or
+legacy .par parameters. New frontends must reuse the libcolorscreen cache.
