@@ -73,22 +73,22 @@ completion only triggers canvas updates; it cannot change the document,
 Undo or a deliberate view mask. Per-tile exposure, dark-point and blur
 corrections remain saved.
 
-**Demosaic resource follow-up (PR #536 merged, sized LRU follow-up):**
-keep `demosaic` as a saved capture input. Conventional Bayer RAWs may retain
-the unpacked sensor mosaic under a 256 MiB reservation. Completed
-demosaiced `image_data` variants are cached through `libcolorscreen::lru_cache`
-with an independent **256 MiB cache-owned byte budget** and automatic weighted
-LRU eviction, not an extra Qt-owned cache. Each variant holds its underlying
-sensor resource without keeping the old fully decoded original image alive;
-the source holds no variants, avoiding reference cycles. Frontends only
-hold currently displayed images and in-flight requests. Qt's explicit
-**Reload and demosaic** still uses generation-gated worker publication and
-cancellation, while ordinary Open and unsupported/over-budget sources retain
-the independent file decode. Active external images can exceed the cache's
-byte budget without invalidating a renderer; this is distinct from a hard
-process-memory cap. Neither source nor decoded caches belong in JSON or
-legacy parameter archives. Core and synthetic-Bayer tests cover cache lifetime,
-weighted eviction and decoder pixel fidelity.
+**Demosaic resource follow-up (PR #536 merged; global LRU follow-up):**
+keep `demosaic` as a saved capture input. Conventional Bayer RAW sources
+and their decoded variants now participate in a **single OS-memory-aware
+libcolorscreen cache budget**, rather than separate fixed 256 MiB limits.
+The shared LRU manager evicts globally old cached values regardless of
+renderer or decoder, while independently pinned views and the original
+unpacked mosaic stay alive when needed. Each image_data variant owns its
+reusable sensor handle and sources never own their variants, avoiding cycles.
+Qt only owns displayed images and in-flight requests; **Reload and demosaic**
+remains generation-gated, while ordinary Open and unsupported inputs retain
+the independent file decoder path. The public `get_cache_memory_statistics()`
+API reports available system memory, global cache budget and per-cache entry,
+pinned and retained-byte estimates. Qt Help → Cache Statistics… displays that
+read-only snapshot. Cache budgets are soft and never impose a hard process-RSS
+cap: external images and LibRaw scratch buffers may use more. No cache
+objects belong in JSON, ZIP-v1 or legacy parameter files.
 
 ## MTF persistence audit: separate real values from bookkeeping
 
