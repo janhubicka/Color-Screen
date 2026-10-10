@@ -83,6 +83,16 @@ DLL_PUBLIC void
 apply_parameter_archive_image_area (const parameter_archive_image_area &bounds,
                                     render_parameters *rparam);
 
+/* Return false with a diagnostic if document parameters include saved values
+   that the historical .par serializer cannot represent at all. Reject such
+   output before truncating/replacing any destination rather than silently
+   losing JSON/v1-only inputs when exporting a legacy file. Either pointer
+   may be null for a partial CLI workflow; this is not a CSP syntax check. */
+DLL_PUBLIC bool
+legacy_csp_can_represent_parameters (
+    const scr_to_img_parameters *geometry,
+    const render_parameters *render, std::string *error);
+
 /* Parsed compatibility information from a Color-Screen parameter archive.  */
 struct parameter_archive_manifest
 {
