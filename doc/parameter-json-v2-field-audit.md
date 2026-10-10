@@ -27,7 +27,10 @@ not numbers of JSON keys:
 
 All members named by these comparisons are represented in native v2 code;
 this was checked against the actual serializers, not solely the CSP output
-keywords. The independent detection state (`black`, `red`, `green`,
+keywords. **The full-document decoder also checks the complete schema-v2
+object-key vocabulary**, including nested MTF records and per-tile corrections.
+Unknown fields fail with an explicit error rather than disappearing on Save;
+dedicated regression tests exercise those cases without mutating live state. The independent detection state (`black`, `red`, `green`,
 `blue`, `min_luminosity`, `min_ratio`) is represented in `detection`.
 All retained MTF curve sample data and metadata are encoded separately from
 the MTF model, including frequency, contrast, uncertainty, native channel,
