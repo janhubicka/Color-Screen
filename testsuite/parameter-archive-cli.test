@@ -8,7 +8,7 @@ if test -z "$srcdir"; then
     test "${VERBOSE+set}" != set && VERBOSE=1
 fi
 
-echo 1..12
+echo 1..13
 . $srcdir/defs.sh
 
 # Dynamic MinGW builds are normally launched through libtool's POSIX wrapper.
@@ -306,4 +306,43 @@ if test -e "$guard_par" ||
 fi
 echo 'ok 12 - legacy export refuses loss of native final geometry'
 
-rm -f "$guard_json" "$guard_par" "$archive" "$native" "$native_out" "$zip_roundtrip"
+# CSP load_csp accepts either CR or LF as an end-marker terminator. When a
+# source contains CRLF the CR can be consumed while the LF remains after the
+# end marker; whitespace-only residue must not be duplicated by the legacy
+# writer on some C stdio implementations (notably Windows clang64). A real
+# nonblank metadata extension must still be retained unchanged.
+crlf_input=out-parameter-crlf-input.par
+crlf_normal=out-parameter-crlf-normal.par
+crlf_json=out-parameter-crlf-native.cspar
+crlf_restored=out-parameter-crlf-restored.par
+crlf_with_extension=out-parameter-crlf-extension.par
+crlf_with_extension_normal=out-parameter-crlf-extension-normal.par
+rm -f "$crlf_input" "$crlf_normal" "$crlf_json" "$crlf_restored" \
+      "$crlf_with_extension" "$crlf_with_extension_normal"
+python3 - "$crlf_input" "$crlf_with_extension" <<'PY' || exit 1
+from pathlib import Path
+import sys
+header = b"screen_alignment_version: 1\nscreen_alignment_end\r\n"
+Path(sys.argv[1]).write_bytes(header)
+Path(sys.argv[2]).write_bytes(header + b"other_vendor_metadata: retained\n")
+PY
+pexec $RUNCOLORSCREEN adjust-par "$crlf_input" --out "$crlf_normal" || exit 1
+pexec $RUNCOLORSCREEN adjust-par --json-v2 --out "$crlf_json" "$crlf_normal" || exit 1
+pexec $RUNCOLORSCREEN adjust-par "$crlf_json" --out "$crlf_restored" || exit 1
+pexec $RUNCOLORSCREEN adjust-par "$crlf_with_extension" \
+    --out "$crlf_with_extension_normal" || exit 1
+python3 - "$crlf_normal" "$crlf_restored" \
+          "$crlf_with_extension_normal" <<'PY' || exit 1
+from pathlib import Path
+import sys
+canonical, restored, extension = (Path(p).read_bytes() for p in sys.argv[1:])
+if canonical != restored:
+    raise SystemExit("legacy CRLF -> normalized PAR -> JSON v2 -> PAR was not byte-stable")
+if not extension.endswith(b"\nother_vendor_metadata: retained\n"):
+    raise SystemExit("nonblank legacy metadata extension was lost")
+PY
+echo 'ok 13 - CRLF end-marker residue is normalized without dropping extensions'
+
+rm -f "$guard_json" "$guard_par" "$archive" "$native" "$native_out" "$zip_roundtrip" \
+      "$crlf_input" "$crlf_normal" "$crlf_json" "$crlf_restored" \
+      "$crlf_with_extension" "$crlf_with_extension_normal"
