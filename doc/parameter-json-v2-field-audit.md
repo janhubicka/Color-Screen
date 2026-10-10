@@ -65,6 +65,21 @@ The two values already had separate JSON v2 fields and round-trip coverage.
 - Qt `profileSpots` are saved directly in the native `profile` section;
   derived `color_match` results are not document state.
 
+### Qt scoped preset compatibility
+
+The application also stores reusable Capture/Process/Reconstruction/Color
+presets in QSettings under a separate versioned preset format. Those preset
+snapshots still use CSP plus explicit additional fields, rather than document
+JSON v2, because existing user presets must remain readable. The audit found
+the Process scope applied `ignore_infrared` without actually saving that
+field in its CSP-backed preset. New Process presets now store this choice in
+their QSettings extras; older presets that lack it preserve the target
+document's current policy. The Qt scoped-preset smoke now tests both cases.
+Reconstruction scaling, observer whitepoint and colour tone-curve points were
+already covered by their separate compatibility extras. Eventually migrating
+preset snapshots to native JSON v2 is a separate change from the document
+file-format rollout, not a prerequisite for preserving existing presets.
+
 ### Lossless compatibility export
 
 Legacy `.par` predates five categories of authoritative structured-only fields:
