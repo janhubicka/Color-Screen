@@ -564,9 +564,11 @@ bool MainWindow::saveReproducibilityReportToFile(const QString &fileName,
   metadata.insert(QStringLiteral("parameter_file_state"), parameterState);
   metadata.insert(
       QStringLiteral("parameter_file_format"),
-      m_parameterFile.format == ParameterFileState::Format::Archive
-          ? QStringLiteral("archive")
-          : QStringLiteral("legacy"));
+      m_parameterFile.format == ParameterFileState::Format::JsonV2
+          ? QStringLiteral("json-v2")
+          : (m_parameterFile.format == ParameterFileState::Format::Archive
+                 ? QStringLiteral("archive")
+                 : QStringLiteral("legacy")));
   metadata.insert(QStringLiteral("document_modified"), isDocumentModified());
   metadata.insert(QStringLiteral("registration_point_count"),
                   static_cast<int>(state.solver.n_points()));
@@ -1870,9 +1872,11 @@ void MainWindow::saveRecoveryState() {
                                  : QStringLiteral("0\n")) +
       (isDocumentModified() ? QStringLiteral("1\n")
                             : QStringLiteral("0\n")) +
-      (m_parameterFile.format == ParameterFileState::Format::Archive
-           ? QStringLiteral("archive\n")
-           : QStringLiteral("legacy\n"));
+      (m_parameterFile.format == ParameterFileState::Format::JsonV2
+           ? QStringLiteral("json-v2\n")
+           : (m_parameterFile.format == ParameterFileState::Format::Archive
+                  ? QStringLiteral("archive\n")
+                  : QStringLiteral("legacy\n")));
   if (!saveRecoveryTextAtomically(
           directory.filePath(QStringLiteral("recovery_params_meta.txt")),
           meta)) {
@@ -1957,12 +1961,14 @@ bool MainWindow::restoreRecoveryState() {
     const QString dirtyFlag = in.readLine().trimmed();
     const QString recoveredFormat = in.readLine().trimmed();
     const ParameterFileState::Format format =
-        recoveredFormat == QLatin1String("archive") ||
+        recoveredFormat == QLatin1String("json-v2")
+            ? ParameterFileState::Format::JsonV2
+            : ((recoveredFormat == QLatin1String("archive") ||
                 (recoveredFormat.isEmpty() &&
                  recoveredParameterPath.endsWith(
-                     QLatin1String(".cspar"), Qt::CaseInsensitive))
-            ? ParameterFileState::Format::Archive
-            : ParameterFileState::Format::LegacyCsp;
+                     QLatin1String(".cspar"), Qt::CaseInsensitive)))
+                   ? ParameterFileState::Format::Archive
+                   : ParameterFileState::Format::LegacyCsp);
     if (recoveredParameterPathSuggested)
       m_parameterFile.setSuggested(recoveredParameterPath, format);
     else
