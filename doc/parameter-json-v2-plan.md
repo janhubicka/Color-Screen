@@ -220,8 +220,13 @@ A v2 writer must serialize all persistent inputs **directly** and atomically
 replace the target using the established sibling-staging/UTF-8-path primitive.
 No ZIP wrapper, private CSP conversion or duplicate authoritative copies.
 Preserve ordinary Save's existing target identity: an opened v1 ZIP should not
-be silently rewritten as plain JSON by pressing Save. Offer explicit conversion
-or Save As selection; switch new projects to v2 only after the gates below.
+be silently rewritten as plain JSON by pressing Save. **Legacy `.par` saves are
+refused when a document contains structured-only persistent settings**—a
+nondefault final frame, independent photographic area, ignore-infrared policy,
+nondefault reconstructed scaling, or observer whitepoint—because `.par` cannot
+represent them. Both Qt and CLI use the same preflight and retain the old file
+on failure. Offer explicit conversion or Save As selection; switch new projects
+to v2 only after the gates below.
 
 ## Execution checklist
 
