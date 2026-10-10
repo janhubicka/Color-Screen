@@ -46,6 +46,7 @@
 #include <QToolBar>
 #include <QToolButton>
 #include <QUndoStack>
+#include <QVBoxLayout>
 #include <QWidget>
 
 #include <atomic>
@@ -575,6 +576,8 @@ QLabel *nextStepSummary = inspector->findChild<QLabel *>(
     QStringLiteral("WorkflowNextStepSummary"));
 QPushButton *openWorkflowStageButton = inspector->findChild<QPushButton *>(
     QStringLiteral("WorkflowOpenStageButton"));
+QWidget *nextWorkflowBlock = inspector->findChild<QWidget *>(
+    QStringLiteral("WorkflowNextBlock"));
 QComboBox *captureTypeCombo = inspector->findChild<QComboBox *>(
     QStringLiteral("CaptureTypeCombo"));
 QComboBox *captureDemosaicCombo = inspector->findChild<QComboBox *>(
@@ -968,6 +971,16 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
          ? !profileSummary->text().startsWith(QStringLiteral("Profile:"))
          : !profileSummary->text().isEmpty()) ||
     !nextStepSummary->text().startsWith(QStringLiteral("Next:")) ||
+    !nextWorkflowBlock || !openWorkflowStageButton ||
+    nextStepSummary->parentWidget() != nextWorkflowBlock ||
+    openWorkflowStageButton->parentWidget() != nextWorkflowBlock ||
+    !qobject_cast<QVBoxLayout *>(nextWorkflowBlock->layout()) ||
+    nextWorkflowBlock->layout()->count() != 2 ||
+    nextWorkflowBlock->layout()->itemAt(0)->widget() != nextStepSummary ||
+    nextWorkflowBlock->layout()->itemAt(1)->widget() !=
+        openWorkflowStageButton ||
+    nextWorkflowBlock->sizePolicy().verticalPolicy() != QSizePolicy::Maximum ||
+    nextStepSummary->font() != processSummary->font() ||
     !captureChoicesCompatible ||
     captureTypeCombo->findData(
         (int)colorscreen::render_parameters::capture_unknown) < 0 ||
@@ -1055,18 +1068,20 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
             return;
           }
 
-          // A line screen is a genuine regular-lattice monochrome path. With no
-          // mapping yet, Geometry is the unambiguous next stage.
+          // A selected regular monochrome screen has a single Detect screen
+          // action in Screen that finds points and fits the geometry.
           first->m_scrToImgParams.type = colorscreen::Joly;
           first->updateWorkflowSummary();
           if (!registrationSummary->text().contains(
                   QStringLiteral("geometry not configured")) ||
               !nextStepSummary->text().contains(
-                  QStringLiteral("Geometry — detect screen coordinates")) ||
+                  QStringLiteral("Screen → Detect screen")) ||
+              !nextStepSummary->text().contains(
+                  QStringLiteral("fit geometry automatically")) ||
               openWorkflowStageButton->property("targetPanelKey").toString() !=
-                  QStringLiteral("geometry")) {
+                  QStringLiteral("screen")) {
             fail(QStringLiteral(
-                "Workflow lost the monochrome line-screen Geometry path"));
+                "Workflow lost the monochrome regular-screen detection path"));
             return;
           }
 
@@ -1089,6 +1104,8 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
               !imageLayerSummary->text().contains(QStringLiteral("850 nm")) ||
               !nextStepSummary->text().contains(
                   QStringLiteral("auto-detected screen filter")) ||
+              !nextStepSummary->text().contains(
+                  QStringLiteral("Screen → Detect screen")) ||
               !openWorkflowStageButton->isHidden()) {
             fail(QStringLiteral(
                 "Workflow lost RGB+IR native-layer/two-path guidance"));
@@ -2447,6 +2464,27 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
           return;
         }
 
+        // The action belongs below the full-width paragraph. Verify actual
+        // separation when this document inspector is visible; layout structure
+        // is checked independently even when another MDI tab is active.
+        QCoreApplication::processEvents();
+        if (nextStepSummary->isVisible() &&
+            openWorkflowStageButton->isVisible()) {
+          const QRect textRect(
+              nextStepSummary->mapTo(workflowSummary, QPoint(0, 0)),
+              nextStepSummary->size());
+          const QRect buttonRect(
+              openWorkflowStageButton->mapTo(workflowSummary, QPoint(0, 0)),
+              openWorkflowStageButton->size());
+          if (buttonRect.top() <= textRect.bottom() ||
+              buttonRect.center().x() < workflowSummary->width() / 2 ||
+              buttonRect.right() > workflowSummary->width()) {
+            fail(QStringLiteral(
+                "Workflow Open stage button overlaps the recommendation or is not bottom-right"));
+            return;
+          }
+        }
+
         // Open stage is explicit user navigation. It follows the semantic tab
         // key, updates the preferred inspector stage, and then disappears once
         // the recommended stage is already current. Restore the operator's
@@ -2500,8 +2538,22 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
             {40, 60}, {-1, 1}, colorscreen::solver_parameters::green);
         first->applyState(workflowReady);
         first->m_geometryFit.clear();
-        first->m_geometryFit.baseline = first->documentStateSnapshot();
-        first->m_geometryFit.acceptedScan = first->m_scan;
+        // Exercise the same accepted-fit publisher as Detect screen, including
+        // a numerically unchanged geometry result (no extra Undo entry).
+        first->m_registrationDiscovery.scan = first->m_scan;
+        first->m_registrationDiscovery.expectedState =
+            first->documentStateSnapshot();
+        const int beforeDiscoveryUndo = first->m_undoStack->index();
+        first->acceptRegistrationDiscoveryGeometry(
+            workflowReady.scrToImg, QStringLiteral("Detect screen geometry"));
+        first->m_registrationDiscovery.clearRequest();
+        if (!first->m_geometryFit.baseline ||
+            first->m_geometryFit.acceptedScan.lock() != first->m_scan ||
+            first->m_undoStack->index() != beforeDiscoveryUndo) {
+          fail(QStringLiteral(
+              "Detect screen did not publish fitted geometry/source provenance"));
+          return;
+        }
         first->m_renderTypeParams.type = colorscreen::render_type_interpolated;
         first->m_imageWidget->setShowRegistrationPoints(false);
         first->updateWorkflowSummary();
@@ -2586,22 +2638,22 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
 
         const QString hiddenPointGuidance = nextStepSummary->text();
         if (hiddenPointGuidance.contains(QStringLiteral("choose Mode")) ||
+            hiddenPointGuidance.contains(QStringLiteral("fit geometry")) ||
             !hiddenPointGuidance.contains(
-                QStringLiteral("Show Registration Points")) ||
-            !hiddenPointGuidance.contains(QStringLiteral("Select (S)")) ||
-            !hiddenPointGuidance.contains(QStringLiteral("Add Point (A)")) ||
-            !hiddenPointGuidance.contains(QStringLiteral("Swap screen colors")) ||
+                QStringLiteral("Swap screen colors")) ||
+            !hiddenPointGuidance.contains(QStringLiteral("local regions")) ||
+            !hiddenPointGuidance.contains(QStringLiteral("Geometry")) ||
             !screenSwapColorsButton->isEnabled()) {
           fail(QStringLiteral(
-              "Workflow did not recognize the already-selected reconstruction mode or explain registration editing"));
+              "Completed Detect screen did not give concise global/local color correction advice"));
           return;
         }
 
         first->m_imageWidget->setShowRegistrationPoints(true);
         QCoreApplication::processEvents();
-        if (!nextStepSummary->text().contains(QStringLiteral("hide it"))) {
+        if (nextStepSummary->text() != hiddenPointGuidance) {
           fail(QStringLiteral(
-              "Workflow did not refresh registration-point visibility guidance"));
+              "View-only registration overlay changed Workflow's next step"));
           return;
         }
 

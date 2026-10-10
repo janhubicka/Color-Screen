@@ -134,7 +134,8 @@ public:
       New user-initiated opens normally go through ColorScreenApplication so
       an occupied window is never overwritten.  SUPPRESSPARAMPROMPT is reserved
       for crash recovery.  */
-  void loadFile(const QString &fileName, bool suppressParamPrompt = false);
+  void loadFile(const QString &fileName, bool suppressParamPrompt = false,
+                bool preferCachedRaw = false);
 
   /** Return true when this untouched empty window may host a newly opened
       image instead of allocating another document window.  */
@@ -953,6 +954,13 @@ private slots:
       bool screenAutodetection, bool allowRegistrationBootstrap,
       bool selectedArea);
 
+  /** Accept fitted GEOMETRY from the current registration-discovery worker.
+      Publish session provenance even when the mapping is unchanged; DESCRIPTION
+      is used for Undo only when the geometry actually changes. */
+  void acceptRegistrationDiscoveryGeometry(
+      const colorscreen::scr_to_img_parameters &geometry,
+      const QString &description);
+
   /** Return true while GENERATION/PROGRESS own the evolving registration
       request and the live document still equals its expected accepted state. */
   bool registrationDiscoveryRequestCurrent(
@@ -1059,6 +1067,14 @@ private:
     std::optional<uint64_t> screenAutodetectAfterGeneration;
     QPointer<QMessageBox> sidecarPrompt;
     QPointer<QMessageBox> failurePrompt;
+    /** The original RAW image owns the unpacked mosaic. A demosaiced
+        derivative need not own it, so retain the source as long as this
+        document continues to use the same input file. */
+    std::shared_ptr<colorscreen::image_data> rawSource;
+    QString rawSourceFile;
+    /** One in-flight image decode can be cancelled when a newer Open or
+        Reload request supersedes it. The worker owns the strong reference. */
+    std::weak_ptr<colorscreen::progress_info> activeProgress;
   };
   ImageLoadState m_imageLoad;
 

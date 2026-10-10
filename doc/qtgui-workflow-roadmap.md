@@ -156,7 +156,7 @@ rather than needing to infer readiness from individual fields.
 Geometry while keeping their implementation panels separate.  A small ordered
 action strip is enough:
 
-`Detect screen -> inspect points -> fit geometry -> validate overlay`
+`Screen: Detect screen (coordinates, points and fit) -> inspect reconstructed colors -> correct only if needed`
 
 Each step should show prerequisites and outcome.  Automatic commands are verbs;
 parameters controlling them are nouns/settings.  Do not mix the two visually.
@@ -183,17 +183,21 @@ the original tool with its pending anchor intact. Wheel zoom remains available.
 Right-click may additionally cancel an unfinished anchor where it has no competing
 tool meaning; Escape remains the universal cancellation key.
 
-The expected registration path is **autodetect first**. Successful **Detect
-screen** already selects an appropriate image-layer + screen-filter reconstruction
-view, so the Workflow summary must advance to inspection instead of repeating
-"choose Mode". Automatic detection also leaves the current registration-overlay
-visibility and canvas tool alone: it must not switch to Add Point simply because
-it found points. Workflow guidance should teach the next useful controls instead:
-**Registration -> Show Registration Points** (also available in Geometry) to
-show/hide the green overlay, **Select (S)** to inspect or move points, and **Add
-Point (A)** for missing points. **Swap screen colors** is a Screen-stage correction
-and belongs beside Detect screen; the older duplicate "try luck" detector in
-Digital Capture should not return.
+The expected registration path is **autodetect first** using **Screen → Detect
+screen** after choosing the regular screen type. This command detects coordinates,
+finds registration points, fits geometry, and selects an appropriate
+reconstruction view. Geometry's coordinate-only autodetection is a separate
+manual fallback, not a mandatory intermediate step. The Workflow summary
+must therefore not ask users to fit again or reselect an already-selected Mode.
+Progressive detection must publish the accepted source-image identity together
+with the fit baseline, even for a numerically unchanged solver result.
+
+After detection keep the next-step paragraph short: inspect reconstructed
+colours. If they are globally wrong, use **Screen → Swap screen colors**.
+If only parts of the image are misaligned, manually correct registration
+points in Geometry. The overlay and **Select (S)**/**Add Point (A)** tools
+remain available there without a long explanation in Workflow. The older
+duplicate "try luck" detector in Digital Capture should not return.
 
 If coordinate detection fails on an otherwise regular screen, `Screen coordinates`
 is the explicit manual fallback: click the green origin dot, click its neighboring
