@@ -37,14 +37,10 @@ namespace colorscreen
 extern void prune_render_caches ();
 extern void prune_render_scr_detect_caches ();
 
-/* RAW mosaics remain sizeable even after freeing processed RGB output.
-   Retain at most 256 MiB across live images. This is a global, opportunistic
-   cache budget, not a limit on the image that Color-Screen may decode. */
-static constexpr uint64_t raw_source_budget = UINT64_C (256) * 1024 * 1024;
-static std::atomic<uint64_t> retained_raw_source_bytes {0};
-/* Total cache-owned decoded-variant budget, distinct from live source/mosaic
-   and externally retained image memory. The core LRU enforces this budget. */
-static constexpr size_t raw_variant_budget = size_t (256) * 1024 * 1024;
+/* Both live RAW mosaics and cached decoded variants participate in the
+   adaptive, process-wide memory budget managed in libcolorscreen's LRU
+   registry. The core remains frontend-neutral: no Qt allocator/cache and
+   no assumption that a 150+ MP image fits into 256 MiB. */
 
 /* Own LibRaw's decoded sensor samples after the initial loader has gone.
    The processed image buffer is released on transfer. Retention is currently
@@ -76,8 +72,7 @@ public:
     if (input_buffer)
       free (input_buffer);
     if (reserved_bytes)
-      retained_raw_source_bytes.fetch_sub (reserved_bytes,
-                                           std::memory_order_relaxed);
+      release_raw_source_cache_bytes (reserved_bytes);
   }
 };
 
@@ -122,9 +117,10 @@ raw_variant_cached_bytes (const image_data &image)
    lru_cache handles key coalescing, size-aware eviction and shared ownership.
    This is intentionally a libcolorscreen cache, with no Qt dependencies. */
 using raw_variant_cache_t
-    = lru_cache<raw_variant_cache_key, image_data, nullptr, 32>;
+    = lru_cache<raw_variant_cache_key, image_data, nullptr, 512>;
 static raw_variant_cache_t raw_variant_cache (
-    "RAW demosaic variants", raw_variant_budget, raw_variant_cached_bytes);
+    "RAW demosaic variants", /*per-cache byte limit=*/0,
+    raw_variant_cached_bytes);
 
 const property_t image_data::demosaic_names[(int)demosaic_max]
      = {
@@ -265,27 +261,18 @@ public:
     const auto &raw = m_processor->imgdata.rawdata;
     const uint64_t w = (uint64_t)m_processor->imgdata.sizes.raw_width;
     const uint64_t h = (uint64_t)m_processor->imgdata.sizes.raw_height;
-    if (!raw.raw_image || !w || !h || w > raw_source_budget / 2 / h)
+    if (!raw.raw_image || !w || !h
+        || h > std::numeric_limits<uint64_t>::max () / 2 / w)
       return {};
     const uint64_t needed = w * h * 2;
-    auto source = std::make_shared<unpacked_raw_source> ();
 
-    /* Atomically reserve from the process-wide budget. Reclaim unused
-       decoded variants first: they can keep a reusable source alive without
-       an active caller. Already displayed/externally pinned images remain
-       valid regardless of whether the cache releases its references. */
-    if (retained_raw_source_bytes.load (std::memory_order_relaxed)
-        > raw_source_budget - needed)
-      raw_variant_cache.prune ();
-    uint64_t used = retained_raw_source_bytes.load (std::memory_order_relaxed);
-    do
-      {
-        if (used > raw_source_budget - needed)
-          return {};
-      }
-    while (!retained_raw_source_bytes.compare_exchange_weak (
-        used, used + needed, std::memory_order_relaxed,
-        std::memory_order_relaxed));
+    /* Ask the global LRU registry to reclaim older cache entries and to
+       reserve this CFA allocation against the OS memory-aware soft budget.
+       If the machine cannot safely retain it, the existing decoded image
+       remains usable and subsequent demosaic requests simply reopen RAW. */
+    if (!reserve_raw_source_cache_bytes (needed))
+      return {};
+    auto source = std::make_shared<unpacked_raw_source> ();
     source->reserved_bytes = needed;
 
     /* free_image releases the temporary postprocessed image, not unpacked
