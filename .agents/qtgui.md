@@ -105,8 +105,8 @@ each document has independent:
   must be refused rather than silently losing that document input.
   Read those supplements only after the full legacy and manifest validation
   succeeds; preserve them on ordinary Save, Save As, CLI rewrites and private
-  recovery. Private recovery parameters use
-  `recovery_params.cspar` with the same structured/atomic archive writer.
+  recovery. Private recovery parameters now use
+  `recovery_params.cspar` with the full native-JSON v2 atomic writer.
   `recovery_params.par` is accepted only when no archive exists. Recovery
   metadata still preserves the user's Archive/Legacy target identity
   independently of its private recovery payload. Keep lightweight QSaveFile
@@ -127,8 +127,8 @@ complete native-JSON v2 snapshot. Existing ZIP-v1 and .par recovery
 snapshots remain supported by content-based parsing. The document lifecycle smoke verifies
 native JSON Save/Open/ordinary Save, corrupt-input failure nonmutation and
 return to the v1 compatibility target. See
-`doc/parameter-json-v2-plan.md` for outstanding recovery, field-audit and
-cross-platform gates.
+`doc/parameter-json-v2-plan.md` for the remaining nested-field audit,
+default-format rollout and full cross-platform validation gates.
 
 Workspace geometry, image/parameter file-dialog directory history, and
 recent-file lists remain application preferences in `QSettings`; they are not
@@ -407,7 +407,7 @@ application-wide help/about actions. Keep this order when adding new menus.
 Crash recovery is session-aware. `ColorScreenApplication` prompts once and
 restores one `MainWindow` per recovery directory. Each `MainWindow` writes and
 removes only its own payload, so closing one image cannot erase another image's
-recovery state. Recovery writes a complete `recovery_params.cspar` archive
+recovery state. Recovery writes a complete native JSON v2 `recovery_params.cspar`
 atomically before updating image/target metadata. The old
 `recovery_params.par` is read only when no archive exists; an invalid
 archive must not fall back to stale legacy data. Both formats use the same
