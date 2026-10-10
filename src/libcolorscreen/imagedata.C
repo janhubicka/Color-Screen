@@ -9,7 +9,7 @@
 #include <array>
 #include <atomic>
 #include <cstdint>
-#include <list>
+#include <limits>
 #include <mutex>
 #include <assert.h>
 #include <cmath>
@@ -42,10 +42,9 @@ extern void prune_render_scr_detect_caches ();
    cache budget, not a limit on the image that Color-Screen may decode. */
 static constexpr uint64_t raw_source_budget = UINT64_C (256) * 1024 * 1024;
 static std::atomic<uint64_t> retained_raw_source_bytes {0};
-/* Count only variants held alive by the cache, not external view owners.
-   Source mosaics have a separate 256 MiB reservation. */
-static constexpr uint64_t raw_variant_budget = UINT64_C (256) * 1024 * 1024;
-static std::atomic<uint64_t> retained_raw_variant_bytes {0};
+/* Total cache-owned decoded-variant budget, distinct from live source/mosaic
+   and externally retained image memory. The core LRU enforces this budget. */
+static constexpr size_t raw_variant_budget = size_t (256) * 1024 * 1024;
 
 /* Own LibRaw's decoded sensor samples after the initial loader has gone.
    The processed image buffer is released on transfer. Retention is currently
@@ -59,30 +58,20 @@ public:
      LibRaw instance; finished image_data variants own independent pixels. */
   std::mutex processing_mutex;
   std::shared_ptr<LibRaw> processor;
+  /* This identity cannot alias a newly opened RAW with the same pathname.
+     Cache keys never need to own the source to compare identities. */
+  const uint64_t cache_id = lru_caches::get ();
   std::string source_filename;
   int full_res_width = 0;
   void *input_buffer = nullptr;
   uint64_t reserved_bytes = 0;
-  struct cached_variant
-  {
-    image_data::demosaicing_t method;
-    std::shared_ptr<image_data> image;
-    uint64_t reserved_bytes;
-  };
-  /* Most recently used first; at most two finished derivatives. A derivative
-     never holds a strong source pointer after its loader has finished. */
-  std::list<cached_variant> variants;
 
   ~unpacked_raw_source ()
   {
+    /* A completed derived image may still own the source through a
+       shared_ptr, but the source no longer owns cached variants: no cycle. */
     /* LibRaw may still own a datastream referring to the EIP input
        buffer. Destroy its processor before returning that memory. */
-    /* Drop cached derivative ownership before releasing source storage. */
-    for (const cached_variant &variant : variants)
-      if (variant.reserved_bytes)
-        retained_raw_variant_bytes.fetch_sub (
-            variant.reserved_bytes, std::memory_order_relaxed);
-    variants.clear ();
     processor.reset ();
     if (input_buffer)
       free (input_buffer);
@@ -91,6 +80,51 @@ public:
                                            std::memory_order_relaxed);
   }
 };
+
+/* libcolorscreen owns this decoded-resource cache. Qt (or any future
+   frontend) simply asks image_data for a demosaiced_variant(). The key
+   identifies a source generation and method without keeping its mosaic
+   alive; a returned image keeps the source alive for subsequent requests. */
+struct raw_variant_cache_key
+{
+  uint64_t source_id = 0;
+  image_data::demosaicing_t method = image_data::demosaic_default;
+
+  bool operator== (const raw_variant_cache_key &other) const
+  {
+    return source_id == other.source_id && method == other.method;
+  }
+};
+
+/* Estimate only the image pixel allocations retained by this LRU entry,
+   plus the descriptor. The live source mosaic and externally pinned image
+   buffers are independent owners with separate memory accounting. */
+static size_t
+raw_variant_cached_bytes (const image_data &image)
+{
+  if (image.width <= 0 || image.height <= 0)
+    return std::numeric_limits<size_t>::max ();
+  const size_t pixel_bytes
+      = (image.has_rgb () ? sizeof (image_data::pixel) : 0)
+        + (image.has_grayscale_or_ir () ? sizeof (image_data::gray) : 0);
+  if (!pixel_bytes)
+    return std::numeric_limits<size_t>::max ();
+  const size_t width = (size_t)image.width;
+  const size_t height = (size_t)image.height;
+  const size_t available
+      = std::numeric_limits<size_t>::max () - sizeof (image_data);
+  if (width > available / pixel_bytes / height)
+    return std::numeric_limits<size_t>::max ();
+  return sizeof (image_data) + width * height * pixel_bytes;
+}
+
+/* An operation supplies its own decoder through get_or_compute(), while
+   lru_cache handles key coalescing, size-aware eviction and shared ownership.
+   This is intentionally a libcolorscreen cache, with no Qt dependencies. */
+using raw_variant_cache_t
+    = lru_cache<raw_variant_cache_key, image_data, nullptr, 32>;
+static raw_variant_cache_t raw_variant_cache (
+    "RAW demosaic variants", raw_variant_budget, raw_variant_cached_bytes);
 
 const property_t image_data::demosaic_names[(int)demosaic_max]
      = {
@@ -236,9 +270,13 @@ public:
     const uint64_t needed = w * h * 2;
     auto source = std::make_shared<unpacked_raw_source> ();
 
-    /* Atomically reserve from the process-wide budget. Multiple documents
-       may finish loading concurrently. Under memory pressure source
-       retention is optional; the already-decoded image is still valid. */
+    /* Atomically reserve from the process-wide budget. Reclaim unused
+       decoded variants first: they can keep a reusable source alive without
+       an active caller. Already displayed/externally pinned images remain
+       valid regardless of whether the cache releases its references. */
+    if (retained_raw_source_bytes.load (std::memory_order_relaxed)
+        > raw_source_budget - needed)
+      raw_variant_cache.prune ();
     uint64_t used = retained_raw_source_bytes.load (std::memory_order_relaxed);
     do
       {
@@ -269,7 +307,7 @@ private:
   /* Do not put it on the stack since it is rather large.  */
   std::shared_ptr<LibRaw> m_processor;
   /* Kept alive across this borrowed reprocessing pass, with the resource
-     mutex held by image_data::demosaiced_variant(). */
+     mutex held by the core cache's per-source decoder callback. */
   std::shared_ptr<unpacked_raw_source> m_reuse_source;
   std::string m_source_filename;
   bool monochromatic = false;
@@ -1839,11 +1877,11 @@ image_data::load (const char *name, bool preload_all, const char **error,
   return false;
 }
 
-/* Produce another complete image from the same unpacked Bayer source.
-   A caller is free to keep returned variants when the bounded cache evicts
-   them. The current source image stays unchanged on success or failure.
-   LibRaw's repeated dcraw_process calls are serialized, since its working
-   output and processing parameters are mutable. */
+/* Produce another independent image from the unpacked Bayer source.
+   The size-aware libcolorscreen LRU coalesces identical concurrent requests.
+   A generated variant retains the sensor source itself (never the cache),
+   so changing modes after the original image leaves the Qt view requires
+   neither a frontend cache nor reopening the RAW file. */
 std::shared_ptr<image_data>
 image_data::demosaiced_variant (demosaicing_t method, const char **error,
                                progress_info *progress)
@@ -1865,110 +1903,87 @@ image_data::demosaiced_variant (demosaicing_t method, const char **error,
       return {};
     }
 
-  /* A shared source may also be used by a non-heap image_data in a test,
-     where weak_from_this simply returns empty. Recompute in that case. */
+  /* An already displayed image needs no second allocation. This also works
+     for a variant built from an earlier variant after its original was freed. */
   if (method == demosaic)
     if (auto original = weak_from_this ().lock ())
       return original;
 
-  std::lock_guard<std::mutex> lock (source->processing_mutex);
-  if (progress && progress->cancel_requested ())
-    {
-      *error = "cancelled";
-      return {};
-    }
-  for (auto it = source->variants.begin (); it != source->variants.end ();
-       ++it)
-    if (it->method == method)
+  raw_variant_cache_key key { source->cache_id, method };
+  auto result = raw_variant_cache.get_or_compute (
+      key, progress,
+      [source, error] (raw_variant_cache_key &requested,
+                       progress_info *task) -> std::unique_ptr<image_data>
       {
-        std::shared_ptr<image_data> image = it->image;
-        source->variants.splice (source->variants.begin (), source->variants,
-                                 it);
-        return image;
-      }
-
-  auto variant = std::make_shared<image_data> ();
-  /* The retained processor's rawdata is immutable; only the temporary
-     postprocessing buffer and LibRaw params change under the mutex. */
-  source->processor->free_image ();
-  variant->loader
-      = std::make_unique<raw_image_data_loader> (variant.get (), source);
-  if (!variant->loader->init_loader (source->source_filename.c_str (), error,
-                                    progress, method))
-    {
-      variant->loader.reset ();
-      source->processor->free_image ();
-      return {};
-    }
-  if (!variant->allocate ())
-    {
-      *error = "out of memory allocating demosaiced variant";
-      variant->loader.reset ();
-      source->processor->free_image ();
-      return {};
-    }
-
-  int permille = 0;
-  for (;;)
-    {
-      if (progress && progress->cancel_requested ())
-        {
-          *error = "cancelled";
-          variant->loader.reset ();
-          source->processor->free_image ();
-          return {};
-        }
-      if (!variant->load_part (&permille, error, progress))
-        {
-          variant->loader.reset ();
-          source->processor->free_image ();
-          return {};
-        }
-      if (permille == 1000)
-        break;
-      if (progress)
-        progress->set_progress (permille);
-    }
-  if (progress && progress->cancel_requested ())
-    {
-      *error = "cancelled";
-      return {};
-    }
-
-  /* A derivative is an independent image with no strong pointer back to its
-     source. Two completed variants per source are sufficient for comparing
-     algorithms without retaining every large image encountered. */
-  const uint64_t w = (uint64_t)variant->width;
-  const uint64_t h = (uint64_t)variant->height;
-  const uint64_t bytes_per_pixel
-      = variant->has_rgb () ? sizeof (pixel) : sizeof (gray);
-  uint64_t needed = 0;
-  if (w && h && w <= raw_variant_budget / bytes_per_pixel / h)
-    needed = w * h * bytes_per_pixel;
-
-  if (needed)
-    {
-      /* Evict only cache ownership; external users of an old image keep its
-         pixels. Never hold more than two finished variants per source. */
-      while (source->variants.size () >= 2)
-        {
-          auto &old = source->variants.back ();
-          retained_raw_variant_bytes.fetch_sub (
-              old.reserved_bytes, std::memory_order_relaxed);
-          source->variants.pop_back ();
-        }
-      uint64_t used = retained_raw_variant_bytes.load (
-          std::memory_order_relaxed);
-      while (used <= raw_variant_budget - needed)
-        if (retained_raw_variant_bytes.compare_exchange_weak (
-                used, used + needed, std::memory_order_relaxed,
-                std::memory_order_relaxed))
+        /* Different algorithms for one LibRaw mosaic share a mutable
+           postprocessing buffer and therefore cannot run concurrently. */
+        std::lock_guard<std::mutex> guard (source->processing_mutex);
+        if (task && task->cancel_requested ())
           {
-            source->variants.push_front ({ method, variant, needed });
-            break;
+            *error = "cancelled";
+            return {};
           }
-    }
-  return variant;
+
+        auto variant = std::make_unique<image_data> ();
+        source->processor->free_image ();
+        variant->loader = std::make_unique<raw_image_data_loader> (
+            variant.get (), source);
+        if (!variant->loader->init_loader (
+                source->source_filename.c_str (), error, task,
+                requested.method))
+          {
+            variant->loader.reset ();
+            source->processor->free_image ();
+            return {};
+          }
+        if (!variant->allocate ())
+          {
+            *error = "out of memory allocating demosaiced variant";
+            variant->loader.reset ();
+            source->processor->free_image ();
+            return {};
+          }
+
+        int permille = 0;
+        for (;;)
+          {
+            if (task && task->cancel_requested ())
+              {
+                *error = "cancelled";
+                variant->loader.reset ();
+                source->processor->free_image ();
+                return {};
+              }
+            if (!variant->load_part (&permille, error, task))
+              {
+                variant->loader.reset ();
+                source->processor->free_image ();
+                return {};
+              }
+            if (permille == 1000)
+              break;
+            if (task)
+              task->set_progress (permille);
+          }
+        if (task && task->cancel_requested ())
+          {
+            *error = "cancelled";
+            source->processor->free_image ();
+            return {};
+          }
+
+        /* The source has no reverse pointer to any variant or cache entry.
+           The current decoded image thus remains a valid RAW source even if
+           the originally opened image and its Qt document are destroyed. */
+        variant->m_unpacked_raw_source = source;
+        return variant;
+      });
+
+  if (!result && !*error)
+    *error = progress && progress->cancel_requested ()
+                 ? "cancelled"
+                 : "could not generate RAW demosaicing variant";
+  return result;
 }
 
 /* Set DPI of the image to NEW_XDPI and NEW_YDPI.  */
