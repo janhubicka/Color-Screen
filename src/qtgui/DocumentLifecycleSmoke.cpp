@@ -459,6 +459,84 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
       app.exit(documentLifecycleFailure);
       return;
     }
+    // Native v2 is a deliberately explicit alpha Save-As option. Verify
+    // that the Qt layer writes plain JSON, adopts the loaded physical format
+    // and keeps JSON on ordinary Save even though the suffix is .cspar.
+    const QString jsonParams = state->temporaryDirectory->filePath(
+        QStringLiteral("explicit-native-json-v2.cspar"));
+    const ParameterState originalV2State = first->documentStateSnapshot();
+    if (!first->saveParametersToFile(
+            jsonParams, MainWindow::ParameterSaveFormat::JsonV2)) {
+      qCritical() << "Document lifecycle smoke could not export native v2 JSON";
+      app.exit(documentLifecycleFailure);
+      return;
+    }
+    const QByteArray nativeBefore = readFile(jsonParams);
+    if (nativeBefore.isEmpty() || nativeBefore.at(0) != '{' ||
+        nativeBefore.contains("screen_alignment_version:") ||
+        !colorscreen::parameter_json_v2_signature_p(
+            jsonParams.toUtf8().constData()) ||
+        colorscreen::parameter_archive_signature_p(
+            jsonParams.toUtf8().constData()) ||
+        first->m_parameterFile.format !=
+            MainWindow::ParameterFileState::Format::JsonV2 ||
+        !first->loadParameterFile(jsonParams) ||
+        first->m_parameterFile.format !=
+            MainWindow::ParameterFileState::Format::JsonV2 ||
+        first->documentStateSnapshot().scrToImg.final_angle !=
+            originalV2State.scrToImg.final_angle ||
+        first->documentStateSnapshot().rparams.gamma !=
+            originalV2State.rparams.gamma ||
+        !first->saveParametersToFile(jsonParams) ||
+        readFile(jsonParams) != nativeBefore) {
+      qCritical() << "Native v2 explicit Save As/Open/ordinary Save failed";
+      app.exit(documentLifecycleFailure);
+      return;
+    }
+
+    // A malformed v2 file is rejected transactionally. Do not accept it as
+    // legacy CSP, overwrite the live document, or change its loaded target.
+    const QString invalidJsonParams =
+        state->temporaryDirectory->filePath(
+            QStringLiteral("invalid-native-json-v2.cspar"));
+    QByteArray truncatedNative = nativeBefore;
+    truncatedNative.truncate(truncatedNative.size() / 2);
+    QFile malformed(invalidJsonParams);
+    if (!malformed.open(QIODevice::WriteOnly | QIODevice::Truncate) ||
+        malformed.write(truncatedNative) != truncatedNative.size() ||
+        !malformed.flush()) {
+      qCritical() << "Native v2 smoke could not create truncated fixture";
+      app.exit(documentLifecycleFailure);
+      return;
+    }
+    malformed.close();
+    const ParameterState acceptedBeforeFailure = first->documentStateSnapshot();
+    if (first->loadParameterFile(invalidJsonParams) ||
+        first->m_parameterFile.format !=
+            MainWindow::ParameterFileState::Format::JsonV2 ||
+        first->m_parameterFile.path != QFileInfo(jsonParams).absoluteFilePath() ||
+        first->documentStateSnapshot() != acceptedBeforeFailure) {
+      qCritical() << "Invalid native v2 JSON partially changed Qt document";
+      app.exit(documentLifecycleFailure);
+      return;
+    }
+    if (QMessageBox *warning = first->findChild<QMessageBox *>(
+            QStringLiteral("ParameterLoadFailureDialog"))) {
+      warning->close();
+    }
+
+    // Restore the original compatibility-archive target for the rest of the
+    // existing crash-recovery and multi-document legacy-v1 smoke phases.
+    if (!first->saveParametersToFile(
+            state->firstParameters,
+            MainWindow::ParameterSaveFormat::ArchiveV1) ||
+        first->m_parameterFile.format !=
+            MainWindow::ParameterFileState::Format::Archive) {
+      qCritical() << "Native v2 smoke could not restore v1 archive target";
+      app.exit(documentLifecycleFailure);
+      return;
+    }
+
     state->firstBaselineParameters = readFile(state->firstParameters);
     if (state->firstBaselineParameters.isEmpty()) {
       qCritical() << "Document lifecycle smoke could not read its baseline parameters";
