@@ -23,6 +23,7 @@
 #include <QTemporaryDir>
 #include <QThread>
 #include <QTimer>
+#include <QUndoStack>
 
 #include <atomic>
 #include <cstdio>
