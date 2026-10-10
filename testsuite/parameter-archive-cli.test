@@ -8,7 +8,7 @@ if test -z "$srcdir"; then
     test "${VERBOSE+set}" != set && VERBOSE=1
 fi
 
-echo 1..5
+echo 1..9
 . $srcdir/defs.sh
 
 # Dynamic MinGW builds are normally launched through libtool's POSIX wrapper.
@@ -34,7 +34,10 @@ PY
 )
 legacy_out=out-parameter-legacy.tif
 archive_out=out-parameter-archive.tif
-rm -f "$archive" "$legacy_out" "$archive_out"
+native=out-parameter-native-v2.cspar
+native_out=out-parameter-native-v2.tif
+zip_roundtrip=out-parameter-v2-to-v1.cspar
+rm -f "$archive" "$legacy_out" "$archive_out" "$native" "$native_out" "$zip_roundtrip"
 
 python3 - "$srcdir/empty.par" "$archive" <<'PY' || exit 1
 import json
@@ -166,4 +169,71 @@ pexec $RUNCOLORSCREEN render --mode original --geometry scan \
   "$archive_out" || exit 1
 echo 'ok 5 - rewritten Unicode archive remains readable'
 
-rm -f "$archive"
+# Explicitly convert one ZIP-v1 project, including Qt profile spots and
+# structured-only geometry/photographic fields, to one plain native JSON file.
+pexec $RUNCOLORSCREEN adjust-par --json-v2 --out "$native" "$archive" || exit 1
+python3 - "$native" <<'PY' || exit 1
+import json
+import pathlib
+import sys
+import zipfile
+path = pathlib.Path(sys.argv[1])
+if zipfile.is_zipfile(path):
+    raise SystemExit("explicit --json-v2 still wrote ZIP")
+content = path.read_bytes()
+if not content.startswith(b"{"):
+    raise SystemExit("v2 payload is not plain UTF-8 JSON")
+state = json.loads(content)
+if state.get("format") != "org.colorscreen.parameters" or state.get("schema_version") != 2:
+    raise SystemExit("v2 payload lacks schema identity")
+if "legacy_csp" in content.decode("utf-8") or "state/legacy.par" in content.decode("utf-8"):
+    raise SystemExit("v2 still embeds a legacy CSP mirror")
+if state["geometry"]["final_angle"] != 108.375 or state["geometry"]["final_ratio"] != 0.803158:
+    raise SystemExit("v2 conversion lost final-frame calibration")
+if state["capture"]["image_area"] != {"enabled": True, "rect": [1, 1, 4, 4]}:
+    raise SystemExit("v2 conversion lost the inner photographic area")
+if state["reconstruction"]["demosaiced_scaling"] != "nearest":
+    raise SystemExit("v2 conversion lost reconstructed scaling")
+if state["profile"]["spots"] != [[0.25, 0.5]]:
+    raise SystemExit("v2 conversion dropped Qt profile spots")
+PY
+echo 'ok 6 - ZIP v1 converted to complete native JSON v2'
+
+pexec $RUNCOLORSCREEN render --mode original --geometry scan   --output-profile=original "$srcdir/checkerboard.tif" "$native"   "$native_out" || exit 1
+pexec $RUNCOLORSCREEN lab compare-images "$archive_out" "$native_out" || exit 1
+echo 'ok 7 - CLI native JSON and ZIP v1 rendering parity'
+
+# Ordinary in-place adjust-par must preserve the loaded native JSON encoding.
+pexec $RUNCOLORSCREEN adjust-par "$native" || exit 1
+python3 - "$native" <<'PY' || exit 1
+import json, pathlib, sys, zipfile
+path = pathlib.Path(sys.argv[1])
+if zipfile.is_zipfile(path):
+    raise SystemExit("ordinary adjust-par downgraded JSON v2 to ZIP")
+state = json.loads(path.read_text(encoding="utf-8"))
+if state["schema_version"] != 2 or state["profile"]["spots"] != [[0.25, 0.5]]:
+    raise SystemExit("ordinary adjust-par changed v2 state or lost profile spots")
+PY
+echo 'ok 8 - CLI preserves native JSON format and Qt metadata'
+
+# The explicit downgrade to compatible ZIP v1 preserves profile spots, not
+# only CSP values, and never produces a hidden JSON-v2 payload in the mirror.
+pexec $RUNCOLORSCREEN adjust-par --zip-v1 --out "$zip_roundtrip" "$native" || exit 1
+python3 - "$zip_roundtrip" <<'PY' || exit 1
+import json, pathlib, sys, zipfile
+path = pathlib.Path(sys.argv[1])
+if not zipfile.is_zipfile(path):
+    raise SystemExit("explicit --zip-v1 did not produce a ZIP archive")
+with zipfile.ZipFile(path) as z:
+    manifest = json.loads(z.read("manifest.json"))
+    mirror = z.read("state/legacy.par")
+if manifest["schema_version"] != 1:
+    raise SystemExit("v2->v1 output has wrong schema version")
+if manifest["state"]["image_area"] != {"enabled": True, "rect": [1, 1, 4, 4]}:
+    raise SystemExit("v2->v1 lost photographic area")
+if b"profile_spot: 0.25 0.5\n" not in mirror:
+    raise SystemExit("v2->v1 lost Qt profile spot postamble")
+PY
+echo 'ok 9 - explicit native v2 to ZIP-v1 compatibility conversion'
+
+rm -f "$archive" "$native" "$native_out" "$zip_roundtrip"
