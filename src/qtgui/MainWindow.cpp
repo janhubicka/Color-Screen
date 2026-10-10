@@ -2848,6 +2848,13 @@ void MainWindow::createMenus() {
       "Inspect global cache memory, available RAM and all libcolorscreen "
       "LRU entries without changing processing or cache policy."));
   connect(cacheStatsAction, &QAction::triggered, this, [this]() {
+    if (QDialog *existing = findChild<QDialog *>(
+            QStringLiteral("CacheStatisticsDialog"))) {
+      existing->show();
+      existing->raise();
+      existing->activateWindow();
+      return;
+    }
     auto *dialog = new QDialog(this);
     dialog->setObjectName(QStringLiteral("CacheStatisticsDialog"));
     dialog->setAttribute(Qt::WA_DeleteOnClose);
@@ -2915,9 +2922,9 @@ void MainWindow::createMenus() {
         const auto &entry = stats.caches[static_cast<size_t>(row)];
         const QString values[] = {
             QString::fromStdString(entry.name),
-            QString::number(entry.entries),
-            QString::number(entry.in_progress),
-            QString::number(entry.externally_pinned),
+            QString::number(static_cast<qulonglong>(entry.entries)),
+            QString::number(static_cast<qulonglong>(entry.in_progress)),
+            QString::number(static_cast<qulonglong>(entry.externally_pinned)),
             entry.precise_size || entry.retained_bytes
                 ? pretty(entry.retained_bytes)
                 : QObject::tr("unknown"),
