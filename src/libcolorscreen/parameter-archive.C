@@ -4381,10 +4381,16 @@ parameter_json_v2_signature_p (const char *name)
   if (!file)
     return false;
   int first = EOF;
-  do
-    first = fgetc (file);
-  while (first == ' ' || first == '\t' || first == '\r'
-         || first == '\n');
+  // Never scan an untrusted multi-gigabyte whitespace prefix before applying
+  // the actual JSON document size limit. The generated v2 document starts
+  // with '{'; a short human-edited leading whitespace prefix is sufficient.
+  for (size_t i = 0; i < 4096; ++i)
+    {
+      first = fgetc (file);
+      if (first != ' ' && first != '\t' && first != '\r'
+          && first != '\n')
+        break;
+    }
   fclose (file);
   return first == '{';
 }
