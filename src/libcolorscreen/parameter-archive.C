@@ -4688,6 +4688,44 @@ read_parameter_json_v2_file (
       contents, geometry, detection, render, solver, profile_spots, error);
 }
 
+/* A legacy CSP file can still be edited and saved, but it cannot represent
+   parameters introduced as authoritative v1/v2 structured sections. The
+   preflight belongs in core so Qt, CLI and future batch writers agree on
+   when exporting .par would silently lose data. */
+bool
+legacy_csp_can_represent_parameters (const scr_to_img_parameters *geometry,
+                                     const render_parameters *render,
+                                     std::string *error)
+{
+  if (error)
+    error->clear ();
+  if (geometry
+      && (geometry->final_angle != (coord_t)90
+          || geometry->final_ratio != (coord_t)1))
+    return archive_fail (
+        error, "Legacy .par cannot preserve final screen angle/ratio; "
+               "choose .cspar to retain the complete geometry");
+  if (render && render->image_area.set)
+    return archive_fail (
+        error, "Legacy .par cannot preserve the photographic image area; "
+               "choose .cspar or clear the inner image bounds");
+  if (render && render->ignore_infrared)
+    return archive_fail (
+        error, "Legacy .par cannot preserve the ignore-infrared setting; "
+               "choose .cspar");
+  if (render
+      && render->demosaiced_scaling
+             != render_parameters::default_scaling)
+    return archive_fail (
+        error, "Legacy .par cannot preserve demosaiced scaling; "
+               "choose .cspar");
+  if (render && render->observer_whitepoint != d50_white)
+    return archive_fail (
+        error, "Legacy .par cannot preserve observer whitepoint; "
+               "choose .cspar");
+  return true;
+}
+
 /* Write the complete direct native JSON document atomically using the same
    Unicode-path, sibling-staging and replace-on-success writer as schema-v1
    archives. ARCHIVE=false here means raw bytes, never legacy CSP conversion. */
