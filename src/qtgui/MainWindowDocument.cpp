@@ -404,7 +404,12 @@ bool MainWindow::saveParametersToFile(
     format = m_parameterFile.format;
   else if (absoluteFileName.endsWith(QLatin1String(".cspar"),
                                      Qt::CaseInsensitive))
-    format = ParameterFileState::Format::Archive;
+    // When saving to another established .cspar without an explicit format
+    // filter, preserve the bytes' existing JSON-v2 or ZIP-v1 encoding.
+    format = colorscreen::parameter_json_v2_signature_p(
+                 absoluteFileName.toUtf8().constData())
+                 ? ParameterFileState::Format::JsonV2
+                 : ParameterFileState::Format::Archive;
   const bool jsonV2 = format == ParameterFileState::Format::JsonV2;
   const bool archive = format == ParameterFileState::Format::Archive;
   const bool hasRgb = m_scan && m_scan->has_rgb();
