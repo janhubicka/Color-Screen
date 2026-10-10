@@ -339,7 +339,7 @@ void MainWindow::onOpenParameters() {
 
   auto *dialog = new QFileDialog(
       this, tr("Open Parameters"), initialPath,
-      tr("Color-Screen parameters (*.cspar *.par);;Archive parameters (*.cspar);;Legacy parameters (*.par);;All Files (*)"));
+      tr("Color-Screen parameters (*.cspar *.par);;JSON v2 or compatible ZIP v1 (*.cspar);;Legacy parameters (*.par);;All Files (*)"));
   dialog->setObjectName(QStringLiteral("ParameterOpenFileDialog"));
   dialog->setFileMode(QFileDialog::ExistingFile);
   dialog->setAcceptMode(QFileDialog::AcceptOpen);
