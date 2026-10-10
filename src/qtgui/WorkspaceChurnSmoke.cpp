@@ -271,9 +271,9 @@ void startWorkspaceChurnSmoke(ColorScreenApplication &app,
         if (!parameterFileProbe.path.isEmpty() ||
             parameterFileProbe.suggested ||
             parameterFileProbe.format !=
-                MainWindow::ParameterFileState::Format::Archive) {
+                MainWindow::ParameterFileState::Format::JsonV2) {
           fail(QStringLiteral(
-              "Fresh parameter-file target did not default to archive format"));
+              "Fresh parameter-file target did not default to native JSON v2"));
           return;
         }
         parameterFileProbe.setSuggested(QStringLiteral("/tmp/suggested.par"));
@@ -3084,7 +3084,8 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         second->applySharedDocumentState(
             archiveState, QStringLiteral("Archive persistence smoke edit"));
         if (!second->isDocumentModified() ||
-            !second->saveParametersToFile(archiveFile) ||
+            !second->saveParametersToFile(
+                archiveFile, MainWindow::ParameterSaveFormat::ArchiveV1) ||
             second->isDocumentModified() ||
             second->m_parameterFile.format !=
                 MainWindow::ParameterFileState::Format::Archive) {
