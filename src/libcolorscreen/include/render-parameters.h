@@ -805,6 +805,7 @@ struct render_parameters
            && scanner_green == other.scanner_green
            && scanner_blue == other.scanner_blue && age == other.age
  	   && dye_density == other.dye_density
+           && temperature == other.temperature
            && backlight_temperature == other.backlight_temperature
            && dark_point == other.dark_point
            && scan_exposure == other.scan_exposure
