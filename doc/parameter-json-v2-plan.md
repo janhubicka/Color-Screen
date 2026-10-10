@@ -48,7 +48,15 @@ calibration grids), plus an in-memory **complete v2 document codec**. It
 composes a single UTF-8 JSON root and decodes one syntax tree into new
 temporary C++ state. This is not yet wired to on-disk Save or CLI/recovery.
 The old v1 ZIP continues to be the application's default until the full
-platform/compatibility gates pass. They operate **directly
+platform/compatibility gates pass. The Qt editor now recognizes JSON v2 by
+content, records its physical file identity, and offers an explicit **JSON
+parameters v2** Save-As filter alongside the v1 ZIP and legacy text filters.
+The CLI `adjust-par` can explicitly convert ZIP v1 or legacy .par to native
+JSON using `--json-v2 --out path.cspar`, preserves native JSON on in-place
+rewrites, and can explicitly downgrade to v1 with `--zip-v1`. These paths
+retain imported Qt profile spots; they do not silently discard unknown
+legacy trailing metadata. Recovery snapshots still use ZIP v1 while retaining
+the user's JSON-v2 target identity in metadata. They operate **directly
 on C++ state** without using `save_csp` or `load_csp`, and emit component
 objects for a future complete document. No component is a standalone v2
 `.cspar` file.
@@ -186,7 +194,11 @@ or Save As selection; switch new projects to v2 only after the gates below.
 - [ ] Audit native field coverage against every persistent C++ member and
       nested legacy/Qt serializer, not only literal CSP keyword names.
 - [ ] Add content-based on-disk dispatch with preserved v1/legacy imports.
-- [ ] Integrate GUI Save/Save As, CLI read/rewrite and private recovery.
+- [x] Add explicit GUI native JSON v2 Save As/Open and format-preserving
+      ordinary Save; opt-in CLI adjust-par conversion, native replay and
+      legacy ZIP interoperability, with a dedicated GUI/CLI smoke test.
+- [ ] Migrate private recovery snapshot output itself to native JSON v2,
+      keeping v1 ZIP and legacy .par recovery readers.
 - [ ] Add explicit conversion from legacy and ZIP v1; preserve existing
       target formats and old-file loaders.
 - [ ] Verify all field families and cross-format round trips, huge point sets,
