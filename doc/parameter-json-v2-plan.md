@@ -8,9 +8,12 @@ sequences, numeric and string types, and is YAML 1.2 compatible without an
 additional parser dependency. The historical `.par` format and ZIP schema-v1
 `.cspar` must remain supported **as import formats**.
 
-**Status (2.0alpha):** current Save, Save As, CLI and recovery still write/read
-schema-v1 ZIP by default. Do not enable v2 writes until all persistent state,
-including Qt profile metadata, is represented and round-trip verified. This
+**Status (2.0alpha):** new GUI parameter targets still default to compatible
+schema-v1 ZIP, while explicit JSON-v2 Save As, automatic content-detected Open
+and CLI conversion/read/rewrite are implemented. Private crash recovery now
+writes complete native v2 JSON and accepts earlier ZIP-v1 or .par snapshots.
+Do not switch the *default user save* to v2 until the full field/CI audit
+and GUI workflows have been validated on all platforms. This
 document supersedes the former plan to migrate individual fields indefinitely
 within schema v1.
 
@@ -44,9 +47,10 @@ full v2 parameter file.
 
 Draft PR #538 has seven directly typed core components (registration,
 capture, reconstruction, process, colour, complete sharpening/MTF and
-calibration grids), plus an in-memory **complete v2 document codec**. It
-composes a single UTF-8 JSON root and decodes one syntax tree into new
-temporary C++ state. This is not yet wired to on-disk Save or CLI/recovery.
+calibration grids), plus a **complete v2 document and atomic file codec**. It composes a single
+UTF-8 JSON root, decodes one syntax tree into private C++ state and supports
+explicit native GUI/CLI I/O plus crash recovery. All old input formats remain
+available; only the default new-file user Save-As format is still ZIP v1.
 The old v1 ZIP continues to be the application's default until the full
 platform/compatibility gates pass. The Qt editor now recognizes JSON v2 by
 content, records its physical file identity, and offers an explicit **JSON
