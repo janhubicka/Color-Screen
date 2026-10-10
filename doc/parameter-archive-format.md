@@ -341,8 +341,9 @@ The default-save gate below is now implemented and must remain green in CI:
   rejection, invalid numeric rejection, CLI rewrite and crash-recovery parity;
 - Windows, macOS and Linux filenames containing Unicode.
 
-Private crash recovery now uses `recovery_params.cspar` with the same
-structured render state and atomic writer as ordinary archives. The lifecycle
+Private crash recovery now uses `recovery_params.cspar` with the complete
+native JSON v2 codec and the same atomic replacement primitive, while
+retaining schema-v1 ZIP and legacy .par snapshot readers. The lifecycle
 smoke covers unclean-shutdown restoration of structured-only values, profile
 spots, original target/dirty metadata, corrupt/truncated archives, and old
 `recovery_params.par` snapshots. An invalid newer archive never falls back to
