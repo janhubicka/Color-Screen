@@ -147,11 +147,23 @@ public:
   /** Return the absolute path of the image assigned to this document. */
   QString currentImageFile() const { return m_currentImageFile; }
 
+  /** Format choice for an explicit parameter Save As operation. Automatic
+      mode preserves the physical format of an established target, or selects
+      v1 ZIP for a new .cspar and legacy text for a new .par. */
+  enum class ParameterSaveFormat {
+    PreserveOrInfer,
+    LegacyCsp,
+    ArchiveV1,
+    JsonV2
+  };
+
   /** Save the current document parameters to FILENAME without opening a dialog.
-      An established current target preserves its loaded format; otherwise
-      .cspar selects the archive format and every other suffix remains legacy
-      CSP. On success the file becomes the current clean parameter target. */
-  bool saveParametersToFile(const QString &fileName);
+      Ordinary Save preserves the loaded physical file format. An explicit
+      Save As selection can request schema-v2 plain JSON while fresh alpha
+      documents continue to default to compatible v1 ZIP. */
+  bool saveParametersToFile(
+      const QString &fileName,
+      ParameterSaveFormat requestedFormat = ParameterSaveFormat::PreserveOrInfer);
 
   /** Load FILENAME as this document's parameter file without opening a dialog.
       The load is transactional, adopts the file on success, refreshes the UI,
@@ -1012,7 +1024,7 @@ private:
       A suggested path is only a Save-As default and must never be overwritten
       without confirmation as though it had already been loaded/saved. */
   struct ParameterFileState {
-    enum class Format { LegacyCsp, Archive };
+    enum class Format { LegacyCsp, Archive, JsonV2 };
 
     QString path;
     bool suggested = false;
