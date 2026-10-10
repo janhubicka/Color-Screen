@@ -379,7 +379,8 @@ void MainWindow::onSaveParameters() {
 void MainWindow::onSaveParametersAs() { saveParametersAs(); }
 
 /** Atomically write the current document parameters and mark them saved. */
-bool MainWindow::saveParametersToFile(const QString &fileName) {
+bool MainWindow::saveParametersToFile(
+    const QString &fileName, ParameterSaveFormat requestedFormat) {
   if (m_parameterSaveFailurePrompt) {
     QPointer<QMessageBox> obsolete = m_parameterSaveFailurePrompt;
     m_parameterSaveFailurePrompt.clear();
@@ -390,20 +391,28 @@ bool MainWindow::saveParametersToFile(const QString &fileName) {
   const bool preservingCurrentTarget =
       !m_parameterFile.suggested && !m_parameterFile.path.isEmpty() &&
       QFileInfo(m_parameterFile.path).absoluteFilePath() == absoluteFileName;
-  const ParameterFileState::Format format =
-      preservingCurrentTarget
-          ? m_parameterFile.format
-          : (absoluteFileName.endsWith(QLatin1String(".cspar"),
-                                       Qt::CaseInsensitive)
-                 ? ParameterFileState::Format::Archive
-                 : ParameterFileState::Format::LegacyCsp);
+  // Explicit Save As choices take precedence; ordinary Save retains the
+  // exact physical format of a loaded target, not merely its .cspar suffix.
+  ParameterFileState::Format format = ParameterFileState::Format::LegacyCsp;
+  if (requestedFormat == ParameterSaveFormat::JsonV2)
+    format = ParameterFileState::Format::JsonV2;
+  else if (requestedFormat == ParameterSaveFormat::ArchiveV1)
+    format = ParameterFileState::Format::Archive;
+  else if (requestedFormat == ParameterSaveFormat::LegacyCsp)
+    format = ParameterFileState::Format::LegacyCsp;
+  else if (preservingCurrentTarget)
+    format = m_parameterFile.format;
+  else if (absoluteFileName.endsWith(QLatin1String(".cspar"),
+                                     Qt::CaseInsensitive))
+    format = ParameterFileState::Format::Archive;
+  const bool jsonV2 = format == ParameterFileState::Format::JsonV2;
   const bool archive = format == ParameterFileState::Format::Archive;
   const bool hasRgb = m_scan && m_scan->has_rgb();
   QString error;
   if (!saveParameterPayloadAtomically(
           absoluteFileName, archive, m_scrToImgParams,
-          hasRgb ? &m_detectParams : nullptr, m_rparams, m_solverParams,
-          m_profileSpots, &error)) {
+          (hasRgb || jsonV2) ? &m_detectParams : nullptr,
+          m_rparams, m_solverParams, m_profileSpots, &error, jsonV2)) {
     // The write result is synchronous because closeEvent needs it immediately,
     // but its explanation must not enter a nested event loop while close/save
     // policy is still on the stack. Veto the close first and let Qt present the
@@ -447,30 +456,35 @@ bool MainWindow::saveParametersAs() {
   if (initialPath.isEmpty())
     initialPath =
         fileDialogDirectoryPreference(QStringLiteral("lastParameterDir"));
-  const QString archiveFilter = tr("Archive parameters (*.cspar)");
+  const QString archiveFilter = tr("Compatible archive v1 (*.cspar)");
+  const QString jsonFilter = tr("JSON parameters v2 (*.cspar)");
   const QString legacyFilter = tr("Legacy parameters (*.par)");
   const QString allFilter = tr("All Files (*)");
-  // A new document defaults to the versioned archive. Existing/suggested
-  // targets keep their explicit physical format so Save As never silently
-  // converts a legacy workflow merely because the new default changed.
-  QString selectedFilter =
-      m_parameterFile.path.isEmpty()
-          ? archiveFilter
-          : (m_parameterFile.format == ParameterFileState::Format::Archive
-                 ? archiveFilter
-                 : legacyFilter);
+  // The v2 format is an explicit alpha option. Fresh targets still default
+  // to fully exercised ZIP v1, and ordinary Save preserves actual file type.
+  QString selectedFilter = archiveFilter;
+  if (!m_parameterFile.path.isEmpty()) {
+    if (m_parameterFile.format == ParameterFileState::Format::JsonV2)
+      selectedFilter = jsonFilter;
+    else if (m_parameterFile.format == ParameterFileState::Format::LegacyCsp)
+      selectedFilter = legacyFilter;
+  }
   QString fileName = QFileDialog::getSaveFileName(
       this, tr("Save Parameters"), initialPath,
-      archiveFilter + QStringLiteral(";;") + legacyFilter +
-          QStringLiteral(";;") + allFilter,
-      &selectedFilter);
+      archiveFilter + QStringLiteral(";;") + jsonFilter +
+          QStringLiteral(";;") + legacyFilter +
+          QStringLiteral(";;") + allFilter, &selectedFilter);
   if (fileName.isEmpty())
     return false;
 
+  ParameterSaveFormat chosen = ParameterSaveFormat::PreserveOrInfer;
   if (selectedFilter == legacyFilter) {
+    chosen = ParameterSaveFormat::LegacyCsp;
     if (!fileName.endsWith(QLatin1String(".par"), Qt::CaseInsensitive))
       fileName += QStringLiteral(".par");
-  } else if (selectedFilter == archiveFilter) {
+  } else if (selectedFilter == archiveFilter || selectedFilter == jsonFilter) {
+    chosen = selectedFilter == jsonFilter ? ParameterSaveFormat::JsonV2
+                                         : ParameterSaveFormat::ArchiveV1;
     if (!fileName.endsWith(QLatin1String(".cspar"), Qt::CaseInsensitive))
       fileName += QStringLiteral(".cspar");
   } else if (!fileName.endsWith(QLatin1String(".par"), Qt::CaseInsensitive) &&
@@ -478,7 +492,7 @@ bool MainWindow::saveParametersAs() {
                                 Qt::CaseInsensitive)) {
     fileName += QStringLiteral(".cspar");
   }
-  return saveParametersToFile(fileName);
+  return saveParametersToFile(fileName, chosen);
 }
 
 /** Atomically write a human-readable provenance snapshot followed by the exact
