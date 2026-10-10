@@ -136,6 +136,33 @@ and max 1 million elements per point collection. These are limits of the
 prototype codec, not claims about general image dimensions or required
 application scale. Profile real large projects before the final format ships.
 
+## Checked-in legacy parameter corpus (validated)
+
+A baseline corpus test now discovers **all 128 .par fixtures** recursively under
+`testsuite/` (4 files) and `examples/` (124 files). For each it invokes
+the actual CLI, without editing any original:
+
+```text
+original .par -> normalized current-writer .par -> JSON v2 -> reloaded .par
+```
+
+The normalized legacy files are compared **byte-for-byte**. The JSON document
+is also loaded and saved again and required to be byte-for-byte canonical.
+A failure reports the individual fixture and a unified diff; the runner is
+part of both `make check` and packaged `make distcheck`.
+
+**Result on commit ac0ebaaf (10 October 2026): 128/128** legacy comparisons
+passed on both Ubuntu amd64 and arm64, and the packaged `make distcheck`
+test passed. This detected and fixed an old Amcolony file using the historical
+model spelling `Miethe_Goerz_mesured_by_Wagner`. The parser accepts that
+legacy alias and outputs the canonical `...measured...` spelling; the source
+fixture remains unchanged to guard backwards compatibility.
+
+Passing this corpus verifies the legacy-persisted fields in these fixtures.
+It is **not** equivalent to full coverage of recently added C++/Qt fields
+or arbitrary malformed/incomplete input; maintain separate typed-state tests
+and the nested-field ownership audit.
+
 ## Field-coverage audit required for full v2
 
 The complete migration must inspect each persistent field of
