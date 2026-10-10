@@ -150,12 +150,11 @@ bool saveParameterPayloadAtomically(
     return written;
   }
   if (!archive) {
-    if (render.image_area.set) {
+    std::string formatError;
+    if (!colorscreen::legacy_csp_can_represent_parameters(
+            &scrToImg, &render, &formatError)) {
       if (error)
-        *error = QCoreApplication::translate(
-            "MainWindow",
-            "Legacy .par cannot preserve the photographic image area. "
-            "Save as .cspar or clear the inner image area first.");
+        *error = QString::fromStdString(formatError);
       return false;
     }
     return qtgui_io::saveStdioAtomically(
