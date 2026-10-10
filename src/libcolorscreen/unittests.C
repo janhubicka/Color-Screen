@@ -10570,6 +10570,73 @@ test_stitch_tile_adjustment_grid ()
 }
 
 
+/* A deliberate export to historical .par must refuse any saved parameter
+   that cannot be represented there, rather than truncate the user's edits. */
+static bool
+test_legacy_csp_representability ()
+{
+  const scr_to_img_parameters defaults_g;
+  const render_parameters defaults_r;
+  std::string error = "stale error";
+  if (!legacy_csp_can_represent_parameters (
+          &defaults_g, &defaults_r, &error) || !error.empty ()
+      || !legacy_csp_can_represent_parameters (
+             nullptr, nullptr, &error))
+    return false;
+
+  auto must_reject = [&] (const scr_to_img_parameters &g,
+                         const render_parameters &r,
+                         const char *expected) -> bool
+    {
+      std::string explanation;
+      if (legacy_csp_can_represent_parameters ( &g, &r, &explanation)
+          || explanation.find (expected) == std::string::npos)
+        {
+          fprintf (stderr,
+                   "Legacy .par format guard missed %s: %s\n",
+                   expected, explanation.c_str ());
+          return false;
+        }
+      return true;
+    };
+  scr_to_img_parameters g = defaults_g;
+  render_parameters r = defaults_r;
+  g.final_angle = 89.75;
+  if (!must_reject (g, r, "angle/ratio"))
+    return false;
+  g = defaults_g;
+  g.final_ratio = 1.125;
+  if (!must_reject (g, r, "angle/ratio"))
+    return false;
+  g = defaults_g;
+  r.image_area = int_image_area (2, 3, 10, 20);
+  if (!must_reject (g, r, "photographic image area"))
+    return false;
+  r = defaults_r;
+  r.ignore_infrared = true;
+  if (!must_reject (g, r, "ignore-infrared"))
+    return false;
+  r = defaults_r;
+  r.demosaiced_scaling = render_parameters::lanczos3_scaling;
+  if (!must_reject (g, r, "demosaiced scaling"))
+    return false;
+  r = defaults_r;
+  r.observer_whitepoint.x += 0.002;
+  if (!must_reject (g, r, "observer whitepoint"))
+    return false;
+  r = defaults_r;
+
+  /* Historical CSP does save ordinary gamma, scan crop and sharpening, so
+     editing those must not be blocked by the new representability check. */
+  r.gamma = 2.25f;
+  r.scan_crop = int_image_area (1, 2, 100, 200);
+  r.sharpen.usm_radius = 1.5f;
+  if (!legacy_csp_can_represent_parameters (&g, &r, &error)
+      || !error.empty ())
+    return false;
+  return true;
+}
+
 /* Compose and reload one COMPLETE native JSON v2 document using one parse,
    then reject missing sections and corrupted nested content transactionally. */
 static bool
@@ -12047,6 +12114,8 @@ main (int argc, char **argv)
     { "mesh_inversion", "mesh inversion tests", [] () { return test_mesh_inversion (); } },
     { "cow_points", "cow points tests", [] () { return test_cow_points (); } },
     { "image_area", "image area tests", [] () { return test_image_area (); } },
+    { "legacy_csp_representability", "reject lossy saves to historical .par",
+      [] () { return test_legacy_csp_representability (); } },
     { "json_v2_document", "complete native schema-v2 JSON document roundtrip",
       [] () { return test_native_json_v2_document (); } },
     { "json_v2_correction_grids", "native JSON schema-v2 spatial correction grid codec",
