@@ -8,7 +8,7 @@ if test -z "$srcdir"; then
     test "${VERBOSE+set}" != set && VERBOSE=1
 fi
 
-echo 1..13
+echo 1..17
 . $srcdir/defs.sh
 
 # Dynamic MinGW builds are normally launched through libtool's POSIX wrapper.
@@ -343,6 +343,81 @@ if not extension.endswith(b"\nother_vendor_metadata: retained\n"):
 PY
 echo 'ok 13 - CRLF end-marker residue is normalized without dropping extensions'
 
+# A new .cspar defaults to JSON, even when the source is ZIP-v1. The two
+# conversion paths must produce identical canonical bytes and profile spots.
+implicit_native=out-parameter-implicit-v2.cspar
+rm -f "$implicit_native"
+pexec $RUNCOLORSCREEN adjust-par --out "$implicit_native" "$archive" || exit 1
+python3 - "$implicit_native" "$native" <<'PY' || exit 1
+import pathlib, sys, zipfile
+new, explicit = (pathlib.Path(p) for p in sys.argv[1:])
+if zipfile.is_zipfile(new) or not new.read_bytes().startswith(b"{"):
+    raise SystemExit("new .cspar implicitly used the old ZIP writer")
+if new.read_bytes() != explicit.read_bytes():
+    raise SystemExit("implicit JSON differs from explicit --json-v2")
+PY
+echo 'ok 14 - new .cspar defaults to complete native JSON v2'
+
+implicit_legacy_native=out-parameter-legacy-to-default-v2.cspar
+rm -f "$implicit_legacy_native"
+pexec $RUNCOLORSCREEN adjust-par --out "$implicit_legacy_native" \
+    "$srcdir/empty.par" || exit 1
+python3 - "$implicit_legacy_native" <<'PY' || exit 1
+import json, pathlib, sys, zipfile
+path = pathlib.Path(sys.argv[1])
+if zipfile.is_zipfile(path):
+    raise SystemExit("legacy -> new .cspar unexpectedly wrote ZIP")
+doc = json.loads(path.read_text(encoding="utf-8"))
+if doc.get("schema_version") != 2 or doc.get("profile", {}).get("spots") != []:
+    raise SystemExit("legacy -> new .cspar lost typed v2 state")
+PY
+echo 'ok 15 - new .cspar from legacy .par defaults to native JSON'
+
+# Unknown legacy extensions must not disappear in an implicit v2 conversion.
+unknown_json=out-parameter-unrecognized-metadata.cspar
+unknown_zip=out-parameter-unrecognized-metadata-compat.cspar
+rm -f "$unknown_json" "$unknown_zip"
+if $RUNCOLORSCREEN adjust-par --out "$unknown_json" \
+    "$crlf_with_extension" >out-parameter-unknown-metadata.log 2>&1; then
+    echo "implicit conversion discarded unknown legacy metadata" >&2
+    exit 1
+fi
+if test -e "$unknown_json" ||
+   ! grep -q "unrecognized trailing metadata" out-parameter-unknown-metadata.log; then
+    echo "unknown trailing metadata was not rejected safely" >&2
+    cat out-parameter-unknown-metadata.log >&2
+    exit 1
+fi
+pexec $RUNCOLORSCREEN adjust-par --zip-v1 --out "$unknown_zip" \
+    "$crlf_with_extension" || exit 1
+python3 - "$unknown_zip" <<'PY' || exit 1
+import sys, zipfile
+with zipfile.ZipFile(sys.argv[1]) as archive:
+    data = archive.read("state/legacy.par")
+if b"other_vendor_metadata: retained\n" not in data:
+    raise SystemExit("explicit ZIP-v1 lost the vendor extension")
+PY
+echo 'ok 16 - unknown metadata requires lossless ZIP-v1 compatibility'
+
+# Refuse to overwrite a pre-existing .cspar with an unrecognized signature.
+unknown_target=out-parameter-unknown-existing.cspar
+printf 'Unknown Color-Screen future format\n' > "$unknown_target"
+if $RUNCOLORSCREEN adjust-par --out "$unknown_target" "$archive" \
+    >out-parameter-unknown-existing.log 2>&1; then
+    echo "implicit output replaced an unknown existing .cspar" >&2
+    exit 1
+fi
+if ! grep -q "Refusing to replace unrecognized existing" \
+      out-parameter-unknown-existing.log ||
+   test "$(cat "$unknown_target")" != "Unknown Color-Screen future format"; then
+    echo "unknown existing .cspar was not preserved" >&2
+    exit 1
+fi
+echo 'ok 17 - existing unrecognized .cspar is not overwritten'
+
 rm -f "$guard_json" "$guard_par" "$archive" "$native" "$native_out" "$zip_roundtrip" \
       "$crlf_input" "$crlf_normal" "$crlf_json" "$crlf_restored" \
-      "$crlf_with_extension" "$crlf_with_extension_normal"
+      "$crlf_with_extension" "$crlf_with_extension_normal" \
+      "$implicit_native" "$implicit_legacy_native" "$unknown_json" \
+      "$unknown_zip" "$unknown_target" "out-parameter-unknown-metadata.log" \
+      "out-parameter-unknown-existing.log"

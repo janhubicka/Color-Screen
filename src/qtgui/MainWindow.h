@@ -1028,7 +1028,7 @@ private:
 
     QString path;
     bool suggested = false;
-    Format format = Format::Archive;
+    Format format = Format::JsonV2;
 
     void setLoaded(const QString &fileName,
                    Format fileFormat = Format::LegacyCsp) {

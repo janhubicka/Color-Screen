@@ -402,13 +402,15 @@ bool MainWindow::saveParametersToFile(
   else if (preservingCurrentTarget)
     format = m_parameterFile.format;
   else if (absoluteFileName.endsWith(QLatin1String(".cspar"),
-                                     Qt::CaseInsensitive))
-    // When saving to another established .cspar without an explicit format
-    // filter, preserve the bytes' existing JSON-v2 or ZIP-v1 encoding.
-    format = colorscreen::parameter_json_v2_signature_p(
+                                     Qt::CaseInsensitive)) {
+    // An established ZIP-v1 destination keeps its format. A new .cspar
+    // defaults to native JSON v2, while ordinary Save above respects the
+    // loaded file's format even though both formats use this suffix.
+    format = colorscreen::parameter_archive_signature_p(
                  absoluteFileName.toUtf8().constData())
-                 ? ParameterFileState::Format::JsonV2
-                 : ParameterFileState::Format::Archive;
+                 ? ParameterFileState::Format::Archive
+                 : ParameterFileState::Format::JsonV2;
+  }
   const bool jsonV2 = format == ParameterFileState::Format::JsonV2;
   const bool archive = format == ParameterFileState::Format::Archive;
   const bool hasRgb = m_scan && m_scan->has_rgb();
@@ -464,9 +466,9 @@ bool MainWindow::saveParametersAs() {
   const QString jsonFilter = tr("JSON parameters v2 (*.cspar)");
   const QString legacyFilter = tr("Legacy parameters (*.par)");
   const QString allFilter = tr("All Files (*)");
-  // The v2 format is an explicit alpha option. Fresh targets still default
-  // to fully exercised ZIP v1, and ordinary Save preserves actual file type.
-  QString selectedFilter = archiveFilter;
+  // Fresh targets default to native JSON v2. Existing/suggested ZIP-v1 and
+  // legacy targets retain their physical encoding until explicit Save As.
+  QString selectedFilter = jsonFilter;
   if (!m_parameterFile.path.isEmpty()) {
     if (m_parameterFile.format == ParameterFileState::Format::JsonV2)
       selectedFilter = jsonFilter;
@@ -475,7 +477,7 @@ bool MainWindow::saveParametersAs() {
   }
   QString fileName = QFileDialog::getSaveFileName(
       this, tr("Save Parameters"), initialPath,
-      archiveFilter + QStringLiteral(";;") + jsonFilter +
+      jsonFilter + QStringLiteral(";;") + archiveFilter +
           QStringLiteral(";;") + legacyFilter +
           QStringLiteral(";;") + allFilter, &selectedFilter);
   if (fileName.isEmpty())
@@ -1576,11 +1578,12 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt) {
           });
       question->open();
     } else {
-      // No sidecar exists. The post-migration natural Save-As target is the
-      // versioned archive; explicit/declined legacy sidecars above still retain
-      // LegacyCsp identity.
+      // New sidecars default to plain JSON v2. Existing or declined ZIP-v1
+      // and legacy sidecars keep their original physical format, and a
+      // suggested path still requires an explicit Save As before overwrite.
       sidecarStaging->suggestedPath = archiveFile;
       sidecarStaging->suggestedArchive = true;
+      sidecarStaging->suggestedJsonV2 = true;
       startImageRead();
     }
   } else {

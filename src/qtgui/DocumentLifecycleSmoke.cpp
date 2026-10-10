@@ -454,15 +454,49 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
     state->secondInitialMirror =
         second->documentStateSnapshot().rparams.scan_mirror;
 
-    if (!first->saveParametersToFile(state->firstParameters) ||
+    if (!first->saveParametersToFile(
+            state->firstParameters,
+            MainWindow::ParameterSaveFormat::ArchiveV1) ||
         !second->saveParametersToFile(state->secondParameters)) {
       qCritical() << "Document lifecycle smoke could not establish clean parameter files";
       app.exit(documentLifecycleFailure);
       return;
     }
-    // Native v2 is a deliberately explicit alpha Save-As option. Verify
-    // that the Qt layer writes plain JSON, adopts the loaded physical format
-    // and keeps JSON on ordinary Save even though the suffix is .cspar.
+    // Newly created .cspar files now default to plain native JSON v2, even
+    // when the current document's established target is a ZIP-v1 archive.
+    // Both subsequent ordinary Save and return to the existing ZIP target
+    // must preserve physical file formats.
+    const QString defaultJsonParams = state->temporaryDirectory->filePath(
+        QStringLiteral("default-native-json-v2.cspar"));
+    if (first->m_parameterFile.format !=
+            MainWindow::ParameterFileState::Format::Archive ||
+        !first->saveParametersToFile(defaultJsonParams) ||
+        first->m_parameterFile.format !=
+            MainWindow::ParameterFileState::Format::JsonV2 ||
+        !colorscreen::parameter_json_v2_signature_p(
+            defaultJsonParams.toUtf8().constData()) ||
+        colorscreen::parameter_archive_signature_p(
+            defaultJsonParams.toUtf8().constData())) {
+      qCritical() << "New .cspar target did not default to plain JSON v2";
+      app.exit(documentLifecycleFailure);
+      return;
+    }
+    const QByteArray initialDefaultJson = readFile(defaultJsonParams);
+    if (initialDefaultJson.isEmpty() || initialDefaultJson.at(0) != '{' ||
+        !first->saveParametersToFile(defaultJsonParams) ||
+        readFile(defaultJsonParams) != initialDefaultJson ||
+        !first->saveParametersToFile(state->firstParameters) ||
+        first->m_parameterFile.format !=
+            MainWindow::ParameterFileState::Format::Archive ||
+        !colorscreen::parameter_archive_signature_p(
+            state->firstParameters.toUtf8().constData())) {
+      qCritical() << "Ordinary Save did not preserve JSON/ZIP target formats";
+      app.exit(documentLifecycleFailure);
+      return;
+    }
+
+    // Explicit JSON Save As is also supported; Open and ordinary Save must
+    // preserve the complete native state and use the same physical encoding.
     const QString jsonParams = state->temporaryDirectory->filePath(
         QStringLiteral("explicit-native-json-v2.cspar"));
     const ParameterState originalV2State = first->documentStateSnapshot();

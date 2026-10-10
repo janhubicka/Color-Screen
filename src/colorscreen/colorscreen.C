@@ -4,6 +4,7 @@
 
 #include <cerrno>
 #include <cstring>
+#include <filesystem>
 #include <string>
 #include <string_view>
 #include <charconv>
@@ -4615,10 +4616,9 @@ do_adjust_par (int argc, char **argv)
   if (!outcspname)
     outcspname = cspname;
   const bool cspar_suffix = parameter_archive_suffix_p (outcspname);
-  // The two .cspar encodings share a filename suffix. Prefer the actual
-  // destination's format when --out names an existing valid file; otherwise
-  // retain the input encoding. Only explicit switches may convert an already
-  // existing ZIP target to JSON or vice versa.
+  // Existing recognized .cspar targets and in-place rewrites keep their
+  // physical encoding. New --out .cspar targets use native JSON v2 by default;
+  // --zip-v1 explicitly selects the compatibility writer.
   if ((force_json_v2 || force_zip_v1) && !cspar_suffix)
     {
       fprintf (stderr, "JSON v2 and ZIP v1 require a .cspar target; use --out\n");
@@ -4628,11 +4628,35 @@ do_adjust_par (int argc, char **argv)
       = cspar_suffix && parameter_archive_signature_p (outcspname);
   const bool destination_json_v2
       = cspar_suffix && parameter_json_v2_signature_p (outcspname);
+  // Unknown existing .cspar files may belong to a future schema. Refuse
+  // to replace one implicitly; explicit conversion flags remain available.
+  if (explicit_parameter_output && cspar_suffix
+      && !force_json_v2 && !force_zip_v1
+      && !destination_zip_v1 && !destination_json_v2)
+    {
+      std::error_code path_error;
+      const bool exists = std::filesystem::exists (
+          std::filesystem::u8path (outcspname), path_error);
+      if (path_error)
+        {
+          fprintf (stderr, "Cannot inspect destination %s: %s\n",
+                   outcspname, path_error.message ().c_str ());
+          return 1;
+        }
+      if (exists)
+        {
+          fprintf (stderr,
+                   "Refusing to replace unrecognized existing .cspar: %s; "
+                   "use --json-v2 or --zip-v1 to select a format\n",
+                   outcspname);
+          return 1;
+        }
+    }
   const bool output_json_v2 =
       force_json_v2
-      || (!force_zip_v1 && cspar_suffix
-          && (destination_json_v2
-              || (!destination_zip_v1 && input_json_v2)));
+      || (!force_zip_v1 && cspar_suffix && !destination_zip_v1
+          && (destination_json_v2 || explicit_parameter_output
+              || input_json_v2));
   const bool output_archive =
       !output_json_v2
       && (explicit_parameter_output ? cspar_suffix : input_archive);
