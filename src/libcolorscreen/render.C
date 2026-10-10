@@ -318,6 +318,7 @@ class sharpened_data
 {
 public:
   mem_luminosity_t *m_data = nullptr;
+  size_t stored_pixels_bytes = 0;
   /* Initialize sharpened data with given WIDTH and HEIGHT.  */
   sharpened_data (int width, int height);
   ~sharpened_data ();
@@ -325,8 +326,11 @@ public:
 
 sharpened_data::sharpened_data (int width, int height)
 {
+  if (width > 0 && height > 0)
+    stored_pixels_bytes = (size_t)width * (size_t)height
+                          * sizeof (mem_luminosity_t);
   m_data = (mem_luminosity_t *)MapAlloc::Alloc (
-      width * height * sizeof (mem_luminosity_t), "HDR data");
+      stored_pixels_bytes, "HDR data");
 }
 
 sharpened_data::~sharpened_data ()
@@ -343,6 +347,7 @@ class sharpened_rgb_data
 {
 public:
   mem_rgbdata *m_data = nullptr;
+  size_t stored_pixels_bytes = 0;
 
   /* Allocate WIDTH by HEIGHT interleaved RGB pixels.  */
   sharpened_rgb_data (int width, int height);
@@ -351,8 +356,11 @@ public:
 
 sharpened_rgb_data::sharpened_rgb_data (int width, int height)
 {
+  if (width > 0 && height > 0)
+    stored_pixels_bytes = (size_t)width * (size_t)height
+                          * sizeof (mem_rgbdata);
   m_data = (mem_rgbdata *)MapAlloc::Alloc (
-      width * height * sizeof (mem_rgbdata), "HDR RGB data");
+      stored_pixels_bytes, "HDR RGB data");
 }
 
 sharpened_rgb_data::~sharpened_rgb_data ()
@@ -556,6 +564,21 @@ std::unique_ptr<sharpened_rgb_data>
 get_new_rgb_sharpened_data (rgb_and_sharpen_params &p,
                             progress_info *progress);
 
+/* Large precomputed sharpened images dominate memory use for 150+ MP scans.
+   Report their real allocated pixel-buffer sizes, not merely sizeof(pointer).
+   The global LRU budget can then evict across sharpened and RAW image caches. */
+static size_t
+sharpened_gray_cached_bytes (const sharpened_data &image)
+{
+  return sizeof (image) + image.stored_pixels_bytes;
+}
+
+static size_t
+sharpened_rgb_cached_bytes (const sharpened_rgb_data &image)
+{
+  return sizeof (image) + image.stored_pixels_bytes;
+}
+
 /* Static cache instances.  */
 static lru_cache<backlight_correction_cache_params, backlight_correction,
                  get_new_backlight_correction, 10>
@@ -570,11 +593,13 @@ static lru_cache<lookup_table_params, luminosity_t[], get_new_lookup_table, 4>
 
 static lru_cache<gray_and_sharpen_params, sharpened_data,
                  get_new_gray_sharpened_data, 2>
-    gray_and_sharpened_data_cache ("gray and sharpened data");
+    gray_and_sharpened_data_cache (
+        "gray and sharpened data", 0, sharpened_gray_cached_bytes);
 
 static lru_cache<rgb_and_sharpen_params, sharpened_rgb_data,
                  get_new_rgb_sharpened_data, 2>
-    rgb_and_sharpened_data_cache ("RGB and sharpened data");
+    rgb_and_sharpened_data_cache (
+        "RGB and sharpened data", 0, sharpened_rgb_cached_bytes);
 
 /* Tables used during gray data computation.  */
 struct gray_data_tables
