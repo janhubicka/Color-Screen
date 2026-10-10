@@ -133,7 +133,22 @@ bool saveParameterPayloadAtomically(
     const colorscreen::scr_detect_parameters *detect,
     const colorscreen::render_parameters &render,
     const colorscreen::solver_parameters &solver,
-    const std::vector<colorscreen::point_t> &profileSpots, QString *error) {
+    const std::vector<colorscreen::point_t> &profileSpots, QString *error,
+    bool jsonV2 = false) {
+  // Native v2 files are one authoritative JSON document; bypass the CSP
+  // serializer and ZIP wrapper entirely. Use the same core atomic writer.
+  if (jsonV2) {
+    const colorscreen::scr_detect_parameters defaultDetection;
+    const auto &detection = detect ? *detect : defaultDetection;
+    const QByteArray targetName = path.toUtf8();
+    std::string writeError;
+    const bool written = colorscreen::write_parameter_json_v2_file(
+        targetName.constData(), scrToImg, detection, render, solver,
+        profileSpots, &writeError);
+    if (error)
+      *error = written ? QString() : QString::fromUtf8(writeError);
+    return written;
+  }
   if (!archive) {
     if (render.image_area.set) {
       if (error)
@@ -192,14 +207,40 @@ bool saveRecoveryTextAtomically(const QString &path, const QString &text) {
 bool loadParameterPayload(
     const QString &path, ParameterState *state,
     std::vector<colorscreen::color_match> *spotResults, bool *isArchive,
-    QString *error) {
+    QString *error, bool *isJsonV2 = nullptr) {
   if (!state)
     return false;
+
+  const QByteArray encodedPath = path.toUtf8();
+  if (colorscreen::parameter_json_v2_signature_p(encodedPath.constData())) {
+    // Decode into a fresh document; a malformed or future JSON file must not
+    // fall back to legacy CSP or publish even a subset of its parameters.
+    ParameterState loadedState;
+    std::string jsonError;
+    const bool loaded = colorscreen::read_parameter_json_v2_file(
+        encodedPath.constData(), &loadedState.scrToImg, &loadedState.detect,
+        &loadedState.rparams, &loadedState.solver,
+        &loadedState.profileSpots, &jsonError);
+    if (!loaded) {
+      if (error)
+        *error = QString::fromUtf8(jsonError);
+      return false;
+    }
+    *state = std::move(loadedState);
+    if (spotResults)
+      spotResults->clear();  // Derived per-view measurements are not file state.
+    if (isArchive)
+      *isArchive = true;  // Both .cspar encodings, vs legacy .par.
+    if (isJsonV2)
+      *isJsonV2 = true;
+    if (error)
+      error->clear();
+    return true;
+  }
 
   std::string openError;
   bool archive = false;
   colorscreen::parameter_archive_manifest archiveManifest;
-  const QByteArray encodedPath = path.toUtf8();
   FILE *f = colorscreen::open_parameter_payload(
       encodedPath.constData(), &archive, &openError, &archiveManifest);
   if (!f) {
@@ -248,6 +289,8 @@ bool loadParameterPayload(
     *spotResults = std::move(loadedSpotResults);
   if (isArchive)
     *isArchive = archive;
+  if (isJsonV2)
+    *isJsonV2 = false;
   if (error)
     error->clear();
   return true;
