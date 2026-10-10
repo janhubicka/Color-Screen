@@ -4604,20 +4604,24 @@ do_adjust_par (int argc, char **argv)
   if (!outcspname)
     outcspname = cspname;
   const bool cspar_suffix = parameter_archive_suffix_p (outcspname);
-  // The two .cspar encodings share a filename suffix. Ordinary adjust-par
-  // preserves the input format; an existing JSON output is also retained
-  // unless an explicit --zip-v1 conversion overrides it.
-  const bool output_json_v2 =
-      !force_zip_v1
-      && (force_json_v2
-          || (cspar_suffix
-              && (input_json_v2
-                  || parameter_json_v2_signature_p (outcspname))));
-  if (output_json_v2 && !cspar_suffix)
+  // The two .cspar encodings share a filename suffix. Prefer the actual
+  // destination's format when --out names an existing valid file; otherwise
+  // retain the input encoding. Only explicit switches may convert an already
+  // existing ZIP target to JSON or vice versa.
+  if ((force_json_v2 || force_zip_v1) && !cspar_suffix)
     {
-      fprintf (stderr, "JSON v2 parameters require a .cspar target; use --out\n");
+      fprintf (stderr, "JSON v2 and ZIP v1 require a .cspar target; use --out\n");
       return 1;
     }
+  const bool destination_zip_v1
+      = cspar_suffix && parameter_archive_signature_p (outcspname);
+  const bool destination_json_v2
+      = cspar_suffix && parameter_json_v2_signature_p (outcspname);
+  const bool output_json_v2 =
+      force_json_v2
+      || (!force_zip_v1 && cspar_suffix
+          && (destination_json_v2
+              || (!destination_zip_v1 && input_json_v2)));
   const bool output_archive =
       !output_json_v2
       && (explicit_parameter_output ? cspar_suffix : input_archive);
