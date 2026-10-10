@@ -77,6 +77,12 @@ CLEANFILES              = slanted-edge-1.log \
                           out-parameter-legacy-loss-guard.cspar \
                           out-parameter-legacy-loss-guard.par \
                           out-parameter-legacy-loss-guard.log \
+                          out-parameter-crlf-input.par \
+                          out-parameter-crlf-normal.par \
+                          out-parameter-crlf-native.cspar \
+                          out-parameter-crlf-restored.par \
+                          out-parameter-crlf-extension.par \
+                          out-parameter-crlf-extension-normal.par \
                           out-parameter-legacy.tif \
                           out-parameter-archive.tif
 
