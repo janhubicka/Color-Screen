@@ -307,6 +307,16 @@ load_parameter_filename (const char *filename, scr_to_img_parameters *param,
     }
   fclose (in);
 
+  /* The CSP parser accepts either CR or LF as a line terminator. On
+     Windows its final screen_alignment_end CRLF can therefore leave a
+     solitary LF in TRAILING. Do not accidentally transfer that whitespace
+     to a rewritten .par while JSON v2, which has no opaque CSP mirror,
+     correctly omits it. Keep any actual trailing extension bytes verbatim,
+     even if preceded by whitespace. */
+  if (trailing.find_first_not_of (" \\t\\r\\n\\f\\v")
+      == std::string::npos)
+    trailing.clear ();
+
   if (is_archive)
     *is_archive = archive;
   if (is_json_v2)
