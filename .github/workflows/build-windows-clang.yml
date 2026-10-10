@@ -92,9 +92,22 @@ jobs:
       run: make -j$(nproc)
     - name: make check
       shell: msys2 {0}
-      # Skip if ussing enhanced ISA
+      # Skip if using an enhanced ISA (the baseline tests all features).
       if: matrix.suffix == ''
-      run: make -j$(nproc) check
+      run: |
+        if ! make -j$(nproc) check; then
+          echo '=== Failed Windows clang TAP tests ==='
+          for log in testsuite/parameter-v2-corpus.log \
+                     testsuite/parameter-archive-cli.log \
+                     testsuite/unittests.log \
+                     testsuite/test-suite.log; do
+            if [ -f "$log" ]; then
+              echo "=== $log ==="
+              tail -n 200 "$log"
+            fi
+          done
+          exit 1
+        fi
     - name: Find testsuite
       shell: msys2 {0}
       if: always()
