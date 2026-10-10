@@ -208,8 +208,11 @@ Load files by **content**:
    decoder into fresh typed state.
 
 Do not guess formats using the suffix alone. Reject unknown schema versions,
-duplicate keys, nonfinite numbers, unknown required features, wrong tuple sizes,
-out-of-bounds data and unrecognized enum values. Never partially change an open
+duplicate keys, **unrecognized fields at any nesting level**, nonfinite numbers,
+unknown required features, wrong tuple sizes, out-of-bounds data and
+unrecognized enum values. The v2 writer cannot preserve unknown keys, so
+accepting them would silently discard them on ordinary Save. Future extensions
+must negotiate a new schema/required feature instead. Never partially change an open
 document on failed parse, mix entries from separate sidecars, or silently load
 an older recovery file after a corrupt newer one.
 
