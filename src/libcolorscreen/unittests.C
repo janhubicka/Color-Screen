@@ -12801,6 +12801,7 @@ test_raw_source_retention_contract ()
 {
   image_data synthetic;
   if (synthetic.has_unpacked_raw_source ()
+      || synthetic.raw_demosaicing_available_p ()
       || !synthetic.set_dimensions (8, 8, true, false))
     {
       fprintf (stderr, "Synthetic image unexpectedly carries RAW source\n");
@@ -12830,6 +12831,7 @@ test_raw_source_retention_contract ()
       return false;
     }
   if (loaded.has_unpacked_raw_source ()
+      || loaded.raw_demosaicing_available_p ()
       || !loaded.has_rgb ()
       || loaded.get_rgb_pixel (3, 5).r
              != synthetic.get_rgb_pixel (3, 5).r)
