@@ -61,9 +61,10 @@ shared policy. Source admission is optional; if insufficient memory is
 available, normal decoding remains valid without retaining a reusable CFA.
 The generic LRU supports optional byte-size callbacks, including a reusable
 vector-capacity helper. In addition to RAW variants and sharpening buffers,
-full-image simulated float layers and screen-detection classification,
-adjusted-RGB, patch-index and relaxation buffers now report their retained
-allocations. Image histograms count allocated bucket capacity. Other legacy
+full-image simulated float layers, reconstructed Dufay/Paget demosaicing
+RGB buffers, and screen-detection classification, adjusted-RGB, patch-index
+and relaxation buffers now report their retained allocations. Image histograms
+count allocated bucket capacity. Other legacy
 caches still report at least sizeof(T), or unknown for unbounded arrays;
 those estimates must not be presented as precise.
 
