@@ -118,9 +118,19 @@ raw_variant_cached_bytes (const image_data &image)
    This is intentionally a libcolorscreen cache, with no Qt dependencies. */
 using raw_variant_cache_t
     = lru_cache<raw_variant_cache_key, image_data, nullptr, 512>;
-static raw_variant_cache_t raw_variant_cache (
-    "RAW demosaic variants", /*per-cache byte limit=*/0,
-    raw_variant_cached_bytes);
+/* Lazily construct the RAW cache after process-startup renderer caches.
+   A cached image's destructor prunes render caches, so its cache must be
+   destroyed before those renderer-cache mutexes at program shutdown.
+   A function-local static initialized on first demosaic request guarantees
+   that ordering for startup-constructed renderer caches. */
+static raw_variant_cache_t &
+raw_variant_cache ()
+{
+  static raw_variant_cache_t cache (
+      "RAW demosaic variants", /*per-cache byte limit=*/0,
+      raw_variant_cached_bytes);
+  return cache;
+}
 
 const property_t image_data::demosaic_names[(int)demosaic_max]
      = {
@@ -1897,7 +1907,7 @@ image_data::demosaiced_variant (demosaicing_t method, const char **error,
       return original;
 
   raw_variant_cache_key key { source->cache_id, method };
-  auto result = raw_variant_cache.get_or_compute (
+  auto result = raw_variant_cache ().get_or_compute (
       key, progress,
       [source, error] (raw_variant_cache_key &requested,
                        progress_info *task) -> std::unique_ptr<image_data>
