@@ -10777,6 +10777,1444 @@ test_stitch_tile_adjustment_grid ()
   return true;
 }
 
+
+/* A deliberate export to historical .par must refuse any saved parameter
+   that cannot be represented there, rather than truncate the user's edits. */
+static bool
+test_legacy_csp_representability ()
+{
+  const scr_to_img_parameters defaults_g;
+  const render_parameters defaults_r;
+  std::string error = "stale error";
+  if (!legacy_csp_can_represent_parameters (
+          &defaults_g, &defaults_r, &error) || !error.empty ()
+      || !legacy_csp_can_represent_parameters (
+             nullptr, nullptr, &error))
+    return false;
+
+  auto must_reject = [&] (const scr_to_img_parameters &g,
+                         const render_parameters &r,
+                         const char *expected) -> bool
+    {
+      std::string explanation;
+      if (legacy_csp_can_represent_parameters ( &g, &r, &explanation)
+          || explanation.find (expected) == std::string::npos)
+        {
+          fprintf (stderr,
+                   "Legacy .par format guard missed %s: %s\n",
+                   expected, explanation.c_str ());
+          return false;
+        }
+      return true;
+    };
+  scr_to_img_parameters g = defaults_g;
+  render_parameters r = defaults_r;
+  g.final_angle = 89.75;
+  if (!must_reject (g, r, "angle/ratio"))
+    return false;
+  g = defaults_g;
+  g.final_ratio = 1.125;
+  if (!must_reject (g, r, "angle/ratio"))
+    return false;
+  g = defaults_g;
+  r.image_area = int_image_area (2, 3, 10, 20);
+  if (!must_reject (g, r, "photographic image area"))
+    return false;
+  r = defaults_r;
+  r.ignore_infrared = true;
+  if (!must_reject (g, r, "ignore-infrared"))
+    return false;
+  r = defaults_r;
+  r.demosaiced_scaling = render_parameters::lanczos3_scaling;
+  if (!must_reject (g, r, "demosaiced scaling"))
+    return false;
+  r = defaults_r;
+  r.observer_whitepoint.x += 0.002;
+  if (!must_reject (g, r, "observer whitepoint"))
+    return false;
+  r = defaults_r;
+
+  /* Historical CSP does save ordinary gamma, scan crop and sharpening, so
+     editing those must not be blocked by the new representability check. */
+  r.gamma = 2.25f;
+  r.scan_crop = int_image_area (1, 2, 100, 200);
+  r.sharpen.usm_radius = 1.5f;
+  if (!legacy_csp_can_represent_parameters (&g, &r, &error)
+      || !error.empty ())
+    return false;
+  return true;
+}
+
+/* Compose and reload one COMPLETE native JSON v2 document using one parse,
+   then reject missing sections and corrupted nested content transactionally. */
+static bool
+test_native_json_v2_document ()
+{
+  scr_to_img_parameters geometry;
+  geometry.type = Dufay;
+  geometry.center = {124.125, 88.875};
+  geometry.coordinate1 = {4.25, -0.125};
+  geometry.coordinate2 = {0.375, 5.125};
+  geometry.final_angle = 93.25;
+  geometry.final_ratio = 1.375;
+  geometry.mesh_trans = std::make_shared<mesh> (0.5, 0.25, 2.0, 2.0, 2, 2);
+  geometry.mesh_trans_is_scr_to_img = true;
+  geometry.mesh_trans->set_point ({0, 0}, {0.125, 0.25});
+  geometry.mesh_trans->set_point ({1, 0}, {2.125, 0.25});
+  geometry.mesh_trans->set_point ({0, 1}, {0.125, 2.25});
+  geometry.mesh_trans->set_point ({1, 1}, {2.125, 2.25});
+
+  scr_detect_parameters detection;
+  detection.min_ratio = 1.375f;
+  solver_parameters solver;
+  solver.optimize_tilt = false;
+  solver.lens_center_distance = 1.25;
+  for (int i = 0; i < 5000; ++i)
+    solver.points.push_back (
+        {{(coord_t)i / 9, (coord_t)i / 11},
+         {(coord_t)i / 3, (coord_t)i / 5},
+         (solver_parameters::point_color)(i % 3)});
+  const std::vector<point_t> spots {{19.125, 27.25}, {25.5, 81.75}};
+
+  render_parameters render;
+  render.capture_type
+      = render_parameters::capture_transparency_with_screen;
+  render.demosaic = image_data::demosaic_AHD;
+  render.gamma = 2.25f;
+  render.scan_crop = int_image_area (2, 4, 512, 256);
+  render.image_area = int_image_area (9, 12, 470, 218);
+  render.scan_exposure = 1.125f;
+  render.ignore_infrared = true;
+  render.demosaiced_scaling = render_parameters::lanczos3_scaling;
+  render.screen_demosaic = render_parameters::amaze_demosaic;
+  render.screen_denoise.mode = denoise_parameters::nl_fast;
+  render.screen_denoise.patch_radius = 2;
+  render.demosaiced_denoise.mode = denoise_parameters::bilateral;
+  render.color_model = render_parameters::color_model_dufay_manual;
+  render.contact_copy.simulate = true;
+  render.contact_copy.exposure = 0.875f;
+  render.observer_whitepoint = {0.3127f, 0.329f};
+  render.output_tone_curve = tone_curve::tone_curve_custom;
+  render.output_tone_curve_control_points
+      = {{0, 0}, {0.25, 0.1875}, {0.75, 0.8125}, {1, 1}};
+  render.sharpen.mode = sharpen_parameters::wiener_deconvolution;
+  render.sharpen.scanner_mtf.model = mtf_model::physical_diffraction;
+  render.sharpen.scanner_mtf.sigma = 0.625;
+  render.sharpen.scanner_mtf.scan_dpi = 3200;
+  render.sharpen.scanner_mtf.wavelengths = {600, 530, 450, 750};
+  mtf_measurement measured;
+  measured.name = u8"Measured transfer ČR";
+  measured.channel = 1;
+  measured.roi = {8, 12, 32, 24};
+  measured.edge_p1 = {11.125, 13.375};
+  measured.edge_p2 = {32.75, 25.125};
+  for (int i = 0; i < 30; ++i)
+    measured.add_value ((double)i / 64, 100 - (double)i / 3,
+                        (double)(i % 7) / 128);
+  render.sharpen.scanner_mtf.measurements.push_back (measured);
+  render.sharpen.scanner_mtf.measured_mtf_idx = 0;
+
+  bool channels[4] = {true, true, false, true};
+  render.backlight_correction
+      = std::make_shared<backlight_correction_parameters> ();
+  if (!render.backlight_correction->alloc (2, 2, channels))
+    return false;
+  render.backlight_correction->black_correction = true;
+  render.backlight_correction->set_luminosity (
+      0, 0, 0.875f, backlight_correction_parameters::red);
+  render.backlight_correction->set_sub (
+      0, 0, 0.0625f, backlight_correction_parameters::red);
+  render.set_tile_adjustments_dimensions (2, 1);
+  render.get_tile_adjustment (1, 0).exposure = 1.125f;
+  render.scanner_blur_correction
+      = std::make_shared<scanner_blur_correction_parameters> ();
+  if (!render.scanner_blur_correction->alloc (
+          2, 2, scanner_blur_correction_parameters::mtf_blur_diameter))
+    return false;
+  render.scanner_blur_correction->set_correction (1, 1, 0.03125f);
+
+  std::string first, error;
+  if (!encode_parameter_json_v2_document (
+          geometry, detection, render, solver, spots, &first, &error)
+      || first.find ("\"schema_version\": 2") == std::string::npos
+      || first.find ("\"legacy_csp\"") != std::string::npos
+      || first.find ("\"capture\"") == std::string::npos
+      || first.find ("\"correction_grids\"") == std::string::npos)
+    {
+      fprintf (stderr, "Native v2 full encode failed: %s\n", error.c_str ());
+      return false;
+    }
+
+  scr_to_img_parameters parsed_geometry;
+  scr_detect_parameters parsed_detection;
+  render_parameters parsed_render;
+  solver_parameters parsed_solver;
+  std::vector<point_t> parsed_spots;
+  if (!decode_parameter_json_v2_document (
+          first, &parsed_geometry, &parsed_detection, &parsed_render,
+          &parsed_solver, &parsed_spots, &error))
+    {
+      fprintf (stderr, "Native v2 full decode failed: %s\n", error.c_str ());
+      return false;
+    }
+  /* A physical JSON reload creates fresh resource objects. Equal saved
+     mappings and calibration grids must still compare as equal document
+     state, or Qt's dirty/Undo machinery would see a false change.  */
+  if (!(parsed_geometry == geometry) || !(parsed_render == render))
+    {
+      fprintf (stderr, "Native v2 full document equality mismatch\n");
+      return false;
+    }
+  if (parsed_geometry.final_ratio != geometry.final_ratio
+      || parsed_geometry.type != geometry.type
+      || !parsed_geometry.mesh_trans
+      || parsed_geometry.mesh_trans->get_point ({1, 1})
+             != geometry.mesh_trans->get_point ({1, 1})
+      || !(parsed_detection == detection)
+      || parsed_solver.points != solver.points
+      || parsed_spots != spots
+      || parsed_render.gamma != render.gamma
+      || !(parsed_render.image_area == render.image_area)
+      || parsed_render.demosaiced_scaling != render.demosaiced_scaling
+      || !parsed_render.sharpen.equal_p (render.sharpen)
+      || parsed_render.output_tone_curve_control_points
+             != render.output_tone_curve_control_points
+      || !parsed_render.backlight_correction
+      || parsed_render.backlight_correction->get_luminosity (
+             0, 0, backlight_correction_parameters::red) != 0.875f
+      || !parsed_render.scanner_blur_correction
+      || parsed_render.scanner_blur_correction->get_correction (1, 1)
+             != 0.03125f
+      || parsed_render.tile_adjustments.size () != 2
+      || parsed_render.get_tile_adjustment (1, 0).exposure != 1.125f)
+    {
+      fprintf (stderr, "Native v2 complete state roundtrip mismatch\n");
+      return false;
+    }
+  std::string canonical;
+  if (!encode_parameter_json_v2_document (
+          parsed_geometry, parsed_detection, parsed_render, parsed_solver,
+          parsed_spots, &canonical, &error)
+      || canonical != first)
+    {
+      fprintf (stderr, "Native v2 full document is not canonical\n");
+      return false;
+    }
+
+  /* Exercise the explicit on-disk v2 API without altering the normal
+     alpha GUI/CLI Save preference. It must write plain UTF-8 JSON and use
+     the same Unicode-path atomic staging as the existing v1 writer. */
+  const std::string native_path
+      = u8"native-v2-žluťoučký-測試.cspar";
+  struct native_path_cleanup
+  {
+    std::filesystem::path path;
+    ~native_path_cleanup ()
+    {
+      std::error_code ignored;
+      std::filesystem::remove (path, ignored);
+    }
+  } cleanup {std::filesystem::u8path (native_path)};
+  if (!write_parameter_json_v2_file (
+          native_path.c_str (), geometry, detection, render,
+          solver, spots, &error)
+      || !parameter_json_v2_signature_p (native_path.c_str ())
+      || parameter_archive_signature_p (native_path.c_str ()))
+    {
+      fprintf (stderr, "Native v2 Unicode-path file save failed: %s\n",
+               error.c_str ());
+      return false;
+    }
+  {
+    std::ifstream input (std::filesystem::u8path (native_path),
+                         std::ios::binary);
+    const std::string bytes {
+        std::istreambuf_iterator<char> (input),
+        std::istreambuf_iterator<char> ()};
+    if (!input.good () && !input.eof ())
+      return false;
+    if (bytes != first)
+      {
+        fprintf (stderr, "Native v2 file did not contain plain canonical JSON\n");
+        return false;
+      }
+  }
+  scr_to_img_parameters loaded_geometry;
+  scr_detect_parameters loaded_detection;
+  render_parameters loaded_render;
+  solver_parameters loaded_solver;
+  std::vector<point_t> loaded_spots;
+  if (!read_parameter_json_v2_file (
+          native_path.c_str (), &loaded_geometry, &loaded_detection,
+          &loaded_render, &loaded_solver, &loaded_spots, &error)
+      || !encode_parameter_json_v2_document (
+          loaded_geometry, loaded_detection, loaded_render, loaded_solver,
+          loaded_spots, &canonical, &error)
+      || canonical != first)
+    {
+      fprintf (stderr, "Native v2 Unicode-path file roundtrip failed: %s\n",
+               error.c_str ());
+      return false;
+    }
+  /* Independently loaded resources compare by value, while an actual
+     calibration edit must be visible. This also checks mesh and backlight
+     data rather than just the pointer identities.  */
+  if (!(loaded_geometry == geometry) || !(loaded_render == render))
+    return false;
+  loaded_geometry.mesh_trans->set_point ({1, 1}, {3.125, 2.25});
+  if (loaded_geometry == geometry)
+    return false;
+  loaded_render.backlight_correction->set_luminosity (
+      0, 0, 0.75f, backlight_correction_parameters::red);
+  if (loaded_render == render)
+    return false;
+
+  /* A failed attempted replacement must leave the last good file byte
+     for byte intact, never even opening the target for truncation. */
+  render_parameters invalid_render = render;
+  invalid_render.gamma = my_quiet_nan<luminosity_t> ();
+  if (write_parameter_json_v2_file (
+          native_path.c_str (), geometry, detection, invalid_render,
+          solver, spots, &error))
+    return false;
+  {
+    std::ifstream input (std::filesystem::u8path (native_path),
+                         std::ios::binary);
+    const std::string bytes {
+        std::istreambuf_iterator<char> (input),
+        std::istreambuf_iterator<char> ()};
+    if (bytes != first)
+      return false;
+  }
+
+  /* Corruption late in the file must not publish any previously accepted
+     capture, geometry, points or MTF data. */
+  auto reject_unchanged = [&] (const std::string &bad)
+    {
+      return !decode_parameter_json_v2_document (
+                 bad, &parsed_geometry, &parsed_detection, &parsed_render,
+                 &parsed_solver, &parsed_spots, &error)
+             && parsed_geometry.final_ratio == geometry.final_ratio
+             && parsed_render.gamma == render.gamma
+             && parsed_solver.points == solver.points
+             && parsed_spots == spots;
+    };
+  for (const auto &substitution :
+       {std::pair<std::string, std::string> {
+            "\"schema_version\": 2", "\"schema_version\": 3"},
+        {"\"format\": \"org.colorscreen.parameters\"",
+         "\"format\": \"unknown.document\""},
+        {"\"wavelengths_nm\": [600, 530, 450, 750]",
+         "\"wavelengths_nm\": [600, 530, 450]"},
+        {"\"correction_grids\"", "\"missing_correction_grids\""},
+        {"\"capture\"", "\"capture\", \"capture\""}})
+    {
+      std::string bad = first;
+      const size_t at = bad.find (substitution.first);
+      if (at == std::string::npos)
+        {
+          fprintf (stderr, "Native v2 corruption test key missing\n");
+          return false;
+        }
+      bad.replace (at, substitution.first.size (), substitution.second);
+      if (!reject_unchanged (bad))
+        return false;
+    }
+
+  /* Unexpected but syntactically valid members are dangerous: if decoded as
+     optional extensions they would silently disappear on the next Save. Test
+     the root, several nested parameter sections and variable-length records
+     independently, including an MTF measurement and a stitched tile. */
+  for (const auto &substitution :
+       {std::pair<std::string, std::string> {
+            "\"schema_version\": 2",
+            "\"schema_version\": 2, \"future_property\": 17"},
+        {"\"capture_type\": \"",
+         "\"unknown_capture_setting\": true, \"capture_type\": \""},
+        {"\"scan_crop\": {",
+         "\"scan_crop\": {\"future_crop_value\": 1, "},
+        {"\"contact_copy\": {",
+         "\"contact_copy\": {\"future_emulsion_model\": 7, "},
+        {"\"mesh\": {",
+         "\"mesh\": {\"future_mesh_mapping\": 3, "},
+        {"\"image\": [",
+         "\"future_point_metadata\": 5, \"image\": ["},
+        {"\"screen_denoise\": {",
+         "\"screen_denoise\": {\"future_filter_setting\": 9, "},
+        {"\"edge_quality\": [",
+         "\"unrecognized_mtf_quality\": 8, \"edge_quality\": ["},
+        {"\"tone_curve\": {",
+         "\"tone_curve\": {\"unrecognized_curve_knob\": 0, "},
+        {"\"backlight\": {",
+         "\"backlight\": {\"future_backlight_model\": 1, "},
+        {"\"scanner_blur\": {",
+         "\"scanner_blur\": {\"future_blur_mode\": 1, "},
+        {"\"correction_grids\": {",
+         "\"correction_grids\": {\"future_tile_layout\": 7, "}})
+    {
+      std::string bad = first;
+      const size_t pos = bad.find (substitution.first);
+      if (pos == std::string::npos)
+        {
+          fprintf (stderr,
+                   "Native v2 unknown-field test insertion not found: %s\n",
+                   substitution.first.c_str ());
+          return false;
+        }
+      bad.replace (pos, substitution.first.size (), substitution.second);
+      if (!reject_unchanged (bad)
+          || error.find ("unsupported v2 field") == std::string::npos)
+        {
+          fprintf (stderr,
+                   "Native v2 unknown field was accepted/dropped: %s (%s)\n",
+                   substitution.first.c_str (), error.c_str ());
+          return false;
+        }
+    }
+
+  /* Unknown required features are not optional metadata and cannot be
+     silently dropped by an older v2 reader. */
+  std::string extra = first;
+  size_t at = extra.find ("\"schema_version\": 2");
+  if (at == std::string::npos)
+    return false;
+  extra.replace (at, strlen ("\"schema_version\": 2"),
+                 "\"schema_version\": 2, \"required_features\": [\"future\"]");
+  if (!reject_unchanged (extra))
+    return false;
+
+  /* A malformed source must leave an established caller's values alone,
+     including a retained calibration resource. */
+  const auto prior_blur = parsed_render.scanner_blur_correction;
+  if (!reject_unchanged ("{") || parsed_render.scanner_blur_correction != prior_blur)
+    return false;
+  return true;
+}
+
+/* Directly persist all spatial calibration resources without a CSP mirror,
+   including non-enabled backlight samples and per-tile optical corrections. */
+static bool
+test_native_json_v2_correction_grids ()
+{
+  render_parameters original;
+  original.gamma = 2.5f;
+  bool enabled[4] = {true, false, true, true};
+  original.backlight_correction
+      = std::make_shared<backlight_correction_parameters> ();
+  if (!original.backlight_correction->alloc (7, 5, enabled))
+    return false;
+  original.backlight_correction->black_correction = true;
+  for (int y = 0; y < 5; ++y)
+    for (int x = 0; x < 7; ++x)
+      for (int c = 0; c < 4; ++c)
+        {
+          const int i = y * 7 + x;
+          auto channel = (backlight_correction_parameters::channel)c;
+          original.backlight_correction->set_luminosity (
+              x, y, (luminosity_t)(i * 4 + c + 1) / 32, channel);
+          original.backlight_correction->set_sub (
+              x, y, (luminosity_t)(i * 4 + c) / 256, channel);
+        }
+
+  auto blur = std::make_shared<scanner_blur_correction_parameters> ();
+  if (!blur->alloc (4, 3, scanner_blur_correction_parameters::mtf_defocus)
+      || !blur->alloc_diagnostics ())
+    return false;
+  for (int y = 0; y < 3; ++y)
+    for (int x = 0; x < 4; ++x)
+      {
+        blur->set_correction (x, y, (luminosity_t)(x + y * 4) / 64);
+        blur->set_diagnostics (x, y, {0.25f, 0.75f, 8, 10});
+      }
+  original.scanner_blur_correction = blur;
+  original.set_tile_adjustments_dimensions (3, 2);
+  for (int y = 0; y < 2; ++y)
+    for (int x = 0; x < 3; ++x)
+      {
+        auto &tile = original.get_tile_adjustment (x, y);
+        tile.exposure = 1 + (luminosity_t)(x + 3 * y) / 16;
+        tile.dark_point = -(luminosity_t)(x + y) / 32;
+      }
+  auto nested = std::make_shared<scanner_blur_correction_parameters> ();
+  if (!nested->alloc (2, 2, scanner_blur_correction_parameters::blur_radius))
+    return false;
+  for (int y = 0; y < 2; ++y)
+    for (int x = 0; x < 2; ++x)
+      nested->set_correction (x, y, (luminosity_t)(x + 2 * y) / 16);
+  original.get_tile_adjustment (2, 1).scanner_blur_correction = nested;
+
+  std::string json, error;
+  if (!encode_parameter_json_v2_correction_grids (original, &json, &error)
+      || json.find ("\"backlight\"") == std::string::npos
+      || json.find ("\"mtf-defocus\"") == std::string::npos
+      || json.find ("\"robust_spread\"") != std::string::npos
+      || json.find ("\"legacy_csp\"") != std::string::npos)
+    {
+      fprintf (stderr, "Native v2 calibration encoding failed: %s\n",
+               error.c_str ());
+      return false;
+    }
+
+  render_parameters decoded;
+  decoded.gamma = 3.25f;
+  decoded.brightness = 0.875f;
+  if (!decode_parameter_json_v2_correction_grids (json, &decoded, &error))
+    {
+      fprintf (stderr, "Native v2 calibration decoding failed: %s\n",
+               error.c_str ());
+      return false;
+    }
+
+  auto same_blur = [] (
+      const std::shared_ptr<scanner_blur_correction_parameters> &a,
+      const std::shared_ptr<scanner_blur_correction_parameters> &b)
+    {
+      if (!a || !b)
+        return !a && !b;
+      if (a->get_width () != b->get_width ()
+          || a->get_height () != b->get_height ()
+          || a->get_mode () != b->get_mode ())
+        return false;
+      for (int y = 0; y < a->get_height (); ++y)
+        for (int x = 0; x < a->get_width (); ++x)
+          if (a->get_correction (x, y) != b->get_correction (x, y))
+            return false;
+      return true;
+    };
+  auto same_grid = [&same_blur] (const render_parameters &a,
+                                const render_parameters &b)
+    {
+      if (a.tile_adjustments_width != b.tile_adjustments_width
+          || a.tile_adjustments_height != b.tile_adjustments_height
+          || a.tile_adjustments.size () != b.tile_adjustments.size ()
+          || !same_blur (a.scanner_blur_correction,
+                         b.scanner_blur_correction)
+          || (bool)a.backlight_correction != (bool)b.backlight_correction)
+        return false;
+      if (a.backlight_correction)
+        {
+          const auto &aa = *a.backlight_correction;
+          const auto &bb = *b.backlight_correction;
+          if (aa.black_correction != bb.black_correction
+              || aa.get_width () != bb.get_width ()
+              || aa.get_height () != bb.get_height ())
+            return false;
+          for (int c = 0; c < 4; ++c)
+            if (aa.channel_enabled ((backlight_correction_parameters::channel)c)
+                != bb.channel_enabled (
+                    (backlight_correction_parameters::channel)c))
+              return false;
+          for (int y = 0; y < aa.get_height (); ++y)
+            for (int x = 0; x < aa.get_width (); ++x)
+              for (int c = 0; c < 4; ++c)
+                {
+                  auto channel = (backlight_correction_parameters::channel)c;
+                  if (aa.get_luminosity (x, y, channel)
+                          != bb.get_luminosity (x, y, channel)
+                      || aa.get_sub (x, y, channel)
+                             != bb.get_sub (x, y, channel))
+                    return false;
+                }
+        }
+      for (size_t i = 0; i < a.tile_adjustments.size (); ++i)
+        if (a.tile_adjustments[i].exposure != b.tile_adjustments[i].exposure
+            || a.tile_adjustments[i].dark_point
+                   != b.tile_adjustments[i].dark_point
+            || !same_blur (
+                 a.tile_adjustments[i].scanner_blur_correction,
+                 b.tile_adjustments[i].scanner_blur_correction))
+          return false;
+      return true;
+    };
+
+  if (!same_grid (original, decoded)
+      || decoded.gamma != 3.25f || decoded.brightness != 0.875f
+      || decoded.scanner_blur_correction->has_diagnostics ())
+    {
+      fprintf (stderr, "Native v2 calibration roundtrip lost data\n");
+      return false;
+    }
+  std::string canonical;
+  if (!encode_parameter_json_v2_correction_grids (
+          decoded, &canonical, &error) || canonical != json)
+    return false;
+
+  /* The decoder created independent resources. Ignoring unrelated scalar
+     values, their persisted data must compare equal, including a nested
+     per-tile blur table and samples from a disabled backlight channel.  */
+  render_parameters expected = original;
+  expected.gamma = decoded.gamma;
+  expected.brightness = decoded.brightness;
+  if (!(expected == decoded))
+    return false;
+  auto nested_blur = decoded.get_tile_adjustment (2, 1).scanner_blur_correction;
+  const luminosity_t old_blur = nested_blur->get_correction (1, 1);
+  nested_blur->set_correction (1, 1, old_blur + 0.125f);
+  if (expected == decoded)
+    return false;
+  nested_blur->set_correction (1, 1, old_blur);
+  if (!(expected == decoded))
+    return false;
+  const auto green = backlight_correction_parameters::green;
+  const luminosity_t old_green
+      = decoded.backlight_correction->get_luminosity (0, 0, green);
+  decoded.backlight_correction->set_luminosity (
+      0, 0, old_green + 0.125f, green);
+  if (expected == decoded)
+    return false;
+  decoded.backlight_correction->set_luminosity (0, 0, old_green, green);
+  if (!(expected == decoded))
+    return false;
+
+  /* Invalid nested payloads cannot update any accepted calibration. */
+  auto check_bad = [&] (const std::string &before,
+                       const std::string &after) -> bool
+    {
+      std::string bad = json;
+      size_t pos = bad.find (before);
+      if (pos == std::string::npos)
+        return false;
+      bad.replace (pos, before.size (), after);
+      return !decode_parameter_json_v2_correction_grids (
+                 bad, &decoded, &error)
+             && same_grid (original, decoded)
+             && decoded.gamma == 3.25f;
+    };
+  if (!check_bad ("\"dimensions\": [7, 5]",
+                  "\"dimensions\": [7, 6]")
+      || !check_bad ("\"channels\": [true, false, true, true]",
+                     "\"channels\": [true, 1, true, true]")
+      || !check_bad ("\"luminosities\": [[0.03125, 0.0625, 0.09375, 0.125]",
+                     "\"luminosities\": [[0.03125, 0.0625, 0.09375]")
+      || !check_bad ("\"mode\": \"mtf-defocus\"",
+                     "\"mode\": \"invalid-mode\"")
+      || !check_bad ("\"values\": [0, 0.015625",
+                     "\"values\": [1e999, 0.015625")
+      || !check_bad ("\"dimensions\": [3, 2]",
+                     "\"dimensions\": [3, 3]"))
+    {
+      fprintf (stderr, "Invalid v2 calibration applied or test failed\n");
+      return false;
+    }
+
+  original.get_tile_adjustment (0, 0).dark_point
+      = my_quiet_nan<luminosity_t> ();
+  std::string unchanged = "keep";
+  if (encode_parameter_json_v2_correction_grids (
+          original, &unchanged, &error) || unchanged != "keep")
+    return false;
+
+  render_parameters empty;
+  if (!encode_parameter_json_v2_correction_grids (empty, &json, &error)
+      || !decode_parameter_json_v2_correction_grids (
+          json, &decoded, &error)
+      || decoded.backlight_correction || decoded.scanner_blur_correction
+      || !decoded.tile_adjustments.empty ()
+      || decoded.tile_adjustments_width || decoded.tile_adjustments_height)
+    return false;
+
+  /* A failed allocation must not destroy the existing calibration. */
+  bool channels[4] = {true, true, true, false};
+  auto retained = std::make_shared<backlight_correction_parameters> ();
+  if (!retained->alloc (2, 2, channels))
+    return false;
+  retained->set_luminosity (0, 0, 0.8125f);
+  if (retained->alloc (-2, 100, channels)
+      || retained->get_width () != 2 || retained->get_height () != 2
+      || retained->get_luminosity (
+          0, 0, backlight_correction_parameters::red) != 0.8125f)
+    return false;
+  return true;
+}
+
+/* Native MTF JSON must preserve not only sampled frequency response but also
+   independent capture channel, selected record and complete spatial evidence. */
+static bool
+test_native_json_v2_sharpness ()
+{
+  render_parameters original;
+  sharpen_parameters &p = original.sharpen;
+  p.mode = sharpen_parameters::richardson_lucy_deconvolution;
+  p.usm_radius = 1.375f;
+  p.usm_amount = 0.625f;
+  p.scanner_snr = 1400.125f;
+  p.scanner_mtf_scale = 0.875f;
+  p.richardson_lucy_iterations = 7;
+  p.richardson_lucy_sigma = 0.125f;
+  p.supersample = 3;
+  p.resampling = sharpen_parameters::lanczos8_resampling;
+
+  mtf_parameters &m = p.scanner_mtf;
+  m.model = mtf_model::physical_diffraction;
+  m.sigma = 1.0123456789;
+  m.halo_fraction = 0.125;
+  m.halo_sigma = 12.345;
+  m.blur_diameter = 0.325;
+  m.defocus = -0.015;
+  m.f_stop = 8.0;
+  m.wavelengths = {601.25, 531.75, 457.5, 752.25};
+  m.pixel_pitch = 5.126;
+  m.sensor_fill_factor = 1.125;
+  m.scan_dpi = 4100.75;
+  m.measured_mtf_idx = 1;
+
+  mtf_measurement source;
+  source.channel = -1;
+  source.image_layer = true;
+  source.wavelength = 546.1;
+  source.same_capture = false;
+  source.name = u8"Měření: original µ & \"červená\"";
+  source.source_filename = u8"C:\\scans\\Česká fotografie\\edge 01.tif";
+  source.source_width = 2048;
+  source.source_height = 1536;
+  source.roi = {22, 31, 95, 45};
+  source.edge_p1 = {23.012345678901, 36.75};
+  source.edge_p2 = {113.875, 62.625};
+  source.edge_angle = 5.126;
+  source.edge_fit_rms = 0.125;
+  source.edge_contrast = 0.75;
+  source.edge_snr = 52.125;
+  source.phase_coverage = 0.875;
+  for (int i = 0; i < 2048; ++i)
+    source.add_value ((double)i / 8192.0,
+                      100.0 / (1.0 + (double)i * 0.02345),
+                      (double)(i % 5) / 1024.0);
+  m.measurements.push_back (source);
+
+  mtf_measurement second = source;
+  second.channel = 3;
+  second.image_layer = false;
+  second.wavelength = 750.25;
+  second.same_capture = true;
+  second.name = "Infrared (same capture)";
+  second.source_filename.clear ();
+  second.source_width = second.source_height = -1;
+  second.roi = {};
+  second.edge_p1 = {0, 0};
+  second.edge_p2 = {0, 0};
+  second.edge_angle = second.edge_fit_rms = second.edge_contrast = 0;
+  second.edge_snr = second.phase_coverage = 0;
+  m.measurements.push_back (std::move (second));
+
+  std::string json, error;
+  if (!encode_parameter_json_v2_sharpness (original, &json, &error)
+      || json.find ("\"measurements\"") == std::string::npos
+      || json.find ("\"legacy_csp\"") != std::string::npos)
+    {
+      fprintf (stderr, "Native JSON MTF encode failed: %s\n", error.c_str ());
+      return false;
+    }
+
+  render_parameters decoded;
+  decoded.gamma = 2.75f;
+  decoded.brightness = 0.875f;
+  if (!decode_parameter_json_v2_sharpness (json, &decoded, &error))
+    {
+      fprintf (stderr, "Native JSON MTF decode failed: %s\n", error.c_str ());
+      return false;
+    }
+  if (!decoded.sharpen.equal_p (original.sharpen)
+      || decoded.gamma != 2.75f || decoded.brightness != 0.875f)
+    {
+      fprintf (stderr, "Native JSON MTF lost exact numerical/provenance data\n");
+      return false;
+    }
+  std::string canonical;
+  if (!encode_parameter_json_v2_sharpness (decoded, &canonical, &error)
+      || canonical != json)
+    {
+      fprintf (stderr, "Native JSON MTF is not deterministic\n");
+      return false;
+    }
+
+  /* A later malformed nested measured curve must not publish partial MTF,
+     exposure or any earlier parsed coefficients. */
+  auto invalid = json;
+  auto check_invalid = [&] (const std::string &before,
+                           const std::string &after) -> bool
+    {
+      invalid = json;
+      const size_t pos = invalid.find (before);
+      if (pos == std::string::npos)
+        return false;
+      invalid.replace (pos, before.size (), after);
+      return !decode_parameter_json_v2_sharpness (invalid, &decoded, &error)
+             && decoded.sharpen.equal_p (original.sharpen)
+             && decoded.gamma == 2.75f;
+    };
+
+  if (!check_invalid ("\"model\": \"physical-diffraction\"",
+                      "\"model\": \"bad-model\"")
+      || !check_invalid ("\"selected_measurement\": 1",
+                         "\"selected_measurement\": 200")
+      || !check_invalid ("\"richardson_lucy_iterations\": 7",
+                         "\"richardson_lucy_iterations\": 7.5")
+      || !check_invalid ("\"wavelengths_nm\": [",
+                         "\"wavelengths_nm\": [1e999, ")
+      || !check_invalid ("\"source_dimensions\": [2048, 1536]",
+                         "\"source_dimensions\": [2147483648, 1536]")
+      || !check_invalid ("\"samples\": [[0, 100, 0]",
+                         "\"samples\": [[0, 100]"))
+    {
+      fprintf (stderr, "Invalid v2 measured MTF was applied or test failed\n");
+      return false;
+    }
+
+  /* Direct encoder rejects invalid retained values without touching OUT. */
+  original.sharpen.scanner_mtf.measurements[1].wavelength
+      = my_quiet_nan<double> ();
+  std::string untouched = "keep";
+  if (encode_parameter_json_v2_sharpness (original, &untouched, &error)
+      || untouched != "keep")
+    return false;
+
+  /* A record with the legacy unavailable-ROI sentinel still round-trips. */
+  original.sharpen.scanner_mtf.measurements[1].wavelength = 750.25;
+  original.sharpen.scanner_mtf.measured_mtf_idx = -1;
+  if (!encode_parameter_json_v2_sharpness (original, &json, &error)
+      || !decode_parameter_json_v2_sharpness (json, &decoded, &error)
+      || !decoded.sharpen.equal_p (original.sharpen))
+    return false;
+  return true;
+}
+
+/* Colour profiles, observer conditions and editable tone curves must have
+   exact native JSON representation without saving output ICC/gamma choices. */
+static bool
+test_native_json_v2_color ()
+{
+  /* Photograph temperature and backlight temperature are independent
+     persistent inputs. GUI dirty/undo uses exact render_parameters equality. */
+  render_parameters baseline;
+  render_parameters changed = baseline;
+  changed.temperature += 125;
+  if (changed == baseline)
+    {
+      fprintf (stderr, "Photo temperature edit was invisible to document equality\n");
+      return false;
+    }
+  changed = baseline;
+  changed.backlight_temperature += 125;
+  if (changed == baseline)
+    {
+      fprintf (stderr, "Backlight temperature edit was invisible to document equality\n");
+      return false;
+    }
+
+  render_parameters original;
+  original.scanner_red = {0.4125f, 0.2125f, 0.0125f};
+  original.scanner_green = {0.325f, 0.715f, 0.065f};
+  original.scanner_blue = {0.125f, 0.0725f, 0.951f};
+  original.profiled_dark = {0.0125f, 0.025f, 0.0375f};
+  original.profiled_red = {0.8125f, 0.05f, 0.125f};
+  original.profiled_green = {0.125f, 0.825f, 0.0625f};
+  original.profiled_blue = {0.03125f, 0.0625f, 0.9f};
+  original.white_balance = {1.125f, 0.875f, 1.25f};
+  original.presaturation = 1.25f;
+  original.temperature = 5500.125f;
+  original.backlight_temperature = 6500.375f;
+  original.observer_whitepoint = {0.3127f, 0.3290f};
+  original.dye_balance = render_parameters::dye_balance_whitepoint;
+  original.saturation = 1.125f;
+  original.brightness = 0.875f;
+  original.output_tone_curve = tone_curve::tone_curve_custom;
+  original.output_tone_curve_control_points.clear ();
+  for (int i = 0; i < 1500; ++i)
+    original.output_tone_curve_control_points.push_back (
+        {(coord_t)i / 1499.0, (coord_t)(i * i) / (1499.0 * 1499.0)});
+
+  std::string json, error;
+  if (!encode_parameter_json_v2_color (original, &json, &error)
+      || json.find ("\"scanner_primaries\"") == std::string::npos
+      || json.find ("\"output_profile\"") != std::string::npos
+      || json.find ("\"output_gamma\"") != std::string::npos)
+    return false;
+
+  render_parameters decoded;
+  decoded.demosaic = image_data::demosaic_PPG;
+  decoded.screen_blur_radius = 0.375;
+  if (!decode_parameter_json_v2_color (json, &decoded, &error))
+    {
+      fprintf (stderr, "Native v2 colour decode failed: %s\n", error.c_str ());
+      return false;
+    }
+  if (decoded.scanner_red.x != original.scanner_red.x
+      || decoded.scanner_red.y != original.scanner_red.y
+      || decoded.scanner_red.z != original.scanner_red.z
+      || decoded.scanner_green.x != original.scanner_green.x
+      || decoded.scanner_green.y != original.scanner_green.y
+      || decoded.scanner_green.z != original.scanner_green.z
+      || decoded.scanner_blue.x != original.scanner_blue.x
+      || decoded.scanner_blue.y != original.scanner_blue.y
+      || decoded.scanner_blue.z != original.scanner_blue.z
+      || decoded.profiled_dark != original.profiled_dark
+      || decoded.profiled_red != original.profiled_red
+      || decoded.profiled_green != original.profiled_green
+      || decoded.profiled_blue != original.profiled_blue
+      || decoded.white_balance != original.white_balance
+      || decoded.presaturation != original.presaturation
+      || decoded.temperature != original.temperature
+      || decoded.backlight_temperature != original.backlight_temperature
+      || decoded.observer_whitepoint != original.observer_whitepoint
+      || decoded.dye_balance != original.dye_balance
+      || decoded.saturation != original.saturation
+      || decoded.brightness != original.brightness
+      || decoded.output_tone_curve != original.output_tone_curve
+      || decoded.output_tone_curve_control_points
+             != original.output_tone_curve_control_points
+      || decoded.demosaic != image_data::demosaic_PPG
+      || decoded.screen_blur_radius != 0.375)
+    {
+      fprintf (stderr, "Native v2 colour roundtrip lost a saved value\n");
+      return false;
+    }
+  std::string second;
+  if (!encode_parameter_json_v2_color (decoded, &second, &error)
+      || second != json)
+    return false;
+
+  const render_parameters unchanged = decoded;
+  for (const auto &substitution :
+       {std::pair<std::string, std::string> {
+            "\"type\": \"custom\"", "\"type\": \"missing-type\""},
+        {"\"saturation\": 1.125", "\"saturation\": 1e999"},
+        {"\"observer_whitepoint\": [", "\"unknown_whitepoint\": ["},
+        {"\"control_points\": [[0, 0]", "\"control_points\": [[0, 0, 0]"},
+        {"\"presaturation\": 1.25",
+         "\"presaturation\": 1.25, \"presaturation\": 1.5"}})
+    {
+      std::string bad = json;
+      size_t at = bad.find (substitution.first);
+      if (at == std::string::npos)
+        {
+          fprintf (stderr, "V2 colour test replacement not found\n");
+          return false;
+        }
+      bad.replace (at, substitution.first.size (), substitution.second);
+      if (decode_parameter_json_v2_color (bad, &decoded, &error)
+          || decoded.output_tone_curve != unchanged.output_tone_curve
+          || decoded.output_tone_curve_control_points
+                 != unchanged.output_tone_curve_control_points
+          || decoded.saturation != unchanged.saturation
+          || decoded.temperature != unchanged.temperature
+          || decoded.demosaic != unchanged.demosaic)
+        {
+          fprintf (stderr, "Invalid v2 colour payload modified document\n");
+          return false;
+        }
+    }
+
+  original.white_balance.red = my_quiet_nan<luminosity_t> ();
+  std::string untouched = "keep";
+  if (encode_parameter_json_v2_color (original, &untouched, &error)
+      || untouched != "keep")
+    return false;
+  return true;
+}
+
+/* Historical material settings must survive as native structured values,
+   including the disabled contact-copy simulation's full editable H&D curve. */
+static bool
+test_native_json_v2_process ()
+{
+  render_parameters original;
+  original.color_model = render_parameters::color_model_autochrome_lavedrine2;
+  original.age = {0.125f, 0.25f, 0.75f};
+  original.dye_density = {1.125f, 0.875f, 1.25f};
+  original.red_strip_width = 0.3125;
+  original.green_strip_width = 0.4125;
+  original.contact_copy.simulate = false;
+  original.contact_copy.preflash = 0.125f;
+  original.contact_copy.exposure = 1.75f;
+  original.contact_copy.boost = 0.925f;
+  auto &curve = original.contact_copy.emulsion_characteristic_curve;
+  curve.minx = -4.5f;
+  curve.miny = 5.5f;
+  curve.linear1x = -3.25f;
+  curve.linear1y = 3.75f;
+  curve.linear2x = 4.25f;
+  curve.linear2y = -3.75f;
+  curve.maxx = 6.5f;
+  curve.maxy = -5.25f;
+
+  std::string json, error;
+  if (!encode_parameter_json_v2_process (original, &json, &error)
+      || json.find ("\"emulsion_curve\"") == std::string::npos
+      || json.find ("\"legacy_csp\"") != std::string::npos)
+    return false;
+  render_parameters parsed;
+  parsed.gamma = 2.75f;
+  parsed.mix_green = 0.625f;
+  if (!decode_parameter_json_v2_process (json, &parsed, &error))
+    {
+      fprintf (stderr, "Native v2 process decode failed: %s\n", error.c_str ());
+      return false;
+    }
+  if (parsed.color_model != original.color_model
+      || parsed.age != original.age
+      || parsed.dye_density != original.dye_density
+      || parsed.red_strip_width != original.red_strip_width
+      || parsed.green_strip_width != original.green_strip_width
+      || !(parsed.contact_copy == original.contact_copy)
+      || parsed.gamma != 2.75f || parsed.mix_green != 0.625f)
+    {
+      fprintf (stderr, "Native v2 process roundtrip lost saved input\n");
+      return false;
+    }
+
+  std::string second;
+  if (!encode_parameter_json_v2_process (parsed, &second, &error)
+      || second != json)
+    return false;
+
+  /* Do not publish any part of a malformed/unsupported process descriptor. */
+  render_parameters unchanged = parsed;
+  for (const auto &substitution :
+       {std::pair<std::string, std::string> {
+            "\"color_model\": \"autochrome_lavedrine2\"",
+            "\"color_model\": \"imaginary_model\""},
+        {"\"age\": [0.125, 0.25, 0.75]",
+         "\"age\": [0.125, 0.25]"},
+        {"\"simulate\": false", "\"simulate\": \"false\""},
+        {"\"preflash\": 0.125", "\"preflash\": 1e999"},
+        {"\"min\": [-4.5, 5.5]", "\"min\": [-4.5]"},
+        {"\"red\": 0.3125", "\"red\": 0.3125, \"red\": 0.3"}})
+    {
+      std::string bad = json;
+      size_t at = bad.find (substitution.first);
+      if (at == std::string::npos)
+        {
+          fprintf (stderr, "v2 process test replacement not found\n");
+          return false;
+        }
+      bad.replace (at, substitution.first.size (), substitution.second);
+      if (decode_parameter_json_v2_process (bad, &parsed, &error)
+          || parsed.color_model != unchanged.color_model
+          || parsed.age != unchanged.age
+          || !(parsed.contact_copy == unchanged.contact_copy)
+          || parsed.gamma != unchanged.gamma)
+        return false;
+    }
+
+  original.dye_density.red = my_quiet_nan<luminosity_t> ();
+  std::string untouched = "keep";
+  if (encode_parameter_json_v2_process (original, &untouched, &error)
+      || untouched != "keep")
+    return false;
+  return true;
+}
+
+/* Round-trip all image-layer and colour-screen reconstruction inputs,
+   including denoise settings that are currently inactive but saved for Undo. */
+static bool
+test_native_json_v2_reconstruction ()
+{
+  render_parameters original;
+  original.ignore_infrared = true;
+  original.mix_red = 0.125f;
+  original.mix_green = 0.5f;
+  original.mix_blue = 0.875f;
+  original.mix_dark = {-0.01f, 0.005f, 0.02f};
+  original.collection_quality
+      = render_parameters::simulated_screen_collection;
+  original.screen_demosaic = render_parameters::amaze_demosaic;
+  original.demosaiced_scaling = render_parameters::lanczos3_scaling;
+  original.screen_blur_radius = 0.875;
+  original.collection_threshold = 0.3125f;
+  original.screen_denoise.mode = denoise_parameters::nl_fast;
+  original.screen_denoise.strength = 0.135f;
+  original.screen_denoise.noise_variance_floor = 0.001f;
+  original.screen_denoise.noise_variance_slope = 0.01f;
+  original.screen_denoise.patch_radius = 3;
+  original.screen_denoise.search_radius = 7;
+  original.screen_denoise.bilateral_sigma_s = 5.5f;
+  original.screen_denoise.bilateral_sigma_r = 0.09f;
+  original.demosaiced_denoise.mode = denoise_parameters::bilateral;
+  original.demosaiced_denoise.strength = 0.23f;
+  original.demosaiced_denoise.noise_variance_floor = 0;
+  original.demosaiced_denoise.noise_variance_slope = -0.02f;
+  original.demosaiced_denoise.patch_radius = 2;
+  original.demosaiced_denoise.search_radius = 11;
+  original.demosaiced_denoise.bilateral_sigma_s = 4.25f;
+  original.demosaiced_denoise.bilateral_sigma_r = 0.013f;
+
+  std::string first, error;
+  if (!encode_parameter_json_v2_reconstruction (
+          original, &first, &error)
+      || first.find ("\"legacy_csp\"") != std::string::npos)
+    return false;
+
+  render_parameters decoded;
+  decoded.gamma = 2.75f;
+  decoded.brightness = 0.91f;
+  if (!decode_parameter_json_v2_reconstruction (first, &decoded, &error))
+    {
+      fprintf (stderr, "Native v2 reconstruction decode failed: %s\n",
+               error.c_str ());
+      return false;
+    }
+  if (decoded.ignore_infrared != original.ignore_infrared
+      || decoded.mix_red != original.mix_red
+      || decoded.mix_green != original.mix_green
+      || decoded.mix_blue != original.mix_blue
+      || decoded.mix_dark != original.mix_dark
+      || decoded.collection_quality != original.collection_quality
+      || decoded.screen_demosaic != original.screen_demosaic
+      || decoded.demosaiced_scaling != original.demosaiced_scaling
+      || decoded.screen_blur_radius != original.screen_blur_radius
+      || decoded.collection_threshold != original.collection_threshold
+      || !decoded.screen_denoise.equal_p (original.screen_denoise)
+      || !decoded.demosaiced_denoise.equal_p (original.demosaiced_denoise)
+      || decoded.gamma != 2.75f || decoded.brightness != 0.91f)
+    {
+      fprintf (stderr, "Native v2 reconstruction lost saved control\n");
+      return false;
+    }
+  std::string second;
+  if (!encode_parameter_json_v2_reconstruction (
+          decoded, &second, &error) || first != second)
+    return false;
+
+  /* Reject malformed algorithm names and the wrong numeric/array types
+     without applying even the earlier, individually valid settings. */
+  render_parameters unchanged = decoded;
+  auto replace_one = [] (std::string &text, const std::string &before,
+                         const std::string &after) -> bool
+    {
+      size_t at = text.find (before);
+      if (at == std::string::npos)
+        return false;
+      text.replace (at, before.size (), after);
+      return true;
+    };
+  for (const auto &substitution :
+       {std::pair<std::string, std::string> {
+            "\"screen_demosaic\": \"amaze\"",
+            "\"screen_demosaic\": \"unsupported\""},
+        {"\"mix_weights\": [0.125, 0.5, 0.875]",
+         "\"mix_weights\": [0.125, 0.5]"},
+        {"\"patch_radius\": 3", "\"patch_radius\": 3.2"},
+        {"\"collection_threshold\": 0.3125",
+         "\"collection_threshold\": 1e999"},
+        {"\"ignore_infrared\": true", "\"ignore_infrared\": \"true\""}})
+    {
+      std::string bad = first;
+      if (!replace_one (bad, substitution.first, substitution.second))
+        {
+          fprintf (stderr, "V2 reconstruction test replacement missing\n");
+          return false;
+        }
+      if (decode_parameter_json_v2_reconstruction (bad, &decoded, &error)
+          || decoded.ignore_infrared != unchanged.ignore_infrared
+          || decoded.screen_demosaic != unchanged.screen_demosaic
+          || decoded.mix_red != unchanged.mix_red
+          || !decoded.screen_denoise.equal_p (unchanged.screen_denoise)
+          || decoded.gamma != unchanged.gamma)
+        {
+          fprintf (stderr, "Invalid v2 reconstruction mutated state\n");
+          return false;
+        }
+    }
+
+  original.mix_blue = my_quiet_nan<luminosity_t> ();
+  std::string untouched = "unchanged";
+  if (encode_parameter_json_v2_reconstruction (
+          original, &untouched, &error) || untouched != "unchanged")
+    return false;
+  return true;
+}
+
+/* Validate native v2 capture scalars and both independent image bounds.
+   This codec is only a component; the full v2 writer must also save the
+   remaining correction, reconstruction, sharpness and colour sections. */
+static bool
+test_native_json_v2_capture ()
+{
+  render_parameters original;
+  original.capture_type
+      = render_parameters::capture_transparency_with_screen;
+  original.demosaic = image_data::demosaic_half;
+  original.gamma = 2.17f;
+  original.scan_rotation = 3;
+  original.scan_mirror = true;
+  original.scan_crop = int_image_area (12, 4, 1500, 900);
+  original.image_area = int_image_area (18, 8, 1400, 700);
+  original.scan_exposure = 1.2345f;
+  original.dark_point = 0.0035f;
+  original.backlight_correction_black = 0.0125f;
+
+  std::string json, error;
+  if (!encode_parameter_json_v2_capture (original, &json, &error)
+      || json.find ("\"capture\"") == std::string::npos
+      || json.find ("\"legacy_csp\"") != std::string::npos)
+    {
+      fprintf (stderr, "Native v2 capture encoding failed: %s\n",
+               error.c_str ());
+      return false;
+    }
+
+  render_parameters decoded;
+  decoded.brightness = 1.625f;
+  decoded.mix_red = 0.75f;
+  if (!decode_parameter_json_v2_capture (json, &decoded, &error))
+    {
+      fprintf (stderr, "Native v2 capture decoding failed: %s\n",
+               error.c_str ());
+      return false;
+    }
+  if (decoded.capture_type != original.capture_type
+      || decoded.demosaic != original.demosaic
+      || decoded.gamma != original.gamma
+      || decoded.scan_rotation != original.scan_rotation
+      || decoded.scan_mirror != original.scan_mirror
+      || !(decoded.scan_crop == original.scan_crop)
+      || !(decoded.image_area == original.image_area)
+      || decoded.scan_exposure != original.scan_exposure
+      || decoded.dark_point != original.dark_point
+      || decoded.backlight_correction_black
+             != original.backlight_correction_black
+      || decoded.brightness != 1.625f || decoded.mix_red != 0.75f)
+    {
+      fprintf (stderr, "Native v2 capture roundtrip changed state\n");
+      return false;
+    }
+
+  std::string second;
+  if (!encode_parameter_json_v2_capture (decoded, &second, &error)
+      || second != json)
+    return false;
+
+  /* Invalid input must not mutate the destination, including unrelated
+     processing controls. Require strict typed integer and crop semantics. */
+  render_parameters unchanged = decoded;
+  auto invalid = json;
+  auto replace_one = [] (std::string &text, const std::string &before,
+                         const std::string &after) -> bool
+    {
+      size_t at = text.find (before);
+      if (at == std::string::npos)
+        return false;
+      text.replace (at, before.size (), after);
+      return true;
+    };
+  for (const auto &substitution :
+       {std::pair<std::string, std::string> {
+            "\"scan_rotation_quarter_turns\": 3",
+            "\"scan_rotation_quarter_turns\": 3.5"},
+        {"\"scan_rotation_quarter_turns\": 3",
+         "\"scan_rotation_quarter_turns\": 2147483648"},
+        {"\"image_area\": {\"enabled\": true, \"rect\": [18, 8, 1400, 700]}",
+         "\"image_area\": {\"enabled\": true, \"rect\": [-1, 8, 1400, 700]}"},
+        {"\"scan_crop\": {\"enabled\": true, \"rect\": [12, 4, 1500, 900]}",
+         "\"scan_crop\": {\"enabled\": true, \"rect\": [2147483640, 4, 1500, 900]}"},
+        {"\"scan_crop\": {\"enabled\": true, \"rect\": [12, 4, 1500, 900]}",
+         "\"scan_crop\": {\"enabled\": false, \"rect\": [12, 4, 1500, 900]}"},
+        {"\"gamma\": 2.1700000762939453", "\"gamma\": 1e999"}})
+    {
+      invalid = json;
+      if (!replace_one (invalid, substitution.first, substitution.second))
+        {
+          fprintf (stderr, "Invalid-v2 capture test replacement not found\n");
+          return false;
+        }
+      if (decode_parameter_json_v2_capture (invalid, &decoded, &error)
+          || decoded.gamma != unchanged.gamma
+          || decoded.scan_rotation != unchanged.scan_rotation
+          || !(decoded.scan_crop == unchanged.scan_crop)
+          || !(decoded.image_area == unchanged.image_area)
+          || decoded.brightness != unchanged.brightness)
+        {
+          fprintf (stderr, "Invalid v2 capture changed live state\n");
+          return false;
+        }
+    }
+
+  invalid = json;
+  if (!replace_one (invalid, "\"demosaic\": \"half\"",
+                    "\"demosaic\": \"unknown-algorithm\"")
+      || decode_parameter_json_v2_capture (invalid, &decoded, &error))
+    return false;
+
+  /* Disabled bounds have an explicit stable canonical representation. */
+  original.scan_crop = int_optional_image_area ();
+  original.image_area = int_optional_image_area ();
+  original.scan_rotation = -1;
+  if (!encode_parameter_json_v2_capture (original, &json, &error)
+      || json.find ("\"enabled\": false, \"rect\": [0, 0, 0, 0]")
+             == std::string::npos
+      || !decode_parameter_json_v2_capture (json, &decoded, &error)
+      || decoded.scan_rotation != -1
+      || !(decoded.scan_crop == original.scan_crop)
+      || !(decoded.image_area == original.image_area))
+    return false;
+
+  original.scan_exposure = my_quiet_nan<luminosity_t> ();
+  std::string untouched = "unchanged";
+  if (encode_parameter_json_v2_capture (original, &untouched, &error)
+      || untouched != "unchanged")
+    return false;
+  return true;
+}
+
+/* Round-trip v2 registration directly through JSON, without the legacy CSP
+   parser or ZIP container. Include enough points to exceed the small v1
+   manifest's JSON node budget. */
+static bool
+test_native_json_v2_registration ()
+{
+  scr_to_img_parameters geometry;
+  geometry.type = Dufay;
+  geometry.center = {1234.56789012345, -0.0000123};
+  geometry.coordinate1 = {4.125, 0.0125};
+  geometry.coordinate2 = {-0.005, 4.875};
+  geometry.projection_distance = 1.23;
+  geometry.tilt_x = 0.00345;
+  geometry.tilt_y = -0.01234;
+  geometry.final_rotation = 17.5;
+  geometry.final_mirror = true;
+  geometry.final_angle = 91.125;
+  geometry.final_ratio = 1.25;
+  geometry.lens_correction.kr[0] = 1.02;
+  geometry.lens_correction.kr[1] = -0.025;
+  geometry.lens_correction.center = {0.49, 0.53};
+  geometry.mesh_trans_is_scr_to_img = true;
+  geometry.mesh_trans
+      = std::make_shared<mesh> (1.25, -2.5, 4.0, 3.5, 4, 3);
+  for (int y = 0; y < 3; ++y)
+    for (int x = 0; x < 4; ++x)
+      geometry.mesh_trans->set_point (
+          {x, y}, {(coord_t)(x * 0.25 + y * 0.125),
+                   (coord_t)(y * 0.75 - x * 0.375)});
+
+  scr_detect_parameters detection;
+  detection.red = {0.8125f, 0.0625f, 0.125f};
+  detection.min_luminosity = 0.0125f;
+  detection.min_ratio = 1.25f;
+  solver_parameters solver;
+  solver.optimize_lens = false;
+  solver.optimize_tilt = false;
+  solver.lens_center_distance = 1.125;
+  for (int i = 0; i < 2500; ++i)
+    solver.points.push_back (
+        {{(coord_t)(i * 0.3), (coord_t)(i * 0.6)},
+         {(coord_t)(i * 0.01), (coord_t)(i * 0.02)},
+         (solver_parameters::point_color)(i % solver_parameters::max_point_color)});
+  std::vector<point_t> spots {{3.25, 7.5}, {-1.125, 0.0078125}};
+
+  std::string first, error;
+  if (!encode_parameter_json_v2_registration (
+          geometry, detection, solver, spots, &first, &error)
+      || first.find ("\"legacy_csp\"") != std::string::npos
+      || first.find ("screen_alignment_version") != std::string::npos)
+    {
+      fprintf (stderr, "Native JSON v2 encode failed: %s\n", error.c_str ());
+      return false;
+    }
+  scr_to_img_parameters decoded_g;
+  scr_detect_parameters decoded_d;
+  solver_parameters decoded_s;
+  std::vector<point_t> decoded_spots;
+  if (!decode_parameter_json_v2_registration (
+          first, &decoded_g, &decoded_d, &decoded_s, &decoded_spots, &error))
+    {
+      fprintf (stderr, "Native JSON v2 decode failed: %s\n", error.c_str ());
+      return false;
+    }
+  if (decoded_g.type != geometry.type
+      || decoded_g.center != geometry.center
+      || decoded_g.coordinate1 != geometry.coordinate1
+      || decoded_g.coordinate2 != geometry.coordinate2
+      || decoded_g.projection_distance != geometry.projection_distance
+      || decoded_g.tilt_x != geometry.tilt_x
+      || decoded_g.tilt_y != geometry.tilt_y
+      || decoded_g.final_rotation != geometry.final_rotation
+      || decoded_g.final_mirror != geometry.final_mirror
+      || decoded_g.final_angle != geometry.final_angle
+      || decoded_g.final_ratio != geometry.final_ratio
+      || !(decoded_g.lens_correction == geometry.lens_correction)
+      || !decoded_g.mesh_trans || !decoded_g.mesh_trans_is_scr_to_img
+      || !(decoded_d == detection)
+      || decoded_s.points != solver.points
+      || decoded_s.optimize_lens != solver.optimize_lens
+      || decoded_s.optimize_tilt != solver.optimize_tilt
+      || decoded_s.lens_center_distance != solver.lens_center_distance
+      || decoded_spots != spots)
+    {
+      fprintf (stderr, "Native JSON v2 registration changed state\n");
+      return false;
+    }
+  for (int y = 0; y < 3; ++y)
+    for (int x = 0; x < 4; ++x)
+      if (decoded_g.mesh_trans->get_point ({x, y})
+          != geometry.mesh_trans->get_point ({x, y}))
+        return false;
+  std::string second;
+  if (!encode_parameter_json_v2_registration (
+          decoded_g, decoded_d, decoded_s, decoded_spots, &second, &error)
+      || first != second)
+    return false;
+
+  /* Malformed numeric/shape/enum data must never partly modify live state. */
+  scr_to_img_parameters unchanged_g;
+  unchanged_g.final_angle = 44.5;
+  scr_detect_parameters unchanged_d;
+  solver_parameters unchanged_s;
+  unchanged_s.optimize_lens = false;
+  std::vector<point_t> unchanged_spots {{12, 19}};
+  for (const auto &substitution :
+       {std::pair<std::string, std::string> {
+            "\"final_ratio\": 1.25", "\"final_ratio\": -1"},
+        {"\"dimensions\": [4, 3]", "\"dimensions\": [4, 4]"}})
+    {
+      std::string bad = first;
+      const size_t pos = bad.find (substitution.first);
+      if (pos == std::string::npos)
+        return false;
+      bad.replace (pos, substitution.first.size (), substitution.second);
+      if (decode_parameter_json_v2_registration (
+              bad, &unchanged_g, &unchanged_d, &unchanged_s,
+              &unchanged_spots, &error)
+          || unchanged_g.final_angle != 44.5
+          || unchanged_d != scr_detect_parameters ()
+          || unchanged_s.optimize_lens
+          || unchanged_spots != std::vector<point_t> ({{12, 19}}))
+        return false;
+    }
+  std::string bad = first;
+  const std::string enum_prefix = "\"screen_type\": \"";
+  const size_t begin = bad.find (enum_prefix);
+  if (begin == std::string::npos)
+    return false;
+  const size_t from = begin + enum_prefix.size ();
+  const size_t to = bad.find ('"', from);
+  if (to == std::string::npos)
+    return false;
+  bad.replace (from, to - from, "invalid-screen-type");
+  if (decode_parameter_json_v2_registration (
+          bad, &unchanged_g, &unchanged_d, &unchanged_s,
+          &unchanged_spots, &error))
+    return false;
+
+  auto invalid_g = geometry;
+  invalid_g.final_ratio = my_quiet_nan<coord_t> ();
+  std::string unchanged_json = "keep";
+  if (encode_parameter_json_v2_registration (
+          invalid_g, detection, solver, spots, &unchanged_json, &error)
+      || unchanged_json != "keep")
+    return false;
+
+  geometry.mesh_trans.reset ();
+  geometry.mesh_trans_is_scr_to_img = false;
+  if (!encode_parameter_json_v2_registration (
+          geometry, detection, solver, spots, &first, &error)
+      || !decode_parameter_json_v2_registration (
+          first, &decoded_g, &decoded_d, &decoded_s,
+          &decoded_spots, &error)
+      || decoded_g.mesh_trans || decoded_g.mesh_trans_is_scr_to_img)
+    return false;
+  return true;
+}
+
 /* Only a completed RAW decoder may retain an unpacked sensor source.
    Manually created buffers and ordinary TIFF decodes do not represent a CFA,
    and must not silently claim to support on-demand RAW reprocessing. */
@@ -11192,6 +12630,24 @@ main (int argc, char **argv)
     { "mesh_inversion", "mesh inversion tests", [] () { return test_mesh_inversion (); } },
     { "cow_points", "cow points tests", [] () { return test_cow_points (); } },
     { "image_area", "image area tests", [] () { return test_image_area (); } },
+    { "legacy_csp_representability", "reject lossy saves to historical .par",
+      [] () { return test_legacy_csp_representability (); } },
+    { "json_v2_document", "complete native schema-v2 JSON document roundtrip",
+      [] () { return test_native_json_v2_document (); } },
+    { "json_v2_correction_grids", "native JSON schema-v2 spatial correction grid codec",
+      [] () { return test_native_json_v2_correction_grids (); } },
+    { "json_v2_sharpness", "native JSON schema-v2 complete MTF/PSF codec",
+      [] () { return test_native_json_v2_sharpness (); } },
+    { "json_v2_color", "native JSON schema-v2 colour/appearance codec",
+      [] () { return test_native_json_v2_color (); } },
+    { "json_v2_process", "native JSON schema-v2 historical process codec",
+      [] () { return test_native_json_v2_process (); } },
+    { "json_v2_reconstruction", "native JSON schema-v2 reconstruction codec",
+      [] () { return test_native_json_v2_reconstruction (); } },
+    { "json_v2_capture", "native JSON schema-v2 capture codec",
+      [] () { return test_native_json_v2_capture (); } },
+    { "json_v2_registration", "native JSON schema-v2 registration codec",
+      [] () { return test_native_json_v2_registration (); } },
     { "stitch_tile_grid", "stitch tile adjustment grid persistence tests",
       [] () { return test_stitch_tile_adjustment_grid (); } },
     { "raw_source_retention", "decoded source lifetime and non-RAW isolation tests",

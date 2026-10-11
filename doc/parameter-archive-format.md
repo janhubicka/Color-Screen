@@ -1,5 +1,13 @@
 # Color-Screen parameter archive format
 
+**Schema v1 compatibility specification.** This document describes the
+existing ZIP-based `.cspar` alpha format and its historical structured
+supplements. It is **not** the agreed final format. The pre-beta target is a
+**single native JSON schema-v2 document**, with no ZIP wrapper or embedded
+legacy CSP mirror; see [Plain JSON v2 migration](parameter-json-v2-plan.md).
+Work on v2 must preserve these v1 readers but must not extend the legacy
+mirror as the final authoritative representation.
+
 ## Status
 
 This document defines the post-GUI alpha file-format migration planned before
@@ -221,10 +229,11 @@ temporary stream and feeds the normal CSP loader. Qt then processes its existing
 metadata postamble exactly as for legacy `.par`. The live document is published
 only after the whole archive and parameter payload have parsed successfully.
 
-The archive writer is now the default for genuinely new parameter saves after
-cross-platform core/CLI/GUI round-trip fixtures were established. Explicit
-legacy `.par` export remains available, and an established target always
-preserves its loaded/chosen format on ordinary Save.
+The schema-v1 ZIP writer was the transitional default earlier in 2.0alpha.
+New .cspar targets now use native JSON v2 by default (see the v2 plan), while
+this ZIP-v1 writer remains an explicit compatibility export. Legacy `.par`
+export remains available, and an established target always preserves its
+loaded/chosen physical format on ordinary Save.
 
 ## Structured migration within schema version 1
 
@@ -333,8 +342,9 @@ The default-save gate below is now implemented and must remain green in CI:
   rejection, invalid numeric rejection, CLI rewrite and crash-recovery parity;
 - Windows, macOS and Linux filenames containing Unicode.
 
-Private crash recovery now uses `recovery_params.cspar` with the same
-structured render state and atomic writer as ordinary archives. The lifecycle
+Private crash recovery now uses `recovery_params.cspar` with the complete
+native JSON v2 codec and the same atomic replacement primitive, while
+retaining schema-v1 ZIP and legacy .par snapshot readers. The lifecycle
 smoke covers unclean-shutdown restoration of structured-only values, profile
 spots, original target/dirty metadata, corrupt/truncated archives, and old
 `recovery_params.par` snapshots. An invalid newer archive never falls back to
@@ -353,8 +363,8 @@ Implementation status in the alpha tree:
   rewrite, and the Czech/CJK archive fixture are merged;
 - automatic image-sidecar discovery now prefers `.cspar` and falls back to
   legacy `.par`, never merging both;
-- genuinely new Save As/no-sidecar targets now default to `.cspar`;
-  established Archive/Legacy targets remain format-preserving;
+- genuinely new Save As/no-sidecar targets now default to JSON-v2 `.cspar`;
+  established ZIP-v1/JSON-v2/Legacy targets remain format-preserving;
 - `render-overrides-v1` is the first authoritative structured-state feature,
   retaining three saved processing fields missing from legacy CSP and three
   neutral output-compatibility keys;
@@ -363,17 +373,15 @@ Implementation status in the alpha tree:
 - `image-area-v1` preserves the independently selectable photographic area
   within the outer object crop.
 
-Remaining rollout sequence:
+Remaining pre-beta rollout sequence (updated decision):
 
-1. Migrate high-value structured sections and dense payloads incrementally,
-   declaring one authoritative representation per schema version and validating
-   the legacy mirror rather than silently merging conflicts.
-2. Crash recovery now saves structured `.cspar` snapshots, while reading
-   old `recovery_params.par` snapshots when no archive exists. Preserve this
-   compatibility and the corrupt-new-archive/no-stale-fallback tests.
-3. Audit any remaining saved `ParameterState` fields that are not represented
-   by legacy CSP and make their structured archive representation authoritative
-   before beta.
-4. Keep all sanitizer/platform matrices green, run alpha field testing on the
-   completed workflow/file format, and only then consider advancing the product
-   version toward beta.
+1. Keep schema-v1 ZIP as a supported importer and explicit compatibility
+   writer; do not extend its legacy mirror.
+2. Native plain JSON v2 serializes persistent C++ and Qt state directly;
+   see [parameter-json-v2-plan.md](parameter-json-v2-plan.md). Seven native
+   codecs, the complete document/file writer, a 128-file historical .par
+   corpus and a nested-state audit support the migration.
+3. New Qt/adjust-par .cspar targets default to JSON v2; ordinary Save and
+   in-place rewrites preserve existing ZIP-v1/JSON-v2/legacy encodings.
+4. Complete the new-default CI matrix and real GUI operator field testing
+   before beta. Color-Screen remains 2.0alpha.

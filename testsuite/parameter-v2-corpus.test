@@ -1,0 +1,34 @@
+## -*- sh -*-
+## parameter-v2-corpus.test -- Strict canonical .par/JSON v2 corpus parity.
+
+# Automake sets srcdir/top_builddir for out-of-tree tests and make distcheck.
+# defs.sh resolves those paths to absolute directories on all platforms.
+if test -z "$srcdir"; then
+    srcdir=$(echo "$0" | sed 's,[^/]*$,,')
+    test -z "$srcdir" && srcdir=.
+fi
+. "$srcdir/defs.sh"
+
+echo 1..1
+
+program="$top_builddir/src/colorscreen/colorscreen$EXEEXT"
+case $(uname -s 2>/dev/null) in
+  MINGW*|MSYS*)
+    real_program="$top_builddir/src/colorscreen/.libs/colorscreen.exe"
+    if test -x "$real_program"; then
+        program="$real_program"
+        PATH="$top_builddir/src/libcolorscreen/.libs:$PATH"
+        export PATH
+    fi
+    ;;
+esac
+
+# The source root is derived from defs.sh's absolute srcdir, not the test's
+# build directory. This matters for make distcheck's _build/sub hierarchy.
+if python3 -X utf8 "$srcdir/check-parameter-v2-corpus.py" \
+        "$srcdir/.." "$program"; then
+    echo 'ok 1 - all example and testsuite PAR fixtures roundtrip through JSON v2'
+else
+    echo 'not ok 1 - legacy/JSON v2 corpus parity (see fixture diagnostics)'
+    exit 1
+fi

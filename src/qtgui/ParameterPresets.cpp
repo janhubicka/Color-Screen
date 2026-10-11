@@ -397,7 +397,13 @@ bool save(const QString &name, Scope scope, const ParameterState &state,
         return false;
 
     QVariantMap extras;
-    if (scope == Scope::Reconstruction) {
+    if (scope == Scope::Process) {
+        // The reusable image-layer IR policy is not a CSP keyword. Persist
+        // this input beside the legacy preset snapshot, as reconstruction
+        // scaling and colour observer settings already do for their scopes.
+        extras.insert(QStringLiteral("ignoreInfrared"),
+                      state.rparams.ignore_infrared);
+    } else if (scope == Scope::Reconstruction) {
         extras.insert(QStringLiteral("demosaicedScaling"),
                       static_cast<int>(state.rparams.demosaiced_scaling));
     } else if (scope == Scope::Color) {
@@ -491,9 +497,19 @@ bool apply(const Record &record, ParameterState *target,
     case Scope::Capture:
         applyCaptureScope(target, source);
         break;
-    case Scope::Process:
+    case Scope::Process: {
+        const bool currentInfraredPolicy = target->rparams.ignore_infrared;
         registrationCleared = applyProcessScope(target, source);
+        if (record.extras.contains(QStringLiteral("ignoreInfrared")))
+            target->rparams.ignore_infrared =
+                record.extras.value(QStringLiteral("ignoreInfrared")).toBool();
+        else
+            // Presets created before this extra existed never stored the
+            // setting. Do not reinterpret their omission as an explicit
+            // request to re-enable the input infrared channel.
+            target->rparams.ignore_infrared = currentInfraredPolicy;
         break;
+    }
     case Scope::Reconstruction:
         applyReconstructionScope(target, source);
         if (record.extras.contains(QStringLiteral("demosaicedScaling"))) {

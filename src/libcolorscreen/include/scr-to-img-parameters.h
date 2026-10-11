@@ -9,6 +9,7 @@
 #include "dllpublic.h"
 #include "lens-warp-correction-parameters.h"
 #include "matrix.h"
+#include "mesh.h"
 #include <cmath>
 #include <memory>
 namespace colorscreen
@@ -234,7 +235,9 @@ struct scr_to_img_parameters
            && tilt_y == other.tilt_y && type == other.type
            && scanner_type == other.scanner_type
            && lens_correction == other.lens_correction
-           && mesh_trans == other.mesh_trans
+           && (mesh_trans == other.mesh_trans
+               || (mesh_trans && other.mesh_trans
+                   && mesh_trans->equal_p (*other.mesh_trans)))
  	   && mesh_trans_is_scr_to_img == other.mesh_trans_is_scr_to_img;
   }
   /* Merge solution from solver into the parameters.
