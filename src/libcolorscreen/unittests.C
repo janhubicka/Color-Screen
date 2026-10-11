@@ -5899,7 +5899,7 @@ test_lru_global_memory_budget ()
   registry.set_test_budget_bytes (10);
 
   bool hit = true;
-  test_params five {5}, six {6};
+  test_params zero {0}, five {5}, six {6};
   {
     lru_cache<test_params, weighted_test_value,
               get_new_weighted_test, 16>
@@ -5908,13 +5908,21 @@ test_lru_global_memory_budget ()
               get_new_weighted_test, 16>
         second ("global weight six", 0, weighted_test_bytes);
 
+    /* This older zero-cost entry is deliberately in the *same* cache as
+       the five-byte value. Global eviction must discard a charged entry
+       rather than this older uncharged one and prematurely give up. */
+    auto uncharged = first.get (zero, nullptr, nullptr, &hit);
+    if (!uncharged || hit || first.retained_bytes () != 0)
+      return false;
     auto externally_pinned = first.get (five, nullptr, nullptr, &hit);
     if (!externally_pinned || hit || first.retained_bytes () != 5)
       return false;
     auto held_six = second.get (six, nullptr, nullptr, &hit);
     if (!held_six || hit || first.retained_bytes () != 0
         || second.retained_bytes () != 6
-        || externally_pinned->weight != 5)
+        || externally_pinned->weight != 5
+        || uncharged->weight != 0 || first.peek (zero) != uncharged
+        || first.peek (five))
       {
         fprintf (stderr,
                  "Global LRU did not evict the oldest independent cache\n");
@@ -5926,7 +5934,7 @@ test_lru_global_memory_budget ()
     for (const auto &entry : report.caches)
       {
         if (entry.name == "global weight five")
-          saw_first = entry.entries == 0 && entry.retained_bytes == 0;
+          saw_first = entry.entries == 1 && entry.retained_bytes == 0;
         if (entry.name == "global weight six")
           saw_second = entry.entries == 1 && entry.retained_bytes == 6
                        && entry.precise_size && entry.externally_pinned == 1;
