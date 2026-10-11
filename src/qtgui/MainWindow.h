@@ -1065,6 +1065,9 @@ private:
     bool pending = false;
     uint64_t generation = 0;
     std::optional<uint64_t> screenAutodetectAfterGeneration;
+    /* Identifies the method of the in-flight same-image decode.
+       Undo/Redo can supersede it without spawning duplicate requests. */
+    std::optional<colorscreen::image_data::demosaicing_t> pendingDemosaic;
     QPointer<QMessageBox> sidecarPrompt;
     QPointer<QMessageBox> failurePrompt;
     /* Cache ownership, byte-budgeting and source lifetimes live entirely in

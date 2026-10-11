@@ -19,8 +19,8 @@ class CapturePanel : public ParameterPanel
 {
     Q_OBJECT
 public:
-    using ReloadCallback = std::function<void()>;
-    explicit CapturePanel(StateGetter stateGetter, StateSetter stateSetter, ImageGetter imageGetter, ReloadCallback reloadCallback, QWidget *parent = nullptr);
+    explicit CapturePanel(StateGetter stateGetter, StateSetter stateSetter,
+                          ImageGetter imageGetter, QWidget *parent = nullptr);
     ~CapturePanel() override;
 
 signals:
@@ -38,11 +38,9 @@ public:
 private:
     void setupUi();
     void refreshFlatFieldStatus();
-    ReloadCallback m_reloadCallback;
     // Top-level material/capture choice controlling the applicable workflow.
     class QComboBox *m_captureTypeCombo = nullptr;
     class QComboBox *m_demosaicCombo = nullptr;
-    class QPushButton *m_reloadDemosaicBtn = nullptr;
     class QLabel *m_imageResolutionValue = nullptr;
     class QPushButton *m_useImageResBtn = nullptr;
     class QLabel *m_exifResolutionValue = nullptr;

@@ -930,9 +930,10 @@ void MainWindow::openRecentFile(const QString &fileName) {
     loadFile(fileName);
 }
 
-/** Reload the current scan with the selected demosaic mode.  Reloading clears
-   the undo stack after replacing image_data, so preserve the document's dirty
-   state explicitly when unsaved parameters preceded the reload. */
+/** Request a new RAW demosaic variant from the cached sensor source.
+    Fall back to ordinary disk decoding when RAW retention was unavailable.
+    This asynchronous operation preserves Undo for cache-derived variants,
+    and the image identity changes only when different decoded pixels result. */
 void MainWindow::reloadCurrentImageWithDemosaic(bool autodetectScreen) {
   if (m_currentImageFile.isEmpty())
     return;
@@ -1177,6 +1178,11 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
       *m_imageLoad.screenAutodetectAfterGeneration != loadGeneration)
     m_imageLoad.screenAutodetectAfterGeneration.reset();
   m_imageLoad.pending = true;
+  m_imageLoad.pendingDemosaic =
+      suppressParamPrompt && preferCachedRaw
+          ? std::optional<colorscreen::image_data::demosaicing_t>(
+                m_rparams.demosaic)
+          : std::nullopt;
 
   // Progressive workers retain the outgoing m_scan until they unwind.  Marking
   // image replacement pending is therefore part of their staleness contract:
@@ -1271,6 +1277,7 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
                 m_imageLoad.screenAutodetectAfterGeneration.reset();
 
               m_imageLoad.pending = false;
+              m_imageLoad.pendingDemosaic.reset();
 
               if (result.first) {
                 const bool liveEditsWhileLoading =
@@ -1362,7 +1369,12 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
                 else if (m_rparams.gamma == -1)
                   m_rparams.gamma = -1;
 
-                m_undoStack->clear();
+                /* A cached demosaic variant is a new pixel representation
+                   of the SAME document/source, not an Open transaction.
+                   Preserve the captured parameter edit in Undo/Redo. Only
+                   independent file loads establish a new undo baseline. */
+                if (!cachedRawSource)
+                  m_undoStack->clear();
                 if (!suppressParamPrompt)
                   m_recoveryDirty = liveEditsWhileLoading;
 

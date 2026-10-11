@@ -12724,6 +12724,7 @@ test_raw_source_variants ()
       return false;
     }
   const image_data::pixel baseline = source.get_rgb_pixel (47, 61);
+  std::vector<uint64_t> derived_ids;
 
   auto same_pixels = [] (const image_data &a, const image_data &b)
     {
@@ -12763,20 +12764,32 @@ test_raw_source_variants ()
       error = nullptr;
       std::shared_ptr<image_data> cached
           = source.demosaiced_variant (method, &error);
-      if (cached != computed)
+      if (cached != computed || cached->id != computed->id)
         {
-          fprintf (stderr, "Repeated RAW variant did not hit cache for %i\n",
+          fprintf (stderr, "Repeated RAW variant changed cached identity for %i\n",
                    (int)method);
           return false;
         }
+      /* Every pixel-changing method must receive its own image UID. Caches
+         for sharpening, detection, grayscale, rendering and screen analysis
+         key on image_data::id: reusing the original/other variant ID would
+         silently mix computations from distinct RGB pixels. */
+      if (computed->id == source.id ||
+          std::find (derived_ids.begin (), derived_ids.end (),
+                     computed->id) != derived_ids.end ())
+        {
+          fprintf (stderr, "Different RAW methods aliased image UID\n");
+          return false;
+        }
+      derived_ids.push_back (computed->id);
 
       image_data fresh;
       error = nullptr;
       if (!fresh.load (path, true, &error, nullptr, method)
-          || !same_pixels (*computed, fresh))
+          || !same_pixels (*computed, fresh) || computed->id == fresh.id)
         {
           fprintf (stderr,
-                   "RAW cached %i differs from independent LibRaw decode: %s\n",
+                   "RAW cached %i reused an independent decode UID or differs: %s\n",
                    (int)method, error ? error : "pixel/geometry mismatch");
           return false;
         }

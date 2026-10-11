@@ -341,7 +341,14 @@ inspector and always returns its content when closed. This rule applies uniforml
 to document, ordinary-view, and slanted-edge reference inspectors: while embedded,
 the workspace owns their floating docks; after detaching a presentation, that
 presentation window becomes the dock host. This avoids nested `QMainWindow` dock
-ownership without reintroducing panel-specific wiring. **Reload and demosaic** reloads both the source scan and every associated
+ownership without reintroducing panel-specific wiring. Changing Digital Capture's demosaic selection immediately requests the new
+cached RAW variant on a background worker (without a second Reload button).
+Capture demosaic Undo/Redo schedules the corresponding variant too, while
+generation cancellation suppresses stale results. Cached variants preserve
+the current document's Undo history; only independent file opens reset it.
+Every newly computed image_data variant has its own unique image UID, so
+all derivative caches keyed by `image_data::id` cannot confuse algorithms.
+**Reload and demosaic** previously reloaded both the source scan and every associated
 slanted-edge reference using the current saved demosaic mode. For a conventional
 Bayer RAW whose unpacked sensor mosaic was retained (draft PR #536), the
 primary image may request a cached/on-demand decoder variant instead of
