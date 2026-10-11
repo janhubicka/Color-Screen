@@ -285,8 +285,12 @@ stitch_image::diff (stitch_image &other, progress_info *progress)
 	return false;
       }
   }
+  /* A stack renderer refers to its source until destruction. Even a
+     failing render or early release_img must not invalidate that pointer. */
+  const std::shared_ptr<image_data> own_tile = img;
+  const std::shared_ptr<image_data> other_tile = other.img;
   render_parameters def;
-  render_img render (param, *img, def, 65535);
+  render_img render (param, *own_tile, def, 65535);
   {
     sub_task task (progress);
     if (!render.precompute_all (progress))
@@ -295,7 +299,7 @@ stitch_image::diff (stitch_image &other, progress_info *progress)
 	other.release_img ();
 	return false;
       }
-    render_img render2 (other.param, *other.img, def, 65535);
+    render_img render2 (other.param, *other_tile, def, 65535);
     if (!render2.precompute_all (progress))
       {
 	release_img ();
@@ -326,6 +330,8 @@ stitch_image::diff (stitch_image &other, progress_info *progress)
     {
       release_img ();
       other.release_img ();
+      progress->resume_stdout ();
+      return false;
     }
   progress->resume_stdout ();
   int rwidth = rxmax - rxmin + 1;
@@ -628,6 +634,9 @@ stitch_image::analyze (stitch_project *prj, detect_regular_screen_params *dspara
       progress->resume_stdout ();
       return false;
     }
+  /* Renderers created during analysis keep borrowing the tile until this
+     function returns. Keep an independent pin across release_img(). */
+  const std::shared_ptr<image_data> analysis_image = img;
   //mesh_trans = detect_solver_points (*img, dparam, solver_param, progress, &xshift, &yshift, &width, &height, &bitmap);
 #if 0
   if (m_prj->params.optimize_colors)
@@ -1467,10 +1476,11 @@ stitch_image::find_common_points (stitch_image &other, int outerborder, int inne
       }
    if (render2)
      {
-       other.release_img ();
+       /* Destroy renderers before dropping the final strong image pins. */
        delete render2;
-       release_img ();
        delete render1;
+       other.release_img ();
+       release_img ();
      }
    return samples;
 }
