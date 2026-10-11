@@ -425,6 +425,9 @@ public:
       without affecting scan/render/Undo state. All disabled means no animation. */
   void refreshEasterEggPreferences();
 
+  /** Diagnostic-only name of the currently selected idle animation. */
+  QString activeEasterEggKey() const;
+
   /**
    * @brief Returns the current interaction mode.
    * @return The interaction mode.

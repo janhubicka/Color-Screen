@@ -132,6 +132,16 @@ void ImageWidget::refreshEasterEggPreferences() {
   update();
 }
 
+/** Return the current idle animation's stable key without exposing or
+    mutating the animated widget. An empty key means all are disabled. */
+QString ImageWidget::activeEasterEggKey() const {
+  if (m_activeAnim == m_thamesAnim) return QStringLiteral("thames");
+  if (m_activeAnim == m_pagetAnim) return QStringLiteral("paget");
+  if (m_activeAnim == m_jolyAnim) return QStringLiteral("joly");
+  if (m_activeAnim == m_hurleyAnim) return QStringLiteral("hurley");
+  return QString();
+}
+
 /**
  * @brief Returns the minimum scale that fits the image to the current view.
  */
