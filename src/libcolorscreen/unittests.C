@@ -36,6 +36,16 @@
 #include "include/spectrum-to-xyz.h"
 #include "lru-cache.h"
 #include "mapalloc.h"
+/* On MinGW, Windows.h (through MapAlloc's legacy HANDLE declarations) also
+   defines scr1/scr2 as Win32 dialog IDs. Those macros predate this test
+   translation unit and collide with existing local geometry variables.
+   They are not used by the core tests. */
+#ifdef scr1
+#undef scr1
+#endif
+#ifdef scr2
+#undef scr2
+#endif
 #include "include/histogram.h"
 #include "deconvolve.h"
 #include "denoise.h"
