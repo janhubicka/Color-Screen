@@ -6093,6 +6093,11 @@ test_lru_dynamic_analyzer_memory ()
       m_blue_support = std::make_unique<luminosity_t[]> (pixels);
       record_completed_plane_bytes ();
     }
+    int_image_area
+    demosaiced_area () const override
+    {
+      return m_area;
+    }
     void
     attach_contrast ()
     {
@@ -6103,14 +6108,14 @@ test_lru_dynamic_analyzer_memory ()
   const size_t plane_bytes = 8 * 6 * 8 * sizeof (luminosity_t);
   if (analyzer.cached_allocated_bytes () != plane_bytes)
     {
-      fprintf (stderr, "Analyzer initial channel/support byte count is wrong\\n");
+      fprintf (stderr, "Analyzer initial channel/support byte count is wrong\n");
       return false;
     }
   analyzer.set_known_pixels (new bitmap_2d (8, 6));
   const size_t bitmap_bytes = sizeof (bitmap_2d) + (8 * 6 + 7) / 8;
   if (analyzer.cached_allocated_bytes () != plane_bytes + bitmap_bytes)
     {
-      fprintf (stderr, "Known-pixel bitmap omitted from analyzer cache\\n");
+      fprintf (stderr, "Known-pixel bitmap omitted from analyzer cache\n");
       return false;
     }
   analyzer.attach_contrast ();
@@ -6118,13 +6123,13 @@ test_lru_dynamic_analyzer_memory ()
       = plane_bytes + bitmap_bytes + 8 * 6 * sizeof (analyze_base::contrast_info);
   if (analyzer.cached_allocated_bytes () != complete_bytes)
     {
-      fprintf (stderr, "Contrast allocation omitted from analyzer cache\\n");
+      fprintf (stderr, "Contrast allocation omitted from analyzer cache\n");
       return false;
     }
   analyzer.attach_contrast ();
   if (analyzer.cached_allocated_bytes () != complete_bytes)
     {
-      fprintf (stderr, "Repeated contrast allocation double-charged bytes\\n");
+      fprintf (stderr, "Repeated contrast allocation double-charged bytes\n");
       return false;
     }
 
@@ -6168,7 +6173,7 @@ test_lru_dynamic_analyzer_memory ()
                  && entry.retained_bytes == 80;
   if (!measured || dynamic.retained_bytes () != 80)
     {
-      fprintf (stderr, "LRU diagnostics kept stale post-publication bytes\\n");
+      fprintf (stderr, "LRU diagnostics kept stale post-publication bytes\n");
       return false;
     }
 
@@ -6178,7 +6183,7 @@ test_lru_dynamic_analyzer_memory ()
       || newer_cache.retained_bytes () != 40
       || older->bytes.load (std::memory_order_relaxed) != 80)
     {
-      fprintf (stderr, "Live-weight eviction did not preserve the newer image\\n");
+      fprintf (stderr, "Live-weight eviction did not preserve the newer image\n");
       return false;
     }
   older.reset ();
