@@ -350,6 +350,36 @@ void startWorkspaceChurnSmoke(ColorScreenApplication &app,
           return;
         }
 
+        // Preferences belong to the entire application, not this document.
+        // Opening and cancelling through the real Edit menu must not change
+        // calibration, file format, dirty/Undo state or any global policy.
+        QAction *preferencesAction = nullptr;
+        for (QAction *action : first->m_editMenu->actions())
+          if (action && action->objectName() ==
+                  QStringLiteral("ApplicationPreferencesAction"))
+            preferencesAction = action;
+        if (!preferencesAction) {
+          fail(QStringLiteral("Application Preferences action missing from Edit"));
+          return;
+        }
+        const int beforePreferencesUndo = first->m_undoStack->index();
+        const bool beforePreferencesDirty = first->isDocumentModified();
+        preferencesAction->trigger();
+        QDialog *preferencesDialog = workspace->findChild<QDialog *>(
+            QStringLiteral("ApplicationPreferencesDialog"));
+        if (!preferencesDialog) {
+          fail(QStringLiteral("Preferences dialog did not open from workspace"));
+          return;
+        }
+        preferencesDialog->reject();
+        QCoreApplication::processEvents();
+        if (first->documentStateSnapshot() != beforeCacheStats ||
+            first->m_undoStack->index() != beforePreferencesUndo ||
+            first->isDocumentModified() != beforePreferencesDirty) {
+          fail(QStringLiteral("Cancelling Preferences changed document state"));
+          return;
+        }
+
         if (!second || !view || view->sourceDocument() != first ||
             view->sharedImageData() != first->sharedImageData() ||
             app.documentWindows().size() != 2 ||
