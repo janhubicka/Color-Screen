@@ -4,7 +4,10 @@
 namespace colorscreen
 {
 namespace {
-render_simulate_process::simulation_cache_t simulation_cache ("Simulated image layers");
+/* At 150 megapixels a simulated float layer holds roughly 600 MiB.
+   sizeof(std::vector<float>) alone misses the pixel allocation. */
+render_simulate_process::simulation_cache_t simulation_cache (
+    "Simulated image layers", 0, lru_vector_cached_bytes<float>);
 
 luminosity_t
 getdata (int, int_point_t p, int width, render_simulate_process *r)
@@ -16,7 +19,8 @@ getdata (int, int_point_t p, int width, render_simulate_process *r)
 std::unique_ptr<std::vector<float>>
 get_new_simulation (struct simulation_params &param, progress_info *progress)
 {
-  auto img = std::make_unique<std::vector <float>> (param.img->width * param.img->height);
+  auto img = std::make_unique<std::vector<float>> (
+      (size_t)param.img->width * (size_t)param.img->height);
   bool ok = false;
   if (param.sharpen.deconvolution_p ())
     ok = deconvolve<luminosity_t, float,

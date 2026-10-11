@@ -322,6 +322,14 @@ public:
   histogram (const histogram &) = delete;
   histogram &operator= (const histogram &) = delete;
 
+  /* Count heap storage owned by cached histogram buckets; vector capacity
+     remains allocated even when fewer buckets are logically used. */
+  size_t
+  cached_bytes () const
+  {
+    return sizeof (*this) + m_entries.capacity () * sizeof (uint64_t);
+  }
+
 private:
   entry_t m_minval, m_maxval;
   entry_t m_inv;

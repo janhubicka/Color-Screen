@@ -607,6 +607,13 @@ sharpened_rgb_cached_bytes (const sharpened_rgb_data &image)
   return sizeof (image) + image.stored_pixels_bytes;
 }
 
+/* Report the allocated bucket capacity of a cached image histogram. */
+static size_t
+image_layer_histogram_cached_bytes (const histogram &value)
+{
+  return value.cached_bytes ();
+}
+
 /* A backlight correction owns a per-channel weight grid. */
 static size_t
 backlight_cached_bytes (const backlight_correction &value)
@@ -622,7 +629,8 @@ static lru_cache<backlight_correction_cache_params, backlight_correction,
 
 static lru_cache<image_layer_histogram_params, histogram,
                  get_new_image_layer_histogram, 10>
-    image_layer_histogram_cache ("image layer histograms");
+    image_layer_histogram_cache (
+        "image layer histograms", 0, image_layer_histogram_cached_bytes);
 
 static lru_cache<lookup_table_params, luminosity_t[], get_new_lookup_table, 4>
     lookup_table_cache ("in lookup tables");

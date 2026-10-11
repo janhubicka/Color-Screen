@@ -17,9 +17,22 @@ namespace colorscreen
 struct color_data
 {
   /* Pointers to data for each RGB channel.  */
-  luminosity_t *m_data[3];
+  luminosity_t *m_data[3] = {nullptr, nullptr, nullptr};
   /* Width of the image.  */
   int width;
+  /* Allocation size of each complete scalar channel. */
+  size_t per_channel_bytes = 0;
+
+  /* Return the size of the buffers owned by this cached result. */
+  size_t
+  cached_bytes () const
+  {
+    size_t bytes = sizeof (*this);
+    for (const luminosity_t *p : m_data)
+      if (p)
+        bytes += per_channel_bytes;
+    return bytes;
+  }
 
   /* Initialize color data for given WIDTH and HEIGHT.  */
   color_data (int width, int height);
@@ -34,11 +47,14 @@ struct color_data
 };
 
 /* Implementation of color_data constructor.  */
-color_data::color_data(int width, int height)
-  : width(width)
+color_data::color_data (int width, int height)
+    : width (width),
+      per_channel_bytes ((size_t)width * (size_t)height
+                         * sizeof (luminosity_t))
 {
   for (int color = 0; color < 3; color++)
-    m_data[color] = (luminosity_t *)MapAlloc::Alloc (width * height * sizeof (luminosity_t), "Color relaxation");
+    m_data[color] = (luminosity_t *)MapAlloc::Alloc (
+        per_channel_bytes, "Color relaxation");
 }
 
 /* Implementation of color_data destructor.  */
@@ -55,7 +71,15 @@ class precomputed_rgbdata
 {
 public:
   /* Precomputed RGB data.  */
-  render_scr_detect::my_mem_rgbdata *m_data;
+  render_scr_detect::my_mem_rgbdata *m_data = nullptr;
+  size_t stored_pixels_bytes = 0;
+
+  /* Return retained full-image RGB storage, not only this descriptor. */
+  size_t
+  cached_bytes () const
+  {
+    return sizeof (*this) + (m_data ? stored_pixels_bytes : 0);
+  }
 
   /* Initialize precomputed RGB data for given WIDTH and HEIGHT.  */
   precomputed_rgbdata (int width, int height);
@@ -65,8 +89,11 @@ public:
 
 /* Implementation of precomputed_rgbdata constructor.  */
 precomputed_rgbdata::precomputed_rgbdata (int width, int height)
+    : stored_pixels_bytes ((size_t)width * (size_t)height
+                           * sizeof (render_scr_detect::my_mem_rgbdata))
 {
-   m_data = (render_scr_detect::my_mem_rgbdata *)MapAlloc::Alloc (width * height * sizeof (render_scr_detect::my_mem_rgbdata), "HDR RGB data");
+  m_data = (render_scr_detect::my_mem_rgbdata *)MapAlloc::Alloc (
+      stored_pixels_bytes, "HDR RGB data");
 }
 
 /* Implementation of precomputed_rgbdata destructor.  */
@@ -119,8 +146,16 @@ std::unique_ptr<color_class_map> get_color_class_map(color_class_params &p, prog
   return map;
 }
 
-/* Cache for color class maps.  */
-static color_class_cache_t color_class_cache ("color tables");
+/* Packed classes use two bits per pixel, with independent byte-aligned
+   rows for concurrent classification. */
+static size_t
+color_class_map_cached_bytes (const color_class_map &map)
+{
+  return sizeof (map)
+         + (map.data ? (size_t)map.rowstride * (size_t)map.height : 0);
+}
+static color_class_cache_t color_class_cache (
+    "color tables", 0, color_class_map_cached_bytes);
 
 /* Cache helper for adjusted RGB data used by slow flood fill.
    P specifies parameters for the data.
@@ -148,8 +183,14 @@ get_precomputed_rgbdata(precomputed_rgbdata_params &p, progress_info *progress)
   return my_precomputed_rgbdata;
 }
 
-/* Cache for precomputed RGB data.  */
-static precomputed_rgbdata_cache_t precomputed_rgbdata_cache ("precomputed data");
+/* Report the full adjusted-RGB image allocation. */
+static size_t
+precomputed_rgb_cached_bytes (const precomputed_rgbdata &data)
+{
+  return data.cached_bytes ();
+}
+static precomputed_rgbdata_cache_t precomputed_rgbdata_cache (
+    "precomputed data", 0, precomputed_rgb_cached_bytes);
 
 /* Cache helper for screen patches.
    P specifies parameters for patches.
@@ -164,8 +205,13 @@ std::unique_ptr<patches> get_patches(patches_cache_params &p, progress_info *pro
   return pat;
 }
 
-/* Cache for screen patches.  */
-static patches_cache_t patches_cache ("patches");
+/* Count per-pixel patch indices and detected-patch vector capacity. */
+static size_t
+patches_cached_bytes (const patches &data)
+{
+  return data.cached_bytes ();
+}
+static patches_cache_t patches_cache ("patches", 0, patches_cached_bytes);
 
 /* Cache helper for color data (relaxation).
    P specifies parameters for color data.
@@ -232,7 +278,9 @@ get_new_color_data (struct color_data_params &p, progress_info *progress)
     {
       return nullptr;
     }
-  luminosity_t *tmp = (luminosity_t *)MapAlloc::Alloc (p.img->width * p.img->height * sizeof (luminosity_t), "Demosaiced HDR data");
+  luminosity_t *tmp = (luminosity_t *)MapAlloc::Alloc (
+      (size_t)p.img->width * (size_t)p.img->height
+          * sizeof (luminosity_t), "Demosaiced HDR data");
   if (progress)
     progress->set_task ("demosaicing", p.img->height * 100 * 3);
   for (int color = 0; color < 3; color++)
@@ -273,8 +321,14 @@ get_new_color_data (struct color_data_params &p, progress_info *progress)
   return data;
 }
 
-/* Cache for color data (relaxation).  */
-static color_data_cache_t color_data_cache ("color data");
+/* Relaxation caches hold three full-resolution scalar image planes. */
+static size_t
+color_data_cached_bytes (const color_data &data)
+{
+  return data.cached_bytes ();
+}
+static color_data_cache_t color_data_cache (
+    "color data", 0, color_data_cached_bytes);
 
 class distance_list distance_list;
 
