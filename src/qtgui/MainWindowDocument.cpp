@@ -1347,14 +1347,13 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
                 // is needed. Failed/obsolete generations cannot publish it.
                 m_scan = tempScan;
 
-                /* GUI tile workers publish individually decoded image data
-                   to views over time. Keep successfully decoded tiles resident
-                   until this scan is replaced; the legacy stitch-analysis LRU
-                   may evict images only when rendering does not read them
-                   concurrently. The tile_ready bit controls availability
-                   independently of each view's visibility mask. */
-                if (isCsprj && m_scan->stitch)
-                  m_scan->stitch->keep_all_images();
+                /* Progressive GUI tile workers keep a strong image_data
+                   reference in each stitch_image, so legacy render paths
+                   borrowing raw pointers remain safe. load_img() places a
+                   completed tile in the shared libcolorscreen LRU as well;
+                   only temporary CLI pins are released after a calculation.
+                   Readiness stays independent of per-view tile visibility.
+                   There is no longer a separate stitch-project LRU policy. */
 
                 if ((int)m_scan->gamma != -2 && m_scan->gamma > 0 &&
                     m_rparams.gamma == -1) // Update only if unknown
