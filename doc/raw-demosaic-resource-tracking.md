@@ -133,6 +133,10 @@ Invariants for final validation:
 - The synthetic Bayer fixture now exercises variant-source ownership after
   dropping the original image, and still checks independent pixel agreement.
   Extend testing to high-memory cache pressure across independent sources.
+- Immutable optical caches now measure the retained coefficients of
+  output-gamma and lens-inverse lookup tables, and backlight correction
+  caches count their full per-channel weight grid. Regression tests in
+  `optical_cache_weights` verify both classes of retained allocation.
 - Add Qt lifecycle smoke for rapid demosaic changes during loading, independent
   document views, failed reload recovery, and close with an old worker in flight.
   The existing generation gates are kept, but targeted tests are still needed.

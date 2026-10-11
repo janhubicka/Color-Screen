@@ -110,6 +110,14 @@ public:
 
   ~precomputed_function () = default;
 
+  /* Include reserved interpolation coefficients, not merely the descriptor
+     or current vector size, when charging an immutable cached lookup. */
+  size_t
+  cached_bytes () const
+  {
+    return sizeof (*this) + m_table.capacity () * sizeof (entry);
+  }
+
   /* Evaluate the function at X using linear interpolation.  */
   T pure_attr
   apply (T x) const noexcept

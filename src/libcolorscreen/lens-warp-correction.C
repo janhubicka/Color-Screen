@@ -93,9 +93,16 @@ get_new_inverse (struct lens_inverse_parameters &p, progress_info *prog)
       },
       true);
 }
+/* Charge the inverse-lens lookup's retained coefficient vector. */
+static size_t
+lens_inverse_cached_bytes (const precomputed_function<coord_t> &table)
+{
+  return table.cached_bytes ();
+}
 static lru_cache<lens_inverse_parameters, precomputed_function<coord_t>,
                  get_new_inverse, 4>
-    lens_inverse_cache ("lens inverse functions");
+    lens_inverse_cache (
+        "lens inverse functions", 0, lens_inverse_cached_bytes);
 }
 
 /* Precompute everything needed to apply lens distortion.

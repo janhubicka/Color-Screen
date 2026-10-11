@@ -404,7 +404,8 @@ backlight_correction::backlight_correction (
 {
   if (progress)
     progress->set_task ("computing backlight correction", 1);
-  m_weights = (entry *)malloc (m_width * m_height * sizeof (entry));
+  m_weights = (entry *)malloc (
+      (size_t)m_width * (size_t)m_height * sizeof (entry));
   m_black = black;
   const luminosity_t epsilon = 1.0 / 256;
 
