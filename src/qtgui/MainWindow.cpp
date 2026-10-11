@@ -1,6 +1,7 @@
 #include "MainWindow.h"
 #include "ChangeParametersCommand.h"
 #include "../libcolorscreen/include/base.h"
+#include "../libcolorscreen/include/cache-stats.h"
 #include "../libcolorscreen/include/finetune.h"
 #include "../libcolorscreen/include/histogram.h"
 #include "../libcolorscreen/include/render-parameters.h"
@@ -53,9 +54,11 @@
 #include <QFormLayout>
 #include <QFrame>
 #include <QFutureWatcher>
+#include <QHeaderView>
 #include <QHBoxLayout>
 #include <QIcon>
 #include <QLabel>
+#include <QLocale>
 #include <QLineEdit>
 #include <QMenu>
 #include <QMenuBar>
@@ -73,6 +76,7 @@
 #include <QStatusBar>
 #include <QSvgRenderer>
 #include <QTabWidget>
+#include <QTableWidget>
 #include <QTextStream>
 #include <QTimer>
 #include <QToolBar>
@@ -83,6 +87,7 @@
 #include <QtConcurrent>
 
 #include <algorithm>
+#include <limits>
 #include <exception>
 #include <string>
 #include <utility>
@@ -2832,6 +2837,120 @@ void MainWindow::createMenus() {
   // document while it is detached.  WorkspaceWindow surfaces the active
   // document's menu actions without changing their ownership.
   m_helpMenu = menuBar()->addMenu("&Help");
+
+  /* A read-only frontend view of the single core cache registry. The dialog
+     never owns image buffers or sets cache budgets; future frontends can
+     query exactly the same libcolorscreen snapshot API without Qt. */
+  QAction *cacheStatsAction =
+      m_helpMenu->addAction(tr("Cache &Statistics…"));
+  cacheStatsAction->setObjectName(QStringLiteral("CacheStatisticsAction"));
+  cacheStatsAction->setToolTip(tr(
+      "Inspect global cache memory, available RAM and all libcolorscreen "
+      "LRU entries without changing processing or cache policy."));
+  connect(cacheStatsAction, &QAction::triggered, this, [this]() {
+    if (QDialog *existing = findChild<QDialog *>(
+            QStringLiteral("CacheStatisticsDialog"))) {
+      existing->show();
+      existing->raise();
+      existing->activateWindow();
+      return;
+    }
+    auto *dialog = new QDialog(this);
+    dialog->setObjectName(QStringLiteral("CacheStatisticsDialog"));
+    dialog->setAttribute(Qt::WA_DeleteOnClose);
+    dialog->setWindowTitle(tr("Color-Screen Cache Statistics"));
+    dialog->resize(760, 430);
+    auto *layout = new QVBoxLayout(dialog);
+    auto *summary = new QLabel(dialog);
+    summary->setObjectName(QStringLiteral("CacheStatisticsSummary"));
+    summary->setWordWrap(true);
+    layout->addWidget(summary);
+
+    auto *table = new QTableWidget(dialog);
+    table->setObjectName(QStringLiteral("CacheStatisticsTable"));
+    table->setColumnCount(6);
+    table->setHorizontalHeaderLabels(
+        {tr("Core cache"), tr("Entries"), tr("Computing"), tr("Pinned"),
+         tr("Retained memory"), tr("Sizing")});
+    table->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    table->setSelectionMode(QAbstractItemView::NoSelection);
+    table->setAlternatingRowColors(true);
+    table->verticalHeader()->hide();
+    table->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
+    for (int col = 1; col <= 5; ++col)
+      table->horizontalHeader()->setSectionResizeMode(
+          col, QHeaderView::ResizeToContents);
+    layout->addWidget(table, 1);
+
+    auto *note = new QLabel(tr(
+        "These are estimated cache-owned bytes, not total process memory. "
+        "Active images, externally held render results and LibRaw working "
+        "buffers remain valid outside the LRU budget."), dialog);
+    note->setWordWrap(true);
+    layout->addWidget(note);
+    auto *buttons = new QDialogButtonBox(QDialogButtonBox::Close, dialog);
+    connect(buttons, &QDialogButtonBox::rejected,
+            dialog, &QDialog::close);
+    layout->addWidget(buttons);
+
+    const auto refresh = [summary, table]() {
+      const auto stats = colorscreen::get_cache_memory_statistics();
+      auto pretty = [](uint64_t bytes) {
+        return QLocale().formattedDataSize(
+            static_cast<qint64>(std::min<uint64_t>(
+                bytes, static_cast<uint64_t>(
+                    std::numeric_limits<qint64>::max()))),
+            1, QLocale::DataSizeIecFormat);
+      };
+      const QString total = stats.total_memory_bytes
+                                ? pretty(stats.total_memory_bytes)
+                                : QObject::tr("unknown");
+      const QString free = stats.available_memory_bytes
+                               ? pretty(stats.available_memory_bytes)
+                               : QObject::tr("unknown");
+      summary->setText(QObject::tr(
+          "System available: %1 / physical: %2     "
+          "Global cache budget: %3     "
+          "LRU-owned: %4     "
+          "Retained RAW mosaic: %5")
+                           .arg(free, total,
+                                pretty(stats.cache_budget_bytes),
+                                pretty(stats.cached_bytes),
+                                pretty(stats.retained_raw_source_bytes)));
+      table->setRowCount(static_cast<int>(stats.caches.size()));
+      for (int row = 0; row < table->rowCount(); ++row) {
+        const auto &entry = stats.caches[static_cast<size_t>(row)];
+        const QString values[] = {
+            QString::fromStdString(entry.name),
+            QString::number(static_cast<qulonglong>(entry.entries)),
+            QString::number(static_cast<qulonglong>(entry.in_progress)),
+            QString::number(static_cast<qulonglong>(entry.externally_pinned)),
+            entry.precise_size || entry.retained_bytes
+                ? pretty(entry.retained_bytes)
+                : QObject::tr("unknown"),
+            entry.precise_size ? QObject::tr("measured")
+                               : QObject::tr("lower bound")};
+        for (int col = 0; col < 6; ++col) {
+          auto *item = table->item(row, col);
+          if (!item) {
+            item = new QTableWidgetItem;
+            table->setItem(row, col, item);
+          }
+          item->setText(values[col]);
+          if (col != 0)
+            item->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        }
+      }
+    };
+    refresh();
+    auto *timer = new QTimer(dialog);
+    timer->setInterval(1000);
+    connect(timer, &QTimer::timeout, dialog, refresh);
+    timer->start();
+    dialog->show();
+  });
+
+  m_helpMenu->addSeparator();
   QAction *aboutAction = m_helpMenu->addAction(tr("&About Color-Screen"));
   connect(aboutAction, &QAction::triggered, this, [this]() {
     QMessageBox::about(
