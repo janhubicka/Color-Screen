@@ -76,6 +76,20 @@ DLL_PUBLIC bool reserve_raw_source_cache_bytes (uint64_t bytes);
 DLL_PUBLIC void release_raw_source_cache_bytes (uint64_t bytes);
 DLL_PUBLIC uint64_t raw_source_cache_bytes ();
 
+/* Count a cached vector's allocated capacity, not just its logical elements
+   or fixed-size descriptor. Packed vector<bool> requires separate sizing. */
+template <typename T, typename Allocator = std::allocator<T>>
+size_t
+lru_vector_cached_bytes (const std::vector<T, Allocator> &data)
+{
+  static_assert (!std::is_same<T, bool>::value,
+                 "packed vector<bool> requires separate byte sizing");
+  const size_t max = std::numeric_limits<size_t>::max ();
+  if (data.capacity () > (max - sizeof (data)) / sizeof (T))
+    return max;
+  return sizeof (data) + data.capacity () * sizeof (T);
+}
+
 /* LRU cache used keep various data between invocations of renderers.
    P represents parameters which are used to produce T.
    get_new is a function computing T based on P. It is expected to

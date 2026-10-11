@@ -242,8 +242,25 @@ typedef lru_cache<demosaiced_params<analyze_dufay>, demosaic_dufay, get_new_demo
 static dufay_analyzer_cache_t dufay_analyzer_cache ("dufay analyzer");
 static paget_analyzer_cache_t paget_analyzer_cache ("paget analyzer");
 static strips_analyzer_cache_t strips_analyzer_cache ("strips analyzer");
-static demosaic_paget_cache_t demosaic_paget_cache ("paget demosaic");
-static demosaic_dufay_cache_t demosaic_dufay_cache ("dufay demosaic");
+/* Completed screen-reconstruction demosaicing stores full-resolution RGB
+   pixels in a vector. For a 150 MP image the pixels dwarf the object itself,
+   so measure its retained capacity just as for the simulated image cache. */
+static size_t
+demosaic_paget_cached_bytes (const demosaic_paget &image)
+{
+  return sizeof (image) + image.demosaiced_pixel_bytes ();
+}
+
+static size_t
+demosaic_dufay_cached_bytes (const demosaic_dufay &image)
+{
+  return sizeof (image) + image.demosaiced_pixel_bytes ();
+}
+
+static demosaic_paget_cache_t demosaic_paget_cache (
+    "paget demosaic", 0, demosaic_paget_cached_bytes);
+static demosaic_dufay_cache_t demosaic_dufay_cache (
+    "dufay demosaic", 0, demosaic_dufay_cached_bytes);
 
 }
 

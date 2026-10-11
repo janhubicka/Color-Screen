@@ -136,6 +136,14 @@ public:
     return h.find_max (0.03);
   }
 
+  /* Return retained RGB pixel heap bytes for read-only LRU accounting.
+     Derived demosaicers may re-export the pixel vector privately. */
+  size_t
+  demosaiced_pixel_bytes () const
+  {
+    return m_demosaiced.capacity () * sizeof (rgbdata);
+  }
+
   std::vector<rgbdata> m_demosaiced;
 
 protected:

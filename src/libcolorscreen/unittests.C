@@ -5881,6 +5881,49 @@ test_lru_cache_byte_budget ()
       fprintf (stderr, "Weighted LRU did not coalesce concurrent generation\n");
       return false;
     }
+  /* A std::vector's reserved capacity must be measured, not its size or
+     descriptor. A too-large generated image remains usable by its caller
+     but must not be held in the LRU's global cache ownership. */
+  const size_t vector_limit = sizeof (std::vector<float>)
+                              + 8 * sizeof (float);
+  lru_cache<test_params, std::vector<float>, nullptr, 8>
+      image_cache ("simulated image vector sizing", vector_limit,
+                   lru_vector_cached_bytes<float>);
+  test_params small_image {4}, big_image {12};
+  auto make_image = [] (test_params &p, progress_info *)
+    {
+      auto image = std::make_unique<std::vector<float>> (1, 0.5f);
+      image->reserve ((size_t)p.x);
+      return image;
+    };
+  auto small_pixels
+      = image_cache.get_or_compute (small_image, nullptr, make_image);
+  const size_t small_bytes = sizeof (std::vector<float>) + 4 * sizeof (float);
+  if (!small_pixels || small_pixels->capacity () != 4
+      || image_cache.retained_bytes () != small_bytes
+      || image_cache.peek (small_image) != small_pixels)
+    {
+      fprintf (stderr, "Vector cache did not measure allocated capacity\n");
+      return false;
+    }
+  auto large_pixels = image_cache.get_or_compute (
+      big_image, nullptr, make_image);
+  if (!large_pixels || large_pixels->capacity () != 12
+      || image_cache.peek (big_image)
+      || image_cache.retained_bytes () != small_bytes
+      || image_cache.peek (small_image) != small_pixels)
+    {
+      fprintf (stderr, "Oversized simulated vector retained by cache\n");
+      return false;
+    }
+  histogram bucketed;
+  bucketed.set_range (0, 1, 64);
+  if (bucketed.cached_bytes ()
+      < sizeof (histogram) + 64 * sizeof (uint64_t))
+    {
+      fprintf (stderr, "Histogram cache size omitted bucket storage\n");
+      return false;
+    }
   return true;
 }
 
