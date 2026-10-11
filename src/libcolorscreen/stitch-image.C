@@ -911,17 +911,16 @@ img_pixel_known_p_wrap (void *data, coord_t sx, coord_t sy)
 bool
 stitch_image::write_row (TIFF * out, int y, uint16_t * outrow, const char **error, progress_info *progress)
 {
+  /* The caller owns OUT and OUTROW on both success and failure. The old
+     helper closed/freed them on error, and BOTH callers repeated that
+     cleanup, leading to a double free when a write failed or was cancelled. */
   if (progress && progress->cancel_requested ())
     {
-      free (outrow);
-      TIFFClose (out);
       *error = "Cancelled";
       return false;
     }
   if (TIFFWriteScanline (out, outrow, y, 0) < 0)
     {
-      free (outrow);
-      TIFFClose (out);
       *error = "Write error";
       return false;
     }
@@ -967,11 +966,21 @@ stitch_image::compare_contrast_with (stitch_image &other, progress_info *progres
   buf[4095]=0;
   snprintf (buf, 4095, "contrast-%03i-%s-%s",(int)((ratio -1) * 100 + 0.5), filename.c_str(), other.filename.c_str());
 
-  /* TODO: Error ignored.  */
-  const char *error;
-  if (!load_img (&error, progress)
-      || !other.load_img (&error, progress))
+  /* Borrow tiles independently; each successful acquisition is released
+     on EVERY early return (failed second load, TIFF creation, cancellation,
+     or write error). The global LRU then decides when the bytes are evicted. */
+  struct tile_loan
+  {
+    stitch_image *tile;
+    ~tile_loan () { if (tile) tile->release_img (); }
+  };
+  const char *error = nullptr;
+  if (!load_img (&error, progress))
     return;
+  tile_loan current_tile {this};
+  if (!other.load_img (&error, progress))
+    return;
+  tile_loan other_tile {&other};
   progress->pause_stdout ();
   printf ("Saving contrast diff %s\n", buf);
   progress->resume_stdout ();
@@ -1077,8 +1086,6 @@ stitch_image::compare_contrast_with (stitch_image &other, progress_info *progres
 	  return;
         }
     }
-  release_img ();
-  other.release_img ();
   free (outrow);
   TIFFClose (out);
 }
