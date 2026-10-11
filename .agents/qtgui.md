@@ -344,8 +344,9 @@ presentation window becomes the dock host. This avoids nested `QMainWindow` dock
 ownership without reintroducing panel-specific wiring. Changing Digital Capture's demosaic selection immediately requests the new
 cached RAW variant on a background worker (without a second Reload button).
 Capture demosaic Undo/Redo schedules the corresponding variant too, while
-generation cancellation suppresses stale results. Cached variants preserve
-the current document's Undo history; only independent file opens reset it.
+generation cancellation suppresses stale results. Same-image demosaicing preserves the current document's Undo history
+even when a file-backed decode fallback is required; only independent file
+opens reset it.
 Every newly computed image_data variant has its own unique image UID, so
 all derivative caches keyed by `image_data::id` cannot confuse algorithms.
 **Reload and demosaic** previously reloaded both the source scan and every associated

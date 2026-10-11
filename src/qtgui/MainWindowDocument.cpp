@@ -931,19 +931,13 @@ void MainWindow::openRecentFile(const QString &fileName) {
 }
 
 /** Request a new RAW demosaic variant from the cached sensor source.
-    Fall back to ordinary disk decoding when RAW retention was unavailable.
-    This asynchronous operation preserves Undo for cache-derived variants,
-    and the image identity changes only when different decoded pixels result. */
+    Fall back to disk decoding when RAW retention was unavailable. Both paths
+    represent the SAME image document and retain Undo, including the ability
+    to Undo the selection and return to a previously clean parameter state.
+    A genuinely independent Open still resets document Undo history. */
 void MainWindow::reloadCurrentImageWithDemosaic(bool autodetectScreen) {
   if (m_currentImageFile.isEmpty())
     return;
-  /* Cached variants preserve Undo/Redo, so that stack continues to
-     provide the authoritative dirty flag: undoing the demosaic edit may
-     return a clean document. Only the legacy disk-reload fallback clears
-     Undo and needs the persistent recovery-dirty fallback. */
-  if (isDocumentModified() &&
-      (!m_scan || !m_scan->has_unpacked_raw_source()))
-    m_recoveryDirty = true;
 
   if (autodetectScreen)
     m_imageLoad.screenAutodetectAfterGeneration = m_imageLoad.generation + 1;
@@ -1235,9 +1229,11 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
         // image_data (including a derived variant) retains its sensor mosaic.
         // Only an explicit same-file Reload and demosaic asks libcolorscreen
         // for a variant. Ordinary Open always reloads the file as before.
-        const std::shared_ptr<colorscreen::image_data> cachedRawSource =
+        const bool sameImageDemosaic =
             preferCachedRaw && outgoingImageFile == requestedImageFile &&
-                    outgoingScan && outgoingScan->has_unpacked_raw_source()
+            static_cast<bool>(outgoingScan);
+        const std::shared_ptr<colorscreen::image_data> cachedRawSource =
+            sameImageDemosaic && outgoingScan->has_unpacked_raw_source()
                 ? outgoingScan : nullptr;
         // A staged sidecar may select the demosaic algorithm needed to decode the
         // image, even though the rest of its state remains private until success.
@@ -1253,7 +1249,8 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
         connect(
             watcher, &QFutureWatcher<std::pair<bool, QString>>::finished, this,
             [this, watcher, progress, isCsprj, cachedRawSource,
-             requestedImageFile, allowInitialGuide, suggestDetectedMetadata,
+             sameImageDemosaic, requestedImageFile, allowInitialGuide,
+             suggestDetectedMetadata,
              loadGeneration, outgoingScan,
              outgoingImageFile, restoreOutgoingImage, sidecarStaging,
              suppressParamPrompt]() {
@@ -1371,11 +1368,11 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
                 else if (m_rparams.gamma == -1)
                   m_rparams.gamma = -1;
 
-                /* A cached demosaic variant is a new pixel representation
-                   of the SAME document/source, not an Open transaction.
-                   Preserve the captured parameter edit in Undo/Redo. Only
-                   independent file loads establish a new undo baseline. */
-                if (!cachedRawSource)
+                /* A demosaic reprocess is still the SAME document, even
+                   if an uncached Bayer source required a disk fallback.
+                   Retain the capture-mode edit, clean baseline and prior
+                   Undo commands. Only a new Open establishes a new history. */
+                if (!sameImageDemosaic)
                   m_undoStack->clear();
                 if (!suppressParamPrompt)
                   m_recoveryDirty = liveEditsWhileLoading;
