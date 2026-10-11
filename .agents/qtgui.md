@@ -352,8 +352,10 @@ all derivative caches keyed by `image_data::id` cannot confuse algorithms.
 slanted-edge reference using the current saved demosaic mode. For a conventional
 Bayer RAW whose unpacked sensor mosaic was retained (draft PR #536), the
 primary image may request a cached/on-demand decoder variant instead of
-opening and unpacking the same source file again; the reference images still
-reload independently from their own filenames. Each displayed variant retains its
+opening and unpacking the same source file again; independent slanted-edge
+reference views likewise reuse their own retained Bayer mosaics when the
+selected demosaic method changes. An explicit same-method reference reload
+still performs a fresh file decode with a distinct image identity. Each displayed variant retains its
 own opaque libcolorscreen sensor-source handle. The GUI must **not** keep
 an extra original-image cache across variants or maintain a byte budget:
 `libcolorscreen::lru_cache` owns byte-aware variant retention and eviction. Never copy this

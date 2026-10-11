@@ -562,15 +562,26 @@ void ImageViewWindow::loadReferenceImage(const QString &fileName) {
     obsolete->close();
   }
 
+  const QString requestedFile = QFileInfo(fileName).absoluteFilePath();
+  const auto demosaic = m_document
+      ? m_document->documentStateSnapshot().rparams.demosaic
+      : colorscreen::image_data::demosaic_none;
+  /* A reference view has its own RAW sensor source. Reuse it when the
+     capture demosaic method changes, but preserve an explicit same-method
+     Reload as a fresh independent file decode (and image UID). */
+  const std::shared_ptr<colorscreen::image_data> cachedRawSource =
+      m_scan && requestedFile == m_referenceFile &&
+              m_scan->has_unpacked_raw_source() &&
+              m_scan->demosaiced_by != demosaic
+          ? m_scan
+          : nullptr;
+
   // Invalidate immediately, even if the reload fails and leaves the old scan.
   cancelReferenceMtfMeasurement();
   m_referenceLoadPending = true;
-  m_referenceFile = QFileInfo(fileName).absoluteFilePath();
+  m_referenceFile = requestedFile;
   statusBar()->showMessage(tr("Opening slanted-edge reference…"));
 
-  const colorscreen::image_data::demosaicing_t demosaic =
-      m_document ? m_document->documentStateSnapshot().rparams.demosaic
-                 : colorscreen::image_data::demosaic_none;
   auto scan = std::make_shared<colorscreen::image_data>();
   auto progress = std::make_shared<colorscreen::progress_info>();
   progress->set_task("Opening slanted edge reference", 0);
@@ -584,14 +595,21 @@ void ImageViewWindow::loadReferenceImage(const QString &fileName) {
     m_referenceLoad.pendingScan.reset();
   }
 
-  runSynchronized([this, scan, path, progress, demosaic]() {
+  runSynchronized([this, scan, path, progress, demosaic,
+                   cachedRawSource]() mutable {
     bool ok = false;
     QString message;
     try {
       const char *error = nullptr;
       colorscreen::sub_task task(progress.get());
-      ok = scan->load(path.toUtf8().constData(), true, &error,
-                      progress.get(), demosaic);
+      if (cachedRawSource) {
+        scan = cachedRawSource->demosaiced_variant(
+            demosaic, &error, progress.get());
+        ok = static_cast<bool>(scan);
+      } else {
+        ok = scan->load(path.toUtf8().constData(), true, &error,
+                        progress.get(), demosaic);
+      }
       if (!ok && error)
         message = QString::fromUtf8(error);
     } catch (const std::exception &error) {
