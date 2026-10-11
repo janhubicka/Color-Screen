@@ -81,6 +81,23 @@ public:
     return m_mode;
   }
 
+  /* Compare persisted grid values and correction mode, not transient
+     reduction diagnostics or this resource's cache identity.  */
+  bool
+  equal_p (const scanner_blur_correction_parameters &other) const
+  {
+    if (m_width != other.m_width || m_height != other.m_height
+        || m_mode != other.m_mode)
+      return false;
+    if (!m_corrections || !other.m_corrections)
+      return m_corrections == other.m_corrections;
+    const size_t n = (size_t)m_width * (size_t)m_height;
+    for (size_t i = 0; i < n; ++i)
+      if (m_corrections[i] != other.m_corrections[i])
+        return false;
+    return true;
+  }
+
   /* Unique id of the image (used for caching).  */
   uint64_t id;
 

@@ -6,15 +6,25 @@
 #include "include/colorscreen.h"
 namespace colorscreen
 {
+/* Allocate a fresh zero-filled correction table. Reject invalid/overflowing
+   dimensions and leave existing correction samples unchanged on failure. */
 bool
 backlight_correction_parameters::alloc (int width, int height, bool enabled[4])
 {
-  try {
-  m_luminosities.resize (width * height);
-  } catch (...)
-  {
+  if (width <= 0 || height <= 0 || !enabled
+      || (size_t)width > (size_t)std::numeric_limits<int>::max ()
+                              / (size_t)height)
     return false;
-  }
+  std::vector<entry> cells;
+  try
+    {
+      cells.resize ((size_t)width * (size_t)height);
+    }
+  catch (...)
+    {
+      return false;
+    }
+  m_luminosities.swap (cells);
   m_width = width;
   m_height = height;
   black_correction = false;
@@ -332,7 +342,11 @@ backlight_correction_parameters::load (FILE *f, const char **error)
       *error = "expected backlight_correction_lums";
       return false;
     }
-  alloc (width, height, enabled);
+  if (!alloc (width, height, enabled))
+    {
+      *error = "invalid or oversized backlight correction dimensions";
+      return false;
+    }
   black_correction = false;
   for (int y = 0; y < m_height; y++)
     {

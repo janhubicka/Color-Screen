@@ -4,9 +4,12 @@
 #include "include/render-parameters.h"
 #include "include/render-type-parameters.h"
 #include "include/scr-to-img-parameters.h"
+#include "include/scr-detect-parameters.h"
+#include "include/solver-parameters.h"
 
 #include <cstdio>
 #include <string>
+#include <vector>
 
 namespace colorscreen
 {
@@ -80,6 +83,16 @@ DLL_PUBLIC void
 apply_parameter_archive_image_area (const parameter_archive_image_area &bounds,
                                     render_parameters *rparam);
 
+/* Return false with a diagnostic if document parameters include saved values
+   that the historical .par serializer cannot represent at all. Reject such
+   output before truncating/replacing any destination rather than silently
+   losing JSON/v1-only inputs when exporting a legacy file. Either pointer
+   may be null for a partial CLI workflow; this is not a CSP syntax check. */
+DLL_PUBLIC bool
+legacy_csp_can_represent_parameters (
+    const scr_to_img_parameters *geometry,
+    const render_parameters *render, std::string *error);
+
 /* Parsed compatibility information from a Color-Screen parameter archive.  */
 struct parameter_archive_manifest
 {
@@ -146,6 +159,185 @@ write_parameter_payload_file (
     const parameter_archive_render_overrides *render_overrides = nullptr,
     const parameter_archive_geometry_final_frame *geometry_final_frame = nullptr,
     const parameter_archive_image_area *image_area = nullptr);
+
+
+/* Compose one complete native JSON schema-v2 document from the core and
+   Qt profile-spot processing/calibration inputs. Every component is encoded
+   directly from typed C++ state, without a legacy CSP mirror or ZIP wrapper.
+   OUTPUT is not modified if a component is invalid. This in-memory API does
+   not alter the alpha GUI/CLI default save target or perform file I/O. */
+DLL_PUBLIC bool
+encode_parameter_json_v2_document (
+    const scr_to_img_parameters &geometry,
+    const scr_detect_parameters &detection,
+    const render_parameters &render,
+    const solver_parameters &solver,
+    const std::vector<point_t> &profile_spots,
+    std::string *output, std::string *error);
+
+/* Parse a complete schema-v2 JSON document with one syntax tree and decode
+   all persistent parameter domains into private state. An invalid header,
+   missing/unknown required feature, malformed nested array, or failed
+   decoder leaves *all* caller outputs unchanged. */
+DLL_PUBLIC bool
+decode_parameter_json_v2_document (
+    const std::string &input,
+    scr_to_img_parameters *geometry,
+    scr_detect_parameters *detection,
+    render_parameters *render,
+    solver_parameters *solver,
+    std::vector<point_t> *profile_spots,
+    std::string *error);
+
+/* True if the first non-whitespace byte of UTF-8 path NAME begins a
+   native JSON document. This is signature-based dispatch only; the typed
+   schema-v2 reader must still validate the format marker and version. */
+DLL_PUBLIC bool parameter_json_v2_signature_p (const char *name);
+
+/* Read a complete plain JSON v2 parameter file from a UTF-8 host pathname.
+   Every persistent core/Qt-spot input is parsed as typed JSON; no CSP
+   stream or ZIP is involved. All destinations remain unchanged on error. */
+DLL_PUBLIC bool
+read_parameter_json_v2_file (
+    const char *name, scr_to_img_parameters *geometry,
+    scr_detect_parameters *detection, render_parameters *render,
+    solver_parameters *solver, std::vector<point_t> *profile_spots,
+    std::string *error);
+
+/* Atomically save one complete JSON v2 parameter file to UTF-8 path NAME.
+   The existing sibling-staging and native replacement primitive preserves
+   an older destination if any serialization, write or rename fails.
+   This explicit API does not change normal alpha Save/Save As defaults. */
+DLL_PUBLIC bool
+write_parameter_json_v2_file (
+    const char *name, const scr_to_img_parameters &geometry,
+    const scr_detect_parameters &detection,
+    const render_parameters &render, const solver_parameters &solver,
+    const std::vector<point_t> &profile_spots, std::string *error);
+
+/* Serialize one native JSON v2 registration component.
+
+   This is a lossless building block for the eventual complete schema-v2
+   document, NOT a standalone .cspar writer. It reads these structures
+   directly, without constructing or parsing legacy CSP text. It includes
+   accepted screen geometry (including mesh and final frame), detection dye
+   controls, solver policy/points and profile spots. The full document writer
+   must not be exposed until every persistent domain has native coverage.
+   OUTPUT remains unchanged on failure. */
+DLL_PUBLIC bool
+encode_parameter_json_v2_registration (
+    const scr_to_img_parameters &geometry,
+    const scr_detect_parameters &detection,
+    const solver_parameters &solver,
+    const std::vector<point_t> &profile_spots,
+    std::string *output, std::string *error);
+
+/* Encode the scalar capture-input component as native JSON v2.
+   This covers capture identification, RAW demosaicing choice, gamma, scan
+   presentation, physical and photographic bounds, and exposure/dark-point
+   controls. It does not serialize correction grids or scanner MTF, which have
+   separate required native components still to implement. The returned
+   object is not a complete standalone .cspar v2 document. */
+DLL_PUBLIC bool
+encode_parameter_json_v2_capture (
+    const render_parameters &capture, std::string *output,
+    std::string *error);
+
+/* Decode capture-input values transactionally into CAPTURE, retaining all
+   unrelated processing controls. On failure CAPTURE is unchanged. */
+DLL_PUBLIC bool
+decode_parameter_json_v2_capture (
+    const std::string &input, render_parameters *capture,
+    std::string *error);
+
+/* Encode image-layer and colour-screen reconstruction controls as native
+   JSON. Includes the infrared policy, RGB mixer, collection and demosaicing
+   selections, screen blur/threshold, and both independent denoising stages.
+   This remains a component: no full v2 .cspar writer exists yet. */
+DLL_PUBLIC bool
+encode_parameter_json_v2_reconstruction (
+    const render_parameters &render, std::string *output,
+    std::string *error);
+
+/* Decode the reconstruction component transactionally into RENDER while
+   leaving unrelated capture, sharpening and colour state untouched. */
+DLL_PUBLIC bool
+decode_parameter_json_v2_reconstruction (
+    const std::string &input, render_parameters *render,
+    std::string *error);
+
+/* Encode historical process colour-model, screen strip widths, dye
+   aging/density and complete contact-copy characteristic curve into native
+   JSON. This is a component for a future complete v2 document. */
+DLL_PUBLIC bool
+encode_parameter_json_v2_process (
+    const render_parameters &render, std::string *output,
+    std::string *error);
+
+/* Decode process parameters transactionally without changing other render
+   controls, or the document, on failure. */
+DLL_PUBLIC bool
+decode_parameter_json_v2_process (
+    const std::string &input, render_parameters *render,
+    std::string *error);
+
+/* Serialize persistent colour calibration and appearance, including scanner
+   primaries, process-profile RGB matrices, balance/observer adjustments and
+   editable output tone curve. Output monitor profile and transfer gamma are
+   per-render resources and deliberately absent. */
+DLL_PUBLIC bool
+encode_parameter_json_v2_color (
+    const render_parameters &render, std::string *output,
+    std::string *error);
+
+/* Decode one native colour/appearance component transactionally into RENDER
+   while retaining all unrelated processing controls and caches. */
+DLL_PUBLIC bool
+decode_parameter_json_v2_color (
+    const std::string &input, render_parameters *render,
+    std::string *error);
+
+/* Serialize all persistent capture sharpening and MTF settings directly
+   into JSON, including each measured transfer curve, uncertainty and spatial
+   provenance. Do not include derived fit tables or transient fit options.
+   This is a component, not a complete schema-v2 .cspar writer. */
+DLL_PUBLIC bool
+encode_parameter_json_v2_sharpness (
+    const render_parameters &render, std::string *output,
+    std::string *error);
+
+/* Parse native sharpness and MTF input transactionally, without modifying
+   unrelated processing/calibration state if an input is malformed. */
+DLL_PUBLIC bool
+decode_parameter_json_v2_sharpness (
+    const std::string &input, render_parameters *render,
+    std::string *error);
+
+/* Encode all persistent spatial calibration grids directly into JSON:
+   backlight luminosity/subtraction samples, scanner blur correction cells,
+   and the full stitched-tile exposure/dark-point/blur grid. Reduction
+   diagnostics are derived and excluded. No legacy text or ZIP intermediary. */
+DLL_PUBLIC bool
+encode_parameter_json_v2_correction_grids (
+    const render_parameters &render, std::string *output,
+    std::string *error);
+
+/* Parse the complete correction-grid component into newly allocated
+   resources, then commit to RENDER only on total success. */
+DLL_PUBLIC bool
+decode_parameter_json_v2_correction_grids (
+    const std::string &input, render_parameters *render,
+    std::string *error);
+
+/* Parse the native JSON v2 registration component into independent temporary
+   state, committing only when all fields and bounds are valid. This prevents
+   a malformed field from partially mutating a live document. ERROR gives a
+   diagnostic; all outputs remain unchanged on failure. */
+DLL_PUBLIC bool
+decode_parameter_json_v2_registration (
+    const std::string &input, scr_to_img_parameters *geometry,
+    scr_detect_parameters *detection, solver_parameters *solver,
+    std::vector<point_t> *profile_spots, std::string *error);
 
 }
 

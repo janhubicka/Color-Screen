@@ -40,6 +40,9 @@ EXTRA_DIST              = defs.sh $(TESTS) \
 			  slanted-gaussian-soft-mtf.txt \
 			  generate-slanted-edge-tests.sh \
 			  validate-mtf-physical-model.py \
+			  check-parameter-v2-inventory.py \
+			  check-parameter-v2-corpus.py \
+			  parameter-v2-key-inventory.tsv \
 			  benchmark-screen-detection.py
 
 TEST_LOG_DRIVER = env AM_TAP_AWK='$(AWK)' $(SHELL) \
@@ -68,11 +71,24 @@ CLEANFILES              = slanted-edge-1.log \
                           paget_lmmse_test.tiff \
                           dufay_rcd_test.tiff \
                           out-parameter-archive.cspar \
+                          out-parameter-native-v2.cspar \
+                          out-parameter-native-v2.tif \
+                          out-parameter-v2-to-v1.cspar \
+                          out-parameter-legacy-loss-guard.cspar \
+                          out-parameter-legacy-loss-guard.par \
+                          out-parameter-legacy-loss-guard.log \
+                          out-parameter-crlf-input.par \
+                          out-parameter-crlf-normal.par \
+                          out-parameter-crlf-native.cspar \
+                          out-parameter-crlf-restored.par \
+                          out-parameter-crlf-extension.par \
+                          out-parameter-crlf-extension-normal.par \
                           out-parameter-legacy.tif \
                           out-parameter-archive.tif
 
 TESTS                   = unittests.test \
                           raw-demosaic-cache.test \
+                          parameter-v2-corpus.test \
                           parameter-archive-cli.test \
 			  dufaycolor_nikon_coolsan9000ED_4000DPI_raw.test  \
 			  dufaycolor_nikon_coolsan9000ED_4000DPI_raw-finetune.test \

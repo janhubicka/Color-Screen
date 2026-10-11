@@ -2090,9 +2090,22 @@ bool scopedPresetSmoke() {
       target.detect != colorscreen::scr_detect_parameters() ||
       target.rparams.capture_type != captureTypeBeforeProcess ||
       !target.rparams.contact_copy.simulate ||
-      target.rparams.color_model != source.rparams.color_model)
+      target.rparams.color_model != source.rparams.color_model ||
+      target.rparams.ignore_infrared != source.rparams.ignore_infrared)
     return fail(QStringLiteral(
-        "Process preset failed to isolate/clear registration correctly"));
+        "Process preset failed to restore IR policy or clear registration"));
+
+  // An existing preset saved before the ignoreInfrared metadata was added
+  // cannot express that policy. Preserve the active choice rather than
+  // interpreting the missing field as an instruction to turn IR back on.
+  auto historicalProcessPreset = processPreset;
+  historicalProcessPreset.extras.remove(QStringLiteral("ignoreInfrared"));
+  target.rparams.ignore_infrared = true;
+  if (!qtgui_presets::apply(historicalProcessPreset, &target,
+                            &clearedRegistration, &error) ||
+      target.rparams.ignore_infrared != true)
+    return fail(QStringLiteral(
+        "Legacy Process preset overwrote an unspecified infrared policy"));
 
   // Reconstruction recipes may change algorithms but must not replace accepted
   // measured/fitted transfer evidence.

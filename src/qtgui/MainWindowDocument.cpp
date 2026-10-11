@@ -133,14 +133,28 @@ bool saveParameterPayloadAtomically(
     const colorscreen::scr_detect_parameters *detect,
     const colorscreen::render_parameters &render,
     const colorscreen::solver_parameters &solver,
-    const std::vector<colorscreen::point_t> &profileSpots, QString *error) {
+    const std::vector<colorscreen::point_t> &profileSpots, QString *error,
+    bool jsonV2 = false) {
+  // Native v2 files are one authoritative JSON document; bypass the CSP
+  // serializer and ZIP wrapper entirely. Use the same core atomic writer.
+  if (jsonV2) {
+    const colorscreen::scr_detect_parameters defaultDetection;
+    const auto &detection = detect ? *detect : defaultDetection;
+    const QByteArray targetName = path.toUtf8();
+    std::string writeError;
+    const bool written = colorscreen::write_parameter_json_v2_file(
+        targetName.constData(), scrToImg, detection, render, solver,
+        profileSpots, &writeError);
+    if (error)
+      *error = written ? QString() : QString::fromUtf8(writeError);
+    return written;
+  }
   if (!archive) {
-    if (render.image_area.set) {
+    std::string formatError;
+    if (!colorscreen::legacy_csp_can_represent_parameters(
+            &scrToImg, &render, &formatError)) {
       if (error)
-        *error = QCoreApplication::translate(
-            "MainWindow",
-            "Legacy .par cannot preserve the photographic image area. "
-            "Save as .cspar or clear the inner image area first.");
+        *error = QString::fromStdString(formatError);
       return false;
     }
     return qtgui_io::saveStdioAtomically(
@@ -192,14 +206,40 @@ bool saveRecoveryTextAtomically(const QString &path, const QString &text) {
 bool loadParameterPayload(
     const QString &path, ParameterState *state,
     std::vector<colorscreen::color_match> *spotResults, bool *isArchive,
-    QString *error) {
+    QString *error, bool *isJsonV2 = nullptr) {
   if (!state)
     return false;
+
+  const QByteArray encodedPath = path.toUtf8();
+  if (colorscreen::parameter_json_v2_signature_p(encodedPath.constData())) {
+    // Decode into a fresh document; a malformed or future JSON file must not
+    // fall back to legacy CSP or publish even a subset of its parameters.
+    ParameterState loadedState;
+    std::string jsonError;
+    const bool loaded = colorscreen::read_parameter_json_v2_file(
+        encodedPath.constData(), &loadedState.scrToImg, &loadedState.detect,
+        &loadedState.rparams, &loadedState.solver,
+        &loadedState.profileSpots, &jsonError);
+    if (!loaded) {
+      if (error)
+        *error = QString::fromUtf8(jsonError);
+      return false;
+    }
+    *state = std::move(loadedState);
+    if (spotResults)
+      spotResults->clear();  // Derived per-view measurements are not file state.
+    if (isArchive)
+      *isArchive = true;  // Both .cspar encodings, vs legacy .par.
+    if (isJsonV2)
+      *isJsonV2 = true;
+    if (error)
+      error->clear();
+    return true;
+  }
 
   std::string openError;
   bool archive = false;
   colorscreen::parameter_archive_manifest archiveManifest;
-  const QByteArray encodedPath = path.toUtf8();
   FILE *f = colorscreen::open_parameter_payload(
       encodedPath.constData(), &archive, &openError, &archiveManifest);
   if (!f) {
@@ -248,6 +288,8 @@ bool loadParameterPayload(
     *spotResults = std::move(loadedSpotResults);
   if (isArchive)
     *isArchive = archive;
+  if (isJsonV2)
+    *isJsonV2 = false;
   if (error)
     error->clear();
   return true;
@@ -296,7 +338,7 @@ void MainWindow::onOpenParameters() {
 
   auto *dialog = new QFileDialog(
       this, tr("Open Parameters"), initialPath,
-      tr("Color-Screen parameters (*.cspar *.par);;Archive parameters (*.cspar);;Legacy parameters (*.par);;All Files (*)"));
+      tr("Color-Screen parameters (*.cspar *.par);;JSON v2 or compatible ZIP v1 (*.cspar);;Legacy parameters (*.par);;All Files (*)"));
   dialog->setObjectName(QStringLiteral("ParameterOpenFileDialog"));
   dialog->setFileMode(QFileDialog::ExistingFile);
   dialog->setAcceptMode(QFileDialog::AcceptOpen);
@@ -336,7 +378,8 @@ void MainWindow::onSaveParameters() {
 void MainWindow::onSaveParametersAs() { saveParametersAs(); }
 
 /** Atomically write the current document parameters and mark them saved. */
-bool MainWindow::saveParametersToFile(const QString &fileName) {
+bool MainWindow::saveParametersToFile(
+    const QString &fileName, ParameterSaveFormat requestedFormat) {
   if (m_parameterSaveFailurePrompt) {
     QPointer<QMessageBox> obsolete = m_parameterSaveFailurePrompt;
     m_parameterSaveFailurePrompt.clear();
@@ -347,20 +390,51 @@ bool MainWindow::saveParametersToFile(const QString &fileName) {
   const bool preservingCurrentTarget =
       !m_parameterFile.suggested && !m_parameterFile.path.isEmpty() &&
       QFileInfo(m_parameterFile.path).absoluteFilePath() == absoluteFileName;
-  const ParameterFileState::Format format =
-      preservingCurrentTarget
-          ? m_parameterFile.format
-          : (absoluteFileName.endsWith(QLatin1String(".cspar"),
-                                       Qt::CaseInsensitive)
-                 ? ParameterFileState::Format::Archive
-                 : ParameterFileState::Format::LegacyCsp);
+  // Explicit Save As choices take precedence; ordinary Save retains the
+  // exact physical format of a loaded target, not merely its .cspar suffix.
+  const bool csparTarget =
+      absoluteFileName.endsWith(QLatin1String(".cspar"), Qt::CaseInsensitive);
+  const QByteArray encodedTarget = absoluteFileName.toUtf8();
+  const bool existingZipV1 =
+      csparTarget && colorscreen::parameter_archive_signature_p(
+                         encodedTarget.constData());
+  const bool existingJsonV2 =
+      csparTarget && colorscreen::parameter_json_v2_signature_p(
+                         encodedTarget.constData());
+  // Never reinterpret an unfamiliar existing .cspar as a fresh JSON file
+  // unless the operator explicitly chose a conversion in Save As.
+  const bool unrecognizedExistingTarget =
+      requestedFormat == ParameterSaveFormat::PreserveOrInfer &&
+      !preservingCurrentTarget && csparTarget &&
+      QFile::exists(absoluteFileName) && !existingZipV1 && !existingJsonV2;
+  ParameterFileState::Format format = ParameterFileState::Format::LegacyCsp;
+  if (requestedFormat == ParameterSaveFormat::JsonV2)
+    format = ParameterFileState::Format::JsonV2;
+  else if (requestedFormat == ParameterSaveFormat::ArchiveV1)
+    format = ParameterFileState::Format::Archive;
+  else if (requestedFormat == ParameterSaveFormat::LegacyCsp)
+    format = ParameterFileState::Format::LegacyCsp;
+  else if (preservingCurrentTarget)
+    format = m_parameterFile.format;
+  else if (csparTarget) {
+    // An established ZIP-v1 destination keeps its format. A new .cspar
+    // defaults to native JSON v2, while ordinary Save above respects the
+    // loaded file's format even though both formats use this suffix.
+    format = existingZipV1 ? ParameterFileState::Format::Archive
+                           : ParameterFileState::Format::JsonV2;
+  }
+  const bool jsonV2 = format == ParameterFileState::Format::JsonV2;
   const bool archive = format == ParameterFileState::Format::Archive;
   const bool hasRgb = m_scan && m_scan->has_rgb();
   QString error;
-  if (!saveParameterPayloadAtomically(
+  if (unrecognizedExistingTarget)
+    error = tr("An existing .cspar file has an unrecognized format. "
+               "Select an explicit format in Save As to replace it.");
+  if (unrecognizedExistingTarget ||
+      !saveParameterPayloadAtomically(
           absoluteFileName, archive, m_scrToImgParams,
-          hasRgb ? &m_detectParams : nullptr, m_rparams, m_solverParams,
-          m_profileSpots, &error)) {
+          (hasRgb || jsonV2) ? &m_detectParams : nullptr,
+          m_rparams, m_solverParams, m_profileSpots, &error, jsonV2)) {
     // The write result is synchronous because closeEvent needs it immediately,
     // but its explanation must not enter a nested event loop while close/save
     // policy is still on the stack. Veto the close first and let Qt present the
@@ -404,30 +478,35 @@ bool MainWindow::saveParametersAs() {
   if (initialPath.isEmpty())
     initialPath =
         fileDialogDirectoryPreference(QStringLiteral("lastParameterDir"));
-  const QString archiveFilter = tr("Archive parameters (*.cspar)");
+  const QString archiveFilter = tr("Compatible archive v1 (*.cspar)");
+  const QString jsonFilter = tr("JSON parameters v2 (*.cspar)");
   const QString legacyFilter = tr("Legacy parameters (*.par)");
   const QString allFilter = tr("All Files (*)");
-  // A new document defaults to the versioned archive. Existing/suggested
-  // targets keep their explicit physical format so Save As never silently
-  // converts a legacy workflow merely because the new default changed.
-  QString selectedFilter =
-      m_parameterFile.path.isEmpty()
-          ? archiveFilter
-          : (m_parameterFile.format == ParameterFileState::Format::Archive
-                 ? archiveFilter
-                 : legacyFilter);
+  // Fresh targets default to native JSON v2. Existing/suggested ZIP-v1 and
+  // legacy targets retain their physical encoding until explicit Save As.
+  QString selectedFilter = jsonFilter;
+  if (!m_parameterFile.path.isEmpty()) {
+    if (m_parameterFile.format == ParameterFileState::Format::JsonV2)
+      selectedFilter = jsonFilter;
+    else if (m_parameterFile.format == ParameterFileState::Format::LegacyCsp)
+      selectedFilter = legacyFilter;
+  }
   QString fileName = QFileDialog::getSaveFileName(
       this, tr("Save Parameters"), initialPath,
-      archiveFilter + QStringLiteral(";;") + legacyFilter +
-          QStringLiteral(";;") + allFilter,
-      &selectedFilter);
+      jsonFilter + QStringLiteral(";;") + archiveFilter +
+          QStringLiteral(";;") + legacyFilter +
+          QStringLiteral(";;") + allFilter, &selectedFilter);
   if (fileName.isEmpty())
     return false;
 
+  ParameterSaveFormat chosen = ParameterSaveFormat::PreserveOrInfer;
   if (selectedFilter == legacyFilter) {
+    chosen = ParameterSaveFormat::LegacyCsp;
     if (!fileName.endsWith(QLatin1String(".par"), Qt::CaseInsensitive))
       fileName += QStringLiteral(".par");
-  } else if (selectedFilter == archiveFilter) {
+  } else if (selectedFilter == archiveFilter || selectedFilter == jsonFilter) {
+    chosen = selectedFilter == jsonFilter ? ParameterSaveFormat::JsonV2
+                                         : ParameterSaveFormat::ArchiveV1;
     if (!fileName.endsWith(QLatin1String(".cspar"), Qt::CaseInsensitive))
       fileName += QStringLiteral(".cspar");
   } else if (!fileName.endsWith(QLatin1String(".par"), Qt::CaseInsensitive) &&
@@ -435,7 +514,7 @@ bool MainWindow::saveParametersAs() {
                                 Qt::CaseInsensitive)) {
     fileName += QStringLiteral(".cspar");
   }
-  return saveParametersToFile(fileName);
+  return saveParametersToFile(fileName, chosen);
 }
 
 /** Atomically write a human-readable provenance snapshot followed by the exact
@@ -507,9 +586,11 @@ bool MainWindow::saveReproducibilityReportToFile(const QString &fileName,
   metadata.insert(QStringLiteral("parameter_file_state"), parameterState);
   metadata.insert(
       QStringLiteral("parameter_file_format"),
-      m_parameterFile.format == ParameterFileState::Format::Archive
-          ? QStringLiteral("archive")
-          : QStringLiteral("legacy"));
+      m_parameterFile.format == ParameterFileState::Format::JsonV2
+          ? QStringLiteral("json-v2")
+          : (m_parameterFile.format == ParameterFileState::Format::Archive
+                 ? QStringLiteral("archive")
+                 : QStringLiteral("legacy")));
   metadata.insert(QStringLiteral("document_modified"), isDocumentModified());
   metadata.insert(QStringLiteral("registration_point_count"),
                   static_cast<int>(state.solver.n_points()));
@@ -1049,8 +1130,10 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
     std::vector<colorscreen::color_match> spotResults;
     QString loadedPath;
     bool loadedArchive = false;
+    bool loadedJsonV2 = false;
     QString suggestedPath;
     bool suggestedArchive = false;
+    bool suggestedJsonV2 = false;
     std::optional<ParameterState> baseline;
   };
   auto sidecarStaging = std::make_shared<SidecarLoadStaging>();
@@ -1216,9 +1299,11 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
                           std::move(sidecarStaging->spotResults);
                       m_parameterFile.setLoaded(
                           sidecarStaging->loadedPath,
-                          sidecarStaging->loadedArchive
-                              ? ParameterFileState::Format::Archive
-                              : ParameterFileState::Format::LegacyCsp);
+                          sidecarStaging->loadedJsonV2
+                              ? ParameterFileState::Format::JsonV2
+                              : (sidecarStaging->loadedArchive
+                                     ? ParameterFileState::Format::Archive
+                                     : ParameterFileState::Format::LegacyCsp));
                       addToRecentParams(sidecarStaging->loadedPath);
 
                       if (colorscreen::screen_geometry_configured_p(
@@ -1228,9 +1313,11 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
                     } else {
                       m_parameterFile.setSuggested(
                           sidecarStaging->loadedPath,
-                          sidecarStaging->loadedArchive
-                              ? ParameterFileState::Format::Archive
-                              : ParameterFileState::Format::LegacyCsp);
+                          sidecarStaging->loadedJsonV2
+                              ? ParameterFileState::Format::JsonV2
+                              : (sidecarStaging->loadedArchive
+                                     ? ParameterFileState::Format::Archive
+                                     : ParameterFileState::Format::LegacyCsp));
                       inspectorStatusBar()->showMessage(
                           tr("Image loaded; sidecar parameters were not applied "
                              "because settings changed while the image was loading."),
@@ -1239,9 +1326,11 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
                   } else if (!sidecarStaging->suggestedPath.isEmpty()) {
                     m_parameterFile.setSuggested(
                         sidecarStaging->suggestedPath,
-                        sidecarStaging->suggestedArchive
-                            ? ParameterFileState::Format::Archive
-                            : ParameterFileState::Format::LegacyCsp);
+                        sidecarStaging->suggestedJsonV2
+                            ? ParameterFileState::Format::JsonV2
+                            : (sidecarStaging->suggestedArchive
+                                   ? ParameterFileState::Format::Archive
+                                   : ParameterFileState::Format::LegacyCsp));
                   }
                 }
 
@@ -1516,38 +1605,47 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
               ParameterState sidecarState;
               std::vector<colorscreen::color_match> sidecarSpotResults;
               bool sidecarArchive = false;
+              bool sidecarJsonV2 = false;
               QString loadError;
               if (!loadParameterPayload(sidecarFile, &sidecarState,
                                         &sidecarSpotResults, &sidecarArchive,
-                                        &loadError)) {
+                                        &loadError, &sidecarJsonV2)) {
                 // Parsing failed, so the named sidecar is at most a later
                 // Save-As suggestion. Publish that suggestion only if the
                 // image itself opens successfully.
                 sidecarStaging->suggestedPath = sidecarFile;
                 sidecarStaging->suggestedArchive = haveArchive;
+                sidecarStaging->suggestedJsonV2 =
+                    haveArchive && colorscreen::parameter_json_v2_signature_p(
+                                       sidecarFile.toUtf8().constData());
                 showParameterLoadFailure(this, loadError);
               } else {
                 sidecarStaging->state = std::move(sidecarState);
                 sidecarStaging->spotResults = std::move(sidecarSpotResults);
                 sidecarStaging->loadedPath = sidecarFile;
                 sidecarStaging->loadedArchive = sidecarArchive;
+                sidecarStaging->loadedJsonV2 = sidecarJsonV2;
               }
             } else {
               // Declining the optional question retains the chosen existing
               // sidecar only as a format-aware Save-As suggestion.
               sidecarStaging->suggestedPath = sidecarFile;
               sidecarStaging->suggestedArchive = haveArchive;
+              sidecarStaging->suggestedJsonV2 =
+                  haveArchive && colorscreen::parameter_json_v2_signature_p(
+                                     sidecarFile.toUtf8().constData());
             }
 
             startImageRead();
           });
       question->open();
     } else {
-      // No sidecar exists. The post-migration natural Save-As target is the
-      // versioned archive; explicit/declined legacy sidecars above still retain
-      // LegacyCsp identity.
+      // New sidecars default to plain JSON v2. Existing or declined ZIP-v1
+      // and legacy sidecars keep their original physical format, and a
+      // suggested path still requires an explicit Save As before overwrite.
       sidecarStaging->suggestedPath = archiveFile;
       sidecarStaging->suggestedArchive = true;
+      sidecarStaging->suggestedJsonV2 = true;
       startImageRead();
     }
   } else {
@@ -1811,12 +1909,14 @@ void MainWindow::saveRecoveryState() {
   const QDir directory(m_recoveryDir);
   const QString paramsPath =
       directory.filePath(QStringLiteral("recovery_params.cspar"));
-  const bool hasRgb = m_scan->has_rgb();
   QString paramsError;
+  // A recovery snapshot must contain every persistent input even if the
+  // user's normal target remains ZIP-v1 or .par. The complete native JSON v2
+  // codec and existing atomic staging preserve that invariant without a
+  // second, lossy CSP representation.
   if (!saveParameterPayloadAtomically(
-          paramsPath, true, m_scrToImgParams,
-          hasRgb ? &m_detectParams : nullptr, m_rparams, m_solverParams,
-          m_profileSpots, &paramsError)) {
+          paramsPath, false, m_scrToImgParams, &m_detectParams, m_rparams,
+          m_solverParams, m_profileSpots, &paramsError, true)) {
     // Preserve the previous usable recovery snapshot and its image/target
     // metadata rather than publishing metadata for a snapshot we did not save.
     qWarning() << "Could not atomically save recovery parameters to" << paramsPath
@@ -1824,8 +1924,8 @@ void MainWindow::saveRecoveryState() {
     return;
   }
 
-  // A newly complete archive supersedes the old per-document legacy snapshot.
-  // Remove it only after archive commit succeeds, so an interrupted migration
+  // A newly complete native JSON snapshot supersedes the old .par recovery.
+  // Remove it only after a successful atomic commit, so an interrupted migration
   // can still restore the older snapshot.
   const QString oldParamsPath =
       directory.filePath(QStringLiteral("recovery_params.par"));
@@ -1843,9 +1943,11 @@ void MainWindow::saveRecoveryState() {
                                  : QStringLiteral("0\n")) +
       (isDocumentModified() ? QStringLiteral("1\n")
                             : QStringLiteral("0\n")) +
-      (m_parameterFile.format == ParameterFileState::Format::Archive
-           ? QStringLiteral("archive\n")
-           : QStringLiteral("legacy\n"));
+      (m_parameterFile.format == ParameterFileState::Format::JsonV2
+           ? QStringLiteral("json-v2\n")
+           : (m_parameterFile.format == ParameterFileState::Format::Archive
+                  ? QStringLiteral("archive\n")
+                  : QStringLiteral("legacy\n")));
   if (!saveRecoveryTextAtomically(
           directory.filePath(QStringLiteral("recovery_params_meta.txt")),
           meta)) {
@@ -1856,9 +1958,9 @@ void MainWindow::saveRecoveryState() {
 
 /** Restore this document from its private recovery payload.
 
-   Prefer complete .cspar snapshots, falling back to old .par snapshots only
-   when no archive exists. Parse transactionally, preserve structured render
-   values, and keep invalid/incomplete recoveries dirty. Returns false only
+   Prefer complete native JSON or legacy ZIP .cspar snapshots, falling back
+   to old .par snapshots only when no .cspar exists. Parse transactionally,
+   preserve structured render state, and keep invalid recoveries dirty. Returns false only
    when the directory contains no usable recovery reference. */
 bool MainWindow::restoreRecoveryState() {
   if (m_recoveryDir.isEmpty())
@@ -1892,8 +1994,8 @@ bool MainWindow::restoreRecoveryState() {
   if (QFile::exists(paramsPath)) {
     // A present archive is authoritative. Never silently fall back to an
     // obsolete .par if the archive is corrupt: that would recover stale state.
-    // The shared loader parses into private defaults, validates the full ZIP
-    // manifest and Qt postamble, then applies required structured render state.
+    // The shared loader validates native JSON v2 or the old ZIP-v1
+    // manifest + Qt postamble into private state before publication.
     ParameterState recoveredState;
     std::vector<colorscreen::color_match> recoveredSpotResults;
     bool recoveredArchive = false;
@@ -1930,12 +2032,14 @@ bool MainWindow::restoreRecoveryState() {
     const QString dirtyFlag = in.readLine().trimmed();
     const QString recoveredFormat = in.readLine().trimmed();
     const ParameterFileState::Format format =
-        recoveredFormat == QLatin1String("archive") ||
+        recoveredFormat == QLatin1String("json-v2")
+            ? ParameterFileState::Format::JsonV2
+            : ((recoveredFormat == QLatin1String("archive") ||
                 (recoveredFormat.isEmpty() &&
                  recoveredParameterPath.endsWith(
-                     QLatin1String(".cspar"), Qt::CaseInsensitive))
-            ? ParameterFileState::Format::Archive
-            : ParameterFileState::Format::LegacyCsp;
+                     QLatin1String(".cspar"), Qt::CaseInsensitive)))
+                   ? ParameterFileState::Format::Archive
+                   : ParameterFileState::Format::LegacyCsp);
     if (recoveredParameterPathSuggested)
       m_parameterFile.setSuggested(recoveredParameterPath, format);
     else
@@ -1996,9 +2100,10 @@ bool MainWindow::loadParameterFile(const QString &fileName) {
   ParameterState loadedState;
   std::vector<colorscreen::color_match> loadedSpotResults;
   bool loadedArchive = false;
+  bool loadedJsonV2 = false;
   QString loadError;
   if (!loadParameterPayload(fileName, &loadedState, &loadedSpotResults,
-                            &loadedArchive, &loadError)) {
+                            &loadedArchive, &loadError, &loadedJsonV2)) {
     showParameterLoadFailure(this, loadError);
     return false;
   }
@@ -2043,8 +2148,9 @@ bool MainWindow::loadParameterFile(const QString &fileName) {
   const QString absoluteFileName = QFileInfo(fileName).absoluteFilePath();
   m_parameterFile.setLoaded(
       absoluteFileName,
-      loadedArchive ? ParameterFileState::Format::Archive
-                    : ParameterFileState::Format::LegacyCsp);
+      loadedJsonV2 ? ParameterFileState::Format::JsonV2
+                   : (loadedArchive ? ParameterFileState::Format::Archive
+                                    : ParameterFileState::Format::LegacyCsp));
   rememberFileDialogDirectory(QStringLiteral("lastParameterDir"),
                               absoluteFileName);
 

@@ -483,7 +483,10 @@ struct render_parameters
     {
       return dark_point == other.dark_point
              && exposure == other.exposure
-             && scanner_blur_correction == other.scanner_blur_correction;
+             && (scanner_blur_correction == other.scanner_blur_correction
+                 || (scanner_blur_correction && other.scanner_blur_correction
+                     && scanner_blur_correction->equal_p (
+                           *other.scanner_blur_correction)));
     }
 
     /* Return true if THIS and OTHER are not equal.  */
@@ -805,6 +808,7 @@ struct render_parameters
            && scanner_green == other.scanner_green
            && scanner_blue == other.scanner_blue && age == other.age
  	   && dye_density == other.dye_density
+           && temperature == other.temperature
            && backlight_temperature == other.backlight_temperature
            && dark_point == other.dark_point
            && scan_exposure == other.scan_exposure
@@ -815,8 +819,14 @@ struct render_parameters
 	   && collection_quality == other.collection_quality
 	   && screen_demosaic == other.screen_demosaic
 	   && demosaiced_scaling == other.demosaiced_scaling
-           && scanner_blur_correction == other.scanner_blur_correction
-           && backlight_correction == other.backlight_correction
+           && (scanner_blur_correction == other.scanner_blur_correction
+               || (scanner_blur_correction && other.scanner_blur_correction
+                   && scanner_blur_correction->equal_p (
+                          *other.scanner_blur_correction)))
+           && (backlight_correction == other.backlight_correction
+               || (backlight_correction && other.backlight_correction
+                   && backlight_correction->equal_p (
+                          *other.backlight_correction)))
            && backlight_correction_black == other.backlight_correction_black
 	   && observer_whitepoint == other.observer_whitepoint
 	   && output_tone_curve == other.output_tone_curve

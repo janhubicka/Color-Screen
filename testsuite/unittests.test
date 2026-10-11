@@ -11,6 +11,13 @@ if test -z "$srcdir"; then
     test "${VERBOSE+set}" != set && VERBOSE=1
 fi
 
+# Check the complete legacy-key migration inventory before running the C++
+# codec round trips. A new persistent field must be classified explicitly.
+# TOP_SRCDIR comes from Automake TESTS_ENVIRONMENT and resolves the
+# source tree even when distcheck runs tests in a separate _build/sub tree.
+# $0/$srcdir may instead refer to a build-tree script location there.
+python3 "$top_srcdir/testsuite/check-parameter-v2-inventory.py"
+
 ../src/libcolorscreen/unittests
 
 # Exercise the serializer as a complete document-state round trip, not only the

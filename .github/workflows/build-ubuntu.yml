@@ -177,6 +177,19 @@ jobs:
       run: CXXFLAGS="-Ofast -flto=auto" CFLAGS="$CXXFLAGS" ./configure --enable-qtgui
     - name: make distcheck
       run: make -j$(nproc) distcheck
+    - name: Show failed distcheck TAP logs
+      if: failure()
+      run: |
+        # Automake distcheck runs under _build/sub, not _build. Print the
+        # captured diagnostics where the reason for a pre-plan exit lives.
+        for log in colorscreen-*/_build/sub/testsuite/unittests.log \
+                   colorscreen-*/_build/sub/testsuite/parameter-v2-corpus.log \
+                   colorscreen-*/_build/sub/testsuite/test-suite.log; do
+          if [ -f "$log" ]; then
+            echo "=== $log ==="
+            tail -n 180 "$log"
+          fi
+        done
     - name: Upload Test Results
       if: always()
       uses: actions/upload-artifact@v4
@@ -189,6 +202,9 @@ jobs:
           colorscreen-*/_build/testsuite/*.txt
           colorscreen-*/_build/testsuite/*.log
           colorscreen-*/_build/testsuite/*.par
+          colorscreen-*/_build/sub/testsuite/*.txt
+          colorscreen-*/_build/sub/testsuite/*.log
+          colorscreen-*/_build/sub/testsuite/*.par
     - uses: actions/upload-artifact@v4
       with:
         name: source-tarball
