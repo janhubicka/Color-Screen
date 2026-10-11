@@ -5767,6 +5767,306 @@ test_lru_cache_concurrency ()
   return ok;
 }
 
+/* Test the optional byte budget in libcolorscreen's generic cache.
+   The budget counts cached ownership, not externally pinned shared_ptr data.
+   Oversized values still return to their caller but are not retained. */
+struct weighted_test_value
+{
+  explicit weighted_test_value (int n) : weight ((size_t)n) {}
+  size_t weight;
+};
+
+std::atomic<int> weighted_test_calls {0};
+
+std::unique_ptr<weighted_test_value>
+get_new_weighted_test (test_params &p, progress_info *)
+{
+  ++weighted_test_calls;
+  return std::make_unique<weighted_test_value> (p.x);
+}
+
+size_t
+weighted_test_bytes (const weighted_test_value &v)
+{
+  return v.weight;
+}
+
+bool
+test_lru_cache_byte_budget ()
+{
+  lru_cache<test_params, weighted_test_value, get_new_weighted_test, 32>
+      cache ("weighted test", 10, weighted_test_bytes);
+  test_params four {4}, five {5}, six {6}, large {12};
+  weighted_test_calls = 0;
+  bool hit = true;
+
+  auto v4 = cache.get (four, nullptr, nullptr, &hit);
+  if (!v4 || hit || cache.retained_bytes () != 4)
+    return false;
+  auto v5 = cache.get (five, nullptr, nullptr, &hit);
+  if (!v5 || hit || cache.retained_bytes () != 9)
+    return false;
+  /* A peek is an LRU use, so the older 5-byte value is evicted rather than
+     the newer 4-byte one. Holding V5 must not stop the eviction or destroy it. */
+  auto keep_four = cache.peek (four);
+  auto v6 = cache.get (six, nullptr, nullptr, &hit);
+  if (!v6 || hit || cache.retained_bytes () != 10
+      || cache.peek (five) || !cache.peek (four)
+      || !cache.peek (six) || v5->weight != 5)
+    {
+      fprintf (stderr, "Weighted LRU failed to evict the oldest owned entry\n");
+      return false;
+    }
+  auto v12 = cache.get (large, nullptr, nullptr, &hit);
+  if (!v12 || hit || v12->weight != 12 || cache.peek (large)
+      || cache.retained_bytes () != 10
+      || weighted_test_calls != 4)
+    {
+      fprintf (stderr, "Weighted LRU retained an oversized result\n");
+      return false;
+    }
+
+  /* The evicted but pinned 5-byte value survives independently. Loading
+     its key again must compute a new result rather than resurrecting it. */
+  auto another_five = cache.get (five, nullptr, nullptr, &hit);
+  if (!another_five || hit || another_five == v5
+      || another_five->weight != 5
+      || weighted_test_calls != 5 || cache.retained_bytes () > 10)
+    {
+      fprintf (stderr, "Weighted LRU improperly reused an evicted value\n");
+      return false;
+    }
+
+  v4.reset ();
+  v5.reset ();
+  v6.reset ();
+  v12.reset ();
+  another_five.reset ();
+  keep_four.reset ();
+  cache.prune ();
+  if (cache.retained_bytes () != 0)
+    {
+      fprintf (stderr, "Weighted LRU prune left cache-owned byte charges\n");
+      return false;
+    }
+
+  /* The generator-less form coalesces caller-provided computations and
+     applies the same byte budget without a frontend-specific cache type. */
+  lru_cache<test_params, weighted_test_value, nullptr, 16>
+      built ("callback weighted test", 9, weighted_test_bytes);
+  test_params seven {7};
+  std::atomic<int> build_calls {0};
+  std::array<std::shared_ptr<weighted_test_value>, 8> results;
+  std::vector<std::thread> threads;
+  for (size_t i = 0; i < results.size (); ++i)
+    threads.emplace_back ([&built, &seven, &results, &build_calls, i] ()
+      {
+        results[i] = built.get_or_compute (
+            seven, nullptr,
+            [&build_calls] (test_params &key, progress_info *)
+            {
+              ++build_calls;
+              std::this_thread::sleep_for (std::chrono::milliseconds (10));
+              return std::make_unique<weighted_test_value> (key.x);
+            });
+      });
+  for (std::thread &worker : threads)
+    worker.join ();
+  for (const auto &slot : results)
+    if (!slot || slot != results[0])
+      return false;
+  if (build_calls != 1 || built.retained_bytes () != 7
+      || built.byte_capacity () != 9)
+    {
+      fprintf (stderr, "Weighted LRU did not coalesce concurrent generation\n");
+      return false;
+    }
+  return true;
+}
+
+/* Force a tiny global budget to validate eviction *across* otherwise
+   independent LRU instances without allocating gigabytes or relying on the
+   machine's free memory. The override is internal to libcolorscreen tests. */
+bool
+test_lru_global_memory_budget ()
+{
+  lru_cache_registry &registry = lru_cache_registry::instance ();
+  struct restore_budget
+  {
+    lru_cache_registry &cache_registry;
+    ~restore_budget () { cache_registry.set_test_budget_bytes (0); }
+  } restore {registry};
+  registry.set_test_budget_bytes (10);
+
+  bool hit = true;
+  test_params zero {0}, five {5}, six {6};
+  {
+    lru_cache<test_params, weighted_test_value,
+              get_new_weighted_test, 16>
+        first ("global weight five", 0, weighted_test_bytes);
+    lru_cache<test_params, weighted_test_value,
+              get_new_weighted_test, 16>
+        second ("global weight six", 0, weighted_test_bytes);
+
+    /* This older zero-cost entry is deliberately in the *same* cache as
+       the five-byte value. Global eviction must discard a charged entry
+       rather than this older uncharged one and prematurely give up. */
+    auto uncharged = first.get (zero, nullptr, nullptr, &hit);
+    if (!uncharged || hit || first.retained_bytes () != 0)
+      return false;
+    auto externally_pinned = first.get (five, nullptr, nullptr, &hit);
+    if (!externally_pinned || hit || first.retained_bytes () != 5)
+      return false;
+    auto held_six = second.get (six, nullptr, nullptr, &hit);
+    if (!held_six || hit || first.retained_bytes () != 0
+        || second.retained_bytes () != 6
+        || externally_pinned->weight != 5
+        || uncharged->weight != 0 || first.peek (zero) != uncharged
+        || first.peek (five))
+      {
+        fprintf (stderr,
+                 "Global LRU did not evict the oldest independent cache\n");
+        return false;
+      }
+
+    const cache_memory_statistics report = get_cache_memory_statistics ();
+    bool saw_first = false, saw_second = false;
+    for (const auto &entry : report.caches)
+      {
+        if (entry.name == "global weight five")
+          saw_first = entry.entries == 1 && entry.retained_bytes == 0;
+        if (entry.name == "global weight six")
+          saw_second = entry.entries == 1 && entry.retained_bytes == 6
+                       && entry.precise_size && entry.externally_pinned == 1;
+      }
+    if (report.cache_budget_bytes != 10 || !saw_first || !saw_second
+        || report.cached_bytes + report.retained_raw_source_bytes > 10)
+      {
+        fprintf (stderr,
+                 "Global LRU per-cache report/budget does not match ownership\n");
+        return false;
+      }
+
+    /* Sensor resources share the SAME admission/eviction budget. A large
+       source reservation displaces the decoded cache rather than being
+       restricted to an unrelated hardcoded 256 MiB quota. */
+    if (!reserve_raw_source_cache_bytes (8))
+      {
+        fprintf (stderr, "Global LRU failed to admit a source reservation\n");
+        return false;
+      }
+    const auto reserved = get_cache_memory_statistics ();
+    release_raw_source_cache_bytes (8);
+    if (reserved.retained_raw_source_bytes < 8
+        || reserved.cached_bytes + reserved.retained_raw_source_bytes > 10
+        || held_six->weight != 6)
+      {
+        fprintf (stderr,
+                 "Global LRU source reservation did not evict decoded bytes\n");
+        return false;
+      }
+  }
+
+  /* Registry metadata must not retain references to a destructed cache. */
+  for (const auto &entry : get_cache_memory_statistics ().caches)
+    if (entry.name == "global weight five"
+        || entry.name == "global weight six")
+      return false;
+
+  /* A 150+ MP RGB capture can occupy approximately 900 MiB of decoded
+     pixels. Exercise an equivalent cache weight WITHOUT allocating a large
+     image or relying on the CI runner's physical RAM. A 2 GiB available
+     cache budget must retain the full value alongside a 300 MiB unpacked
+     Bayer CFA reservation, rather than silently retaining neither due to a
+     historical 256 MiB hard cap. */
+  constexpr uint64_t gib = UINT64_C (1024) * 1024 * 1024;
+  constexpr int rgb_bytes = 900 * 1024 * 1024;
+  constexpr uint64_t mosaic_bytes = UINT64_C (300) * 1024 * 1024;
+  registry.set_test_budget_bytes (2 * gib);
+  {
+    lru_cache<test_params, weighted_test_value,
+              get_new_weighted_test, 8>
+        huge ("simulated 150 MP RGB", 0, weighted_test_bytes);
+    test_params rgb {rgb_bytes};
+    auto image = huge.get (rgb, nullptr, nullptr, &hit);
+    const bool retained = image && !hit
+                          && huge.retained_bytes () == (size_t)rgb_bytes;
+    const bool reserved = reserve_raw_source_cache_bytes (mosaic_bytes);
+    const cache_memory_statistics report = get_cache_memory_statistics ();
+    if (reserved)
+      release_raw_source_cache_bytes (mosaic_bytes);
+    if (!retained || !reserved
+        || report.cache_budget_bytes != 2 * gib
+        || report.cached_bytes < (size_t)rgb_bytes
+        || report.retained_raw_source_bytes < mosaic_bytes
+        || image->weight != (size_t)rgb_bytes)
+      {
+        fprintf (stderr,
+                 "Global LRU rejected simulated 150 MP image under 2 GiB budget\n");
+        return false;
+      }
+  }
+  /* Evicting a decoded RAW variant can drop the last reference to its CFA
+     source. The shared global budget must count that release before
+     considering the next independent image. The old deferred-destruction
+     batch loop would evict BOTH 10+35-byte source and the newer 50-byte
+     result under a 50-byte budget, even though the latter fits alone. */
+  registry.set_test_budget_bytes (100);
+  {
+    struct source_owning_test_value
+    {
+      size_t weight;
+      uint64_t reserved_raw_bytes;
+      source_owning_test_value (size_t w, uint64_t raw)
+          : weight (w), reserved_raw_bytes (raw) {}
+      ~source_owning_test_value ()
+      {
+        if (reserved_raw_bytes)
+          release_raw_source_cache_bytes (reserved_raw_bytes);
+      }
+    };
+    lru_cache<test_params, source_owning_test_value, nullptr, 8>
+        source_cache ("eviction releases RAW mosaic", 0,
+                      +[] (const source_owning_test_value &v)
+                      { return v.weight; });
+    lru_cache<test_params, weighted_test_value,
+              get_new_weighted_test, 8>
+        independent_cache ("eviction preserves newer image", 0,
+                           weighted_test_bytes);
+    test_params source_key {10}, independent_key {50};
+    const uint64_t original_raw_bytes = raw_source_cache_bytes ();
+    if (!reserve_raw_source_cache_bytes (35))
+      return false;
+    auto source_variant = source_cache.get_or_compute (
+        source_key, nullptr,
+        [] (test_params &, progress_info *)
+        { return std::make_unique<source_owning_test_value> (10, 35); });
+    if (!source_variant)
+      {
+        release_raw_source_cache_bytes (35);
+        return false;
+      }
+    source_variant.reset ();
+    auto newer = independent_cache.get (independent_key, nullptr);
+    if (!newer)
+      return false;
+    newer.reset ();
+
+    registry.set_test_budget_bytes (50);
+    registry.enforce_budget ();
+    if (source_cache.peek (source_key)
+        || !independent_cache.peek (independent_key)
+        || raw_source_cache_bytes () != original_raw_bytes
+        || independent_cache.retained_bytes () != 50)
+      {
+        fprintf (stderr,
+                 "Global eviction discarded a fitting image after releasing RAW source\\n");
+        return false;
+      }
+  }
+  return true;
+}
+
 /* test_spectrum_dyes_to_xyz performs unit tests for the spectrum_dyes_to_xyz class.  */
 bool
 test_spectrum_dyes_to_xyz ()
@@ -12132,9 +12432,9 @@ test_raw_source_variants ()
           return false;
         }
       if (!source.has_unpacked_raw_source ()
-          || !source.has_rgb ())
+          || !source.has_rgb () || !computed->has_unpacked_raw_source ())
         {
-          fprintf (stderr, "Variant request discarded original source\n");
+          fprintf (stderr, "Variant request discarded reusable RAW source\n");
           return false;
         }
       const image_data::pixel after = source.get_rgb_pixel (47, 61);
@@ -12225,6 +12525,39 @@ test_raw_source_variants ()
       || baseline.b != after_threads.b)
     {
       fprintf (stderr, "Concurrent RAW requests changed source pixels\n");
+      return false;
+    }
+
+  /* The cache must not depend on a Qt document retaining the initial RAW.
+     A displayed derivative can request another algorithm even after the
+     original image_data is gone. No original/derivative ownership cycle. */
+  std::weak_ptr<image_data> original_weak;
+  std::shared_ptr<image_data> retained;
+  {
+    auto original = std::make_shared<image_data> ();
+    if (!original->load (path, true, &error, nullptr,
+                         image_data::demosaic_linear))
+      return false;
+    original_weak = original;
+    retained = original->demosaiced_variant (image_data::demosaic_PPG,
+                                            &error);
+    if (!retained || !retained->has_unpacked_raw_source ())
+      {
+        fprintf (stderr, "RAW derivative does not retain its sensor source\n");
+        return false;
+      }
+  }
+  if (!original_weak.expired ())
+    {
+      fprintf (stderr, "RAW derivative unexpectedly owns original image\n");
+      return false;
+    }
+  auto from_retained = retained->demosaiced_variant (
+      image_data::demosaic_AHD, &error);
+  if (!from_retained || !same_pixels (*from_retained, *results[0]))
+    {
+      fprintf (stderr, "RAW reprocessing after original release failed: %s\n",
+               error ? error : "pixel/geometry mismatch");
       return false;
     }
   return true;
@@ -12378,6 +12711,10 @@ main (int argc, char **argv)
     { "hd_sorting", "hd sorting tests", [] () { return test_hd_sorting (); } },
     { "tone_curve", "custom tone curve tests", [] () { return test_custom_tone_curve (); } },
     { "lru_cache", "lru cache concurrency tests", [] () { return test_lru_cache_concurrency (); } },
+    { "lru_cache_byte_budget", "size-aware LRU eviction and concurrent generation",
+      [] () { return test_lru_cache_byte_budget (); } },
+    { "lru_global_memory", "global LRU eviction, diagnostics and RAM admission",
+      [] () { return test_lru_global_memory_budget (); } },
     { "spectrum", "spectrum to xyz tests", [] () { return test_spectrum_dyes_to_xyz (); } },
     { "whitepoint", "whitepoint consistency tests", [] () { return test_whitepoint_constants (); } },
     { "darkroom", "darkroom simulation tests", [] () { return test_darkroom (); } },

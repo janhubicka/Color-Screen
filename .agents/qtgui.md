@@ -346,8 +346,10 @@ slanted-edge reference using the current saved demosaic mode. For a conventional
 Bayer RAW whose unpacked sensor mosaic was retained (draft PR #536), the
 primary image may request a cached/on-demand decoder variant instead of
 opening and unpacking the same source file again; the reference images still
-reload independently from their own filenames. The GUI keeps an original
-`image_data` owner for that mosaic across variant displays. Never copy this
+reload independently from their own filenames. Each displayed variant retains its
+own opaque libcolorscreen sensor-source handle. The GUI must **not** keep
+an extra original-image cache across variants or maintain a byte budget:
+`libcolorscreen::lru_cache` owns byte-aware variant retention and eviction. Never copy this
 resource into `ParameterState`, Undo or parameter archives: `demosaic`
 itself remains the persistent input choice. The image replacement generation
 gate remains authoritative, including source replacement, cancellation and
@@ -1291,7 +1293,13 @@ inputs remain `ignore_infrared`, `demosaiced_scaling` and
 `observer_whitepoint`. Saved appearance tone curve and physical colour
 calibration remain document-owned.
 
-Keep `demosaic` saved for reopening the original capture. A future on-demand
-`image_data` raw/demosaic resource cache must retain a lossless original
-mosaic, key reconstructed results by decoder inputs, bound memory usage, and
-isolate in-flight results across image-load generations.
+Keep `demosaic` saved for reopening the original capture. Core
+`image_data::demosaiced_variant()` retains the reusable Bayer source and
+uses the OS-memory-aware global `libcolorscreen::lru_cache` registry;
+the Qt frontend does not own a duplicate RAW decoder cache or control the
+memory budget. Help → Cache Statistics… is a read-only dialog that displays
+the core's installed/available memory, shared budget, retained Bayer source
+bytes and per-cache entry/byte/pin estimates, with no Qt cache policy. Cache keys
+include source generation and demosaic method, and old worker generations
+cannot publish into the current image view. Remain frontend-neutral so
+other applications can use exactly the same image-loading resources.

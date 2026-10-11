@@ -5,8 +5,12 @@
 #include <thread>
 #include <atomic>
 #include <memory>
+#include <cstddef>
 #include <condition_variable>
 #include <type_traits>
+#include <limits>
+#include <vector>
+#include "include/cache-stats.h"
 #include "include/progress-info.h"
 #include "include/dllpublic.h"
 
@@ -32,6 +36,45 @@ private:
   DLL_PUBLIC static std::atomic_uint64_t time;
 };
 extern class lru_caches lru_caches;
+
+/* The non-template registry coordinates eviction and read-only statistics
+   across every simple and tiled LRU in libcolorscreen. Its implementation
+   lives in the core library, never in a frontend. The registry lock is always
+   acquired BEFORE a cache mutex; caches notify it only after unlocking their
+   own mutex. Returned evicted references are destroyed after releasing the
+   registry lock, so destructors cannot reenter cache pruning under a lock. */
+class tracked_lru_cache
+{
+public:
+  virtual ~tracked_lru_cache () = default;
+  virtual cache_entry_statistics cache_statistics (uint64_t *oldest) = 0;
+  virtual std::shared_ptr<void> discard_oldest_cache_entry () = 0;
+};
+
+class DLL_PUBLIC lru_cache_registry
+{
+public:
+  static lru_cache_registry &instance ();
+  void register_cache (tracked_lru_cache *);
+  void unregister_cache (tracked_lru_cache *);
+  cache_memory_statistics snapshot ();
+  void enforce_budget (uint64_t extra_bytes = 0);
+
+  /* Internal deterministic test hook; zero restores the OS-based budget.
+     It is intentionally absent from the installed public cache-stats API. */
+  void set_test_budget_bytes (uint64_t bytes);
+
+private:
+  std::mutex registry_mutex;
+  std::vector<tracked_lru_cache *> caches;
+};
+
+/* Reserve/release unpacked Bayer CFA memory against the same global cache
+   policy. Reserving requires no Qt-specific memory service. Release is atomic
+   so a retired image can die while another cache lock is still held. */
+DLL_PUBLIC bool reserve_raw_source_cache_bytes (uint64_t bytes);
+DLL_PUBLIC void release_raw_source_cache_bytes (uint64_t bytes);
+DLL_PUBLIC uint64_t raw_source_cache_bytes ();
 
 /* LRU cache used keep various data between invocations of renderers.
    P represents parameters which are used to produce T.
@@ -90,6 +133,9 @@ struct lru_entry_base
   uint64_t id;
   uint64_t last_used;
   bool computing = false;
+  /* Bytes retained by the cache's strong ownership (not external pins).
+     Zero for an in-flight entry or when no byte budget is configured. */
+  size_t cached_bytes = 0;
 };
 
 /* RAII guard to manage the computing flag and notifications. 
@@ -131,7 +177,7 @@ struct computing_guard
    ENTRY is the entry structure.
    DERIVED is the final class type.  */
 template <typename P, typename T, typename Entry, typename Derived>
-class abstract_lru_cache
+class abstract_lru_cache : public tracked_lru_cache
 {
   static const bool verbose = false;
 
@@ -141,15 +187,101 @@ protected:
   std::mutex lock;
   std::condition_variable cond;
   const char *name;
+  /* An optional cache-owned byte budget; external shared_ptr owners are
+     deliberately excluded from this accounting. Zero disables this limit. */
+  const size_t max_cached_bytes;
+  size_t cached_bytes = 0;
+  size_t (*value_bytes) (const T &);
 
-  /* Initialize the cache with a NAME and BASE_SIZE.  */
-  abstract_lru_cache (const char *n, int base_size)
-      : entries (NULL), cache_size (base_size), name (n)
+  /* Initialize the cache with count and optional byte budgets. */
+  abstract_lru_cache (const char *n, int base_size,
+                      size_t max_bytes = 0,
+                      size_t (*weight) (const T &) = nullptr)
+      : entries (NULL), cache_size (base_size), name (n),
+        max_cached_bytes (max_bytes), value_bytes (weight)
   {
+    lru_cache_registry::instance ().register_cache (this);
+  }
+
+  cache_entry_statistics
+  cache_statistics (uint64_t *oldest) override
+  {
+    std::unique_lock<std::mutex> guard (lock);
+    cache_entry_statistics stat;
+    stat.name = name ? name : "unnamed";
+    stat.retained_bytes = cached_bytes;
+    stat.precise_size = value_bytes != nullptr;
+    uint64_t least_recent = std::numeric_limits<uint64_t>::max ();
+    for (Entry *e = entries; e; e = e->next)
+      {
+        ++stat.entries;
+        if (e->computing)
+          ++stat.in_progress;
+        if (e->val && e->val.use_count () > 1)
+          ++stat.externally_pinned;
+        if (e->val && e->cached_bytes && !e->computing
+            && e->last_used < least_recent)
+          least_recent = e->last_used;
+      }
+    if (oldest)
+      *oldest = least_recent;
+    return stat;
+  }
+
+  /* Detach the oldest owned result, even if a renderer independently pins
+     it. The aliasing shared_ptr defers any image destruction until after
+     global registry locks have been released by the caller. */
+  std::shared_ptr<void>
+  discard_oldest_cache_entry () override
+  {
+    std::unique_lock<std::mutex> guard (lock);
+    Entry **victim = nullptr;
+    for (Entry **slot = &entries; *slot; slot = &(*slot)->next)
+      if ((*slot)->val && (*slot)->cached_bytes && !(*slot)->computing
+          && (!victim || (*slot)->last_used < (*victim)->last_used))
+        victim = slot;
+    if (!victim)
+      return {};
+    Entry *old = *victim;
+    *victim = old->next;
+    cached_bytes -= old->cached_bytes;
+    std::shared_ptr<void> detached (old->val, nullptr);
+    delete old;
+    return detached;
+  }
+
+  /* Release the least recently used completed entries until NEED bytes
+     will fit. Even an externally pinned value can leave this cache; its
+     shared_ptr remains alive for the owner, without counting towards the
+     cache's retained-byte limit. Never remove an in-progress computation
+     or the just-computed PROTECTED entry. Called with LOCK held. */
+  void
+  make_room_for_bytes (size_t need, Entry *protected_entry,
+                       std::vector<std::shared_ptr<void>> &retired)
+  {
+    while (cached_bytes > max_cached_bytes - need)
+      {
+        Entry **victim = nullptr;
+        for (Entry **slot = &entries; *slot; slot = &(*slot)->next)
+          if ((*slot) != protected_entry && !(*slot)->computing
+              && (*slot)->val
+              && (!victim || (*slot)->last_used < (*victim)->last_used))
+            victim = slot;
+        if (!victim)
+          break;
+        Entry *old = *victim;
+        *victim = old->next;
+        cached_bytes -= old->cached_bytes;
+        /* Keep its data alive until the caller unlocks this cache; a
+           derived image destructor may touch other LRU instances. */
+        retired.emplace_back (old->val, nullptr);
+        delete old;
+      }
   }
 
   virtual ~abstract_lru_cache ()
   {
+    lru_cache_registry::instance ().unregister_cache (this);
     prune ();
     if (entries)
       fprintf (stderr, "Claimed entries in cache %s. Leaking memory\n", name);
@@ -177,6 +309,10 @@ protected:
     if (progress)
       progress->wait ("unlocking cache");
 
+    /* Recycled or evicted image_data values can prune other core caches in
+       their destructor. Defer their final destruction until this cache's
+       mutex is unlocked, avoiding lock-order inversions and reentrancy. */
+    std::vector<std::shared_ptr<void>> retired;
     std::unique_lock<std::mutex> guard (lock, std::defer_lock);
     if (!progress)
       guard.lock ();
@@ -253,6 +389,10 @@ protected:
         e = longest_unused;
         if (verbose)
           fprintf (stderr, "Cache %s: deleting id %i\n", name, (int)e->id);
+        cached_bytes -= e->cached_bytes;
+        e->cached_bytes = 0;
+        if (e->val)
+          retired.emplace_back (e->val, nullptr);
         e->val = nullptr;
       }
     else
@@ -269,6 +409,7 @@ protected:
     e->last_used = time;
 
     guard.unlock ();
+    retired.clear ();
     std::shared_ptr<T> ret_val;
     {
       computing_guard cguard (e->computing, lock, cond);
@@ -279,22 +420,66 @@ protected:
       ret_val = e->val;
       cguard.finished ();
     }
-    cond.notify_all ();
-
-    if (id_out)
-      *id_out = e->id;
+    /* Preserve the return value independently of cache ownership. A result
+       larger than the byte budget is useful to its caller but is not cached.
+       Releasing cache ownership of an externally pinned victim does not
+       invalidate that owner's shared_ptr. */
+    const uint64_t entry_id = e->id;
+    if (ret_val)
+      {
+        /* Historical caches of float[] remain count-only: an unbounded
+           array has neither sizeof(T) nor a generic per-value size. For
+           every ordinary object, track at least its descriptor size, or use
+           the supplied complete byte-size callback. This measurement is
+           also visible in the global statistics panel. */
+        size_t weight = 0;
+        if constexpr (!std::is_array<T>::value)
+          weight = value_bytes ? value_bytes (*ret_val) : sizeof (T);
+        if (!max_cached_bytes || weight <= max_cached_bytes)
+          {
+            if (max_cached_bytes)
+              make_room_for_bytes (weight, e, retired);
+            e->cached_bytes = weight;
+            cached_bytes += weight;
+          }
+        else
+          {
+            /* The caller receives a completed oversized result even when
+               the cache itself cannot retain it. */
+            for (Entry **slot = &entries; *slot; slot = &(*slot)->next)
+              if (*slot == e)
+                {
+                  *slot = e->next;
+                  delete e;
+                  break;
+                }
+          }
+      }
     if (!ret_val)
       {
-        for (Entry **e2 = &entries;; e2 = &(*e2)->next)
-          if (*e2 == e)
+        for (Entry **slot = &entries; *slot; slot = &(*slot)->next)
+          if (*slot == e)
             {
-              *e2 = e->next;
+              *slot = e->next;
               delete e;
               break;
             }
       }
+    cond.notify_all ();
+
+    if (id_out)
+      *id_out = entry_id;
     if (verbose && ret_val)
-      fprintf (stderr, "Cache %s: added id %i size %i\n", name, (int)e->id, (int)size);
+      fprintf (stderr, "Cache %s: added id %i size %i\n", name,
+               (int)entry_id, (int)size);
+
+    /* Global eviction may inspect *other* cache instances. Never take the
+       registry lock while holding this cache's mutex. The returned image
+       already has its own shared_ptr so even immediate eviction is safe. */
+    guard.unlock ();
+    retired.clear ();
+    if (ret_val)
+      lru_cache_registry::instance ().enforce_budget ();
     return ret_val;
   }
 
@@ -303,21 +488,45 @@ public:
   void
   prune ()
   {
+    std::vector<std::shared_ptr<void>> retired;
+    {
+      std::unique_lock<std::mutex> guard (lock);
+      Entry **e;
+      for (e = &entries; *e;)
+        {
+          if ((*e)->val.use_count () <= 1 && !(*e)->computing)
+            {
+              if (verbose)
+                fprintf (stderr, "Cache %s: deleting id %i\n", name,
+                         (int)(*e)->id);
+              Entry *old = *e;
+              *e = old->next;
+              cached_bytes -= old->cached_bytes;
+              if (old->val)
+                retired.emplace_back (old->val, nullptr);
+              delete old;
+            }
+          else
+            e = &(*e)->next;
+        }
+    }
+    /* Destruct old values after releasing this cache's mutex. */
+  }
+
+  /* Current cache-owned memory footprint. This excludes externally
+     retained values which are never invalidated by eviction. */
+  size_t
+  retained_bytes ()
+  {
     std::unique_lock<std::mutex> guard (lock);
-    Entry **e;
-    for (e = &entries; *e;)
-      {
-        if ((*e)->val.use_count () <= 1 && !(*e)->computing)
-          {
-            if (verbose)
-              fprintf (stderr, "Cache %s: deleting id %i\n", name, (int)(*e)->id);
-            Entry *next = (*e)->next;
-            delete (*e);
-            (*e) = next;
-          }
-        else
-          e = &(*e)->next;
-      }
+    return cached_bytes;
+  }
+
+  /* Configured byte budget; zero denotes entry-count-only caching. */
+  size_t
+  byte_capacity () const
+  {
+    return max_cached_bytes;
   }
 
   /* Increase the capacity of the cache to N times the base size.  */
@@ -338,7 +547,9 @@ struct lru_cache_entry : lru_entry_base<P, T, lru_cache_entry<P, T>> {};
    T is the result type.
    GET_NEW is the generator function.
    BASE_CACHE_SIZE is the default size.  */
-template <typename P, typename T, std::unique_ptr<T> get_new (P &, progress_info *progress), int base_cache_size>
+template <typename P, typename T,
+          std::unique_ptr<T> (*get_new) (P &, progress_info *) = nullptr,
+          int base_cache_size = 4>
 class lru_cache : public abstract_lru_cache<P, T, lru_cache_entry<P, T>, lru_cache<P, T, get_new, base_cache_size>>
 {
   using Entry = lru_cache_entry<P, T>;
@@ -346,21 +557,39 @@ class lru_cache : public abstract_lru_cache<P, T, lru_cache_entry<P, T>, lru_cac
 
 public:
   static constexpr int base_size_const = base_cache_size;
-  /* Create an LRU cache named N.  */
-  lru_cache (const char *n) : Base (n, base_cache_size) {}
+  /* Create an LRU cache. MAX_BYTES=0 keeps the old count-only policy.
+     VALUE_BYTES measures a completed value including its owned allocations;
+     if omitted, sizeof(T) is used. */
+  lru_cache (const char *n, size_t max_bytes = 0,
+             size_t (*value_bytes) (const T &) = nullptr)
+      : Base (n, base_cache_size, max_bytes, value_bytes) {}
 
-  /* Fetch the value for parameters P or generate it.
-     Use PROGRESS for task cancellation.
-     ID will receive the unique identifier of the entry.  */
+  /* Fetch the value for parameters P or generate it using GET_NEW. */
   std::shared_ptr<T>
   get (P &p, progress_info *progress, uint64_t *id = NULL,
        bool *cache_hit = NULL)
+  {
+    static_assert (get_new != nullptr,
+                   "a generator-less cache must use get_or_compute");
+    return get_or_compute (p, progress,
+                           [](P &key, progress_info *task) {
+                             return get_new (key, task);
+                           }, id, cache_hit);
+  }
+
+  /* Fetch using an operation-specific generator, with the same per-key
+     coalescing and cancellation as get(). Useful when the generator needs
+     an enclosing image/resource without exposing it in the cache key. */
+  template <typename Fetcher>
+  std::shared_ptr<T>
+  get_or_compute (P &p, progress_info *progress, Fetcher &&fetch,
+                  uint64_t *id = NULL, bool *cache_hit = NULL)
   {
     return this->get_internal (
         p, progress, id, cache_hit,
         [&](Entry *e) { return p == e->params; },
         [](Entry *) {},
-        [&](Entry *e) { return get_new (e->params, progress); });
+        [&](Entry *e) { return fetch (e->params, progress); });
   }
 
   /* Return a completed cached value for P without generating or waiting for
@@ -374,6 +603,7 @@ public:
     for (Entry *e = this->entries; e; e = e->next)
       if (!e->computing && e->val && p == e->params)
         {
+          e->last_used = lru_caches::get ();
           if (id)
             *id = e->id;
           return e->val;
