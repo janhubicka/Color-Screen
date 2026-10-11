@@ -35,6 +35,7 @@
 #include "simulate.h"
 #include "include/spectrum-to-xyz.h"
 #include "lru-cache.h"
+#include "mapalloc.h"
 #include "include/histogram.h"
 #include "deconvolve.h"
 #include "denoise.h"
@@ -5949,6 +5950,42 @@ test_cache_memory_preferences ()
       || cache_memory_percent () != 0)
     {
       fprintf (stderr, "Application cache percentage validation failed\n");
+      return false;
+    }
+  return true;
+}
+
+/* Verify that scratch-directory preferences cannot truncate filenames,
+   and that selecting a real directory is reversible. */
+bool
+test_cache_scratch_preferences ()
+{
+  const std::string original = cache_scratch_directory ();
+  struct restore_directory
+  {
+    std::string path;
+    ~restore_directory () { set_cache_scratch_directory (path); }
+  } restore {original};
+  if (set_cache_scratch_directory (std::string (512, 'x'))
+      || cache_scratch_directory () != original)
+    {
+      fprintf (stderr, "Long scratch directory overwrote the setting\n");
+      return false;
+    }
+  std::error_code error;
+  const std::filesystem::path temporary
+      = std::filesystem::temp_directory_path (error);
+  if (error || !set_cache_scratch_directory (temporary.string ()))
+    {
+      fprintf (stderr, "Could not choose existing temporary directory\n");
+      return false;
+    }
+  const std::string configured = cache_scratch_directory ();
+  if (configured.empty ()
+      || !set_cache_scratch_directory (std::string ())
+      || !cache_scratch_directory ().empty ())
+    {
+      fprintf (stderr, "Scratch directory preference was not reversible\n");
       return false;
     }
   return true;
@@ -12787,6 +12824,8 @@ main (int argc, char **argv)
       [] () { return test_lru_global_memory_budget (); } },
     { "cache_memory_preferences", "adaptive and user-selected cache fractions",
       [] () { return test_cache_memory_preferences (); } },
+    { "cache_scratch_preferences", "scratch mmap directory selection",
+      [] () { return test_cache_scratch_preferences (); } },
     { "spectrum", "spectrum to xyz tests", [] () { return test_spectrum_dyes_to_xyz (); } },
     { "whitepoint", "whitepoint consistency tests", [] () { return test_whitepoint_constants (); } },
     { "darkroom", "darkroom simulation tests", [] () { return test_darkroom (); } },

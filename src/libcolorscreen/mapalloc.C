@@ -1,5 +1,6 @@
 /* Taken from multiblend.  */
 #include "mapalloc.h"
+#include "include/cache-stats.h"
 #ifdef __APPLE__
 #define memalign(a,b) malloc((b))
 #else
@@ -7,6 +8,9 @@
 #endif
 #include <cstring>
 #include <cstdio>
+#include <filesystem>
+#include <string>
+#include <system_error>
 
 #ifndef _WIN32
 #include <cstdlib>
@@ -41,45 +45,86 @@ MapAlloc::DestructionGuard::~DestructionGuard ()
 * MapAlloc
 ***********************************************************************/
 void MapAlloc::CacheThreshold(size_t limit) {
+	std::lock_guard<std::mutex> guard (mapalloc_lock);
 	cache_threshold = limit;
 }
 
 void* MapAlloc::Alloc(size_t size, const char *reason, int alignment) {
-	mapalloc_lock.lock ();
+	std::lock_guard<std::mutex> guard (mapalloc_lock);
+	/* A temporary-file failure may throw. Always release the mutex. */
 	objects.push_back(std::make_unique <MapAllocObject>(size, reason, alignment));
-	void *ret = objects.back ()->GetPointer();
-	mapalloc_lock.unlock ();
-	return ret;
+	return objects.back ()->GetPointer();
 }
 
 void MapAlloc::Free(void* p) {
 	/* If static destruction already ran; do nothing.  */
 	if (destroyed)
 	  return;
-	mapalloc_lock.lock ();
+	std::lock_guard<std::mutex> guard (mapalloc_lock);
 	for (auto it = objects.begin(); it < objects.end(); ++it) {
 		if ((*it)->GetPointer() == p) {
 			objects.erase(it);
 			break;
 		}
 	}
-	mapalloc_lock.unlock ();
 }
 
 size_t MapAlloc::GetSize(void* p) {
+	std::lock_guard<std::mutex> guard (mapalloc_lock);
 	for (auto it = objects.begin(); it < objects.end(); ++it) {
 		if ((*it)->GetPointer() == p) {
 			return (*it)->GetSize();
 		}
 	}
-
 	return 0;
 }
 
-void MapAlloc::SetTmpdir(const char* _tmpdir) {
-	strcpy_s(tmpdir, _tmpdir);
-	size_t l = strlen(tmpdir);
-	while ((tmpdir[l - 1] == '\\' || tmpdir[l - 1] == '/') && l > 0) tmpdir[--l] = 0;
+/* Change the scratch directory used for FUTURE mmap allocations. PATH is
+   an OS-native encoded folder. Empty restores platform default. The
+   historic fixed-size array must never truncate a selected path. */
+bool
+MapAlloc::SetTmpdir (const char *path)
+{
+  if (!path)
+    return false;
+  std::string directory (path);
+  while (directory.size () > 1
+         && (directory.back () == '/' || directory.back () == '\\')
+         && !(directory.size () == 3 && directory[1] == ':'))
+    directory.pop_back ();
+  if (directory.size () >= sizeof (tmpdir))
+    return false;
+  if (!directory.empty ())
+    {
+      std::error_code error;
+      if (!std::filesystem::is_directory (
+              std::filesystem::path (directory), error))
+        return false;
+    }
+  std::lock_guard<std::mutex> guard (mapalloc_lock);
+  std::memcpy (tmpdir, directory.c_str (), directory.size () + 1);
+  return true;
+}
+
+/* Read the configured directory without racing a new mmap allocation. */
+std::string
+MapAlloc::GetTmpdir ()
+{
+  std::lock_guard<std::mutex> guard (mapalloc_lock);
+  return std::string (tmpdir);
+}
+
+/* Frontend-neutral scratch configuration exposed by libcolorscreen. */
+bool
+set_cache_scratch_directory (const std::string &path)
+{
+  return MapAlloc::SetTmpdir (path.c_str ());
+}
+
+std::string
+cache_scratch_directory ()
+{
+  return MapAlloc::GetTmpdir ();
 }
 
 /***********************************************************************
@@ -135,18 +180,16 @@ MapAlloc::MapAllocObject::MapAllocObject(size_t _size, const char *reason, int a
 		}
 #else
 		if (!tmpdir[0]) {
-			char* td = getenv("TMPDIR");
-			if (td) {
-				strcpy(tmpdir, td);
-			} else {
-				strcpy(tmpdir, "/tmp");
-			}
+			const char* td = getenv("TMPDIR");
+			if (!td || !*td || strlen(td) >= sizeof (tmpdir))
+			  td = "/tmp";
+			snprintf(tmpdir, sizeof (tmpdir), "%s", td);
 		}
 
 		sprintf(filename, "%s/.mbXXXXXX", tmpdir);
 		file = mkstemp(filename);
 
-		if (file <= 0) {
+		if (file < 0) {
 			sprintf(filename, "Could not create temp file in %s/: %s", tmpdir, strerror(errno));
 			throw(filename);
 		}

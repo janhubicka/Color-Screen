@@ -2,6 +2,7 @@
 #include <cstddef>
 #include <memory>
 #include <mutex>
+#include <string>
 /* Taken from multiblend.  */
 
 #include <vector>
@@ -55,7 +56,10 @@ public:
 	static void Free(void* p);
 	static size_t GetSize(void* p);
 	static void CacheThreshold(size_t threshold);
-	static void SetTmpdir(const char* _tmpdir);
+	/* Change the folder used for FUTURE memory-mapped scratch files.
+	   Empty resets to the platform default, invalid paths are rejected. */
+	static bool SetTmpdir(const char* path);
+	static std::string GetTmpdir();
 	static bool LastFile() { return objects.back()->IsFile(); }
 //	static bool last_mapped;
 };
