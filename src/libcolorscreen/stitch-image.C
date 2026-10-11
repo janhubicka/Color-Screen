@@ -273,6 +273,10 @@ stitch_image::diff (stitch_image &other, progress_info *progress)
 	return false;
       }
   }
+  /* Keep image storage live while local render objects unwind, even if a
+     failure path drops the explicit stitch-image reference first. */
+  const auto source_pin = img;
+  const auto target_pin = other.img;
   render_parameters def;
   render_img render (param, *img, def, 65535);
   {
@@ -314,6 +318,8 @@ stitch_image::diff (stitch_image &other, progress_info *progress)
     {
       release_img ();
       other.release_img ();
+      progress->resume_stdout ();
+      return false;
     }
   progress->resume_stdout ();
   int rwidth = rxmax - rxmin + 1;
@@ -1455,10 +1461,12 @@ stitch_image::find_common_points (stitch_image &other, int outerborder, int inne
       }
    if (render2)
      {
-       other.release_img ();
+       /* The heap renderers may still refer to decoded pixel data during
+          destruction. Destroy them before releasing their tile pins. */
        delete render2;
-       release_img ();
        delete render1;
+       other.release_img ();
+       release_img ();
      }
    return samples;
 }
