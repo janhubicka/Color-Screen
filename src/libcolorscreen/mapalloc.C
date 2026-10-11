@@ -85,6 +85,13 @@ size_t MapAlloc::GetSize(void* p) {
 	return 0;
 }
 
+/* Report currently allocated in-RAM MapAlloc buffers, excluding mmap
+   scratch-backed allocations. The counter is updated under mapalloc_lock. */
+size_t MapAlloc::GetRamBytes () {
+	std::lock_guard<std::mutex> guard (mapalloc_lock);
+	return total_allocated;
+}
+
 /* Change the scratch directory used for FUTURE mmap allocations. PATH is
    an OS-native encoded folder. Empty restores platform default. The
    historic fixed-size array must never truncate a selected path. */
@@ -137,7 +144,9 @@ cache_scratch_directory ()
 * MapAllocObject
 ***********************************************************************/
 MapAlloc::MapAllocObject::MapAllocObject(size_t _size, const char *reason, int alignment) : size(_size) {
-	if (total_allocated + size < cache_threshold || size < min_file_size) {
+	if ((total_allocated < cache_threshold
+	     && size < cache_threshold - total_allocated)
+	    || size < min_file_size) {
 		if (debug)
 		  printf ("Allocating %li bytes for %s, overall allocation: %li\n", (long)_size, reason, (long)(total_allocated + size));
 #ifdef _WIN32
@@ -255,6 +264,10 @@ MapAlloc::MapAllocObject::~MapAllocObject() {
 		if (debug)
 		  printf ("Freeing %li bytes\n", (long)size);
 		free(pointer);
+		/* Unlike Windows, POSIX previously failed to decrement this
+		   counter. Repeated malloc/free cycles then forced scratch files
+		   even when virtually no heap-backed MapAlloc data remained. */
+		total_allocated -= size;
 	} else {
 		if (debug)
 		  printf ("Unmapping file of size %liMB\n", (long)size/1024/1024);

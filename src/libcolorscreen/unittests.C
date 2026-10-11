@@ -6041,6 +6041,24 @@ test_cache_scratch_preferences ()
     ~restore_threshold () { MapAlloc::CacheThreshold (original); }
   } restore_limit {MapAlloc::GetCacheThreshold ()};
   MapAlloc::CacheThreshold (0);
+  /* Buffers smaller than the scratch-file minimum remain heap backed even
+     with a zero threshold. Freeing them must restore RAM accounting. */
+  const size_t old_ram_bytes = MapAlloc::GetRamBytes ();
+  char *ordinary = static_cast<char *> (
+      MapAlloc::Alloc (64 * 1024, "scratch RAM accounting smoke"));
+  if (!ordinary || MapAlloc::GetRamBytes () != old_ram_bytes + 64 * 1024)
+    {
+      if (ordinary)
+        MapAlloc::Free (ordinary);
+      fprintf (stderr, "MapAlloc failed to count heap-backed bytes\n");
+      return false;
+    }
+  MapAlloc::Free (ordinary);
+  if (MapAlloc::GetRamBytes () != old_ram_bytes)
+    {
+      fprintf (stderr, "MapAlloc RAM accounting leaked after free\n");
+      return false;
+    }
   char *mapped = nullptr;
   try
     {

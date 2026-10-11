@@ -57,6 +57,9 @@ public:
 	static size_t GetSize(void* p);
 	static void CacheThreshold(size_t threshold);
 	static size_t GetCacheThreshold();
+	/* Return the total size of live heap-backed MapAlloc arrays.
+	   File-backed mmap allocations are intentionally not included. */
+	static size_t GetRamBytes();
 	/* Change the folder used for FUTURE memory-mapped scratch files.
 	   Empty resets to the platform default, invalid paths are rejected. */
 	static bool SetTmpdir(const char* path);
