@@ -46,6 +46,9 @@
 #ifdef scr2
 #undef scr2
 #endif
+#ifdef scr3
+#undef scr3
+#endif
 #include "include/histogram.h"
 #include "deconvolve.h"
 #include "denoise.h"
