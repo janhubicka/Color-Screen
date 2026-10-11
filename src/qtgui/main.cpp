@@ -588,7 +588,7 @@ bool colorSectionPreferencesSmoke() {
         QStringLiteral("capture.corrections")},
        [&]() {
          return std::make_unique<CapturePanel>(
-             getState, setState, getCaptureImage, []() {});
+             getState, setState, getCaptureImage);
        }},
       {{QStringLiteral("sharpness.capture"),
         QStringLiteral("sharpness.measurements"),
