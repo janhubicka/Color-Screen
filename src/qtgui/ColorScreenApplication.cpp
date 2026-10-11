@@ -103,6 +103,18 @@ bool copyRecoveryFile(const QString &source, const QString &destination) {
   return QFile::copy(source, destination);
 }
 
+/** Display a parent-owned, nonblocking Preferences validation warning.
+    Failed settings must leave the dialog open for correction, without a
+    nested event loop that could dispatch unrelated image-worker callbacks. */
+void showPreferencesWarning(QDialog *parent, const QString &title,
+                            const QString &detail) {
+  auto *warning = new QMessageBox(
+      QMessageBox::Warning, title, detail, QMessageBox::Ok, parent);
+  warning->setObjectName(QStringLiteral("PreferencesWarningDialog"));
+  warning->setAttribute(Qt::WA_DeleteOnClose);
+  warning->open();
+}
+
 } // namespace
 
 /** Construct the application-level document manager. */
@@ -361,7 +373,7 @@ void ColorScreenApplication::showPreferences(QWidget *parent) {
               const QDir directory(chosen);
               if (chosen.isEmpty() || !directory.isAbsolute() ||
                   !directory.exists()) {
-                QMessageBox::warning(
+                showPreferencesWarning(
                     dialog, QObject::tr("Invalid scratch directory"),
                     QObject::tr("Select an existing absolute directory."));
                 return;
@@ -369,7 +381,7 @@ void ColorScreenApplication::showPreferences(QWidget *parent) {
               QTemporaryFile probe(
                   directory.filePath(QStringLiteral(".colorscreen-write-XXXXXX")));
               if (!probe.open()) {
-                QMessageBox::warning(
+                showPreferencesWarning(
                     dialog, QObject::tr("Scratch directory not writable"),
                     QObject::tr("Cannot create a temporary file in %1.")
                         .arg(QDir::toNativeSeparators(chosen)));
@@ -381,7 +393,7 @@ void ColorScreenApplication::showPreferences(QWidget *parent) {
                 colorscreen::cache_scratch_directory();
             if (!colorscreen::set_cache_scratch_directory(
                     QFile::encodeName(chosen).toStdString())) {
-              QMessageBox::warning(
+              showPreferencesWarning(
                   dialog, QObject::tr("Scratch directory unavailable"),
                   QObject::tr("The chosen directory cannot be used for mmap "
                               "scratch files. Choose a shorter, accessible "
@@ -390,8 +402,9 @@ void ColorScreenApplication::showPreferences(QWidget *parent) {
             }
             if (!colorscreen::set_cache_memory_percent(percent)) {
               colorscreen::set_cache_scratch_directory(oldScratch);
-              QMessageBox::warning(dialog, QObject::tr("Invalid cache budget"),
-                                   QObject::tr("Choose a value from 10 to 85%."));
+              showPreferencesWarning(
+                  dialog, QObject::tr("Invalid cache budget"),
+                  QObject::tr("Choose a value from 10 to 85%."));
               return;
             }
 
@@ -408,7 +421,7 @@ void ColorScreenApplication::showPreferences(QWidget *parent) {
             if (settings.status() != QSettings::NoError) {
               colorscreen::set_cache_memory_percent(oldPercent);
               colorscreen::set_cache_scratch_directory(oldScratch);
-              QMessageBox::warning(
+              showPreferencesWarning(
                   dialog, QObject::tr("Could not save preferences"),
                   QObject::tr("Your application settings file is not writable."));
               return;
