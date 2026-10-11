@@ -212,18 +212,25 @@ protected:
   void
   refresh_dynamic_weights ()
   {
-    if (!dynamically_sized || !value_bytes)
-      return;
-    size_t total = 0;
-    const size_t limit = std::numeric_limits<size_t>::max ();
-    for (Entry *e = entries; e; e = e->next)
-      if (e->val && !e->computing)
-        {
-          e->cached_bytes = value_bytes (*e->val);
-          total = e->cached_bytes > limit - total
-                      ? limit : total + e->cached_bytes;
-        }
-    cached_bytes = total;
+    /* A shared_ptr<T[]> has no operator* and there is no generic byte
+       count for an unbounded array.  This guard must be compile-time:
+       testing dynamically_sized at runtime still instantiates the invalid
+       dereference for legacy array-backed caches. */
+    if constexpr (!std::is_array<T>::value)
+      {
+        if (!dynamically_sized || !value_bytes)
+          return;
+        size_t total = 0;
+        const size_t limit = std::numeric_limits<size_t>::max ();
+        for (Entry *e = entries; e; e = e->next)
+          if (e->val && !e->computing)
+            {
+              e->cached_bytes = value_bytes (*e->val);
+              total = e->cached_bytes > limit - total
+                          ? limit : total + e->cached_bytes;
+            }
+        cached_bytes = total;
+      }
   }
 
   cache_entry_statistics
