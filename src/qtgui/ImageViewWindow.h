@@ -217,6 +217,12 @@ private:
   WorkspacePresentationState m_workspacePresentation;
   bool m_slantedEdgeReference = false;
   bool m_referenceLoadPending = false;
+  /* Subsequent capture edits cannot start a second reference worker while
+     one is active. Replay only the latest requested method on completion;
+     do not publish a superseded reference or its failure dialog. */
+  bool m_referenceReloadRequested = false;
+  colorscreen::image_data::demosaicing_t m_referenceLoadMethod =
+      colorscreen::image_data::demosaic_default;
   QPointer<QMessageBox> m_referenceLoadFailurePrompt;
   QString m_referenceFile;
   int m_selectedMtfMeasurement = -1;

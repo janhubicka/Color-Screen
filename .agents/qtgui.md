@@ -1378,3 +1378,13 @@ current requested method is `image_data::demosaic`; never infer it from
 `demosaiced_by`. For a cached hit the entire image object (including UID)
 is shared; newly computed methods get fresh `image_data::id`, and
 uncached CFA sources reload from disk as a safe fallback.
+
+Slanted-edge references keep one asynchronous decoder per view. If a
+capture demosaic edit arrives during an active reference load, the view
+records a pending replay and checks the latest document method before
+publishing. A superseded successful decode preserves its RAW-source pin
+but never updates the displayed reference; a superseded error must never
+close the view. The next event-loop turn reuses the cached RAW source for
+the latest method or decodes from disk if source retention was unavailable.
+Use `image_data::demosaic` for the exact requested method, not
+`demosaiced_by` (which need not distinguish linear/no-interpolation).
