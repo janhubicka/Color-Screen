@@ -37,7 +37,9 @@ Changes planned for version 2.0 (development version 2.0alpha)
      keeping the current scan's parameter file and undo history. Reference
      scans keep the normal navigation preview above a single Sharpness tab and
      expose only Original digital capture and Image layer rendering modes.
-     Reload and demosaic refreshes the main scan and every associated reference.
+     Changing the RAW Demosaic choice reprocesses the main image and all
+     associated slanted-edge reference scans automatically, using retained
+     sensor samples when available and keeping same-document Undo history.
      Crash recovery records those reference filenames per document and reopens
      them with the recovered image; ordinary New Views and view-local layout,
      zoom, pan, and render-mode state are intentionally not recovered yet.
