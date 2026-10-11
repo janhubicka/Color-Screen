@@ -195,19 +195,30 @@ MapAlloc::MapAllocObject::MapAllocObject(size_t _size, const char *reason, int a
 		}
 
 		if (ftruncate(file, size)) {
+			const int failure = errno;
 			unlink(filename);
-			sprintf(filename, "Could not allocate %zu temporary bytes in %s: %s", size, tmpdir, strerror(errno));
+			close(file);
+			file = -1;
+			snprintf(filename, sizeof (filename),
+			         "Could not allocate %zu temporary bytes in %s: %s",
+			         size, tmpdir, strerror(failure));
 			throw(filename);
 		}
 
 		if (debug)
 		  printf ("Producing tmp file %s for %s of size %liMB\n", filename, reason, (long)size/1024/1024);
 
-		pointer = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_PRIVATE, file, 0);
+		/* These arrays are intentionally DISK-BACKED scratch. MAP_PRIVATE
+		   would turn writes into anonymous copy-on-write RAM and could OOM
+		   the process during large scans, despite the temporary file. */
+		pointer = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, file, 0);
 		if (pointer == MAP_FAILED) {
 			unlink(filename);
+			close(file);
+			file = -1;
 			pointer = NULL;
-			sprintf(filename, "Could not mmap temporary file");
+			snprintf(filename, sizeof (filename),
+			         "Could not mmap temporary file: %s", strerror(errno));
 			throw(filename);
 		}
 
@@ -233,7 +244,7 @@ MapAlloc::MapAllocObject::~MapAllocObject() {
 		CloseHandle(file);
 	}
 #else
-	if (!file) {
+	if (file < 0) {
 		if (debug)
 		  printf ("Freeing %li bytes\n", (long)size);
 		free(pointer);
@@ -251,7 +262,11 @@ void* MapAlloc::MapAllocObject::GetPointer() {
 }
 
 bool MapAlloc::MapAllocObject::IsFile() {
+#ifdef _WIN32
 	return !!file;
+#else
+	return file >= 0;
+#endif
 }
 
 MapAlloc::~MapAlloc ()

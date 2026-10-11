@@ -32,7 +32,7 @@ private:
 		HANDLE file = NULL;
 		HANDLE map = NULL;
 #else
-		int file = 0;
+		int file = -1;  // 0 is a valid fd if stdin has been closed.
 #endif
 		void* pointer = NULL;
 		size_t size;

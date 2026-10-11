@@ -5981,6 +5981,25 @@ test_cache_scratch_preferences ()
       return false;
     }
   const std::string configured = cache_scratch_directory ();
+  /* Force the mmap fallback with a small temporary allocation. This tests
+     that the scratch preference actually feeds the disk-backed allocator,
+     rather than just accepting and storing a directory string. */
+  MapAlloc::CacheThreshold (0);
+  char *mapped = static_cast<char *> (
+      MapAlloc::Alloc (2 * 1024 * 1024, "scratch preferences smoke"));
+  const bool file_backed = mapped && MapAlloc::LastFile ();
+  if (mapped)
+    {
+      mapped[0] = 42;
+      mapped[2 * 1024 * 1024 - 1] = 23;
+      MapAlloc::Free (mapped);
+    }
+  MapAlloc::CacheThreshold (1024ULL * 1024 * 1024);
+  if (!file_backed)
+    {
+      fprintf (stderr, "Scratch preference did not use file-backed mmap\n");
+      return false;
+    }
   if (configured.empty ()
       || !set_cache_scratch_directory (std::string ())
       || !cache_scratch_directory ().empty ())
