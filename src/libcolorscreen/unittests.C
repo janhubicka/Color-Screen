@@ -12944,6 +12944,52 @@ test_raw_source_variants ()
                    (int)method, error ? error : "pixel/geometry mismatch");
           return false;
         }
+      /* Rendered scanner sharpening is an image-dependent shared LRU.
+         Compare the cached-variant result with a newly opened independent
+         image, using identical sharpening parameters. This catches an
+         accidental image UID reuse that would alias otherwise unrelated RGB
+         pixel buffers even when the source decoded pixel arrays are correct.
+         The screen/analysis caches use this same UID and its derived
+         image-layer ID for their pixel-dependent keys. */
+      render_parameters sharpened_params;
+      sharpened_params.gamma = 1;
+      sharpened_params.sharpen.mode = sharpen_parameters::unsharp_mask;
+      sharpened_params.sharpen.usm_radius = 1.25;
+      sharpened_params.sharpen.usm_amount = 0.6;
+      render cached_render (*computed, sharpened_params, 65535);
+      render independent_render (fresh, sharpened_params, 65535);
+      const rgbdata fractions { (luminosity_t)1 / 3,
+                                (luminosity_t)1 / 3,
+                                (luminosity_t)1 / 3 };
+      if (!cached_render.precompute_all (PRECOMPUTE_RGB_IMAGE, fractions,
+                                         nullptr)
+          || !independent_render.precompute_all (
+              PRECOMPUTE_RGB_IMAGE, fractions, nullptr))
+        {
+          fprintf (stderr,
+                   "Failed preparing image-keyed RAW sharpening for %i\n",
+                   (int)method);
+          return false;
+        }
+      for (int y = 4; y < computed->height - 4; y += 23)
+        for (int x = 4; x < computed->width - 4; x += 19)
+          {
+            const rgbdata first
+                = cached_render.get_linearized_rgb_pixel ({x, y});
+            const rgbdata second
+                = independent_render.get_linearized_rgb_pixel ({x, y});
+            if (fabs (first.red - second.red) > 0.0001
+                || fabs (first.green - second.green) > 0.0001
+                || fabs (first.blue - second.blue) > 0.0001)
+              {
+                fprintf (stderr,
+                         "Image-keyed RAW sharpening reused stale variant "
+                         "buffers for method %i at %i,%i\n",
+                         (int)method, x, y);
+                return false;
+              }
+          }
+
       if (!source.has_unpacked_raw_source ()
           || !source.has_rgb () || !computed->has_unpacked_raw_source ())
         {
