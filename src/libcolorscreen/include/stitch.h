@@ -109,9 +109,10 @@ public:
   std::string filename;
   std::string screen_filename;
   std::string known_screen_filename;
-  /* The image pointer is installed when decoding begins, not when image
-     bytes are ready. Use image_ready_p() for concurrent rendering rather
-     than testing IMG, which may still be undergoing load_part(). */
+  /* Completed image pointer installed only after the shared core cache
+     finishes decoding and validating the tile. image_ready_p() publishes
+     availability to concurrent GUI renderers with release/acquire ordering.
+     Active renderers must hold a pin independent of core cache ownership. */
   /* Completed decoded pixels participate in the single core LRU. A live
      stitch tile holds an independent shared_ptr pin while it may be used by
      renderers; the cache may discard its own reference under memory pressure
