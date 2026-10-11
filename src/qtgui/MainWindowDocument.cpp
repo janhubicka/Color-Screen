@@ -1347,14 +1347,11 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
                 // is needed. Failed/obsolete generations cannot publish it.
                 m_scan = tempScan;
 
-                /* GUI tile workers publish individually decoded image data
-                   to views over time. Keep successfully decoded tiles resident
-                   until this scan is replaced; the legacy stitch-analysis LRU
-                   may evict images only when rendering does not read them
-                   concurrently. The tile_ready bit controls availability
-                   independently of each view's visibility mask. */
-                if (isCsprj && m_scan->stitch)
-                  m_scan->stitch->keep_all_images();
+                /* GUI tile workers retain a shared image pin after decode.
+                   The new libcolorscreen LRU owns only its independent cache
+                   reference, which can be evicted at any time; the active
+                   display pin prevents a tile from disappearing mid-render.
+                   This replaces the old per-project keep_all_images policy. */
 
                 if ((int)m_scan->gamma != -2 && m_scan->gamma > 0 &&
                     m_rparams.gamma == -1) // Update only if unknown

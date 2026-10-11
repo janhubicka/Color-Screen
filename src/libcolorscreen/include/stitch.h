@@ -4,6 +4,7 @@
 #include <atomic>
 #include <string>
 #include <memory>
+#include <mutex>
 #include "imagedata.h"
 #include "scr-to-img.h"
 #include "colorscreen.h"
@@ -111,7 +112,11 @@ public:
   /* The image pointer is installed when decoding begins, not when image
      bytes are ready. Use image_ready_p() for concurrent rendering rather
      than testing IMG, which may still be undergoing load_part(). */
-  std::unique_ptr<image_data> img;
+  /* Completed decoded pixels participate in the single core LRU. A live
+     stitch tile holds an independent shared_ptr pin while it may be used by
+     renderers; the cache may discard its own reference under memory pressure
+     without invalidating a currently rendered tile. */
+  std::shared_ptr<image_data> img;
   bool image_ready_p () const noexcept
   {
     return m_image_ready.load (std::memory_order_acquire);
@@ -161,15 +166,15 @@ public:
 
   stitch_image ();
   ~stitch_image ();
-  bool init_loader (const char **error, progress_info *progress);
+  /* Acquire a fully decoded image from the global cache, or decode it
+     exactly once on a miss. LOAD_IMG pins the result until RELEASE_IMG.
+     Rendering must retain a live pin for the duration of its request. */
   DLL_PUBLIC bool load_img (const char **error, progress_info *);
-  bool load_part (int *permille, const char **error, progress_info *progress);
   DLL_PUBLIC void release_img ();
   void update_scr_to_final_parameters (coord_t ratio, coord_t anlge);
   bool analyze (stitch_project *prj, detect_regular_screen_params *dsparams, bool top_p, bool bottom_p, bool left_p,
                 bool right_p, lens_warp_correction_parameters &lens_correction,
                 progress_info *);
-  void release_image_data (progress_info *);
   bitmap_2d *compute_known_pixels (scr_to_img &scr_to_img,
                                    int skiptop, int skipbottom, int skipleft,
                                    int skipright, progress_info *progress);
@@ -240,14 +245,13 @@ public:
                                      const char **error);
 
 private:
-  static std::atomic<uint64_t> current_time;
-  static std::atomic<int> nloaded;
-  /* Release-store only after image decoding and validation have completed.
-     Renderers acquire-load before using IMG on a still-live GUI project. */
+  /* Published after successful decode and while a completed tile is pinned.
+     Old generation callbacks may not access an unpublished image. */
   std::atomic<bool> m_image_ready {false};
-  uint64_t lastused;
-  int refcount;
-  stitch_project *m_prj;
+  std::mutex m_image_mutex;
+  int refcount = 0;
+  stitch_project *m_prj = nullptr;
+  friend class stitch_project;
 };
 
 class stitch_project
@@ -282,12 +286,7 @@ public:
                                  int y = -1);
   std::string add_path (std::string name);
   void set_path_by_filename (std::string name);
-  void
-  keep_all_images ()
-  {
-    release_images = false;
-  }
-  bool
+   bool
   tile_for_scr (const render_output_parameters *output, coord_t sx, coord_t sy, int *x,
                 int *y, bool only_loaded)
   {
@@ -400,7 +399,9 @@ private:
   /* Screen used to collect patch density at analysis stage.  */
   std::shared_ptr<screen> my_screen;
   int stitch_info_scale = 0;
-  bool release_images;
+  /* Per-project source generation ensures stale disk/project loads never
+     satisfy another independently opened stitch document. */
+  uint64_t m_tile_cache_id = 0;
   coord_t rotation_adjustment;
   friend stitch_image;
 

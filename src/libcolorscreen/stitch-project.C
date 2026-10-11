@@ -9,6 +9,7 @@
 #include "include/stitch.h"
 #include "include/screen-map.h"
 #include "render-to-scr.h"
+#include "lru-cache.h"
 #include "analyze-base.h"
 #include "loadsave.h"
 #include "parameter-archive.h"
@@ -47,8 +48,8 @@ load_stitch_parameter_file (const char *name, scr_to_img_parameters *param,
 stitch_project::stitch_project ()
   : params (), report_file (NULL), images(), param (), rparam (),
     common_scr_to_img (), dparam (), solver_param (),
-    pixel_size (0), my_screen (), stitch_info_scale (0), 
-    release_images (true), rotation_adjustment (0)
+    pixel_size (0), my_screen (), stitch_info_scale (0),
+    m_tile_cache_id (lru_caches::get ()), rotation_adjustment (0)
 {}
 
 stitch_project::~stitch_project ()
@@ -58,6 +59,11 @@ stitch_project::~stitch_project ()
 bool
 stitch_project::initialize ()
 {
+  /* A parsed project has already attached its tiles during load(). For a
+     newly constructed project, establish their ownership before any decode. */
+  for (int y = 0; y < params.height; ++y)
+    for (int x = 0; x < params.width; ++x)
+      images[y][x].m_prj = this;
 
   image_data data;
   scr_param.type = NoScreen;
@@ -1563,10 +1569,8 @@ stitch_project::stitch (progress_info *progress, detect_regular_screen_params *d
 	    if (x != xx || y != yy)
 	      images[y][x].diff (images[yy][xx], progress);
 
-  for (int y = 0; y < params.height; y++)
-    for (int x = 0; x < params.width; x++)
-      if (images[y][x].img)
-	images[y][x].release_image_data (progress);
+  /* Tiles released by callers remain reusable in the shared LRU. A
+     still-live project owns only the image pins of its active operations. */
   if (report_file)
     fclose (report_file);
   return true;
