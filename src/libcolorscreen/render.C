@@ -261,18 +261,22 @@ lru_cache_registry::enforce_budget (uint64_t extra_bytes)
 
      Keep the registry lock only while inspecting caches and detaching the
      victim: source/image destructors can themselves prune caches and must
-     run outside both the registry lock and every per-cache lock. */
+     run outside both the registry lock and every per-cache lock.
+
+     Sample the OS memory target only once per eviction pass. Repeated OS
+     queries for every displaced tile are expensive, and a released counted
+     allocation should not artificially move the target during this pass.
+     The next cache operation will obtain a fresh adaptive budget. */
+  const uint64_t budget = cache_memory_budget_bytes ();
   for (;;)
     {
       std::shared_ptr<void> retired;
       {
         std::lock_guard<std::mutex> registry_guard (registry_mutex);
-        const memory_reading mem = query_host_memory ();
         uint64_t current = raw_source_cache_bytes ();
         for (tracked_lru_cache *cache : caches)
           current = saturating_add (
               current, cache->cache_statistics (nullptr).retained_bytes);
-        const uint64_t budget = effective_cache_budget (mem, current);
         if (saturating_add (current, extra_bytes) <= budget)
           return;
 
