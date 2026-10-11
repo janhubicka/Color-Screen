@@ -12,6 +12,7 @@ class MainWindow;
 class ImageViewWindow;
 class QEvent;
 class QFileDialog;
+class QDialog;
 class QMenu;
 class QWidget;
 class WorkspaceWindow;
@@ -26,6 +27,14 @@ class ColorScreenApplication final : public QApplication {
 public:
   /** Construct the Qt application and initialize document-window tracking. */
   ColorScreenApplication(int &argc, char **argv);
+
+  /** Apply saved, application-wide memory and scratch preferences to the
+      frontend-independent libcolorscreen cache/allocator on startup. */
+  void applySavedPreferences();
+
+  /** Open the one shared Preferences dialog, including performance, scratch
+      files and independently enabled idle-screen Easter eggs. */
+  void showPreferences(QWidget *parent = nullptr);
 
   /** Create, show, and register an empty document window.
 
@@ -199,6 +208,7 @@ private:
   /** One active reference-file chooser per source document. */
   QHash<MainWindow *, QPointer<QFileDialog>> m_slantedReferenceFileDialogs;
   QPointer<WorkspaceWindow> m_workspaceWindow;
+  QPointer<QDialog> m_preferencesDialog;
   QSet<MainWindow *> m_restoringReferenceRecovery;
   QSet<MainWindow *> m_hiddenDocumentPresentations;
   QSet<MainWindow *> m_finalizingDocuments;
