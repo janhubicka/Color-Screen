@@ -64,6 +64,7 @@
 #include <QSettings>
 #include <QSpinBox>
 #include <QSlider>
+#include <QStackedWidget>
 #include <QStringList>
 #include <QStatusBar>
 #include <QStyleFactory>
@@ -82,6 +83,7 @@
 #include <cstring>
 #include <functional>
 #include <memory>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -3655,8 +3657,6 @@ bool runPointerInteractionSmoke() {
 
 } // namespace
 
-/** Start the Qt GUI, restore any crashed document session, and open every
-    positional image argument in an independent MainWindow.  */
 /** Exercise application-wide Preferences transactionally before opening
     any real image document. Use an isolated QSettings identity and restore
     the actual cache/scratch policies and CSEGG override on every exit. */
@@ -3794,6 +3794,8 @@ bool applicationPreferencesSmoke(ColorScreenApplication &app) {
   return true;
 }
 
+/** Start the Qt GUI, restore any crashed document session, and open every
+    positional image argument in an independent MainWindow.  */
 int main(int argc, char *argv[]) {
   // Enable plugin diagnostics before QApplication initializes platform plugins.
   for (int i = 1; i < argc; ++i) {
