@@ -3670,6 +3670,7 @@ int main(int argc, char *argv[]) {
 
   // Use INI files on every platform so settings are easy to inspect and move.
   QSettings::setDefaultFormat(QSettings::IniFormat);
+  app.applySavedPreferences();
   QApplication::setStyle(QStyleFactory::create("Fusion"));
   QApplication::setWindowIcon(QIcon(":/images/icon.svg"));
 

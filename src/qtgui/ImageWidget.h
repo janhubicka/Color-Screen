@@ -421,6 +421,10 @@ public:
    */
   double getZoom() const { return m_scale; }
 
+  /** Re-select the idle-screen Easter egg from current application preferences
+      without affecting scan/render/Undo state. All disabled means no animation. */
+  void refreshEasterEggPreferences();
+
   /**
    * @brief Returns the current interaction mode.
    * @return The interaction mode.
