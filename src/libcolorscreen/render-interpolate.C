@@ -248,13 +248,13 @@ static strips_analyzer_cache_t strips_analyzer_cache ("strips analyzer");
 static size_t
 demosaic_paget_cached_bytes (const demosaic_paget &image)
 {
-  return sizeof (image) + image.m_demosaiced.capacity () * sizeof (rgbdata);
+  return sizeof (image) + image.demosaiced_pixel_bytes ();
 }
 
 static size_t
 demosaic_dufay_cached_bytes (const demosaic_dufay &image)
 {
-  return sizeof (image) + image.m_demosaiced.capacity () * sizeof (rgbdata);
+  return sizeof (image) + image.demosaiced_pixel_bytes ();
 }
 
 static demosaic_paget_cache_t demosaic_paget_cache (
