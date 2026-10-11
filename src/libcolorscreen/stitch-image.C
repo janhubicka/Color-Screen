@@ -622,6 +622,15 @@ stitch_image::analyze (stitch_project *prj, detect_regular_screen_params *dspara
       progress->resume_stdout ();
       return false;
     }
+  /* Every early return must drop its tile reference. Keep a separate image
+     pin alive until after local renderers have been destroyed, even if the
+     LRU removes its cache-owned reference during an analysis operation. */
+  const auto decoded_image_pin = img;
+  struct image_pin_guard
+  {
+    stitch_image *tile;
+    ~image_pin_guard () { tile->release_img (); }
+  } pin_guard {this};
   //mesh_trans = detect_solver_points (*img, dparam, solver_param, progress, &xshift, &yshift, &width, &height, &bitmap);
 #if 0
   if (m_prj->params.optimize_colors)
@@ -859,7 +868,6 @@ stitch_image::analyze (stitch_project *prj, detect_regular_screen_params *dspara
   progress->resume_stdout ();
   //dufay.set_known_pixels (bitmap);
   analyzed = true;
-  release_img ();
   return true;
 }
 
