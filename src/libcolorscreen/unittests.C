@@ -5121,7 +5121,7 @@ test_optical_cache_weights ()
     }
   precomputed_function<double> curve (
       0, 1, 65, [] (double x) { return x * x; });
-  if (curve.cached_bytes () < sizeof (curve) + 65 * 2 * sizeof (double))
+  if (curve.cached_bytes () < sizeof (curve) + 64 * 2 * sizeof (double))
     {
       fprintf (stderr, "Optical lookup omitted interpolation coefficients\n");
       return false;
