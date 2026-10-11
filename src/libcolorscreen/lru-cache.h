@@ -237,7 +237,7 @@ protected:
     std::unique_lock<std::mutex> guard (lock);
     Entry **victim = nullptr;
     for (Entry **slot = &entries; *slot; slot = &(*slot)->next)
-      if ((*slot)->val && !(*slot)->computing
+      if ((*slot)->val && (*slot)->cached_bytes && !(*slot)->computing
           && (!victim || (*slot)->last_used < (*victim)->last_used))
         victim = slot;
     if (!victim)
@@ -256,7 +256,8 @@ protected:
      cache's retained-byte limit. Never remove an in-progress computation
      or the just-computed PROTECTED entry. Called with LOCK held. */
   void
-  make_room_for_bytes (size_t need, Entry *protected_entry)
+  make_room_for_bytes (size_t need, Entry *protected_entry,
+                       std::vector<std::shared_ptr<void>> &retired)
   {
     while (cached_bytes > max_cached_bytes - need)
       {
@@ -271,6 +272,9 @@ protected:
         Entry *old = *victim;
         *victim = old->next;
         cached_bytes -= old->cached_bytes;
+        /* Keep its data alive until the caller unlocks this cache; a
+           derived image destructor may touch other LRU instances. */
+        retired.emplace_back (old->val, nullptr);
         delete old;
       }
   }
@@ -305,6 +309,10 @@ protected:
     if (progress)
       progress->wait ("unlocking cache");
 
+    /* Recycled or evicted image_data values can prune other core caches in
+       their destructor. Defer their final destruction until this cache's
+       mutex is unlocked, avoiding lock-order inversions and reentrancy. */
+    std::vector<std::shared_ptr<void>> retired;
     std::unique_lock<std::mutex> guard (lock, std::defer_lock);
     if (!progress)
       guard.lock ();
@@ -383,6 +391,8 @@ protected:
           fprintf (stderr, "Cache %s: deleting id %i\n", name, (int)e->id);
         cached_bytes -= e->cached_bytes;
         e->cached_bytes = 0;
+        if (e->val)
+          retired.emplace_back (e->val, nullptr);
         e->val = nullptr;
       }
     else
@@ -399,6 +409,7 @@ protected:
     e->last_used = time;
 
     guard.unlock ();
+    retired.clear ();
     std::shared_ptr<T> ret_val;
     {
       computing_guard cguard (e->computing, lock, cond);
@@ -427,7 +438,7 @@ protected:
         if (!max_cached_bytes || weight <= max_cached_bytes)
           {
             if (max_cached_bytes)
-              make_room_for_bytes (weight, e);
+              make_room_for_bytes (weight, e, retired);
             e->cached_bytes = weight;
             cached_bytes += weight;
           }
@@ -466,6 +477,7 @@ protected:
        registry lock while holding this cache's mutex. The returned image
        already has its own shared_ptr so even immediate eviction is safe. */
     guard.unlock ();
+    retired.clear ();
     if (ret_val)
       lru_cache_registry::instance ().enforce_budget ();
     return ret_val;
@@ -476,22 +488,29 @@ public:
   void
   prune ()
   {
-    std::unique_lock<std::mutex> guard (lock);
-    Entry **e;
-    for (e = &entries; *e;)
-      {
-        if ((*e)->val.use_count () <= 1 && !(*e)->computing)
-          {
-            if (verbose)
-              fprintf (stderr, "Cache %s: deleting id %i\n", name, (int)(*e)->id);
-            Entry *next = (*e)->next;
-            cached_bytes -= (*e)->cached_bytes;
-            delete (*e);
-            (*e) = next;
-          }
-        else
-          e = &(*e)->next;
-      }
+    std::vector<std::shared_ptr<void>> retired;
+    {
+      std::unique_lock<std::mutex> guard (lock);
+      Entry **e;
+      for (e = &entries; *e;)
+        {
+          if ((*e)->val.use_count () <= 1 && !(*e)->computing)
+            {
+              if (verbose)
+                fprintf (stderr, "Cache %s: deleting id %i\n", name,
+                         (int)(*e)->id);
+              Entry *old = *e;
+              *e = old->next;
+              cached_bytes -= old->cached_bytes;
+              if (old->val)
+                retired.emplace_back (old->val, nullptr);
+              delete old;
+            }
+          else
+            e = &(*e)->next;
+        }
+    }
+    /* Destruct old values after releasing this cache's mutex. */
   }
 
   /* Current cache-owned memory footprint. This excludes externally
