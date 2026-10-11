@@ -937,7 +937,12 @@ void MainWindow::openRecentFile(const QString &fileName) {
 void MainWindow::reloadCurrentImageWithDemosaic(bool autodetectScreen) {
   if (m_currentImageFile.isEmpty())
     return;
-  if (isDocumentModified())
+  /* Cached variants preserve Undo/Redo, so that stack continues to
+     provide the authoritative dirty flag: undoing the demosaic edit may
+     return a clean document. Only the legacy disk-reload fallback clears
+     Undo and needs the persistent recovery-dirty fallback. */
+  if (isDocumentModified() &&
+      (!m_scan || !m_scan->has_unpacked_raw_source()))
     m_recoveryDirty = true;
 
   if (autodetectScreen)
