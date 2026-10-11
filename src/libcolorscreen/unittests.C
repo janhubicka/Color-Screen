@@ -6092,6 +6092,50 @@ test_cache_scratch_preferences ()
   return true;
 }
 
+/* The same ordering is shared by Qt, CLI, and future frontends:
+   larger retained allocations first, then more entries, then cache name. */
+bool
+test_cache_statistics_lexicographic_order ()
+{
+  lru_cache_registry &registry = lru_cache_registry::instance ();
+  struct restore_budget
+  {
+    lru_cache_registry &registry;
+    ~restore_budget () { registry.set_test_budget_bytes (0); }
+  } restore {registry};
+  registry.set_test_budget_bytes (1024 * 1024);
+  lru_cache<test_params, weighted_test_value, get_new_weighted_test, 8>
+      biggest ("sort: biggest", 0, weighted_test_bytes),
+      numerous ("sort: numerous", 0, weighted_test_bytes),
+      alphabetically_first ("sort: alpha", 0, weighted_test_bytes),
+      alphabetically_last ("sort: zeta", 0, weighted_test_bytes),
+      smallest ("sort: smallest", 0, weighted_test_bytes);
+  test_params thirty {30}, thirteen {13}, seven {7},
+              twenty {20}, ten {10};
+  auto a = biggest.get (thirty, nullptr);
+  auto b = numerous.get (thirteen, nullptr);
+  auto c = numerous.get (seven, nullptr);
+  auto d = alphabetically_first.get (twenty, nullptr);
+  auto e = alphabetically_last.get (twenty, nullptr);
+  auto f = smallest.get (ten, nullptr);
+  if (!a || !b || !c || !d || !e || !f)
+    return false;
+  std::vector<std::string> selected;
+  for (const cache_entry_statistics &entry
+       : get_cache_memory_statistics ().caches)
+    if (entry.name.compare (0, 6, "sort: ") == 0)
+      selected.push_back (entry.name);
+  const std::vector<std::string> expected {
+      "sort: biggest", "sort: numerous", "sort: alpha", "sort: zeta",
+      "sort: smallest"};
+  if (selected != expected)
+    {
+      fprintf (stderr, "Global cache sorting is not size/count/name ordered\n");
+      return false;
+    }
+  return true;
+}
+
 /* Force a tiny global budget to validate eviction *across* otherwise
    independent LRU instances without allocating gigabytes or relying on the
    machine's free memory. The override is internal to libcolorscreen tests. */
@@ -13079,6 +13123,8 @@ main (int argc, char **argv)
       [] () { return test_lru_cache_byte_budget (); } },
     { "lru_global_memory", "global LRU eviction, diagnostics and RAM admission",
       [] () { return test_lru_global_memory_budget (); } },
+    { "cache_statistics_order", "global size/entry/name cache ordering",
+      [] () { return test_cache_statistics_lexicographic_order (); } },
     { "cache_memory_preferences", "adaptive and user-selected cache fractions",
       [] () { return test_cache_memory_preferences (); } },
     { "cache_scratch_preferences", "scratch mmap directory selection",

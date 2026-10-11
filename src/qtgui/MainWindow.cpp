@@ -2885,6 +2885,8 @@ void MainWindow::createMenus() {
     table->setEditTriggers(QAbstractItemView::NoEditTriggers);
     table->setSelectionMode(QAbstractItemView::NoSelection);
     table->setAlternatingRowColors(true);
+    table->setToolTip(tr("Sorted lexicographically by retained memory "
+                         "(descending), entry count (descending), then name."));
     table->verticalHeader()->hide();
     table->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
     for (int col = 1; col <= 5; ++col)
