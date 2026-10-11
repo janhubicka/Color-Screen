@@ -5,6 +5,7 @@
 #ifndef ANALYZE_BASE_H
 #define ANALYZE_BASE_H
 #include <memory>
+#include <atomic>
 #include <cassert>
 #include "include/color.h"
 #include "include/progress-info.h"
@@ -55,6 +56,11 @@ public:
   {
     assert (!m_known_pixels && !m_n_known_pixels);
     m_known_pixels.reset (bitmap);
+    /* Known-pixel evidence can be installed after the analyzer is cached. */
+    const size_t pixels = bitmap->width * bitmap->height;
+    m_cached_known_bytes.store (
+        sizeof (bitmap_2d) + pixels / 8 + (pixels % 8 != 0),
+        std::memory_order_relaxed);
     for (int y = 0; y < m_area.height; y++)
       for (int x = 0; x < m_area.width; x++)
 	if (bitmap->test_bit (x, y))
@@ -326,7 +332,50 @@ public:
   /* Return Y shift.  */
   int get_yshift () const { return m_area.yshift (); }
 
+  /* The LRU registry reads only these atomic counters after publication,
+     never potentially changing pixel, contrast or bitmap allocations. */
+  size_t
+  cached_allocated_bytes () const
+  {
+    return m_cached_plane_bytes.load (std::memory_order_relaxed)
+           + m_cached_known_bytes.load (std::memory_order_relaxed)
+           + m_cached_contrast_bytes.load (std::memory_order_relaxed);
+  }
+
+  /* Record the completed dense channel/collection-support buffers while
+     the analyzer is still private to the computation. The dimensions and
+     powers of two agree with analyze_base_worker::analyze. */
+  void
+  record_completed_plane_bytes ()
+  {
+    const size_t pixels = (size_t)m_area.width * (size_t)m_area.height;
+    const size_t red_count = pixels << (m_rwscl + m_rhscl);
+    const size_t green_count = pixels << (m_gwscl + m_ghscl);
+    const size_t blue_count = pixels << (m_bwscl + m_bhscl);
+    size_t bytes = 0;
+    if (m_red) bytes += red_count * sizeof (luminosity_t);
+    if (m_green) bytes += green_count * sizeof (luminosity_t);
+    if (m_blue) bytes += blue_count * sizeof (luminosity_t);
+    if (m_rgb_red) bytes += red_count * sizeof (rgbdata);
+    if (m_rgb_green) bytes += green_count * sizeof (rgbdata);
+    if (m_rgb_blue) bytes += blue_count * sizeof (rgbdata);
+    if (m_red_support) bytes += red_count * sizeof (luminosity_t);
+    if (m_green_support) bytes += green_count * sizeof (luminosity_t);
+    if (m_blue_support) bytes += blue_count * sizeof (luminosity_t);
+    m_cached_plane_bytes.store (bytes, std::memory_order_relaxed);
+  }
+
 protected:
+  /* Replacing contrast data does not double-charge an existing allocation.
+     Publish its new size independently of the completed channel planes. */
+  void
+  record_contrast_cache_bytes ()
+  {
+    m_cached_contrast_bytes.store (
+        m_contrast ? (size_t)m_area.width * (size_t)m_area.height
+                         * sizeof (contrast_info) : 0,
+        std::memory_order_relaxed);
+  }
   /* Minimum size for OpenMP parallelization.  */
   static constexpr size_t openmp_min_size = 128 * 1024;
 
@@ -379,6 +428,9 @@ protected:
   std::unique_ptr<bitmap_2d> m_known_pixels;
   int m_n_known_pixels = 0;
   std::unique_ptr<contrast_info[]> m_contrast;
+  std::atomic<size_t> m_cached_plane_bytes {0};
+  std::atomic<size_t> m_cached_known_bytes {0};
+  std::atomic<size_t> m_cached_contrast_bytes {0};
 };
 
 

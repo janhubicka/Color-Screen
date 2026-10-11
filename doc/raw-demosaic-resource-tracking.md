@@ -101,8 +101,8 @@ Invariants for final validation:
    demosaicing can differ in dimensions, channel availability, pitch and
    selected sharpening domain. Each variant must carry metadata matching
    its own output without modifying the source's accepted metadata.
-4. **Bounded cache ownership:** libcolorscreen's source quota and weighted
-   decoded-variant LRU have separate budgets. Eviction drops only cache-held
+4. **Bounded cache ownership:** libcolorscreen's sensor-source reservations,
+   decoded variants, analyzer tiles and renderer LRUs share one adaptive budget. Eviction drops only cache-held
    `shared_ptr` references; independently displayed images and their source
    mosaics remain valid. Variants own sources; sources own no variants.
 5. **Version and cancellation:** the Qt document loads a RAW source once,
@@ -140,6 +140,10 @@ Invariants for final validation:
   output-gamma and lens-inverse lookup tables, and backlight correction
   caches count their full per-channel weight grid. Regression tests in
   `optical_cache_weights` verify both classes of retained allocation.
+- Analyzer tile caches now report their completed channel and support arrays
+  plus late-installed known-pixel and contrast allocations through atomic
+  byte counters. Their opt-in dynamic LRU callbacks refresh global statistics
+  and eviction weights without reading mutable pixel buffers or using Qt.
 - Complete byte-size callbacks for the remaining analyzer tiles, spectral/
   optical tables, lookup arrays and other pointer-backed legacy LRU values.
   Unmeasured arrays remain explicitly unknown in the cache statistics UI.
