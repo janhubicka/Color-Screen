@@ -6069,6 +6069,23 @@ test_lru_global_memory_budget ()
       }
 
     const cache_memory_statistics report = get_cache_memory_statistics ();
+    /* Global snapshots list largest owned allocations first, followed by
+       descending cache entry count and name for exact ties. */
+    for (size_t index = 1; index < report.caches.size (); index++)
+      {
+        const auto &prior = report.caches[index - 1];
+        const auto &next = report.caches[index];
+        if (prior.retained_bytes < next.retained_bytes
+            || (prior.retained_bytes == next.retained_bytes
+                && prior.entries < next.entries)
+            || (prior.retained_bytes == next.retained_bytes
+                && prior.entries == next.entries
+                && prior.name > next.name))
+          {
+            fprintf (stderr, "Global cache statistics ordering is unstable\n");
+            return false;
+          }
+      }
     bool saw_first = false, saw_second = false;
     for (const auto &entry : report.caches)
       {

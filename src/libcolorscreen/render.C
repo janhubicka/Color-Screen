@@ -257,10 +257,20 @@ lru_cache_registry::snapshot ()
   result.cache_budget_bytes = effective_cache_budget (
       mem, saturating_add (result.cached_bytes,
                            result.retained_raw_source_bytes));
+  /* Present highest retained cache memory first. Equal-sized caches are
+     ordered by entry count, then by name to make every snapshot stable.
+     The same ordering is used by Qt and other frontends without a separate
+     UI-side sort or duplicated cache policy. */
   std::sort (result.caches.begin (), result.caches.end (),
              [] (const cache_entry_statistics &a,
                  const cache_entry_statistics &b)
-             { return a.name < b.name; });
+             {
+               if (a.retained_bytes != b.retained_bytes)
+                 return a.retained_bytes > b.retained_bytes;
+               if (a.entries != b.entries)
+                 return a.entries > b.entries;
+               return a.name < b.name;
+             });
   return result;
 }
 

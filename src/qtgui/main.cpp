@@ -1,5 +1,6 @@
 #include <algorithm>
 #include "../libcolorscreen/include/backlight-correction-parameters.h"
+#include "../libcolorscreen/include/cache-stats.h"
 #include "../libcolorscreen/include/imagedata.h"
 #include "GeometryPanel.h"
 #include "AtomicFileSave.h"
@@ -53,6 +54,7 @@
 #include <QImage>
 #include <QKeyEvent>
 #include <QLabel>
+#include <QLineEdit>
 #include <QMdiArea>
 #include <QMdiSubWindow>
 #include <QMenu>

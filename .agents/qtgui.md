@@ -1342,3 +1342,12 @@ The ordinary Qt smoke run uses an isolated QSettings identity to exercise
 Cancel, OK, Core API policy, scratch selection and Easter-egg filtering;
 restore the real identity, core settings and CSEGG environment afterward.
 
+
+### Cache statistics order
+
+The core snapshot `get_cache_memory_statistics().caches` is displayed with
+highest retained byte size first, then highest entry count, then ascending
+cache name. This is a lexicographic order on `(-bytes, -entries, name)`, not
+a frontend-local alphabetical sort; the Qt Cache Statistics dialog simply
+renders the core results. Entry size remains an estimate for legacy caches
+without byte callbacks and the shared memory budget remains a soft limit.
