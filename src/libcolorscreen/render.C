@@ -253,26 +253,29 @@ lru_cache_registry::snapshot ()
 void
 lru_cache_registry::enforce_budget (uint64_t extra_bytes)
 {
-  /* Hold the registry lock while selecting/calling a cache to prevent it
-     being destroyed concurrently. Evicted shared_ptrs are destructed ONLY
-     after releasing that lock: image_data destructors may prune other caches.
-     No cache may call this method while holding its own entry mutex. */
-  std::vector<std::shared_ptr<void>> retired;
-  {
-    std::lock_guard<std::mutex> registry_guard (registry_mutex);
-    const memory_reading mem = query_host_memory ();
-    const uint64_t raw_bytes = raw_source_cache_bytes ();
-    uint64_t current = raw_bytes;
-    for (tracked_lru_cache *cache : caches)
-      current = saturating_add (
-          current, cache->cache_statistics (nullptr).retained_bytes);
-    const uint64_t budget = effective_cache_budget (mem, current);
+  /* Evict one globally oldest completed entry at a time. A decoded RAW
+     variant can be the last owner of its unpacked CFA source. Releasing that
+     variant may also release a large RAW reservation, so recompute the
+     accounting BEFORE choosing another victim. Otherwise memory pressure
+     needlessly evicts younger, independent cached images.
 
-    /* At most the number of completed entries can be detached. A zero-byte
-       array entry is intentionally excluded from global byte-pressure
-       eviction, since its actual backing allocation is not measurable. */
-    while (saturating_add (current, extra_bytes) > budget)
+     Keep the registry lock only while inspecting caches and detaching the
+     victim: source/image destructors can themselves prune caches and must
+     run outside both the registry lock and every per-cache lock. */
+  for (;;)
+    {
+      std::shared_ptr<void> retired;
       {
+        std::lock_guard<std::mutex> registry_guard (registry_mutex);
+        const memory_reading mem = query_host_memory ();
+        uint64_t current = raw_source_cache_bytes ();
+        for (tracked_lru_cache *cache : caches)
+          current = saturating_add (
+              current, cache->cache_statistics (nullptr).retained_bytes);
+        const uint64_t budget = effective_cache_budget (mem, current);
+        if (saturating_add (current, extra_bytes) <= budget)
+          return;
+
         tracked_lru_cache *oldest_cache = nullptr;
         uint64_t oldest = std::numeric_limits<uint64_t>::max ();
         for (tracked_lru_cache *cache : caches)
@@ -285,19 +288,20 @@ lru_cache_registry::enforce_budget (uint64_t extra_bytes)
                 oldest_cache = cache;
               }
           }
+        /* Unmeasured zero-byte entries and externally owned RAW sources
+           cannot be freed by global LRU eviction. */
         if (!oldest_cache)
-          break;
-        retired.push_back (oldest_cache->discard_oldest_cache_entry ());
-        uint64_t new_total = raw_bytes;
-        for (tracked_lru_cache *cache : caches)
-          new_total = saturating_add (
-              new_total, cache->cache_statistics (nullptr).retained_bytes);
-        if (new_total >= current)
-          break;
-        current = new_total;
+          return;
+        retired = oldest_cache->discard_oldest_cache_entry ();
       }
-  }
-  /* 'retired' releases all cache ownership here, outside every mutex. */
+
+      /* The aliasing shared_ptr carries the control block even though its
+         stored pointer is null. Check use_count, not operator bool, when
+         deciding whether an entry was detached by a concurrent prune. */
+      if (!retired.use_count ())
+        return;
+      retired.reset ();
+    }
 }
 
 bool

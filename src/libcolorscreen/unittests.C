@@ -6006,6 +6006,64 @@ test_lru_global_memory_budget ()
         return false;
       }
   }
+  /* Evicting a decoded RAW variant can drop the last reference to its CFA
+     source. The shared global budget must count that release before
+     considering the next independent image. The old deferred-destruction
+     batch loop would evict BOTH 10+35-byte source and the newer 50-byte
+     result under a 50-byte budget, even though the latter fits alone. */
+  registry.set_test_budget_bytes (100);
+  {
+    struct source_owning_test_value
+    {
+      size_t weight;
+      uint64_t reserved_raw_bytes;
+      source_owning_test_value (size_t w, uint64_t raw)
+          : weight (w), reserved_raw_bytes (raw) {}
+      ~source_owning_test_value ()
+      {
+        if (reserved_raw_bytes)
+          release_raw_source_cache_bytes (reserved_raw_bytes);
+      }
+    };
+    lru_cache<test_params, source_owning_test_value, nullptr, 8>
+        source_cache ("eviction releases RAW mosaic", 0,
+                      +[] (const source_owning_test_value &v)
+                      { return v.weight; });
+    lru_cache<test_params, weighted_test_value,
+              get_new_weighted_test, 8>
+        independent_cache ("eviction preserves newer image", 0,
+                           weighted_test_bytes);
+    test_params source_key {10}, independent_key {50};
+    const uint64_t original_raw_bytes = raw_source_cache_bytes ();
+    if (!reserve_raw_source_cache_bytes (35))
+      return false;
+    auto source_variant = source_cache.get_or_compute (
+        source_key, nullptr,
+        [] (test_params &, progress_info *)
+        { return std::make_unique<source_owning_test_value> (10, 35); });
+    if (!source_variant)
+      {
+        release_raw_source_cache_bytes (35);
+        return false;
+      }
+    source_variant.reset ();
+    auto newer = independent_cache.get (independent_key, nullptr);
+    if (!newer)
+      return false;
+    newer.reset ();
+
+    registry.set_test_budget_bytes (50);
+    registry.enforce_budget ();
+    if (source_cache.peek (source_key)
+        || !independent_cache.peek (independent_key)
+        || raw_source_cache_bytes () != original_raw_bytes
+        || independent_cache.retained_bytes () != 50)
+      {
+        fprintf (stderr,
+                 "Global eviction discarded a fitting image after releasing RAW source\\n");
+        return false;
+      }
+  }
   return true;
 }
 
