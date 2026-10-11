@@ -12934,14 +12934,54 @@ test_raw_source_variants ()
 
       image_data fresh;
       error = nullptr;
-      if (!fresh.load (path, true, &error, nullptr, method)
-          || !same_pixels (*computed, fresh) || computed->id == fresh.id
-          || !computed->raw_demosaicing_available_p ()
-          || computed->demosaic != method)
+      if (!fresh.load (path, true, &error, nullptr, method))
+        {
+          fprintf (stderr, "Independent RAW decode failed for method %i: %s\n",
+                   (int)method, error ? error : "unknown error");
+          return false;
+        }
+      const bool pixel_match = same_pixels (*computed, fresh);
+      const bool unique_ids = computed->id != fresh.id;
+      const bool retained_cfa = computed->raw_demosaicing_available_p ();
+      const bool requested_method = computed->demosaic == method;
+      if (!pixel_match || !unique_ids || !retained_cfa || !requested_method)
         {
           fprintf (stderr,
-                   "RAW cached %i reused an independent decode UID or differs: %s\n",
-                   (int)method, error ? error : "pixel/geometry mismatch");
+                   "RAW variant %i: pixel/geometry=%d, UID distinct=%d, "
+                   "CFA capability=%d, requested method=%d; "
+                   "cached %ix%i ID=%llu, fresh %ix%i ID=%llu\n",
+                   (int)method, (int)pixel_match, (int)unique_ids,
+                   (int)retained_cfa, (int)requested_method,
+                   computed->width, computed->height,
+                   (unsigned long long)computed->id,
+                   fresh.width, fresh.height,
+                   (unsigned long long)fresh.id);
+          if (!pixel_match && computed->width == fresh.width
+              && computed->height == fresh.height && computed->has_rgb ()
+              && fresh.has_rgb ())
+            for (int y = 0; y < computed->height; ++y)
+              {
+                bool reported = false;
+                for (int x = 0; x < computed->width; ++x)
+                  {
+                    const auto got = computed->get_rgb_pixel (x, y);
+                    const auto wanted = fresh.get_rgb_pixel (x, y);
+                    if (got.r != wanted.r || got.g != wanted.g
+                        || got.b != wanted.b)
+                      {
+                        fprintf (stderr,
+                                 "First RAW pixel mismatch at %i,%i: "
+                                 "cached %u,%u,%u; fresh %u,%u,%u\n",
+                                 x, y, (unsigned)got.r, (unsigned)got.g,
+                                 (unsigned)got.b, (unsigned)wanted.r,
+                                 (unsigned)wanted.g, (unsigned)wanted.b);
+                        reported = true;
+                        break;
+                      }
+                  }
+                if (reported)
+                  break;
+              }
           return false;
         }
       /* Rendered scanner sharpening is an image-dependent shared LRU.
