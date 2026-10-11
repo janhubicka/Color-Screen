@@ -11037,6 +11037,123 @@ test_stitch_tile_adjustment_grid ()
 }
 
 
+/* A completed stitched CLI tile should be borrowed from the same core
+   size-aware LRU as other processed images, rather than retained/evicted by
+   a private 'one tile in memory' stitch_project policy. */
+bool
+test_stitch_tile_shared_lru ()
+{
+  namespace fs = std::filesystem;
+  std::error_code ec;
+  const fs::path directory = fs::temp_directory_path (ec);
+  if (ec)
+    return false;
+  const fs::path source_path = directory /
+      ("colorscreen-stitch-cache-" + std::to_string (lru_caches::get ()) + ".tif");
+  struct clean_up
+  {
+    fs::path path;
+    ~clean_up ()
+    {
+      std::error_code ignored;
+      fs::remove (path, ignored);
+    }
+  } cleanup {source_path};
+
+  image_data image;
+  if (!image.set_dimensions (32, 24, true, false))
+    return false;
+  for (int y = 0; y < 24; ++y)
+    for (int x = 0; x < 32; ++x)
+      {
+        auto &p = image.get_rgb_row (y)[x];
+        p.r = (uint16_t)(x * 1700);
+        p.g = (uint16_t)(y * 2200);
+        p.b = (uint16_t)((x + y) * 850);
+      }
+  if (!image.save_tiff (source_path.string ().c_str (), nullptr))
+    {
+      fprintf (stderr, "Cannot write synthetic stitch source TIFF\n");
+      return false;
+    }
+
+  auto project = std::make_unique<stitch_project> ();
+  stitch_image &tile = project->images[0][0];
+  tile.filename = source_path.string ();
+  tile.param.type = NoScreen;
+  tile.param.coordinate1 = {1, 0};
+  tile.param.coordinate2 = {0, 1};
+  tile.angle = 90;
+  tile.ratio = 1;
+  tile.pos = {0, 0};
+  tile.img_width = tile.width = 32;
+  tile.img_height = tile.height = 24;
+  FILE *description = tmpfile ();
+  if (!description)
+    return false;
+  bool saved = tile.save (description);
+  rewind (description);
+  const char *error = nullptr;
+  const bool parsed = saved && tile.load (project.get (), description, &error);
+  fclose (description);
+  if (!parsed)
+    {
+      fprintf (stderr, "Cannot read synthetic stitch source metadata: %s\n",
+               error ? error : "unknown");
+      return false;
+    }
+
+  lru_cache_registry &registry = lru_cache_registry::instance ();
+  struct budget_restore
+  {
+    lru_cache_registry &registry;
+    ~budget_restore () { registry.set_test_budget_bytes (0); }
+  } restore_budget {registry};
+  registry.set_test_budget_bytes (16 * 1024 * 1024);
+  if (!tile.load_img (&error, nullptr) || !tile.image_ready_p ())
+    {
+      fprintf (stderr, "Core stitching tile load failed: %s\n",
+               error ? error : "unknown");
+      return false;
+    }
+  std::shared_ptr<image_data> pinned = tile.img;
+  const uint64_t first_id = pinned->id;
+  tile.release_img ();
+  if (tile.img || tile.image_ready_p ())
+    {
+      fprintf (stderr, "Released stitch tile still pinned by project\n");
+      return false;
+    }
+  if (!tile.load_img (&error, nullptr) || !tile.img
+      || tile.img->id != first_id || tile.img.get () != pinned.get ())
+    {
+      fprintf (stderr, "Stitch source was decoded again instead of reused\n");
+      return false;
+    }
+  tile.release_img ();
+
+  bool found = false;
+  for (const auto &row : get_cache_memory_statistics ().caches)
+    if (row.name == "stitched image tiles")
+      found = row.precise_size && row.retained_bytes >= 32u * 24u * 6u
+              && row.entries >= 1;
+  if (!found)
+    {
+      fprintf (stderr, "Global cache omitted the decoded stitch tile\n");
+      return false;
+    }
+
+  registry.set_test_budget_bytes (1);
+  registry.enforce_budget ();
+  if (pinned->id != first_id || pinned->get_rgb_pixel (1, 1).r != 1700)
+    {
+      fprintf (stderr, "Eviction invalidated a pinned stitch image\n");
+      return false;
+    }
+  pinned.reset ();
+  return true;
+}
+
 /* A deliberate export to historical .par must refuse any saved parameter
    that cannot be represented there, rather than truncate the user's edits. */
 static bool
@@ -12911,6 +13028,8 @@ main (int argc, char **argv)
       [] () { return test_native_json_v2_registration (); } },
     { "stitch_tile_grid", "stitch tile adjustment grid persistence tests",
       [] () { return test_stitch_tile_adjustment_grid (); } },
+    { "stitch_tile_cache", "global LRU reuse and safe stitch tile eviction",
+      [] () { return test_stitch_tile_shared_lru (); } },
     { "raw_source_retention", "decoded source lifetime and non-RAW isolation tests",
       [] () { return test_raw_source_retention_contract (); } },
     { "raw_source_variant", "cached Bayer RAW reprocessing tests",
