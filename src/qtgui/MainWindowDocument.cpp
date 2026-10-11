@@ -1116,6 +1116,14 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
   const QString outgoingImageFile = m_currentImageFile;
   const auto outgoingScan = m_scan;
   const bool restoreOutgoingImage = static_cast<bool>(outgoingScan);
+  /* Reprocessing a different CFA method is not a new image Open. Keep the
+     already displayed, immutable source pixels visible while its replacement
+     is generated, instead of blanking a potentially very large canvas.
+     The panel data accessor still reports unavailable while pending, so
+     image-dependent commands cannot treat this old preview as new pixels. */
+  const bool preservePreview =
+      suppressParamPrompt && preferCachedRaw && outgoingScan &&
+      outgoingImageFile == requestedImageFile;
 
   // Return the completed scan through QFuture rather than sharing a mutable
   // pointer between the worker and the GUI thread. Cached demosaic requests
@@ -1194,10 +1202,13 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
   m_currentImageFile = requestedImageFile;
   updateWindowTitle();
 
-  // Clear current image and stop rendering. Processing panels deliberately
-  // see no usable source while replacement is pending even though m_scan keeps
-  // the outgoing image alive for transactional reload failure recovery.
-  m_imageWidget->setImage(nullptr, nullptr, nullptr, nullptr, nullptr, nullptr);
+  // Ordinary Open clears the old image immediately. For a same-document RAW
+  // demosaic edit, keep the prior immutable pixels as a visual preview until
+  // the new variant is ready (or decoding fails). Processing panels still see
+  // no usable data through panelImageData() while m_imageLoad.pending.
+  if (!preservePreview)
+    m_imageWidget->setImage(nullptr, nullptr, nullptr, nullptr, nullptr,
+                            nullptr);
   refreshImageAvailabilityPresentation();
 
   // Continue into the actual image worker only after the optional sidecar
