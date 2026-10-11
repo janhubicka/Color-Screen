@@ -1338,13 +1338,7 @@ stitch_image_data_loader::init_loader (const char *name, const char **error,
   m_img->stitch->determine_angle ();
   int xmax, ymax;
   m_img->stitch->determine_viewport (m_img->xmin, xmax, m_img->ymin, ymax);
-  if (m_preload_all)
-    {
-      m_img->stitch->keep_all_images ();
-      increase_lru_cache_sizes_for_stitch_projects (
-          m_img->stitch->params.width * m_img->stitch->params.height);
-    }
-  m_img->width = xmax - m_img->xmin;
+   m_img->width = xmax - m_img->xmin;
   m_img->height = ymax - m_img->ymin;
   m_curr_img = 0;
   m_max_img
@@ -1363,85 +1357,60 @@ bool
 stitch_image_data_loader::load_part (int *permille, const char **error,
                                      progress_info *progress)
 {
-  int y = m_curr_img / m_img->stitch->params.width;
-  int x = m_curr_img % m_img->stitch->params.width;
-  stitch_image &simg = m_img->stitch->images[y][x];
-  if (!simg.img)
-    {
-      sub_task task (progress);
-      if (progress)
-        progress->set_task ("loading image header", 1);
-      if (!simg.init_loader (error, progress))
-        return false;
-      *permille = 1000 * m_curr_img / (m_max_img + 1);
-      if (!simg.img->allocate ())
-        {
-          *error = "out of memory";
-          simg.img = NULL;
-          return false;
-        }
-      return true;
-    }
-  int permille2;
+  const int y = m_curr_img / m_img->stitch->params.width;
+  const int x = m_curr_img % m_img->stitch->params.width;
+  stitch_image &tile = m_img->stitch->images[y][x];
+
+  /* A tile is a single cache acquisition rather than a separate project-
+     specific partial decoder. The underlying image_data::load still reports
+     progress, and simultaneous requests share one core LRU computation. */
   {
     sub_task task (progress);
-    if (!simg.load_part (&permille2, error, progress))
-      {
-	simg.img = NULL;
-	return false;
-      }
+    if (!tile.load_img (error, progress))
+      return false;
   }
-  *permille
-      = 1000 * m_curr_img / (m_max_img + 1) + permille2 / (m_max_img + 1);
-  if (permille2 == 1000)
+  image_data &decoded = *tile.img;
+  if (!m_curr_img)
     {
-      if (!x && !y)
+      m_img->maxval = decoded.maxval;
+      m_img->icc_profile_size = decoded.icc_profile_size;
+      if (decoded.icc_profile)
         {
-          m_img->maxval = simg.img->maxval;
-          m_img->icc_profile_size = simg.img->icc_profile_size;
-          if (simg.img->icc_profile)
+          m_img->icc_profile = malloc (decoded.icc_profile_size);
+          if (!m_img->icc_profile)
             {
-              m_img->icc_profile = malloc (simg.img->icc_profile_size);
-              m_img->icc_profile_size = simg.img->icc_profile_size;
-              memcpy (m_img->icc_profile, simg.img->icc_profile,
-                      m_img->icc_profile_size);
-            }
-          m_img->xdpi = simg.img->xdpi;
-          m_img->ydpi = simg.img->ydpi;
-        }
-      else
-        {
-          if (m_img->maxval != simg.img->maxval)
-            {
-              *error = "images in stitch project must all have the same bit "
-                       "depth";
+              *error = "out of memory copying stitch profile";
               return false;
             }
-          if (m_img->xdpi != simg.img->xdpi || m_img->ydpi != simg.img->ydpi)
-            {
-              *error = "images in stitch project must all have the same DPI";
-              return false;
-            }
-#if 1
-          if (m_img->icc_profile_size != simg.img->icc_profile_size
-              || memcmp (m_img->icc_profile, simg.img->icc_profile,
-                         m_img->icc_profile_size))
-            {
-              *error = "images in stitch project must all have the same color "
-                       "profile";
-              return false;
-            }
-#endif
+          memcpy (m_img->icc_profile, decoded.icc_profile,
+                  decoded.icc_profile_size);
         }
-      if (m_curr_img == m_max_img)
-        {
-          *permille = 1000;
-          return true;
-        }
-      else
-        m_curr_img++;
-      return true;
+      m_img->xdpi = decoded.xdpi;
+      m_img->ydpi = decoded.ydpi;
     }
+  else
+    {
+      if (m_img->maxval != decoded.maxval)
+        {
+          *error = "images in stitch project must all have the same bit depth";
+          return false;
+        }
+      if (m_img->xdpi != decoded.xdpi || m_img->ydpi != decoded.ydpi)
+        {
+          *error = "images in stitch project must all have the same DPI";
+          return false;
+        }
+      if (m_img->icc_profile_size != decoded.icc_profile_size
+          || (m_img->icc_profile_size
+              && memcmp (m_img->icc_profile, decoded.icc_profile,
+                         m_img->icc_profile_size)))
+        {
+          *error = "images in stitch project must all have the same color profile";
+          return false;
+        }
+    }
+  ++m_curr_img;
+  *permille = 1000 * m_curr_img / (m_max_img + 1);
   return true;
 }
 
