@@ -657,10 +657,18 @@ image_layer_histogram_cached_bytes (const histogram &value)
   return value.cached_bytes ();
 }
 
+/* A backlight correction owns a per-channel weight grid. */
+static size_t
+backlight_cached_bytes (const backlight_correction &value)
+{
+  return value.cached_bytes ();
+}
+
 /* Static cache instances.  */
 static lru_cache<backlight_correction_cache_params, backlight_correction,
                  get_new_backlight_correction, 10>
-    backlight_correction_cache ("backlight corrections");
+    backlight_correction_cache (
+        "backlight corrections", 0, backlight_cached_bytes);
 
 static lru_cache<image_layer_histogram_params, histogram,
                  get_new_image_layer_histogram, 10>

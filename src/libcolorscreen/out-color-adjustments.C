@@ -41,9 +41,16 @@ get_new_out_lookup_table (out_lookup_table_params &p, progress_info *)
       });
 }
 
+/* Output-gamma lookups own a vector of interpolation coefficients. */
+static size_t
+out_lookup_cached_bytes (const precomputed_function<luminosity_t> &table)
+{
+  return table.cached_bytes ();
+}
 static lru_cache<out_lookup_table_params, precomputed_function<luminosity_t>,
-		 get_new_out_lookup_table, 4>
-    out_lookup_table_cache ("out lookup tables");
+                 get_new_out_lookup_table, 4>
+    out_lookup_table_cache (
+        "out lookup tables", 0, out_lookup_cached_bytes);
 }
 
 /* Precompute color transformation matrices and lookup tables for given
