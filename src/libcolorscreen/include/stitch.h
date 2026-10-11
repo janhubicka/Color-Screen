@@ -4,6 +4,7 @@
 #include <atomic>
 #include <string>
 #include <memory>
+#include <mutex>
 #include "imagedata.h"
 #include "scr-to-img.h"
 #include "colorscreen.h"
@@ -108,10 +109,10 @@ public:
   std::string filename;
   std::string screen_filename;
   std::string known_screen_filename;
-  /* The image pointer is installed when decoding begins, not when image
-     bytes are ready. Use image_ready_p() for concurrent rendering rather
-     than testing IMG, which may still be undergoing load_part(). */
-  std::unique_ptr<image_data> img;
+  /* Completed CLI tiles are acquired from a shared libcolorscreen LRU.
+     An in-flight or GUI-progressive tile stays strongly pinned here until
+     its users finish. Check image_ready_p() before borrowing pixel data. */
+  std::shared_ptr<image_data> img;
   bool image_ready_p () const noexcept
   {
     return m_image_ready.load (std::memory_order_acquire);
@@ -169,7 +170,6 @@ public:
   bool analyze (stitch_project *prj, detect_regular_screen_params *dsparams, bool top_p, bool bottom_p, bool left_p,
                 bool right_p, lens_warp_correction_parameters &lens_correction,
                 progress_info *);
-  void release_image_data (progress_info *);
   bitmap_2d *compute_known_pixels (scr_to_img &scr_to_img,
                                    int skiptop, int skipbottom, int skipleft,
                                    int skipright, progress_info *progress);
@@ -240,13 +240,17 @@ public:
                                      const char **error);
 
 private:
-  static std::atomic<uint64_t> current_time;
-  static std::atomic<int> nloaded;
-  /* Release-store only after image decoding and validation have completed.
-     Renderers acquire-load before using IMG on a still-live GUI project. */
-  std::atomic<bool> m_image_ready {false};
-  uint64_t lastused;
+  /* Cache-key identity is unique across stitch projects, even if they
+     reference the same filename with different calibration settings. */
+  uint64_t m_image_cache_id;
+  std::mutex m_image_lock;
   int refcount;
+  /* A temporary CLI pin is released after its final analysis user.
+     GUI-progressive tiles stay pinned for raw-pointer rendering safety. */
+  bool m_cached_image = false;
+  /* Release-store only after image decoding and validation have completed.
+     GUI renderers acquire-load before accessing IMG. */
+  std::atomic<bool> m_image_ready {false};
   stitch_project *m_prj;
 };
 
@@ -282,11 +286,6 @@ public:
                                  int y = -1);
   std::string add_path (std::string name);
   void set_path_by_filename (std::string name);
-  void
-  keep_all_images ()
-  {
-    release_images = false;
-  }
   bool
   tile_for_scr (const render_output_parameters *output, coord_t sx, coord_t sy, int *x,
                 int *y, bool only_loaded)
@@ -400,7 +399,6 @@ private:
   /* Screen used to collect patch density at analysis stage.  */
   std::shared_ptr<screen> my_screen;
   int stitch_info_scale = 0;
-  bool release_images;
   coord_t rotation_adjustment;
   friend stitch_image;
 

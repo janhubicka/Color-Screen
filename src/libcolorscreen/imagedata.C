@@ -1338,12 +1338,9 @@ stitch_image_data_loader::init_loader (const char *name, const char **error,
   m_img->stitch->determine_angle ();
   int xmax, ymax;
   m_img->stitch->determine_viewport (m_img->xmin, xmax, m_img->ymin, ymax);
-  if (m_preload_all)
-    {
-      m_img->stitch->keep_all_images ();
-      increase_lru_cache_sizes_for_stitch_projects (
-          m_img->stitch->params.width * m_img->stitch->params.height);
-    }
+  /* GUI progressive tiles remain pinned while the legacy render path
+     borrows their public IMG pointers. CLI analysis tiles use the core
+     byte-accounted LRU instead of a stitch-project cache-size override. */
   m_img->width = xmax - m_img->xmin;
   m_img->height = ymax - m_img->ymin;
   m_curr_img = 0;

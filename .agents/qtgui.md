@@ -1278,9 +1278,13 @@ exposure, dark-point and blur. Actual loading availability is determined indepen
 `stitch_image::img` is allocated before pixels are decoded, so the library
 publishes a release-store ready bit **only after** `load_part` completes
 and validates dimensions/colour channels. Render lookups acquire-load that
-bit before reading the tile. The GUI calls `keep_all_images()` on its
-stitched project before dispatching parallel loads to prevent background
-LRU eviction while a view renders. Completion refreshes primary and peer
+bit before reading the tile. CLI analysis tiles are now retained by the single size-aware global
+`libcolorscreen` LRU. Their project pins are released when analysis finishes;
+the historical project-local one-tile LRU and cache-size inflation are gone.
+GUI progressive loading still holds tiles during rendering because existing
+renderers borrow raw `stitch_image::img` pointers. A separate follow-up must
+give renderer requests explicit `shared_ptr` pins before making those
+GUI buffers evictable without races. Completion refreshes primary and peer
 renders through `imageTilesChanged()`, without altering `ParameterState`,
 Undo or dirty state. A file export can explicitly
 reuse the active view's mask, but never saves it in CSP.

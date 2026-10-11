@@ -47,8 +47,8 @@ load_stitch_parameter_file (const char *name, scr_to_img_parameters *param,
 stitch_project::stitch_project ()
   : params (), report_file (NULL), images(), param (), rparam (),
     common_scr_to_img (), dparam (), solver_param (),
-    pixel_size (0), my_screen (), stitch_info_scale (0), 
-    release_images (true), rotation_adjustment (0)
+    pixel_size (0), my_screen (), stitch_info_scale (0),
+    rotation_adjustment (0)
 {}
 
 stitch_project::~stitch_project ()
@@ -1563,10 +1563,9 @@ stitch_project::stitch (progress_info *progress, detect_regular_screen_params *d
 	    if (x != xx || y != yy)
 	      images[y][x].diff (images[yy][xx], progress);
 
-  for (int y = 0; y < params.height; y++)
-    for (int x = 0; x < params.width; x++)
-      if (images[y][x].img)
-	images[y][x].release_image_data (progress);
+  /* Tile ownership is released by active analysis operations, and the
+     libcolorscreen LRU alone decides whether completed pixels stay cached.
+     No project-local eviction or explicit final image sweep is necessary. */
   if (report_file)
     fclose (report_file);
   return true;
