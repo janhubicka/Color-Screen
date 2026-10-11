@@ -5972,6 +5972,40 @@ test_lru_global_memory_budget ()
     if (entry.name == "global weight five"
         || entry.name == "global weight six")
       return false;
+
+  /* A 150+ MP RGB capture can occupy approximately 900 MiB of decoded
+     pixels. Exercise an equivalent cache weight WITHOUT allocating a large
+     image or relying on the CI runner's physical RAM. A 2 GiB available
+     cache budget must retain the full value alongside a 300 MiB unpacked
+     Bayer CFA reservation, rather than silently retaining neither due to a
+     historical 256 MiB hard cap. */
+  constexpr uint64_t gib = UINT64_C (1024) * 1024 * 1024;
+  constexpr int rgb_bytes = 900 * 1024 * 1024;
+  constexpr uint64_t mosaic_bytes = UINT64_C (300) * 1024 * 1024;
+  registry.set_test_budget_bytes (2 * gib);
+  {
+    lru_cache<test_params, weighted_test_value,
+              get_new_weighted_test, 8>
+        huge ("simulated 150 MP RGB", 0, weighted_test_bytes);
+    test_params rgb {rgb_bytes};
+    auto image = huge.get (rgb, nullptr, nullptr, &hit);
+    const bool retained = image && !hit
+                          && huge.retained_bytes () == (size_t)rgb_bytes;
+    const bool reserved = reserve_raw_source_cache_bytes (mosaic_bytes);
+    const cache_memory_statistics report = get_cache_memory_statistics ();
+    if (reserved)
+      release_raw_source_cache_bytes (mosaic_bytes);
+    if (!retained || !reserved
+        || report.cache_budget_bytes != 2 * gib
+        || report.cached_bytes < (size_t)rgb_bytes
+        || report.retained_raw_source_bytes < mosaic_bytes
+        || image->weight != (size_t)rgb_bytes)
+      {
+        fprintf (stderr,
+                 "Global LRU rejected simulated 150 MP image under 2 GiB budget\n");
+        return false;
+      }
+  }
   return true;
 }
 
