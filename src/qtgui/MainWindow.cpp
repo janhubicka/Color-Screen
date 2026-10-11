@@ -3583,7 +3583,12 @@ void MainWindow::applyState(const ParameterState &state) {
           m_rparams.demosaic != selectedMethod)
         return;
       if (m_imageLoad.pending) {
-        if (m_imageLoad.pendingDemosaic &&
+        /* A fresh Open/sidecar request still retains the outgoing m_scan
+           for rollback, but its target filename may already differ.
+           Never supersede that independent Open with an old document's
+           Undo/Redo-triggered demosaic request. Only same-image reprocess
+           requests carry a pendingDemosaic identity. */
+        if (!m_imageLoad.pendingDemosaic ||
             *m_imageLoad.pendingDemosaic == selectedMethod)
           return;
       } else if (m_scan->demosaiced_by == selectedMethod) {
