@@ -1287,9 +1287,17 @@ exposure, dark-point and blur. Actual loading availability is determined indepen
 `stitch_image::img` is allocated before pixels are decoded, so the library
 publishes a release-store ready bit **only after** `load_part` completes
 and validates dimensions/colour channels. Render lookups acquire-load that
-bit before reading the tile. The GUI calls `keep_all_images()` on its
-stitched project before dispatching parallel loads to prevent background
-LRU eviction while a view renders. Completion refreshes primary and peer
+bit before reading the tile. Each decoded stitch tile is held by the same **global byte-aware core
+LRU** as RAW variants and renderer caches. The old per-project
+`release_images`/oldest-image heuristic and `keep_all_images()` override
+are gone. A tile undergoing rendering owns an independent shared pointer
+until `release_img()`; global eviction can drop the cache reference but
+must never invalidate that active tile. The GUI's concurrent tile workers
+retain their image pins for the visible project's lifetime, preserving
+existing paint and progressive-loading safety. Subsequent viewport-based
+pin scheduling can reduce memory for very large projects without requiring
+another frontend cache. Cache keys include project generation, tile path
+and demosaicing mode; reopened projects cannot silently reuse stale data. Completion refreshes primary and peer
 renders through `imageTilesChanged()`, without altering `ParameterState`,
 Undo or dirty state. A file export can explicitly
 reuse the active view's mask, but never saves it in CSP.

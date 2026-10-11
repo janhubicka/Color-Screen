@@ -9,19 +9,80 @@
 #include "analyze-dufay.h"
 #include "analyze-paget.h"
 #include "render-interpolate.h"
+#include "lru-cache.h"
 #include "loadsave.h"
+#include <limits>
 extern const unsigned char sRGB_icc[];
 extern const unsigned int sRGB_icc_len;
 namespace colorscreen
 {
-std::atomic<uint64_t> stitch_image::current_time {0};
-std::atomic<int> stitch_image::nloaded {0};
+namespace
+{
+/* Only this lightweight key remains in cache metadata after a project closes.
+   It deliberately does not own or dereference the stitch_project. */
+struct stitch_tile_cache_key
+{
+  uint64_t project_id;
+  std::string absolute_path;
+  image_data::demosaicing_t method;
+  bool
+  operator== (const stitch_tile_cache_key &o) const
+  {
+    return project_id == o.project_id && method == o.method
+           && absolute_path == o.absolute_path;
+  }
+};
+
+/* Count all decoded pixel planes, including any grayscale/IR channel and ICC
+   profile. The retained unpacked RAW source has separate global accounting. */
+size_t
+stitch_tile_cached_bytes (const image_data &image)
+{
+  if (image.width <= 0 || image.height <= 0)
+    return std::numeric_limits<size_t>::max ();
+  const size_t channels
+      = (image.has_rgb () ? sizeof (image_data::pixel) : 0)
+        + (image.has_grayscale_or_ir () ? sizeof (image_data::gray) : 0);
+  if (!channels)
+    return std::numeric_limits<size_t>::max ();
+  const size_t pixels = (size_t)image.width * (size_t)image.height;
+  const size_t limit = std::numeric_limits<size_t>::max ();
+  if (pixels > (limit - sizeof (image_data)) / channels)
+    return limit;
+  size_t size = sizeof (image_data) + pixels * channels;
+  if (image.icc_profile_size > limit - size)
+    return limit;
+  size += image.icc_profile_size;
+  for (const auto &table : image.to_linear)
+    {
+      if (table.capacity () > (limit - size) / sizeof (luminosity_t))
+        return limit;
+      size += table.capacity () * sizeof (luminosity_t);
+    }
+  return size;
+}
+
+using stitch_tile_cache_t
+    = lru_cache<stitch_tile_cache_key, image_data, nullptr, 512>;
+
+/* Keep the registry and its per-value eviction logic in libcolorscreen.
+   A function-local cache has safe teardown ordering relative to renderer LRUs
+   whose values are pruned when an image_data is destroyed. */
+stitch_tile_cache_t &
+stitch_tile_cache ()
+{
+  static stitch_tile_cache_t *cache = new stitch_tile_cache_t (
+      "Stitch decoded tiles", 0, stitch_tile_cached_bytes);
+  return *cache;
+}
+} // anonymous namespace
 
 stitch_image::stitch_image ()
-: filename (""), img (), mesh_trans (), demosaic (image_data::demosaic_default), xshift (0), yshift (0),
-  width (0), height (0), final_xshift (0), final_yshift (0), final_width (0),
-  final_height (0), screen_detected_patches (), known_pixels (),
-  stitch_info (NULL), analyzed (false), refcount (0)
+    : filename (""), img (), mesh_trans (),
+      demosaic (image_data::demosaic_default), xshift (0), yshift (0),
+      width (0), height (0), final_xshift (0), final_yshift (0),
+      final_width (0), final_height (0), screen_detected_patches (),
+      known_pixels (), stitch_info (NULL), analyzed (false)
 {
 }
 
@@ -30,155 +91,96 @@ stitch_image::~stitch_image ()
   delete stitch_info;
 }
 
-void
-stitch_image::release_image_data (progress_info *progress)
-{
-  //progress->pause_stdout ();
-  //printf ("Releasing input tile %s\n", filename.c_str ());
-  //progress->resume_stdout ();
-  assert (!refcount && img);
-  m_image_ready.store (false, std::memory_order_release);
-  img = NULL;
-  nloaded--;
-}
-
-bool
-stitch_image::init_loader (const char **error, progress_info *progress)
-{
-  assert (!img);
-  m_image_ready.store (false, std::memory_order_release);
-  img = std::make_unique <image_data> ();
-  if (!img->init_loader (m_prj->add_path (filename).c_str (), false, error, progress))
-    {
-      img = NULL;
-      return false;
-    }
-  if (img->stitch)
-    {
-      *error = "Can not embedd stitch projects in sitch projects";
-      img = NULL;
-      return false;
-    }
-  return true;
-}
-bool
-stitch_image::load_part (int *permille, const char **error, progress_info *progress)
-{
-  if (!img->load_part (permille, error, progress))
-    {
-      m_image_ready.store (false, std::memory_order_release);
-      img = NULL;
-      return false;
-    }
-  if (*permille == 1000)
-    {
-      img_width = img->width;
-      img_height = img->height;
-      if (m_prj->params.scan_xdpi && !img->xdpi)
-	img->xdpi = m_prj->params.scan_xdpi;
-      if (m_prj->params.scan_ydpi && !img->ydpi)
-	img->ydpi = m_prj->params.scan_ydpi;
-      if (!img->has_rgb ())
-	{
-	  *error = "source image is not having color channels";
-          m_image_ready.store (false, std::memory_order_release);
-	  img = NULL;
-	  return false;
-	}
-      /* All pixels and tile metadata are now complete. The GUI's render
-         lookup uses an acquire-load before accessing IMG, so publishing
-         this bit is the tile's visibility/readiness handoff. */
-      m_image_ready.store (true, std::memory_order_release);
-    }
-  return true;
-}
-
+/* Load a stitch tile from the global decoded-image cache, using the project
+   identity and demosaicing mode as part of its key. Parallel loads of the
+   same tile coalesce in the LRU. Hold a separate shared_ptr for the caller
+   until RELEASE_IMG so global eviction cannot invalidate active renderers. */
 bool
 stitch_image::load_img (const char **error, progress_info *progress)
 {
-  refcount++;
-  lastused = ++current_time;
-  if (img)
-    {
-      const bool ready = image_ready_p ();
-      if (!ready)
-        refcount--;
-      return ready;
-    }
-  /* Perhaps make number of cached images user specified.  */
-  if (nloaded >= 1 && m_prj->release_images)
-    {
-      int minx = -1, miny = -1;
-      uint64_t minlast = 0;
+  if (error)
+    *error = nullptr;
+  {
+    std::lock_guard<std::mutex> guard (m_image_mutex);
+    if (img && m_image_ready.load (std::memory_order_acquire))
+      {
+        ++refcount;
+        return true;
+      }
+    if (!m_prj)
+      {
+        if (error)
+          *error = "stitch tile is not attached to a project";
+        return false;
+      }
+  }
 
+  const std::string path = m_prj->add_path (filename);
+  stitch_tile_cache_key key {m_prj->m_tile_cache_id, path, demosaic};
+  const coord_t scan_xdpi = m_prj->params.scan_xdpi;
+  const coord_t scan_ydpi = m_prj->params.scan_ydpi;
+  auto loaded = stitch_tile_cache ().get_or_compute (
+      key, progress,
+      [path, scan_xdpi, scan_ydpi, error] (stitch_tile_cache_key &request,
+                                         progress_info *task)
+          -> std::unique_ptr<image_data>
+      {
+        auto value = std::make_unique<image_data> ();
+        if (!value->load (path.c_str (), false, error, task, request.method))
+          return nullptr;
+        if (value->stitch)
+          {
+            if (error)
+              *error = "cannot embed stitch projects in stitch projects";
+            return nullptr;
+          }
+        if (!value->has_rgb ())
+          {
+            if (error)
+              *error = "source image does not have color channels";
+            return nullptr;
+          }
+        if (scan_xdpi && !value->xdpi)
+          value->xdpi = scan_xdpi;
+        if (scan_ydpi && !value->ydpi)
+          value->ydpi = scan_ydpi;
+        return value;
+      });
 
-      for (int y = 0; y < m_prj->params.height; y++)
-	for (int x = 0; x < m_prj->params.width; x++)
-	  if (m_prj->images[y][x].refcount)
-	    ;
-	  else if (m_prj->images[y][x].img
-		   && (minx == -1 || m_prj->images[y][x].lastused < minlast))
-	    {
-	      minx = x;
-	      miny = y;
-	      minlast = m_prj->images[y][x].lastused;
-	    }
-      if (minx != -1)
-	m_prj->images[miny][minx].release_image_data (progress);
-    }
-  nloaded++;
-#if 0
-  if (progress)
-    progress->pause_stdout ();
-  printf ("Loading input tile %s (%i tiles in memory)\n", filename.c_str (), nloaded);
-  if (progress)
-    progress->resume_stdout ();
-#endif
-  if (progress)
-    progress->set_task ("loading image header",1);
-  if (!init_loader (error, progress))
+  if (!loaded)
     {
-      nloaded--;
-      refcount--;
+      if (error && !*error)
+        *error = "tile decode was cancelled or could not complete";
       return false;
     }
-  if (progress)
-    progress->set_task ("loading",1000);
-  if (!img->allocate ())
-    {
-      *error = "out of memory";
-      m_image_ready.store (false, std::memory_order_release);
-      img = NULL;
-      nloaded--;
-      refcount--;
-      return false;
-    }
-  int permille = 0;
-  while (load_part (&permille, error, progress))
-    {
-      if (permille == 1000)
-	return true;
-      if (progress)
-	progress->set_progress (permille);
-      if (progress && progress->cancel_requested ())
-	{
-	  *error = "cancelled";
-          m_image_ready.store (false, std::memory_order_release);
-	  img = NULL;
-          nloaded--;
-          refcount--;
-	  return false;
-	}
-    }
-  nloaded--;
-  refcount--;
-  return false;
+
+  {
+    std::lock_guard<std::mutex> guard (m_image_mutex);
+    img = std::move (loaded);
+    img_width = img->width;
+    img_height = img->height;
+    ++refcount;
+    m_image_ready.store (true, std::memory_order_release);
+  }
+  return true;
 }
 
+/* Release one active rendering/analysis pin. The global LRU decides whether
+   the decoded image should stay cached, so no per-project LRU scans or file
+   unload decisions remain. Destruction runs outside the tile mutex. */
 void
 stitch_image::release_img ()
 {
-  refcount--;
+  std::shared_ptr<image_data> unpinned;
+  {
+    std::lock_guard<std::mutex> guard (m_image_mutex);
+    assert (refcount > 0);
+    if (--refcount == 0)
+      {
+        m_image_ready.store (false, std::memory_order_release);
+        unpinned = std::move (img);
+      }
+  }
 }
 
 bitmap_2d*
@@ -271,6 +273,10 @@ stitch_image::diff (stitch_image &other, progress_info *progress)
 	return false;
       }
   }
+  /* Keep image storage live while local render objects unwind, even if a
+     failure path drops the explicit stitch-image reference first. */
+  const auto source_pin = img;
+  const auto target_pin = other.img;
   render_parameters def;
   render_img render (param, *img, def, 65535);
   {
@@ -312,6 +318,8 @@ stitch_image::diff (stitch_image &other, progress_info *progress)
     {
       release_img ();
       other.release_img ();
+      progress->resume_stdout ();
+      return false;
     }
   progress->resume_stdout ();
   int rwidth = rxmax - rxmin + 1;
@@ -614,6 +622,15 @@ stitch_image::analyze (stitch_project *prj, detect_regular_screen_params *dspara
       progress->resume_stdout ();
       return false;
     }
+  /* Every early return must drop its tile reference. Keep a separate image
+     pin alive until after local renderers have been destroyed, even if the
+     LRU removes its cache-owned reference during an analysis operation. */
+  const auto decoded_image_pin = img;
+  struct image_pin_guard
+  {
+    stitch_image *tile;
+    ~image_pin_guard () { tile->release_img (); }
+  } pin_guard {this};
   //mesh_trans = detect_solver_points (*img, dparam, solver_param, progress, &xshift, &yshift, &width, &height, &bitmap);
 #if 0
   if (m_prj->params.optimize_colors)
@@ -851,7 +868,6 @@ stitch_image::analyze (stitch_project *prj, detect_regular_screen_params *dspara
   progress->resume_stdout ();
   //dufay.set_known_pixels (bitmap);
   analyzed = true;
-  release_img ();
   return true;
 }
 
@@ -1453,10 +1469,12 @@ stitch_image::find_common_points (stitch_image &other, int outerborder, int inne
       }
    if (render2)
      {
-       other.release_img ();
+       /* The heap renderers may still refer to decoded pixel data during
+          destruction. Destroy them before releasing their tile pins. */
        delete render2;
-       release_img ();
        delete render1;
+       other.release_img ();
+       release_img ();
      }
    return samples;
 }

@@ -58,6 +58,7 @@
 #include "include/strips.h"
 #include "demosaic.h"
 #include "analyze-base.h"
+#include "include/stitch.h"
 #include "finetune-int.h"
 #include "gaussian-blur.h"
 #include "nmsimplex.h"
@@ -6089,6 +6090,98 @@ test_cache_scratch_preferences ()
       fprintf (stderr, "Scratch directory preference was not reversible\n");
       return false;
     }
+  return true;
+}
+
+/* A project tile has no private "oldest image" eviction any more.
+   Verify cache reuse after its caller drops the tile pin, then verify that
+   global eviction cannot invalidate a tile still pinned for rendering. */
+bool
+test_stitch_tile_global_cache ()
+{
+  std::error_code fs_error;
+  const auto dir = std::filesystem::temp_directory_path (fs_error);
+  if (fs_error)
+    return false;
+  const std::string filename
+      = (dir / ("colorscreen-stitch-cache-"
+                + std::to_string (lru_caches::get ()) + ".tiff")).string ();
+  struct cleanup_file
+  {
+    std::string path;
+    ~cleanup_file () { std::remove (path.c_str ()); }
+  } cleanup {filename};
+
+  image_data source;
+  if (!source.set_dimensions (4, 4, true, false))
+    return false;
+  source.xdpi = source.ydpi = 300;
+  for (int y = 0; y < 4; ++y)
+    for (int x = 0; x < 4; ++x)
+      source.put_rgb_pixel (x, y,
+                            {(image_data::gray)(x * 1234),
+                             (image_data::gray)(y * 1345), 50000});
+  if (!source.save_tiff (filename.c_str ()))
+    return false;
+
+  stitch_project project;
+  project.params.width = project.params.height = 1;
+  if (!project.initialize ())
+    return false;
+  auto &tile = project.images[0][0];
+  tile.filename = filename;
+
+  lru_cache_registry &registry = lru_cache_registry::instance ();
+  struct restore_budget
+  {
+    lru_cache_registry &r;
+    ~restore_budget () { r.set_test_budget_bytes (0); }
+  } reset_budget {registry};
+  registry.set_test_budget_bytes (UINT64_C (2) * 1024 * 1024 * 1024);
+
+  const char *error = nullptr;
+  if (!tile.load_img (&error, nullptr)
+      || !tile.image_ready_p () || !tile.img
+      || !tile.img->has_rgb ())
+    {
+      fprintf (stderr, "First stitch tile decode failed: %s\n",
+               error ? error : "unknown");
+      return false;
+    }
+  const uint64_t decoded_id = tile.img->id;
+  const auto original_pixel = tile.img->get_rgb_pixel (2, 3);
+  tile.release_img ();
+  if (tile.img || tile.image_ready_p ())
+    {
+      fprintf (stderr, "Stitch tile still owns a released reference\n");
+      return false;
+    }
+
+  /* Only the globally cached image can satisfy the request now. An
+     accidental disk re-decode must fail because the source is gone. */
+  std::remove (filename.c_str ());
+  error = nullptr;
+  if (!tile.load_img (&error, nullptr)
+      || !tile.image_ready_p () || !tile.img
+      || tile.img->id != decoded_id
+      || tile.img->get_rgb_pixel (2, 3).r != original_pixel.r)
+    {
+      fprintf (stderr, "Stitch tile was not reused from core LRU: %s\n",
+               error ? error : "unexpected source identity");
+      return false;
+    }
+
+  /* Force eviction of the cache-owned reference while the renderer holds
+     its own tile reference. Its pixels must remain readable. */
+  registry.set_test_budget_bytes (1);
+  registry.enforce_budget ();
+  if (!tile.image_ready_p () || !tile.img
+      || tile.img->get_rgb_pixel (2, 3).r != original_pixel.r)
+    {
+      fprintf (stderr, "Active stitch image was invalidated by eviction\n");
+      return false;
+    }
+  tile.release_img ();
   return true;
 }
 
@@ -13125,6 +13218,8 @@ main (int argc, char **argv)
       [] () { return test_lru_global_memory_budget (); } },
     { "cache_statistics_order", "global size/entry/name cache ordering",
       [] () { return test_cache_statistics_lexicographic_order (); } },
+    { "stitch_tile_global_cache", "decoded stitch tiles use the shared LRU",
+      [] () { return test_stitch_tile_global_cache (); } },
     { "cache_memory_preferences", "adaptive and user-selected cache fractions",
       [] () { return test_cache_memory_preferences (); } },
     { "cache_scratch_preferences", "scratch mmap directory selection",
