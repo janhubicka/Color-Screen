@@ -59,11 +59,14 @@ There is no fixed 256 MiB limit on an unpacked RAW CFA or a decoded variant.
 Both sensor-memory reservations and decoded variants participate in the same
 shared policy. Source admission is optional; if insufficient memory is
 available, normal decoding remains valid without retaining a reusable CFA.
-The existing generic LRU supports optional byte-size callbacks. RAW variants
-report decoded pixel allocation sizes; other cache types currently report
-either measured allocations, at least sizeof(T), or unknown for unbounded
-array types, rather than claiming exact memory accounting for every legacy
-cache.
+The generic LRU supports optional byte-size callbacks, including a reusable
+vector-capacity helper. In addition to RAW variants and sharpening buffers,
+full-image simulated float layers, reconstructed Dufay/Paget demosaicing
+RGB buffers, and screen-detection classification, adjusted-RGB, patch-index
+and relaxation buffers now report their retained allocations. Image histograms
+count allocated bucket capacity. Other legacy
+caches still report at least sizeof(T), or unknown for unbounded arrays;
+those estimates must not be presented as precise.
 
 Every decoded variant retains its own shared opaque sensor resource; no
 source points back to its variants, so ownership is acyclic. Qt therefore
@@ -137,6 +140,9 @@ Invariants for final validation:
   plus late-installed known-pixel and contrast allocations through atomic
   byte counters. Their opt-in dynamic LRU callbacks refresh global statistics
   and eviction weights without reading mutable pixel buffers or using Qt.
+- Complete byte-size callbacks for the remaining analyzer tiles, spectral/
+  optical tables, lookup arrays and other pointer-backed legacy LRU values.
+  Unmeasured arrays remain explicitly unknown in the cache statistics UI.
 - Add Qt lifecycle smoke for rapid demosaic changes during loading, independent
   document views, failed reload recovery, and close with an old worker in flight.
   The existing generation gates are kept, but targeted tests are still needed.
