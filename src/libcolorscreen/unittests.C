@@ -5927,6 +5927,33 @@ test_lru_cache_byte_budget ()
   return true;
 }
 
+/* Check the application-wide adaptive/cache-percentage control without
+   consulting frontend state or changing any document parameters. */
+bool
+test_cache_memory_preferences ()
+{
+  const int original = cache_memory_percent ();
+  struct restore_percentage
+  {
+    int value;
+    ~restore_percentage () { set_cache_memory_percent (value); }
+  } restore {original};
+
+  if (set_cache_memory_percent (9) || set_cache_memory_percent (86)
+      || set_cache_memory_percent (-1)
+      || cache_memory_percent () != original
+      || !set_cache_memory_percent (65)
+      || cache_memory_percent () != 65
+      || get_cache_memory_statistics ().configured_memory_percent != 65
+      || !set_cache_memory_percent (0)
+      || cache_memory_percent () != 0)
+    {
+      fprintf (stderr, "Application cache percentage validation failed\n");
+      return false;
+    }
+  return true;
+}
+
 /* Force a tiny global budget to validate eviction *across* otherwise
    independent LRU instances without allocating gigabytes or relying on the
    machine's free memory. The override is internal to libcolorscreen tests. */
@@ -12758,6 +12785,8 @@ main (int argc, char **argv)
       [] () { return test_lru_cache_byte_budget (); } },
     { "lru_global_memory", "global LRU eviction, diagnostics and RAM admission",
       [] () { return test_lru_global_memory_budget (); } },
+    { "cache_memory_preferences", "adaptive and user-selected cache fractions",
+      [] () { return test_cache_memory_preferences (); } },
     { "spectrum", "spectrum to xyz tests", [] () { return test_spectrum_dyes_to_xyz (); } },
     { "whitepoint", "whitepoint consistency tests", [] () { return test_whitepoint_constants (); } },
     { "darkroom", "darkroom simulation tests", [] () { return test_darkroom (); } },

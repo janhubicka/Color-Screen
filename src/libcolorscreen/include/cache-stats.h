@@ -34,6 +34,8 @@ struct cache_memory_statistics
   uint64_t cache_budget_bytes = 0;
   uint64_t cached_bytes = 0;
   uint64_t retained_raw_source_bytes = 0;
+  /* Zero means adaptive default; 10..85 is an explicit memory percentage. */
+  int configured_memory_percent = 0;
   std::vector<cache_entry_statistics> caches;
 };
 
@@ -44,6 +46,20 @@ DLL_PUBLIC cache_memory_statistics get_cache_memory_statistics ();
 /* Query the available-memory-based global cache budget. The budget adapts
    to installed RAM, current free/available memory and cache-held allocations. */
 DLL_PUBLIC uint64_t cache_memory_budget_bytes ();
+
+/* Configure the percentage of currently available memory (plus resources
+   already retained by the core) reserved for ALL libcolorscreen caches.
+   Zero selects the adaptive default. Valid explicit values are 10..85.
+   Reject invalid values without changing policy. This is a soft cache
+   ownership budget, never a hard process RSS limit. */
+DLL_PUBLIC bool set_cache_memory_percent (int percent);
+DLL_PUBLIC int cache_memory_percent ();
+
+/* Configure the native-encoded scratch directory for future file-backed
+   mmap allocations. Empty restores the system default. Existing mappings
+   remain valid; invalid or excessively long paths are rejected. */
+DLL_PUBLIC bool set_cache_scratch_directory (const std::string &path);
+DLL_PUBLIC std::string cache_scratch_directory ();
 
 }
 
