@@ -49,6 +49,12 @@ void MapAlloc::CacheThreshold(size_t limit) {
 	cache_threshold = limit;
 }
 
+/* Read the scratch-mapping threshold for testing and policy restoration. */
+size_t MapAlloc::GetCacheThreshold() {
+	std::lock_guard<std::mutex> guard (mapalloc_lock);
+	return cache_threshold;
+}
+
 void* MapAlloc::Alloc(size_t size, const char *reason, int alignment) {
 	std::lock_guard<std::mutex> guard (mapalloc_lock);
 	/* A temporary-file failure may throw. Always release the mutex. */
@@ -213,12 +219,13 @@ MapAlloc::MapAllocObject::MapAllocObject(size_t _size, const char *reason, int a
 		   the process during large scans, despite the temporary file. */
 		pointer = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, file, 0);
 		if (pointer == MAP_FAILED) {
+			const int failure = errno;
 			unlink(filename);
 			close(file);
 			file = -1;
 			pointer = NULL;
 			snprintf(filename, sizeof (filename),
-			         "Could not mmap temporary file: %s", strerror(errno));
+			         "Could not mmap temporary file: %s", strerror(failure));
 			throw(filename);
 		}
 

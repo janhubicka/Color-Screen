@@ -5984,9 +5984,23 @@ test_cache_scratch_preferences ()
   /* Force the mmap fallback with a small temporary allocation. This tests
      that the scratch preference actually feeds the disk-backed allocator,
      rather than just accepting and storing a directory string. */
+  struct restore_threshold
+  {
+    size_t original;
+    ~restore_threshold () { MapAlloc::CacheThreshold (original); }
+  } restore_limit {MapAlloc::GetCacheThreshold ()};
   MapAlloc::CacheThreshold (0);
-  char *mapped = static_cast<char *> (
-      MapAlloc::Alloc (2 * 1024 * 1024, "scratch preferences smoke"));
+  char *mapped = nullptr;
+  try
+    {
+      mapped = static_cast<char *> (
+          MapAlloc::Alloc (2 * 1024 * 1024, "scratch preferences smoke"));
+    }
+  catch (...)
+    {
+      fprintf (stderr, "Could not mmap scratch test buffer\n");
+      return false;
+    }
   const bool file_backed = mapped && MapAlloc::LastFile ();
   if (mapped)
     {
@@ -5994,7 +6008,6 @@ test_cache_scratch_preferences ()
       mapped[2 * 1024 * 1024 - 1] = 23;
       MapAlloc::Free (mapped);
     }
-  MapAlloc::CacheThreshold (1024ULL * 1024 * 1024);
   if (!file_backed)
     {
       fprintf (stderr, "Scratch preference did not use file-backed mmap\n");

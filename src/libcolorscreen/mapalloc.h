@@ -56,6 +56,7 @@ public:
 	static void Free(void* p);
 	static size_t GetSize(void* p);
 	static void CacheThreshold(size_t threshold);
+	static size_t GetCacheThreshold();
 	/* Change the folder used for FUTURE memory-mapped scratch files.
 	   Empty resets to the platform default, invalid paths are rejected. */
 	static bool SetTmpdir(const char* path);
