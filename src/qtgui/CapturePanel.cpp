@@ -651,7 +651,7 @@ void CapturePanel::setupUi()
         setVisibleRow(m_screenResolutionValue->parentWidget(), showScreenRes);
 
         // 0. Demosaic
-        bool canDemosaic = img && img->demosaiced_by != colorscreen::image_data::demosaic_max;
+        bool canDemosaic = img && img->raw_demosaicing_available_p();
         if (canDemosaic) {
             QSignalBlocker signalBlocker2(m_demosaicCombo);
             int idx = m_demosaicCombo->findData((int)state.rparams.demosaic);

@@ -1369,3 +1369,12 @@ cache name. This is a lexicographic order on `(-bytes, -entries, name)`, not
 a frontend-local alphabetical sort; the Qt Cache Statistics dialog simply
 renders the core results. Entry size remains an estimate for legacy caches
 without byte callbacks and the shared memory budget remains a soft limit.
+
+The RAW/CFA capability is explicit image metadata, independent of
+`demosaiced_by`. Linear and noninterpolating LibRaw modes can leave that
+historical algorithm-result field at `demosaic_max`, and so must still
+show the Capture demosaic selector and react to parameter changes. The
+current requested method is `image_data::demosaic`; never infer it from
+`demosaiced_by`. For a cached hit the entire image object (including UID)
+is shared; newly computed methods get fresh `image_data::id`, and
+uncached CFA sources reload from disk as a safe fallback.

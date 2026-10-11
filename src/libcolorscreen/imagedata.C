@@ -1032,6 +1032,11 @@ raw_image_data_loader::init_loader (const char *name, const char **error,
      full-color, 1 is Leaf Catchlight's 16x16 layout and 9 is Fuji X-Trans.
      The compensation below relies specifically on a repeating 2x2 Bayer CFA.  */
   m_img->standard_bayer_cfa = m_processor->imgdata.idata.filters >= 1000;
+  /* Keep the identity of a CFA RAW independently of the selected interpolation
+     algorithm and of whether the unpacked source could fit the LRU budget.
+     In particular demosaic_linear / demosaic_none do not assign
+     demosaiced_by even though the operator may choose another method. */
+  m_img->raw_cfa_image = m_processor->imgdata.idata.filters != 0;
   if (!m_processor->imgdata.idata.filters)
     m_img->demosaiced_by = image_data::demosaic_max;
   if (bayer_correction && !m_img->standard_bayer_cfa)

@@ -254,6 +254,15 @@ public:
   /* True when the RAW loader reported a conventional 2x2 Bayer CFA.
      Special mosaics such as X-Trans and full-color RAW files are false.  */
   bool standard_bayer_cfa = false;
+  /* True for RAW captures with a genuine sensor CFA, including layouts
+     which are not the standard 2x2 Bayer pattern. Unlike demosaiced_by,
+     this is not an algorithm result: linear/no-interpolation RAW decodes
+     may leave demosaiced_by == demosaic_max yet still allow switching. */
+  bool raw_cfa_image = false;
+  bool raw_demosaicing_available_p () const noexcept
+  {
+    return raw_cfa_image;
+  }
   demosaicing_t demosaiced_by = demosaic_max;
   std::string camera_make;
   std::string camera_model;

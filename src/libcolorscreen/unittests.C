@@ -12854,10 +12854,20 @@ test_raw_source_variants ()
   const char *error = nullptr;
   image_data source;
   if (!source.load (path, true, &error, nullptr, image_data::demosaic_linear)
-      || !source.has_unpacked_raw_source () || !source.has_rgb ())
+      || !source.has_unpacked_raw_source () || !source.has_rgb ()
+      || !source.raw_demosaicing_available_p ()
+      || source.demosaic != image_data::demosaic_linear)
     {
       fprintf (stderr, "Could not cache synthetic Bayer source: %s\n",
                error ? error : "source not retained as Bayer RAW");
+      return false;
+    }
+  /* Linear/no-interpolation RAW variants are legitimate CFA sources even
+     if demosaiced_by does not identify a postprocessing algorithm. The
+     GUI must consult the stable CFA capability rather than that field. */
+  if (source.demosaiced_by != image_data::demosaic_max)
+    {
+      fprintf (stderr, "Linear RAW no longer covers demosaiced_by sentinel\n");
       return false;
     }
   const image_data::pixel baseline = source.get_rgb_pixel (47, 61);
@@ -12923,7 +12933,9 @@ test_raw_source_variants ()
       image_data fresh;
       error = nullptr;
       if (!fresh.load (path, true, &error, nullptr, method)
-          || !same_pixels (*computed, fresh) || computed->id == fresh.id)
+          || !same_pixels (*computed, fresh) || computed->id == fresh.id
+          || !computed->raw_demosaicing_available_p ()
+          || computed->demosaic != method)
         {
           fprintf (stderr,
                    "RAW cached %i reused an independent decode UID or differs: %s\n",

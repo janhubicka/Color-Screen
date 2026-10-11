@@ -3573,13 +3573,13 @@ void MainWindow::applyState(const ParameterState &state) {
      While another variant is processing, restart only if its requested
      method differs; ordinary Open/sidecar remains transactional. */
   if (demosaicSelectionChanged && m_scan &&
-      m_scan->demosaiced_by != colorscreen::image_data::demosaic_max &&
+      m_scan->raw_demosaicing_available_p() &&
       !m_currentImageFile.isEmpty()) {
     const auto selectedMethod = state.rparams.demosaic;
     QTimer::singleShot(0, this, [this, selectedMethod]() {
       if (m_closeLifecycle.closing() || !m_scan ||
           m_currentImageFile.isEmpty() ||
-          m_scan->demosaiced_by == colorscreen::image_data::demosaic_max ||
+          !m_scan->raw_demosaicing_available_p() ||
           m_rparams.demosaic != selectedMethod)
         return;
       if (m_imageLoad.pending) {
@@ -3591,7 +3591,7 @@ void MainWindow::applyState(const ParameterState &state) {
         if (!m_imageLoad.pendingDemosaic ||
             *m_imageLoad.pendingDemosaic == selectedMethod)
           return;
-      } else if (m_scan->demosaiced_by == selectedMethod) {
+      } else if (m_scan->demosaic == selectedMethod) {
         return;
       }
       reloadCurrentImageWithDemosaic();
