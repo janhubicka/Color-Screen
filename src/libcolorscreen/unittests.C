@@ -6174,6 +6174,130 @@ test_lru_global_memory_budget ()
   return true;
 }
 
+/* A live analyzer can acquire bitmap/contrast storage after its LRU
+   publication. Verify that the registry sees this growth without racing on
+   any of the mutable buffers, and evicts globally older cache-owned data
+   without invalidating a caller's independent shared_ptr. */
+bool
+test_lru_dynamic_analyzer_memory ()
+{
+  /* Start with a synthetic 8x6 Dufay-like analyzer. The red plane has twice
+     as many samples, and every channel also holds collection support. */
+  struct synthetic_analyzer : analyze_base
+  {
+    synthetic_analyzer ()
+        : analyze_base (1, 0, 0, 0, 0, 0,
+                        nullptr, nullptr, nullptr, nullptr,
+                        nullptr, nullptr)
+    {
+      m_area = int_image_area (0, 0, 8, 6);
+      const size_t pixels = 8 * 6;
+      m_red = std::make_unique<luminosity_t[]> (2 * pixels);
+      m_green = std::make_unique<luminosity_t[]> (pixels);
+      m_blue = std::make_unique<luminosity_t[]> (pixels);
+      m_red_support = std::make_unique<luminosity_t[]> (2 * pixels);
+      m_green_support = std::make_unique<luminosity_t[]> (pixels);
+      m_blue_support = std::make_unique<luminosity_t[]> (pixels);
+      record_completed_plane_bytes ();
+    }
+    int_image_area
+    demosaiced_area () const override
+    {
+      return m_area;
+    }
+    void
+    attach_contrast ()
+    {
+      m_contrast = std::make_unique<contrast_info[]> (8 * 6);
+      record_contrast_cache_bytes ();
+    }
+  } analyzer;
+  const size_t plane_bytes = 8 * 6 * 8 * sizeof (luminosity_t);
+  if (analyzer.cached_allocated_bytes () != plane_bytes)
+    {
+      fprintf (stderr, "Analyzer initial channel/support byte count is wrong\n");
+      return false;
+    }
+  analyzer.set_known_pixels (new bitmap_2d (8, 6));
+  const size_t bitmap_bytes = sizeof (bitmap_2d) + (8 * 6 + 7) / 8;
+  if (analyzer.cached_allocated_bytes () != plane_bytes + bitmap_bytes)
+    {
+      fprintf (stderr, "Known-pixel bitmap omitted from analyzer cache\n");
+      return false;
+    }
+  analyzer.attach_contrast ();
+  const size_t complete_bytes
+      = plane_bytes + bitmap_bytes + 8 * 6 * sizeof (analyze_base::contrast_info);
+  if (analyzer.cached_allocated_bytes () != complete_bytes)
+    {
+      fprintf (stderr, "Contrast allocation omitted from analyzer cache\n");
+      return false;
+    }
+  analyzer.attach_contrast ();
+  if (analyzer.cached_allocated_bytes () != complete_bytes)
+    {
+      fprintf (stderr, "Repeated contrast allocation double-charged bytes\n");
+      return false;
+    }
+
+  struct mutable_test_value
+  {
+    std::atomic<size_t> bytes {10};
+  };
+  auto size_callback = +[] (const mutable_test_value &data) -> size_t
+    { return data.bytes.load (std::memory_order_relaxed); };
+  lru_cache_registry &registry = lru_cache_registry::instance ();
+  struct restore_budget
+  {
+    lru_cache_registry &registry;
+    ~restore_budget () { registry.set_test_budget_bytes (0); }
+  } restore {registry};
+  registry.set_test_budget_bytes (1000);
+  lru_cache<test_params, mutable_test_value, nullptr, 4>
+      dynamic ("live analyzer reservation regression", 0,
+               size_callback, true);
+  lru_cache<test_params, weighted_test_value,
+            get_new_weighted_test, 4>
+      newer_cache ("subsequent independent image", 0, weighted_test_bytes);
+  test_params older_key {1}, newer_key {40};
+  auto older = dynamic.get_or_compute (
+      older_key, nullptr,
+      [] (test_params &, progress_info *)
+      { return std::make_unique<mutable_test_value> (); });
+  if (!older || dynamic.retained_bytes () != 10)
+    return false;
+  auto newer = newer_cache.get (newer_key, nullptr);
+  if (!newer || newer_cache.retained_bytes () != 40)
+    return false;
+
+  /* This growth happens AFTER inserting the completed cache value, just
+     like attaching a registration bitmap to a finished analyzer tile. */
+  older->bytes.store (80, std::memory_order_relaxed);
+  bool measured = false;
+  for (const auto &entry : get_cache_memory_statistics ().caches)
+    if (entry.name == "live analyzer reservation regression")
+      measured = entry.precise_size && entry.entries == 1
+                 && entry.retained_bytes == 80;
+  if (!measured || dynamic.retained_bytes () != 80)
+    {
+      fprintf (stderr, "LRU diagnostics kept stale post-publication bytes\n");
+      return false;
+    }
+
+  registry.set_test_budget_bytes (70);
+  registry.enforce_budget ();
+  if (dynamic.peek (older_key) || !newer_cache.peek (newer_key)
+      || newer_cache.retained_bytes () != 40
+      || older->bytes.load (std::memory_order_relaxed) != 80)
+    {
+      fprintf (stderr, "Live-weight eviction did not preserve the newer image\n");
+      return false;
+    }
+  older.reset ();
+  newer.reset ();
+  return true;
+}
+
 /* test_spectrum_dyes_to_xyz performs unit tests for the spectrum_dyes_to_xyz class.  */
 bool
 test_spectrum_dyes_to_xyz ()
@@ -12826,6 +12950,8 @@ main (int argc, char **argv)
       [] () { return test_cache_memory_preferences (); } },
     { "cache_scratch_preferences", "scratch mmap directory selection",
       [] () { return test_cache_scratch_preferences (); } },
+    { "lru_analyzer_dynamic_memory", "live analyzer reservations and global eviction",
+      [] () { return test_lru_dynamic_analyzer_memory (); } },
     { "spectrum", "spectrum to xyz tests", [] () { return test_spectrum_dyes_to_xyz (); } },
     { "whitepoint", "whitepoint consistency tests", [] () { return test_whitepoint_constants (); } },
     { "darkroom", "darkroom simulation tests", [] () { return test_darkroom (); } },

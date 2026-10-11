@@ -152,6 +152,7 @@ get_new_dufay_analysis (struct analyzer_params &p, int_image_area area,
       {
 	if (!denoise_analyzer (ret.get (), p.denoise, p.mode, progress))
 	  return nullptr;
+        ret->record_completed_plane_bytes ();
         return ret;
       }
   }
@@ -170,6 +171,7 @@ get_new_paget_analysis (struct analyzer_params &p, int_image_area area,
     {
       if (!denoise_analyzer (ret.get (), p.denoise, p.mode, progress))
 	return nullptr;
+      ret->record_completed_plane_bytes ();
       return ret;
     }
   return nullptr;
@@ -227,6 +229,7 @@ get_new_strips_analysis (struct analyzer_params &p, int_image_area area,
       {
 	if (!denoise_analyzer (ret.get (), p.denoise, p.mode, progress))
 	  return nullptr;
+        ret->record_completed_plane_bytes ();
         return ret;
       }
   }
@@ -239,9 +242,30 @@ typedef lru_tile_cache<analyzer_params, analyze_strips, get_new_strips_analysis,
 typedef lru_cache<demosaiced_params<analyze_paget>, demosaic_paget, get_new_demosaic_paget, 2> demosaic_paget_cache_t;
 typedef lru_cache<demosaiced_params<analyze_dufay>, demosaic_dufay, get_new_demosaic_dufay, 2> demosaic_dufay_cache_t;
 
-static dufay_analyzer_cache_t dufay_analyzer_cache ("dufay analyzer");
-static paget_analyzer_cache_t paget_analyzer_cache ("paget analyzer");
-static strips_analyzer_cache_t strips_analyzer_cache ("strips analyzer");
+/* Fixed completed planes and late contrast/known-pixel allocations are
+   reported through atomic counters. These mutable-size callbacks must
+   never access the analyzer's changing pixel arrays directly. */
+static size_t
+dufay_analyzer_cached_bytes (const analyze_dufay &value)
+{
+  return sizeof (value) + value.cached_allocated_bytes ();
+}
+static size_t
+paget_analyzer_cached_bytes (const analyze_paget &value)
+{
+  return sizeof (value) + value.cached_allocated_bytes ();
+}
+static size_t
+strips_analyzer_cached_bytes (const analyze_strips &value)
+{
+  return sizeof (value) + value.cached_allocated_bytes ();
+}
+static dufay_analyzer_cache_t dufay_analyzer_cache (
+    "dufay analyzer", 0, dufay_analyzer_cached_bytes, true);
+static paget_analyzer_cache_t paget_analyzer_cache (
+    "paget analyzer", 0, paget_analyzer_cached_bytes, true);
+static strips_analyzer_cache_t strips_analyzer_cache (
+    "strips analyzer", 0, strips_analyzer_cached_bytes, true);
 /* Completed screen-reconstruction demosaicing stores full-resolution RGB
    pixels in a vector. For a 150 MP image the pixels dwarf the object itself,
    so measure its retained capacity just as for the simulated image cache. */

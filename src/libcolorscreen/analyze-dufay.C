@@ -9,6 +9,7 @@ analyze_dufay::analyze_contrast (render_to_scr *render, const image_data *img, s
   m_contrast.reset (new contrast_info [m_area.width * m_area.height]);
   if (!m_contrast)
     return false;
+  record_contrast_cache_bytes ();
   if (progress)
     progress->set_task ("collecting contrast info", img->height);
 #pragma omp parallel for default (none) 

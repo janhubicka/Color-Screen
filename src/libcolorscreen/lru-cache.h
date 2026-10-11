@@ -206,21 +206,52 @@ protected:
   const size_t max_cached_bytes;
   size_t cached_bytes = 0;
   size_t (*value_bytes) (const T &);
+  /* Dynamic callbacks must only query thread-safe resource counters. */
+  const bool dynamically_sized;
 
   /* Initialize the cache with count and optional byte budgets. */
   abstract_lru_cache (const char *n, int base_size,
                       size_t max_bytes = 0,
-                      size_t (*weight) (const T &) = nullptr)
+                      size_t (*weight) (const T &) = nullptr,
+                      bool dynamic_size = false)
       : entries (NULL), cache_size (base_size), name (n),
-        max_cached_bytes (max_bytes), value_bytes (weight)
+        max_cached_bytes (max_bytes), value_bytes (weight),
+        dynamically_sized (dynamic_size)
   {
     lru_cache_registry::instance ().register_cache (this);
+  }
+
+  /* Refresh mutable cache entries from atomically published byte totals.
+     Never inspect concurrently modified pixel storage. LOCK is held. */
+  void
+  refresh_dynamic_weights ()
+  {
+    /* A shared_ptr<T[]> has no operator* and there is no generic byte
+       count for an unbounded array.  This guard must be compile-time:
+       testing dynamically_sized at runtime still instantiates the invalid
+       dereference for legacy array-backed caches. */
+    if constexpr (!std::is_array<T>::value)
+      {
+        if (!dynamically_sized || !value_bytes)
+          return;
+        size_t total = 0;
+        const size_t limit = std::numeric_limits<size_t>::max ();
+        for (Entry *e = entries; e; e = e->next)
+          if (e->val && !e->computing)
+            {
+              e->cached_bytes = value_bytes (*e->val);
+              total = e->cached_bytes > limit - total
+                          ? limit : total + e->cached_bytes;
+            }
+        cached_bytes = total;
+      }
   }
 
   cache_entry_statistics
   cache_statistics (uint64_t *oldest) override
   {
     std::unique_lock<std::mutex> guard (lock);
+    refresh_dynamic_weights ();
     cache_entry_statistics stat;
     stat.name = name ? name : "unnamed";
     stat.retained_bytes = cached_bytes;
@@ -249,6 +280,7 @@ protected:
   discard_oldest_cache_entry () override
   {
     std::unique_lock<std::mutex> guard (lock);
+    refresh_dynamic_weights ();
     Entry **victim = nullptr;
     for (Entry **slot = &entries; *slot; slot = &(*slot)->next)
       if ((*slot)->val && (*slot)->cached_bytes && !(*slot)->computing
@@ -273,6 +305,7 @@ protected:
   make_room_for_bytes (size_t need, Entry *protected_entry,
                        std::vector<std::shared_ptr<void>> &retired)
   {
+    refresh_dynamic_weights ();
     while (cached_bytes > max_cached_bytes - need)
       {
         Entry **victim = nullptr;
@@ -345,6 +378,7 @@ protected:
           }
       }
     time++;
+    refresh_dynamic_weights ();
 
   restart:
     size = 0;
@@ -505,6 +539,7 @@ public:
     std::vector<std::shared_ptr<void>> retired;
     {
       std::unique_lock<std::mutex> guard (lock);
+      refresh_dynamic_weights ();
       Entry **e;
       for (e = &entries; *e;)
         {
@@ -533,6 +568,7 @@ public:
   retained_bytes ()
   {
     std::unique_lock<std::mutex> guard (lock);
+    refresh_dynamic_weights ();
     return cached_bytes;
   }
 
@@ -575,8 +611,9 @@ public:
      VALUE_BYTES measures a completed value including its owned allocations;
      if omitted, sizeof(T) is used. */
   lru_cache (const char *n, size_t max_bytes = 0,
-             size_t (*value_bytes) (const T &) = nullptr)
-      : Base (n, base_cache_size, max_bytes, value_bytes) {}
+             size_t (*value_bytes) (const T &) = nullptr,
+             bool dynamic_size = false)
+      : Base (n, base_cache_size, max_bytes, value_bytes, dynamic_size) {}
 
   /* Fetch the value for parameters P or generate it using GET_NEW. */
   std::shared_ptr<T>
@@ -649,7 +686,10 @@ class lru_tile_cache : public abstract_lru_cache<P, T, tile_cache_entry<P, T>, l
 public:
   static constexpr int base_size_const = base_cache_size;
   /* Create an LRU tile cache named N.  */
-  lru_tile_cache (const char *n) : Base (n, base_cache_size) {}
+  lru_tile_cache (const char *n, size_t max_bytes = 0,
+                  size_t (*value_bytes) (const T &) = nullptr,
+                  bool dynamic_size = false)
+      : Base (n, base_cache_size, max_bytes, value_bytes, dynamic_size) {}
 
   /* Fetch the value for parameters P and given tile coordinates or generate it.
      AREA defines the tile geometry.
