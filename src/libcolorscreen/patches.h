@@ -78,6 +78,17 @@ class patches
       return m_vec.size ();
     }
 
+    /* Return retained map and patch-vector storage, including spare vector
+       capacity. Use this for shared LRU byte accounting. */
+    size_t
+    cached_bytes () const
+    {
+      return sizeof (*this)
+             + (m_map ? (size_t)m_width * (size_t)m_height
+                             * sizeof (patch_index_t) : 0)
+             + m_vec.capacity () * sizeof (patch);
+    }
+
     /* Find coordinates of nearest patch in each color for position P.
        Set RP to patch indices and RX, RY to coordinates.
        Return true if patches were found.  */
