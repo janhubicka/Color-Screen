@@ -72,6 +72,16 @@ public:
   {
     return m_weights != NULL;
   }
+
+  /* Report the fixed per-channel correction grid retained by this cache. */
+  size_t
+  cached_bytes () const
+  {
+    return sizeof (*this)
+           + (m_weights ? (size_t)m_width * (size_t)m_height
+                              * sizeof (entry) : 0);
+  }
+
   int id;
   bool black_correction;
 private:

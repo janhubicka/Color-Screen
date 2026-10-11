@@ -136,6 +136,10 @@ Invariants for final validation:
 - The synthetic Bayer fixture now exercises variant-source ownership after
   dropping the original image, and still checks independent pixel agreement.
   Extend testing to high-memory cache pressure across independent sources.
+- Immutable optical caches now measure the retained coefficients of
+  output-gamma and lens-inverse lookup tables, and backlight correction
+  caches count their full per-channel weight grid. Regression tests in
+  `optical_cache_weights` verify both classes of retained allocation.
 - Analyzer tile caches now report their completed channel and support arrays
   plus late-installed known-pixel and contrast allocations through atomic
   byte counters. Their opt-in dynamic LRU callbacks refresh global statistics

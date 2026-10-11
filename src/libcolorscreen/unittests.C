@@ -37,6 +37,7 @@
 #include "lru-cache.h"
 #include "include/histogram.h"
 #include "deconvolve.h"
+#include "backlight-correction.h"
 #include "denoise.h"
 #include "include/paget.h"
 #include "include/dufaycolor.h"
@@ -5105,6 +5106,43 @@ test_precomputed_function ()
     }
 
   return ok;
+}
+
+/* Verify core cache sizing for immutable optical lookup coefficients and
+   the per-channel weights owned by a finished backlight correction. */
+static bool
+test_optical_cache_weights ()
+{
+  precomputed_function<double> empty;
+  if (empty.cached_bytes () != sizeof (empty))
+    {
+      fprintf (stderr, "Empty optical lookup has unexpected cached bytes\n");
+      return false;
+    }
+  precomputed_function<double> curve (
+      0, 1, 65, [] (double x) { return x * x; });
+  if (curve.cached_bytes () < sizeof (curve) + 64 * 2 * sizeof (double))
+    {
+      fprintf (stderr, "Optical lookup omitted interpolation coefficients\n");
+      return false;
+    }
+
+  bool enabled[4] = {true, true, true, false};
+  backlight_correction_parameters grid;
+  if (!grid.alloc (3, 4, enabled))
+    return false;
+  for (int y = 0; y < 4; y++)
+    for (int x = 0; x < 3; x++)
+      grid.set_luminosity (x, y, 1.0);
+  backlight_correction weights (grid, 300, 400, 0, false, nullptr);
+  if (!weights.initialized_p ()
+      || weights.cached_bytes ()
+             != sizeof (weights) + 3 * 4 * 8 * sizeof (luminosity_t))
+    {
+      fprintf (stderr, "Backlight cache omitted allocated correction grid\n");
+      return false;
+    }
+  return true;
 }
 
 /* Internal unit test for the histogram parallel collection.  */
@@ -12867,6 +12905,8 @@ main (int argc, char **argv)
     { "1d_homography", "1d homography and lens correction tests", [] () { return (bool)test_homography (true, true, 0.15); } },
     { "discovery", "screen discovery tests", [] () { return (bool)test_discovery (1.8); } },
     { "precomputed", "precomputed function tests", [] () { return test_precomputed_function (); } },
+    { "optical_cache_weights", "optical lookup and correction cache size tests",
+      [] () { return test_optical_cache_weights (); } },
     { "histogram", "histogram parallel tests", [] () { return test_histogram_parallel (); } },
     { "richards", "richards curve tests", [] () { return test_richards_curve (); } },
     { "richards_symmetry", "richards symmetry tests", [] () { return test_richards_symmetry (); } },
