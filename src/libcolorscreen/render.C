@@ -45,6 +45,10 @@ struct memory_reading
 {
   uint64_t total = 0;
   uint64_t available = 0;
+  /* Distinguish an actual zero-free-memory reading from OS APIs which do
+     not provide an availability figure. A failed platform probe must not
+     accidentally disable every core LRU cache. */
+  bool available_known = false;
 };
 
 memory_reading
@@ -58,6 +62,7 @@ query_host_memory ()
     {
       result.total = stat.ullTotalPhys;
       result.available = stat.ullAvailPhys;
+      result.available_known = true;
     }
 #elif defined(__APPLE__)
   uint64_t physical = 0;
@@ -71,9 +76,12 @@ query_host_memory ()
   if (host_page_size (host, &page_size) == KERN_SUCCESS
       && host_statistics64 (host, HOST_VM_INFO64, (host_info64_t)&vm,
                             &count) == KERN_SUCCESS)
-    result.available
-        = (uint64_t)(vm.free_count + vm.inactive_count
-                     + vm.speculative_count) * (uint64_t)page_size;
+    {
+      result.available
+          = (uint64_t)(vm.free_count + vm.inactive_count
+                       + vm.speculative_count) * (uint64_t)page_size;
+      result.available_known = true;
+    }
   mach_port_deallocate (mach_task_self (), host);
 #elif defined(__linux__)
   std::ifstream input ("/proc/meminfo");
@@ -88,8 +96,11 @@ query_host_memory ()
       if (key == "MemTotal:")
         result.total = kb * UINT64_C (1024);
       else if (key == "MemAvailable:")
-        result.available = kb * UINT64_C (1024);
-      if (result.total && result.available)
+        {
+          result.available = kb * UINT64_C (1024);
+          result.available_known = true;
+        }
+      if (result.total && result.available_known)
         break;
     }
 
@@ -105,12 +116,15 @@ query_host_memory ()
       try
         {
           const uint64_t limit = std::stoull (max_text);
-          if (limit && limit >= current)
+          if (limit)
             {
               if (!result.total || limit < result.total)
                 result.total = limit;
-              if (!result.available || limit - current < result.available)
-                result.available = limit - current;
+              const uint64_t remaining = current >= limit ? 0
+                                                         : limit - current;
+              if (!result.available_known || remaining < result.available)
+                result.available = remaining;
+              result.available_known = true;
             }
         }
       catch (const std::exception &)
@@ -124,10 +138,14 @@ query_host_memory ()
   const long page_size = sysconf (_SC_PAGESIZE);
   if (pages > 0 && page_size > 0)
     result.total = (uint64_t)pages * (uint64_t)page_size;
-  if (available > 0 && page_size > 0)
-    result.available = (uint64_t)available * (uint64_t)page_size;
+  if (available >= 0 && page_size > 0)
+    {
+      result.available = (uint64_t)available * (uint64_t)page_size;
+      result.available_known = true;
+    }
 #endif
-  if (result.total && result.available > result.total)
+  if (result.total && result.available_known
+      && result.available > result.total)
     result.available = result.total;
   return result;
 }
@@ -153,8 +171,10 @@ effective_cache_budget (const memory_reading &mem, uint64_t accounted)
     return test_limit;
   const uint64_t normal = mem.total ? mem.total / 3
                                     : UINT64_C (2) * 1024 * 1024 * 1024;
+  if (!mem.available_known)
+    return normal / 2; /* Conservative fallback if the OS probe fails. */
   if (!mem.available)
-    return mem.total ? 0 : normal;
+    return 0; /* Verified memory exhaustion: retain no idle cache data. */
   return std::min (normal, saturating_add (mem.available, accounted) / 2);
 }
 } // anonymous namespace
