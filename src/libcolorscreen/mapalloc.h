@@ -2,6 +2,7 @@
 #include <cstddef>
 #include <memory>
 #include <mutex>
+#include <string>
 /* Taken from multiblend.  */
 
 #include <vector>
@@ -31,7 +32,7 @@ private:
 		HANDLE file = NULL;
 		HANDLE map = NULL;
 #else
-		int file = 0;
+		int file = -1;  // 0 is a valid fd if stdin has been closed.
 #endif
 		void* pointer = NULL;
 		size_t size;
@@ -55,7 +56,14 @@ public:
 	static void Free(void* p);
 	static size_t GetSize(void* p);
 	static void CacheThreshold(size_t threshold);
-	static void SetTmpdir(const char* _tmpdir);
+	static size_t GetCacheThreshold();
+	/* Return the total size of live heap-backed MapAlloc arrays.
+	   File-backed mmap allocations are intentionally not included. */
+	static size_t GetRamBytes();
+	/* Change the folder used for FUTURE memory-mapped scratch files.
+	   Empty resets to the platform default, invalid paths are rejected. */
+	static bool SetTmpdir(const char* path);
+	static std::string GetTmpdir();
 	static bool LastFile() { return objects.back()->IsFile(); }
 //	static bool last_mapped;
 };

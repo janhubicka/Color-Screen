@@ -1,5 +1,6 @@
 #include <algorithm>
 #include "../libcolorscreen/include/backlight-correction-parameters.h"
+#include "../libcolorscreen/include/cache-stats.h"
 #include "../libcolorscreen/include/imagedata.h"
 #include "GeometryPanel.h"
 #include "AtomicFileSave.h"
@@ -36,11 +37,14 @@
 #include <QCheckBox>
 #include <QColor>
 #include <QComboBox>
+#include <QDialog>
+#include <QDialogButtonBox>
 #include <QCommandLineOption>
 #include <QCommandLineParser>
 #include <QCoreApplication>
 #include <QDebug>
 #include <QDockWidget>
+#include <QEvent>
 #include <QDoubleSpinBox>
 #include <QFile>
 #include <QFileInfo>
@@ -50,6 +54,7 @@
 #include <QImage>
 #include <QKeyEvent>
 #include <QLabel>
+#include <QLineEdit>
 #include <QMdiArea>
 #include <QMdiSubWindow>
 #include <QMenu>
@@ -59,7 +64,9 @@
 #include <QPalette>
 #include <QPushButton>
 #include <QSettings>
+#include <QSpinBox>
 #include <QSlider>
+#include <QStackedWidget>
 #include <QStringList>
 #include <QStatusBar>
 #include <QStyleFactory>
@@ -71,12 +78,14 @@
 #include <QTemporaryDir>
 #include <QTransform>
 #include <QUndoStack>
+#include <QUuid>
 
 #include <atomic>
 #include <cmath>
 #include <cstring>
 #include <functional>
 #include <memory>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -3650,6 +3659,143 @@ bool runPointerInteractionSmoke() {
 
 } // namespace
 
+/** Exercise application-wide Preferences transactionally before opening
+    any real image document. Use an isolated QSettings identity and restore
+    the actual cache/scratch policies and CSEGG override on every exit. */
+bool applicationPreferencesSmoke(ColorScreenApplication &app) {
+  QTemporaryDir scratch;
+  if (!scratch.isValid()) {
+    qCritical() << "Cannot create scratch preference smoke fixture";
+    return false;
+  }
+  struct Restore {
+    QString organization = QCoreApplication::organizationName();
+    QString domain = QCoreApplication::organizationDomain();
+    QString application = QCoreApplication::applicationName();
+    int percent = colorscreen::cache_memory_percent();
+    std::string temporary = colorscreen::cache_scratch_directory();
+    QByteArray originalEgg = qgetenv("CSEGG");
+    bool hadEgg = qEnvironmentVariableIsSet("CSEGG");
+    ~Restore() {
+      QSettings isolated;
+      const QString filename = isolated.fileName();
+      isolated.clear();
+      isolated.sync();
+      QFile::remove(filename);
+      QCoreApplication::setOrganizationName(organization);
+      QCoreApplication::setOrganizationDomain(domain);
+      QCoreApplication::setApplicationName(application);
+      colorscreen::set_cache_memory_percent(percent);
+      colorscreen::set_cache_scratch_directory(temporary);
+      if (hadEgg)
+        qputenv("CSEGG", originalEgg);
+      else
+        qunsetenv("CSEGG");
+    }
+  } restore;
+  const QString identity = QStringLiteral("ColorScreenPrefsSmoke-") +
+                           QUuid::createUuid().toString(QUuid::WithoutBraces);
+  QCoreApplication::setOrganizationName(identity);
+  QCoreApplication::setOrganizationDomain(identity + QStringLiteral(".invalid"));
+  QCoreApplication::setApplicationName(QStringLiteral("PreferencesTest"));
+
+  const auto findDialog = []() -> QDialog * {
+    for (QWidget *widget : QApplication::topLevelWidgets())
+      if (auto *dialog = qobject_cast<QDialog *>(widget))
+        if (dialog->objectName() ==
+            QStringLiteral("ApplicationPreferencesDialog"))
+          return dialog;
+    return nullptr;
+  };
+  const auto fail = [](const QString &detail) {
+    qCritical() << "Preferences smoke failed:" << detail;
+    return false;
+  };
+  app.showPreferences();
+  QDialog *dialog = findDialog();
+  if (!dialog)
+    return fail(QStringLiteral("dialog not created"));
+  auto *autoCache = dialog->findChild<QCheckBox *>(
+      QStringLiteral("PreferencesAutomaticCache"));
+  auto *buttons = dialog->findChild<QDialogButtonBox *>(
+      QStringLiteral("PreferencesButtons"));
+  auto *pages = dialog->findChild<QStackedWidget *>(
+      QStringLiteral("PreferencesPages"));
+  if (!autoCache || !buttons || !pages || pages->count() != 3)
+    return fail(QStringLiteral("missing extensible pages or controls"));
+  autoCache->setChecked(false);
+  buttons->button(QDialogButtonBox::Cancel)->click();
+  QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+  if (QSettings().contains(QStringLiteral("preferences/cachePercent")) ||
+      colorscreen::cache_memory_percent() != restore.percent)
+    return fail(QStringLiteral("Cancel modified core or persisted settings"));
+
+  app.showPreferences();
+  dialog = findDialog();
+  if (!dialog)
+    return fail(QStringLiteral("dialog did not reopen"));
+  autoCache = dialog->findChild<QCheckBox *>(
+      QStringLiteral("PreferencesAutomaticCache"));
+  auto *percent = dialog->findChild<QSpinBox *>(
+      QStringLiteral("PreferencesCachePercent"));
+  auto *defaultScratch = dialog->findChild<QCheckBox *>(
+      QStringLiteral("PreferencesSystemScratch"));
+  auto *scratchPath = dialog->findChild<QLineEdit *>(
+      QStringLiteral("PreferencesScratchDirectory"));
+  auto *joly = dialog->findChild<QCheckBox *>(
+      QStringLiteral("PreferencesEgg_joly"));
+  auto *thames = dialog->findChild<QCheckBox *>(
+      QStringLiteral("PreferencesEgg_thames"));
+  auto *paget = dialog->findChild<QCheckBox *>(
+      QStringLiteral("PreferencesEgg_paget"));
+  auto *hurley = dialog->findChild<QCheckBox *>(
+      QStringLiteral("PreferencesEgg_hurley"));
+  buttons = dialog->findChild<QDialogButtonBox *>(
+      QStringLiteral("PreferencesButtons"));
+  if (!autoCache || !percent || !defaultScratch || !scratchPath ||
+      !joly || !thames || !paget || !hurley || !buttons)
+    return fail(QStringLiteral("missing preference fields after reopen"));
+  autoCache->setChecked(false);
+  percent->setValue(65);
+  defaultScratch->setChecked(false);
+  scratchPath->setText(scratch.path());
+  joly->setChecked(false);
+  buttons->button(QDialogButtonBox::Ok)->click();
+  QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+  const QSettings values;
+  if (colorscreen::cache_memory_percent() != 65 ||
+      values.value(QStringLiteral("preferences/cachePercent")).toInt() != 65 ||
+      values.value(QStringLiteral("preferences/scratchDirectory")).toString() !=
+          scratch.path() ||
+      colorscreen::cache_scratch_directory() !=
+          QFile::encodeName(scratch.path()).toStdString() ||
+      values.value(QStringLiteral("preferences/easterEggs/joly"), true).toBool())
+    return fail(QStringLiteral("OK did not apply/persist all selections"));
+
+  // Environment override and live preference refresh must never resurrect a
+  // disabled Easter egg. With all eggs disabled the idle view stays blank.
+  qputenv("CSEGG", QByteArray("joly"));
+  ImageWidget image;
+  if (image.activeEasterEggKey() == QStringLiteral("joly") ||
+      image.activeEasterEggKey().isEmpty())
+    return fail(QStringLiteral("disabled Joly egg forced by environment"));
+  QSettings disabled;
+  for (const QString &key : {QStringLiteral("thames"),
+                              QStringLiteral("paget"),
+                              QStringLiteral("joly"),
+                              QStringLiteral("hurley")})
+    disabled.setValue(QStringLiteral("preferences/easterEggs/%1").arg(key),
+                      false);
+  image.refreshEasterEggPreferences();
+  if (!image.activeEasterEggKey().isEmpty())
+    return fail(QStringLiteral("empty allowed egg set still selected animation"));
+  disabled.setValue(QStringLiteral("preferences/easterEggs/joly"), true);
+  image.refreshEasterEggPreferences();
+  if (image.activeEasterEggKey() != QStringLiteral("joly"))
+    return fail(QStringLiteral("re-enabling egg did not refresh existing view"));
+  return true;
+}
+
 /** Start the Qt GUI, restore any crashed document session, and open every
     positional image argument in an independent MainWindow.  */
 int main(int argc, char *argv[]) {
@@ -3670,6 +3816,7 @@ int main(int argc, char *argv[]) {
 
   // Use INI files on every platform so settings are easy to inspect and move.
   QSettings::setDefaultFormat(QSettings::IniFormat);
+  app.applySavedPreferences();
   QApplication::setStyle(QStyleFactory::create("Fusion"));
   QApplication::setWindowIcon(QIcon(":/images/icon.svg"));
 
@@ -3789,6 +3936,8 @@ int main(int argc, char *argv[]) {
   // interruption semantics. It needs no image fixture or worker thread.
   if (parser.isSet(smokeTestOption) && !runPointerInteractionSmoke())
     return 20;
+  if (parser.isSet(smokeTestOption) && !applicationPreferencesSmoke(app))
+    return 24;
   // Keep beta-critical undo and logical-tab invariants in the same ordinary
   // smoke lane so every supported Qt platform exercises them.
   if (parser.isSet(smokeTestOption) && !runBetaInvariantSmoke())

@@ -13,9 +13,13 @@ independent, frontend-owned RAW decoding/variant cache in `qtgui`.
 Qt may hold displayed images or an in-flight worker's `shared_ptr` and
 control worker cancellation, but must not control core cache policy.
 The shared cache manager obtains available memory through native host
-APIs and applies a single adaptive soft byte budget to all core LRUs and RAW
-sensor resources, not a hardcoded 256 MiB limit. Other frontends use the
-public `get_cache_memory_statistics()` API for read-only telemetry.
+APIs and applies one global adaptive soft byte budget (or an optional
+10–85% operator-configured available-memory share) to all core LRUs and RAW
+sensor resources, not a hardcoded 256 MiB limit. The frontend sets the
+policy through the public `set_cache_memory_percent()` API, not a Qt LRU.
+The public `set_cache_scratch_directory()` configures future MapAlloc
+memory-mapped temporary files. Other frontends use the shared core APIs,
+including `get_cache_memory_statistics()`, for read-only telemetry.
 Cache byte limits bound only cache-owned allocations; views/renderers holding
 independent `shared_ptr` references continue to own their pixels safely.
 

@@ -2617,6 +2617,18 @@ void MainWindow::createMenus() {
   redoAction->setShortcut(QKeySequence::Redo);
   m_editMenu->addAction(redoAction);
 
+  m_editMenu->addSeparator();
+  QAction *preferencesAction = m_editMenu->addAction(tr("&Preferences…"));
+  preferencesAction->setObjectName(QStringLiteral("ApplicationPreferencesAction"));
+  preferencesAction->setMenuRole(QAction::PreferencesRole);
+  preferencesAction->setToolTip(
+      tr("Set shared cache memory, memory-mapped scratch files and "
+         "idle-screen animations for the whole application."));
+  connect(preferencesAction, &QAction::triggered, this, [this]() {
+    if (ColorScreenApplication *application = documentApplication())
+      application->showPreferences(this);
+  });
+
   // View Menu
   m_viewMenu = menuBar()->addMenu("&View");
 

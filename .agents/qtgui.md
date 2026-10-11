@@ -1303,3 +1303,51 @@ bytes and per-cache entry/byte/pin estimates, with no Qt cache policy. Cache key
 include source generation and demosaic method, and old worker generations
 cannot publish into the current image view. Remain frontend-neutral so
 other applications can use exactly the same image-loading resources.
+
+## Application Preferences (2.0alpha)
+
+**Edit → Preferences…** is an application-wide, Photoshop-style dialog with
+an extensible category list and separate **Performance**, **Scratch disks**,
+and **Easter eggs** pages. The Qt macOS action has `PreferencesRole`; normal
+secondary views share their document's Edit menu. `ColorScreenApplication`
+owns one dialog at a time, across document switches; Cancel never persists or
+applies changes, Restore Defaults edits only the pending dialog, and OK validates
+before committing. Validation warnings are parent-owned **nonblocking** dialogs.
+
+Store preferences in `QSettings`, *not* in the parameter file or recovery:
+- `preferences/cachePercent`: 0 means automatic; a custom 10–85% is applied
+  by the public Qt-free `set_cache_memory_percent()`. Auto still uses the
+  adaptive minimum of one-third physical RAM and half of available RAM plus
+  core-retained allocations. Explicit percentages use the latter pool, limited
+  by effective installed memory. Reducing the preference evicts cache-owned
+  entries but never invalidates images pinned by renderers/views. Cache
+  Statistics remains a read-only view of the core registry.
+- `preferences/scratchDirectory`: empty selects the platform temporary
+  folder; a custom absolute path must exist, admit creation of a probe file,
+  and fit the legacy allocator's bounded path buffer. The public core
+  `set_cache_scratch_directory()` configures only **future** MapAlloc
+  mmap-backed scratch files; existing allocations keep their original backing.
+  Explain that system temp directories may be RAM-backed.
+- `preferences/easterEggs/{thames,paget,joly,hurley}`: independent booleans
+  (all true by default). ImageWidget chooses only among enabled idle
+  animations, honors `CSEGG=none`, but never permits `CSEGG` to resurrect
+  a disabled animation. Applying changes refreshes existing primary, secondary
+  and detached canvases without changing document state.
+
+The Preferences UI does not implement its own RAM allocator/cache, and the
+backend has no dependency on Qt. `ColorScreenApplication::applySavedPreferences()`
+runs once after QSettings format/application identity initialization, before
+any document opens. Future preferences should follow the same separation.
+The ordinary Qt smoke run uses an isolated QSettings identity to exercise
+Cancel, OK, Core API policy, scratch selection and Easter-egg filtering;
+restore the real identity, core settings and CSEGG environment afterward.
+
+
+### Cache statistics order
+
+The core snapshot `get_cache_memory_statistics().caches` is displayed with
+highest retained byte size first, then highest entry count, then ascending
+cache name. This is a lexicographic order on `(-bytes, -entries, name)`, not
+a frontend-local alphabetical sort; the Qt Cache Statistics dialog simply
+renders the core results. Entry size remains an estimate for legacy caches
+without byte callbacks and the shared memory budget remains a soft limit.

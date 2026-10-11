@@ -1,15 +1,28 @@
 #include "ColorScreenApplication.h"
 
 #include "MainWindow.h"
+#include "ImageWidget.h"
+#include "../libcolorscreen/include/cache-stats.h"
 #include "ImageViewWindow.h"
 #include "WorkspaceWindow.h"
 
 #include <QAction>
+#include <QApplication>
+#include <QCheckBox>
+#include <QDialog>
+#include <QDialogButtonBox>
 #include <QDir>
 #include <QDebug>
 #include <QFile>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QFormLayout>
+#include <QGroupBox>
+#include <QHBoxLayout>
+#include <QLabel>
+#include <QLocale>
+#include <QLineEdit>
+#include <QListWidget>
 #include <QFileOpenEvent>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -19,11 +32,21 @@
 #include <QMenu>
 #include <QMessageBox>
 #include <QPoint>
+#include <QPushButton>
+#include <QSettings>
+#include <QSlider>
+#include <QSpinBox>
+#include <QStackedWidget>
 #include <QSaveFile>
 #include <QStandardPaths>
+#include <QTemporaryFile>
 #include <QTimer>
+#include <QVBoxLayout>
 #include <QUrl>
 #include <QUuid>
+
+#include <algorithm>
+#include <limits>
 
 namespace {
 
@@ -80,12 +103,338 @@ bool copyRecoveryFile(const QString &source, const QString &destination) {
   return QFile::copy(source, destination);
 }
 
+/** Display a parent-owned, nonblocking Preferences validation warning.
+    Failed settings must leave the dialog open for correction, without a
+    nested event loop that could dispatch unrelated image-worker callbacks. */
+void showPreferencesWarning(QDialog *parent, const QString &title,
+                            const QString &detail) {
+  auto *warning = new QMessageBox(
+      QMessageBox::Warning, title, detail, QMessageBox::Ok, parent);
+  warning->setObjectName(QStringLiteral("PreferencesWarningDialog"));
+  warning->setAttribute(Qt::WA_DeleteOnClose);
+  warning->open();
+}
+
 } // namespace
 
 /** Construct the application-level document manager. */
 ColorScreenApplication::ColorScreenApplication(int &argc, char **argv)
     : QApplication(argc, argv) {
   setQuitOnLastWindowClosed(true);
+}
+
+/** Apply the persistent process-wide preferences before opening any image.
+    Invalid/deleted scratch folders leave the OS default in place and can be
+    corrected from Edit -> Preferences; no image parameter state is involved. */
+void ColorScreenApplication::applySavedPreferences() {
+  QSettings settings;
+  const int percent =
+      settings.value(QStringLiteral("preferences/cachePercent"), 0).toInt();
+  if (!colorscreen::set_cache_memory_percent(percent)) {
+    qWarning() << "Invalid saved cache-memory percentage; using Auto";
+    colorscreen::set_cache_memory_percent(0);
+  }
+
+  const QString folder =
+      settings.value(QStringLiteral("preferences/scratchDirectory")).toString();
+  if (!colorscreen::set_cache_scratch_directory(
+          QFile::encodeName(folder).toStdString())) {
+    qWarning() << "The configured scratch folder is no longer usable:" << folder;
+    colorscreen::set_cache_scratch_directory(std::string());
+  }
+}
+
+/** Show a Photoshop-like, extensible preferences workspace: navigation on
+    the left, independent settings pages on the right. Only OK applies settings
+    globally, while Cancel and closing the window leave them unchanged. */
+void ColorScreenApplication::showPreferences(QWidget *parent) {
+  if (m_preferencesDialog) {
+    m_preferencesDialog->show();
+    m_preferencesDialog->raise();
+    m_preferencesDialog->activateWindow();
+    return;
+  }
+
+  QWidget *owner = parent ? parent->window() : activeWindow();
+  auto *dialog = new QDialog(owner);
+  m_preferencesDialog = dialog;
+  dialog->setAttribute(Qt::WA_DeleteOnClose);
+  dialog->setObjectName(QStringLiteral("ApplicationPreferencesDialog"));
+  dialog->setWindowTitle(tr("Preferences — Color-Screen"));
+  dialog->resize(755, 475);
+  auto *outer = new QVBoxLayout(dialog);
+  auto *body = new QHBoxLayout;
+  body->setSpacing(16);
+  auto *categories = new QListWidget(dialog);
+  categories->setObjectName(QStringLiteral("PreferencesCategories"));
+  categories->setFixedWidth(168);
+  categories->setSpacing(4);
+  body->addWidget(categories);
+  auto *pages = new QStackedWidget(dialog);
+  pages->setObjectName(QStringLiteral("PreferencesPages"));
+  body->addWidget(pages, 1);
+  outer->addLayout(body, 1);
+
+  const auto createPage = [categories, pages, dialog](const QString &title) {
+    categories->addItem(title);
+    auto *page = new QWidget(dialog);
+    auto *layout = new QVBoxLayout(page);
+    layout->setSpacing(12);
+    pages->addWidget(page);
+    return layout;
+  };
+  QSettings saved;
+
+  // Memory policy belongs to libcolorscreen, never to an individual scan.
+  auto *memory = createPage(tr("Performance"));
+  auto *title = new QLabel(tr("<h3>Memory and cache</h3>"), dialog);
+  memory->addWidget(title);
+  auto *automatic = new QCheckBox(tr("Automatically manage cache memory"),
+                                   dialog);
+  automatic->setObjectName(QStringLiteral("PreferencesAutomaticCache"));
+  const int savedPercent =
+      saved.value(QStringLiteral("preferences/cachePercent"), 0).toInt();
+  automatic->setChecked(savedPercent == 0);
+  memory->addWidget(automatic);
+  auto *percentRow = new QHBoxLayout;
+  auto *percentLabel = new QLabel(tr("Maximum cache share:"), dialog);
+  percentRow->addWidget(percentLabel);
+  auto *slider = new QSlider(Qt::Horizontal, dialog);
+  slider->setObjectName(QStringLiteral("PreferencesCacheSlider"));
+  slider->setRange(10, 85);
+  slider->setSingleStep(5);
+  slider->setPageStep(5);
+  slider->setValue(savedPercent >= 10 && savedPercent <= 85
+                       ? savedPercent : 50);
+  percentRow->addWidget(slider, 1);
+  auto *percentage = new QSpinBox(dialog);
+  percentage->setObjectName(QStringLiteral("PreferencesCachePercent"));
+  percentage->setRange(10, 85);
+  percentage->setSuffix(QStringLiteral(" %"));
+  percentage->setValue(slider->value());
+  percentRow->addWidget(percentage);
+  memory->addLayout(percentRow);
+  connect(slider, &QSlider::valueChanged, percentage, &QSpinBox::setValue);
+  connect(percentage, QOverload<int>::of(&QSpinBox::valueChanged),
+          slider, &QSlider::setValue);
+  auto *currentMemory = new QLabel(dialog);
+  currentMemory->setObjectName(QStringLiteral("PreferencesMemorySummary"));
+  currentMemory->setWordWrap(true);
+  memory->addWidget(currentMemory);
+  auto updateMemory = [automatic, slider, percentage, currentMemory]() {
+    const bool custom = !automatic->isChecked();
+    slider->setEnabled(custom);
+    percentage->setEnabled(custom);
+    const colorscreen::cache_memory_statistics stats =
+        colorscreen::get_cache_memory_statistics();
+    const auto size = [](uint64_t bytes) {
+      return QLocale().formattedDataSize(
+          static_cast<qint64>(std::min<uint64_t>(
+              bytes, static_cast<uint64_t>(
+                         std::numeric_limits<qint64>::max()))),
+          1, QLocale::DataSizeIecFormat);
+    };
+    currentMemory->setText(
+        QObject::tr("Available memory: %1     Physical memory: %2\n"
+                    "Current shared cache budget: %3\n"
+                    "LRU-owned: %4     Retained RAW mosaics: %5")
+            .arg(stats.available_memory_bytes
+                     ? size(stats.available_memory_bytes)
+                     : QObject::tr("unknown"),
+                 stats.total_memory_bytes
+                     ? size(stats.total_memory_bytes)
+                     : QObject::tr("unknown"),
+                 size(stats.cache_budget_bytes),
+                 size(stats.cached_bytes),
+                 size(stats.retained_raw_source_bytes)));
+  };
+  connect(automatic, &QCheckBox::toggled, dialog, updateMemory);
+  updateMemory();
+  auto *memoryHint = new QLabel(
+      tr("Automatic balances cache usage against free memory. Custom uses "
+         "the chosen percentage of available memory, including bytes "
+         "already retained by the shared cache. Images still in use and "
+         "temporary processing buffers are not constrained by this budget."),
+      dialog);
+  memoryHint->setWordWrap(true);
+  memory->addWidget(memoryHint);
+  memory->addStretch();
+
+  auto *scratch = createPage(tr("Scratch disks"));
+  scratch->addWidget(new QLabel(tr("<h3>Memory-mapped temporary files</h3>"),
+                                 dialog));
+  auto *scratchHint = new QLabel(
+      tr("When large working arrays cannot be kept in RAM, Color-Screen can "
+         "store them in memory-mapped scratch files. Select a writable, "
+         "disk-backed location with plenty of free space. Changes only "
+         "affect new allocations; active mappings remain valid."),
+      dialog);
+  scratchHint->setWordWrap(true);
+  scratch->addWidget(scratchHint);
+  auto *systemScratch =
+      new QCheckBox(tr("Use the system temporary directory"), dialog);
+  systemScratch->setObjectName(QStringLiteral("PreferencesSystemScratch"));
+  const QString storedFolder =
+      saved.value(QStringLiteral("preferences/scratchDirectory")).toString();
+  systemScratch->setChecked(storedFolder.isEmpty());
+  scratch->addWidget(systemScratch);
+  auto *pathRow = new QHBoxLayout;
+  auto *folder = new QLineEdit(storedFolder, dialog);
+  folder->setObjectName(QStringLiteral("PreferencesScratchDirectory"));
+  folder->setPlaceholderText(QDir::toNativeSeparators(QDir::tempPath()));
+  pathRow->addWidget(folder, 1);
+  auto *browse = new QPushButton(tr("Browse…"), dialog);
+  browse->setObjectName(QStringLiteral("PreferencesBrowseScratch"));
+  pathRow->addWidget(browse);
+  scratch->addLayout(pathRow);
+  connect(systemScratch, &QCheckBox::toggled, folder, &QWidget::setDisabled);
+  folder->setDisabled(systemScratch->isChecked());
+  connect(browse, &QPushButton::clicked, dialog, [dialog, folder, systemScratch]() {
+    auto *chooser = new QFileDialog(
+        dialog, QObject::tr("Select scratch-file folder"),
+        folder->text().isEmpty() ? QDir::tempPath() : folder->text());
+    chooser->setObjectName(QStringLiteral("PreferencesScratchChooser"));
+    chooser->setFileMode(QFileDialog::Directory);
+    chooser->setOption(QFileDialog::ShowDirsOnly, true);
+    chooser->setAttribute(Qt::WA_DeleteOnClose);
+    QObject::connect(chooser, &QFileDialog::fileSelected, dialog,
+                     [folder, systemScratch](const QString &path) {
+                       folder->setText(QDir::cleanPath(path));
+                       systemScratch->setChecked(false);
+                     });
+    chooser->open();
+  });
+  auto *scratchWarning = new QLabel(
+      tr("Some system temporary folders are RAM-backed (for example tmpfs "
+         "on Linux). Choose a physical disk if scratch files could exceed "
+         "available RAM. The application will not relocate existing mappings."),
+      dialog);
+  scratchWarning->setWordWrap(true);
+  scratch->addWidget(scratchWarning);
+  scratch->addStretch();
+
+  auto *eggs = createPage(tr("Easter eggs"));
+  eggs->addWidget(new QLabel(tr("<h3>Idle-screen animations</h3>"), dialog));
+  auto *eggsHint = new QLabel(
+      tr("Choose which historical photography animations may appear on "
+         "empty image canvases. Disabling all of them leaves the canvas "
+         "blank. Existing views update when you apply these preferences."),
+      dialog);
+  eggsHint->setWordWrap(true);
+  eggs->addWidget(eggsHint);
+  const QStringList eggKeys = {
+      QStringLiteral("thames"), QStringLiteral("paget"),
+      QStringLiteral("joly"), QStringLiteral("hurley")};
+  const QStringList eggLabels = {
+      tr("Thames"), tr("Paget"), tr("Joly"), tr("Hurley")};
+  QList<QCheckBox *> eggToggles;
+  for (qsizetype i = 0; i < eggKeys.size(); ++i) {
+    auto *toggle = new QCheckBox(eggLabels[i], dialog);
+    toggle->setObjectName(
+        QStringLiteral("PreferencesEgg_%1").arg(eggKeys[i]));
+    toggle->setChecked(saved.value(
+        QStringLiteral("preferences/easterEggs/%1").arg(eggKeys[i]),
+        true).toBool());
+    eggs->addWidget(toggle);
+    eggToggles.append(toggle);
+  }
+  eggs->addStretch();
+
+  connect(categories, &QListWidget::currentRowChanged, pages,
+          &QStackedWidget::setCurrentIndex);
+  categories->setCurrentRow(0);
+  auto *buttons = new QDialogButtonBox(
+      QDialogButtonBox::Ok | QDialogButtonBox::Cancel |
+          QDialogButtonBox::RestoreDefaults,
+      Qt::Horizontal, dialog);
+  buttons->setObjectName(QStringLiteral("PreferencesButtons"));
+  outer->addWidget(buttons);
+  connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
+  connect(buttons->button(QDialogButtonBox::RestoreDefaults),
+          &QPushButton::clicked, dialog,
+          [automatic, percentage, systemScratch, folder, eggToggles]() {
+            automatic->setChecked(true);
+            percentage->setValue(50);
+            systemScratch->setChecked(true);
+            folder->clear();
+            for (QCheckBox *egg : eggToggles)
+              egg->setChecked(true);
+          });
+  connect(buttons, &QDialogButtonBox::accepted, dialog,
+          [dialog, automatic, percentage, systemScratch, folder,
+           eggKeys, eggToggles]() {
+            const int percent =
+                automatic->isChecked() ? 0 : percentage->value();
+            const QString chosen =
+                systemScratch->isChecked()
+                    ? QString()
+                    : QDir::cleanPath(folder->text().trimmed());
+            if (!systemScratch->isChecked()) {
+              const QDir directory(chosen);
+              if (chosen.isEmpty() || !directory.isAbsolute() ||
+                  !directory.exists()) {
+                showPreferencesWarning(
+                    dialog, QObject::tr("Invalid scratch directory"),
+                    QObject::tr("Select an existing absolute directory."));
+                return;
+              }
+              QTemporaryFile probe(
+                  directory.filePath(QStringLiteral(".colorscreen-write-XXXXXX")));
+              if (!probe.open()) {
+                showPreferencesWarning(
+                    dialog, QObject::tr("Scratch directory not writable"),
+                    QObject::tr("Cannot create a temporary file in %1.")
+                        .arg(QDir::toNativeSeparators(chosen)));
+                return;
+              }
+            }
+            const int oldPercent = colorscreen::cache_memory_percent();
+            const std::string oldScratch =
+                colorscreen::cache_scratch_directory();
+            if (!colorscreen::set_cache_scratch_directory(
+                    QFile::encodeName(chosen).toStdString())) {
+              showPreferencesWarning(
+                  dialog, QObject::tr("Scratch directory unavailable"),
+                  QObject::tr("The chosen directory cannot be used for mmap "
+                              "scratch files. Choose a shorter, accessible "
+                              "path or use the system default."));
+              return;
+            }
+            if (!colorscreen::set_cache_memory_percent(percent)) {
+              colorscreen::set_cache_scratch_directory(oldScratch);
+              showPreferencesWarning(
+                  dialog, QObject::tr("Invalid cache budget"),
+                  QObject::tr("Choose a value from 10 to 85%."));
+              return;
+            }
+
+            QSettings settings;
+            settings.setValue(QStringLiteral("preferences/cachePercent"),
+                              percent);
+            settings.setValue(QStringLiteral("preferences/scratchDirectory"),
+                              chosen);
+            for (qsizetype i = 0; i < eggKeys.size(); ++i)
+              settings.setValue(
+                  QStringLiteral("preferences/easterEggs/%1").arg(eggKeys[i]),
+                  eggToggles[i]->isChecked());
+            settings.sync();
+            if (settings.status() != QSettings::NoError) {
+              colorscreen::set_cache_memory_percent(oldPercent);
+              colorscreen::set_cache_scratch_directory(oldScratch);
+              showPreferencesWarning(
+                  dialog, QObject::tr("Could not save preferences"),
+                  QObject::tr("Your application settings file is not writable."));
+              return;
+            }
+            // A scan or Undo stack must never be touched by presentation
+            // preferences. Existing empty and detached views read the new
+            // Easter-egg permissions without constructing another cache.
+            for (QWidget *widget : QApplication::allWidgets())
+              if (auto *image = qobject_cast<ImageWidget *>(widget))
+                image->refreshEasterEggPreferences();
+            dialog->accept();
+          });
+  dialog->show();
 }
 
 /** Create one independently owned document and present it as a tab by default. */

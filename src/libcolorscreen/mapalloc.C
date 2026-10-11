@@ -1,5 +1,6 @@
 /* Taken from multiblend.  */
 #include "mapalloc.h"
+#include "include/cache-stats.h"
 #ifdef __APPLE__
 #define memalign(a,b) malloc((b))
 #else
@@ -7,6 +8,9 @@
 #endif
 #include <cstring>
 #include <cstdio>
+#include <filesystem>
+#include <string>
+#include <system_error>
 
 #ifndef _WIN32
 #include <cstdlib>
@@ -41,52 +45,108 @@ MapAlloc::DestructionGuard::~DestructionGuard ()
 * MapAlloc
 ***********************************************************************/
 void MapAlloc::CacheThreshold(size_t limit) {
+	std::lock_guard<std::mutex> guard (mapalloc_lock);
 	cache_threshold = limit;
 }
 
+/* Read the scratch-mapping threshold for testing and policy restoration. */
+size_t MapAlloc::GetCacheThreshold() {
+	std::lock_guard<std::mutex> guard (mapalloc_lock);
+	return cache_threshold;
+}
+
 void* MapAlloc::Alloc(size_t size, const char *reason, int alignment) {
-	mapalloc_lock.lock ();
+	std::lock_guard<std::mutex> guard (mapalloc_lock);
+	/* A temporary-file failure may throw. Always release the mutex. */
 	objects.push_back(std::make_unique <MapAllocObject>(size, reason, alignment));
-	void *ret = objects.back ()->GetPointer();
-	mapalloc_lock.unlock ();
-	return ret;
+	return objects.back ()->GetPointer();
 }
 
 void MapAlloc::Free(void* p) {
 	/* If static destruction already ran; do nothing.  */
 	if (destroyed)
 	  return;
-	mapalloc_lock.lock ();
+	std::lock_guard<std::mutex> guard (mapalloc_lock);
 	for (auto it = objects.begin(); it < objects.end(); ++it) {
 		if ((*it)->GetPointer() == p) {
 			objects.erase(it);
 			break;
 		}
 	}
-	mapalloc_lock.unlock ();
 }
 
 size_t MapAlloc::GetSize(void* p) {
+	std::lock_guard<std::mutex> guard (mapalloc_lock);
 	for (auto it = objects.begin(); it < objects.end(); ++it) {
 		if ((*it)->GetPointer() == p) {
 			return (*it)->GetSize();
 		}
 	}
-
 	return 0;
 }
 
-void MapAlloc::SetTmpdir(const char* _tmpdir) {
-	strcpy_s(tmpdir, _tmpdir);
-	size_t l = strlen(tmpdir);
-	while ((tmpdir[l - 1] == '\\' || tmpdir[l - 1] == '/') && l > 0) tmpdir[--l] = 0;
+/* Report currently allocated in-RAM MapAlloc buffers, excluding mmap
+   scratch-backed allocations. The counter is updated under mapalloc_lock. */
+size_t MapAlloc::GetRamBytes () {
+	std::lock_guard<std::mutex> guard (mapalloc_lock);
+	return total_allocated;
+}
+
+/* Change the scratch directory used for FUTURE mmap allocations. PATH is
+   an OS-native encoded folder. Empty restores platform default. The
+   historic fixed-size array must never truncate a selected path. */
+bool
+MapAlloc::SetTmpdir (const char *path)
+{
+  if (!path)
+    return false;
+  std::string directory (path);
+  while (directory.size () > 1
+         && (directory.back () == '/' || directory.back () == '\\')
+         && !(directory.size () == 3 && directory[1] == ':'))
+    directory.pop_back ();
+  if (directory.size () >= sizeof (tmpdir))
+    return false;
+  if (!directory.empty ())
+    {
+      std::error_code error;
+      if (!std::filesystem::is_directory (
+              std::filesystem::path (directory), error))
+        return false;
+    }
+  std::lock_guard<std::mutex> guard (mapalloc_lock);
+  std::memcpy (tmpdir, directory.c_str (), directory.size () + 1);
+  return true;
+}
+
+/* Read the configured directory without racing a new mmap allocation. */
+std::string
+MapAlloc::GetTmpdir ()
+{
+  std::lock_guard<std::mutex> guard (mapalloc_lock);
+  return std::string (tmpdir);
+}
+
+/* Frontend-neutral scratch configuration exposed by libcolorscreen. */
+bool
+set_cache_scratch_directory (const std::string &path)
+{
+  return MapAlloc::SetTmpdir (path.c_str ());
+}
+
+std::string
+cache_scratch_directory ()
+{
+  return MapAlloc::GetTmpdir ();
 }
 
 /***********************************************************************
 * MapAllocObject
 ***********************************************************************/
 MapAlloc::MapAllocObject::MapAllocObject(size_t _size, const char *reason, int alignment) : size(_size) {
-	if (total_allocated + size < cache_threshold || size < min_file_size) {
+	if ((total_allocated < cache_threshold
+	     && size < cache_threshold - total_allocated)
+	    || size < min_file_size) {
 		if (debug)
 		  printf ("Allocating %li bytes for %s, overall allocation: %li\n", (long)_size, reason, (long)(total_allocated + size));
 #ifdef _WIN32
@@ -135,36 +195,46 @@ MapAlloc::MapAllocObject::MapAllocObject(size_t _size, const char *reason, int a
 		}
 #else
 		if (!tmpdir[0]) {
-			char* td = getenv("TMPDIR");
-			if (td) {
-				strcpy(tmpdir, td);
-			} else {
-				strcpy(tmpdir, "/tmp");
-			}
+			const char* td = getenv("TMPDIR");
+			if (!td || !*td || strlen(td) >= sizeof (tmpdir))
+			  td = "/tmp";
+			snprintf(tmpdir, sizeof (tmpdir), "%s", td);
 		}
 
 		sprintf(filename, "%s/.mbXXXXXX", tmpdir);
 		file = mkstemp(filename);
 
-		if (file <= 0) {
+		if (file < 0) {
 			sprintf(filename, "Could not create temp file in %s/: %s", tmpdir, strerror(errno));
 			throw(filename);
 		}
 
 		if (ftruncate(file, size)) {
+			const int failure = errno;
 			unlink(filename);
-			sprintf(filename, "Could not allocate %zu temporary bytes in %s: %s", size, tmpdir, strerror(errno));
+			close(file);
+			file = -1;
+			snprintf(filename, sizeof (filename),
+			         "Could not allocate %zu temporary bytes in %s: %s",
+			         size, tmpdir, strerror(failure));
 			throw(filename);
 		}
 
 		if (debug)
 		  printf ("Producing tmp file %s for %s of size %liMB\n", filename, reason, (long)size/1024/1024);
 
-		pointer = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_PRIVATE, file, 0);
+		/* These arrays are intentionally DISK-BACKED scratch. MAP_PRIVATE
+		   would turn writes into anonymous copy-on-write RAM and could OOM
+		   the process during large scans, despite the temporary file. */
+		pointer = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, file, 0);
 		if (pointer == MAP_FAILED) {
+			const int failure = errno;
 			unlink(filename);
+			close(file);
+			file = -1;
 			pointer = NULL;
-			sprintf(filename, "Could not mmap temporary file");
+			snprintf(filename, sizeof (filename),
+			         "Could not mmap temporary file: %s", strerror(failure));
 			throw(filename);
 		}
 
@@ -190,10 +260,14 @@ MapAlloc::MapAllocObject::~MapAllocObject() {
 		CloseHandle(file);
 	}
 #else
-	if (!file) {
+	if (file < 0) {
 		if (debug)
 		  printf ("Freeing %li bytes\n", (long)size);
 		free(pointer);
+		/* Unlike Windows, POSIX previously failed to decrement this
+		   counter. Repeated malloc/free cycles then forced scratch files
+		   even when virtually no heap-backed MapAlloc data remained. */
+		total_allocated -= size;
 	} else {
 		if (debug)
 		  printf ("Unmapping file of size %liMB\n", (long)size/1024/1024);
@@ -208,7 +282,11 @@ void* MapAlloc::MapAllocObject::GetPointer() {
 }
 
 bool MapAlloc::MapAllocObject::IsFile() {
+#ifdef _WIN32
 	return !!file;
+#else
+	return file >= 0;
+#endif
 }
 
 MapAlloc::~MapAlloc ()

@@ -38,6 +38,7 @@ namespace
 {
 std::atomic<uint64_t> raw_cache_source_bytes {0};
 std::atomic<uint64_t> test_cache_budget_override {0};
+std::atomic<int> user_cache_memory_percent {0};
 
 /* A conservative OS memory estimate. These APIs are deliberately implemented
    in libcolorscreen, rather than calling Qt's platform/system services. */
@@ -175,7 +176,18 @@ effective_cache_budget (const memory_reading &mem, uint64_t accounted)
     return normal / 2; /* Conservative fallback if the OS probe fails. */
   if (!mem.available)
     return 0; /* Verified memory exhaustion: retain no idle cache data. */
-  return std::min (normal, saturating_add (mem.available, accounted) / 2);
+  const uint64_t usable = std::min (
+      mem.total ? mem.total : std::numeric_limits<uint64_t>::max (),
+      saturating_add (mem.available, accounted));
+  const int percent
+      = user_cache_memory_percent.load (std::memory_order_relaxed);
+  if (percent)
+    {
+      /* Avoid overflowing on unusually large host memory readings. */
+      return (usable / 100) * (uint64_t)percent
+             + (usable % 100) * (uint64_t)percent / 100;
+    }
+  return std::min (normal, usable / 2);
 }
 } // anonymous namespace
 
@@ -240,13 +252,25 @@ lru_cache_registry::snapshot ()
   const memory_reading mem = query_host_memory ();
   result.total_memory_bytes = mem.total;
   result.available_memory_bytes = mem.available;
+  result.configured_memory_percent
+      = user_cache_memory_percent.load (std::memory_order_relaxed);
   result.cache_budget_bytes = effective_cache_budget (
       mem, saturating_add (result.cached_bytes,
                            result.retained_raw_source_bytes));
+  /* Present highest retained cache memory first. Equal-sized caches are
+     ordered by entry count, then by name to make every snapshot stable.
+     The same ordering is used by Qt and other frontends without a separate
+     UI-side sort or duplicated cache policy. */
   std::sort (result.caches.begin (), result.caches.end (),
              [] (const cache_entry_statistics &a,
                  const cache_entry_statistics &b)
-             { return a.name < b.name; });
+             {
+               if (a.retained_bytes != b.retained_bytes)
+                 return a.retained_bytes > b.retained_bytes;
+               if (a.entries != b.entries)
+                 return a.entries > b.entries;
+               return a.name < b.name;
+             });
   return result;
 }
 
@@ -338,6 +362,25 @@ uint64_t
 cache_memory_budget_bytes ()
 {
   return get_cache_memory_statistics ().cache_budget_bytes;
+}
+
+/* Apply PERCENT to the shared cache budget (zero restores Auto). If the new
+   budget is smaller, reclaim only cache-owned references immediately. */
+bool
+set_cache_memory_percent (int percent)
+{
+  if (percent != 0 && (percent < 10 || percent > 85))
+    return false;
+  user_cache_memory_percent.store (percent, std::memory_order_relaxed);
+  lru_cache_registry::instance ().enforce_budget ();
+  return true;
+}
+
+/* Return the operator-selected cache percentage independently of Qt. */
+int
+cache_memory_percent ()
+{
+  return user_cache_memory_percent.load (std::memory_order_relaxed);
 }
 
 /* A wrapper class around precomputed image data which handles allocation and

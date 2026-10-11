@@ -18,6 +18,7 @@
 #include <QPainter>
 #include <QPolygonF>
 #include <QRandomGenerator>
+#include <QSettings>
 #include <QWheelEvent>
 #include <QTimer>
 #include <QtMath>
@@ -63,25 +64,9 @@ ImageWidget::ImageWidget(QWidget *parent) : QWidget(parent), m_lastSize(0, 0) {
   m_hurleyAnim->setGeometry(rect());
   m_hurleyAnim->hide();
   
-  // Choose animation (Random by default, or overridden by CSEGG env var)
-  QByteArray csegg = qgetenv("CSEGG").toLower();
-  if (csegg == "none") {
-      m_activeAnim = nullptr;
-  } else if (csegg == "thames") {
-      m_activeAnim = m_thamesAnim;
-  } else if (csegg == "paget") {
-      m_activeAnim = m_pagetAnim;
-  } else if (csegg == "joly") {
-      m_activeAnim = m_jolyAnim;
-  } else if (csegg == "hurley") {
-      m_activeAnim = m_hurleyAnim;
-  } else {
-      int animChoice = QRandomGenerator::global()->bounded(4);
-      if (animChoice == 0) m_activeAnim = m_thamesAnim;
-      else if (animChoice == 1) m_activeAnim = m_pagetAnim;
-      else if (animChoice == 2) m_activeAnim = m_jolyAnim;
-      else m_activeAnim = m_hurleyAnim;
-  }
+  // Select only among Easter eggs enabled in application preferences.
+  // A CSEGG override cannot re-enable an explicitly disabled animation.
+  refreshEasterEggPreferences();
 
   setMouseTracking(true);
   setContextMenuPolicy(Qt::NoContextMenu); // Allow right-click for our custom handling
@@ -99,6 +84,62 @@ ImageWidget::ImageWidget(QWidget *parent) : QWidget(parent), m_lastSize(0, 0) {
   m_exploreTimer = new QTimer(this);
   m_exploreTimer->setInterval(16); // ~60 FPS
   connect(m_exploreTimer, &QTimer::timeout, this, &ImageWidget::exploreTick);
+}
+
+/** Re-select an enabled historical idle animation for this particular
+    canvas, including detached and reference views. This is strictly view
+    presentation state; no image, cache or document parameters are modified. */
+void ImageWidget::refreshEasterEggPreferences() {
+  const struct {
+    const char *name;
+    QWidget *widget;
+  } animations[] = {
+      {"thames", m_thamesAnim}, {"paget", m_pagetAnim},
+      {"joly", m_jolyAnim}, {"hurley", m_hurleyAnim}};
+  QSettings settings;
+  QList<QWidget *> allowed;
+  QWidget *forced = nullptr;
+  const QByteArray overrideName = qgetenv("CSEGG").toLower();
+  for (const auto &animation : animations) {
+    const QString key = QStringLiteral("preferences/easterEggs/") +
+                        QString::fromLatin1(animation.name);
+    if (!settings.value(key, true).toBool())
+      continue;
+    allowed.append(animation.widget);
+    if (overrideName == animation.name)
+      forced = animation.widget;
+  }
+
+  QWidget *selected = nullptr;
+  if (overrideName != "none") {
+    if (forced)
+      selected = forced;
+    else if (allowed.contains(m_activeAnim))
+      selected = m_activeAnim;
+    else if (!allowed.isEmpty())
+      selected = allowed.at(QRandomGenerator::global()->bounded(allowed.size()));
+  }
+  if (selected == m_activeAnim)
+    return;
+
+  if (m_activeAnim == m_thamesAnim) m_thamesAnim->stopAnimation();
+  if (m_activeAnim == m_pagetAnim) m_pagetAnim->stopAnimation();
+  if (m_activeAnim == m_jolyAnim) m_jolyAnim->stopAnimation();
+  if (m_activeAnim == m_hurleyAnim) m_hurleyAnim->stopAnimation();
+  if (m_activeAnim)
+    m_activeAnim->hide();
+  m_activeAnim = selected;
+  update();
+}
+
+/** Return the current idle animation's stable key without exposing or
+    mutating the animated widget. An empty key means all are disabled. */
+QString ImageWidget::activeEasterEggKey() const {
+  if (m_activeAnim == m_thamesAnim) return QStringLiteral("thames");
+  if (m_activeAnim == m_pagetAnim) return QStringLiteral("paget");
+  if (m_activeAnim == m_jolyAnim) return QStringLiteral("joly");
+  if (m_activeAnim == m_hurleyAnim) return QStringLiteral("hurley");
+  return QString();
 }
 
 /**

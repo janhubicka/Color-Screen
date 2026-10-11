@@ -35,6 +35,20 @@
 #include "simulate.h"
 #include "include/spectrum-to-xyz.h"
 #include "lru-cache.h"
+#include "mapalloc.h"
+/* On MinGW, Windows.h (through MapAlloc's legacy HANDLE declarations) also
+   defines scr1/scr2 as Win32 dialog IDs. Those macros predate this test
+   translation unit and collide with existing local geometry variables.
+   They are not used by the core tests. */
+#ifdef scr1
+#undef scr1
+#endif
+#ifdef scr2
+#undef scr2
+#endif
+#ifdef scr3
+#undef scr3
+#endif
 #include "include/histogram.h"
 #include "deconvolve.h"
 #include "backlight-correction.h"
@@ -5965,6 +5979,119 @@ test_lru_cache_byte_budget ()
   return true;
 }
 
+/* Check the application-wide adaptive/cache-percentage control without
+   consulting frontend state or changing any document parameters. */
+bool
+test_cache_memory_preferences ()
+{
+  const int original = cache_memory_percent ();
+  struct restore_percentage
+  {
+    int value;
+    ~restore_percentage () { set_cache_memory_percent (value); }
+  } restore {original};
+
+  if (set_cache_memory_percent (9) || set_cache_memory_percent (86)
+      || set_cache_memory_percent (-1)
+      || cache_memory_percent () != original
+      || !set_cache_memory_percent (65)
+      || cache_memory_percent () != 65
+      || get_cache_memory_statistics ().configured_memory_percent != 65
+      || !set_cache_memory_percent (0)
+      || cache_memory_percent () != 0)
+    {
+      fprintf (stderr, "Application cache percentage validation failed\n");
+      return false;
+    }
+  return true;
+}
+
+/* Verify that scratch-directory preferences cannot truncate filenames,
+   and that selecting a real directory is reversible. */
+bool
+test_cache_scratch_preferences ()
+{
+  const std::string original = cache_scratch_directory ();
+  struct restore_directory
+  {
+    std::string path;
+    ~restore_directory () { set_cache_scratch_directory (path); }
+  } restore {original};
+  if (set_cache_scratch_directory (std::string (512, 'x'))
+      || cache_scratch_directory () != original)
+    {
+      fprintf (stderr, "Long scratch directory overwrote the setting\n");
+      return false;
+    }
+  std::error_code error;
+  const std::filesystem::path temporary
+      = std::filesystem::temp_directory_path (error);
+  if (error || !set_cache_scratch_directory (temporary.string ()))
+    {
+      fprintf (stderr, "Could not choose existing temporary directory\n");
+      return false;
+    }
+  const std::string configured = cache_scratch_directory ();
+  /* Force the mmap fallback with a small temporary allocation. This tests
+     that the scratch preference actually feeds the disk-backed allocator,
+     rather than just accepting and storing a directory string. */
+  struct restore_threshold
+  {
+    size_t original;
+    ~restore_threshold () { MapAlloc::CacheThreshold (original); }
+  } restore_limit {MapAlloc::GetCacheThreshold ()};
+  MapAlloc::CacheThreshold (0);
+  /* Buffers smaller than the scratch-file minimum remain heap backed even
+     with a zero threshold. Freeing them must restore RAM accounting. */
+  const size_t old_ram_bytes = MapAlloc::GetRamBytes ();
+  char *ordinary = static_cast<char *> (
+      MapAlloc::Alloc (64 * 1024, "scratch RAM accounting smoke"));
+  if (!ordinary || MapAlloc::GetRamBytes () != old_ram_bytes + 64 * 1024)
+    {
+      if (ordinary)
+        MapAlloc::Free (ordinary);
+      fprintf (stderr, "MapAlloc failed to count heap-backed bytes\n");
+      return false;
+    }
+  MapAlloc::Free (ordinary);
+  if (MapAlloc::GetRamBytes () != old_ram_bytes)
+    {
+      fprintf (stderr, "MapAlloc RAM accounting leaked after free\n");
+      return false;
+    }
+  char *mapped = nullptr;
+  try
+    {
+      mapped = static_cast<char *> (
+          MapAlloc::Alloc (2 * 1024 * 1024, "scratch preferences smoke"));
+    }
+  catch (...)
+    {
+      fprintf (stderr, "Could not mmap scratch test buffer\n");
+      return false;
+    }
+  const bool file_backed = mapped && MapAlloc::LastFile ();
+  if (mapped)
+    {
+      mapped[0] = 42;
+      mapped[2 * 1024 * 1024 - 1] = 23;
+      MapAlloc::Free (mapped);
+    }
+  if (!file_backed)
+    {
+      fprintf (stderr, "Scratch preference did not use file-backed mmap\n");
+      return false;
+    }
+  if (configured.empty ()
+      || !set_cache_scratch_directory (std::string ())
+      || !cache_scratch_directory ().empty ())
+    {
+      fprintf (stderr, "Scratch directory preference was not reversible\n");
+      return false;
+    }
+  return true;
+}
+
 /* Force a tiny global budget to validate eviction *across* otherwise
    independent LRU instances without allocating gigabytes or relying on the
    machine's free memory. The override is internal to libcolorscreen tests. */
@@ -6011,6 +6138,23 @@ test_lru_global_memory_budget ()
       }
 
     const cache_memory_statistics report = get_cache_memory_statistics ();
+    /* Global snapshots list largest owned allocations first, followed by
+       descending cache entry count and name for exact ties. */
+    for (size_t index = 1; index < report.caches.size (); index++)
+      {
+        const auto &prior = report.caches[index - 1];
+        const auto &next = report.caches[index];
+        if (prior.retained_bytes < next.retained_bytes
+            || (prior.retained_bytes == next.retained_bytes
+                && prior.entries < next.entries)
+            || (prior.retained_bytes == next.retained_bytes
+                && prior.entries == next.entries
+                && prior.name > next.name))
+          {
+            fprintf (stderr, "Global cache statistics ordering is unstable\n");
+            return false;
+          }
+      }
     bool saw_first = false, saw_second = false;
     for (const auto &entry : report.caches)
       {
@@ -12922,6 +13066,10 @@ main (int argc, char **argv)
       [] () { return test_lru_cache_byte_budget (); } },
     { "lru_global_memory", "global LRU eviction, diagnostics and RAM admission",
       [] () { return test_lru_global_memory_budget (); } },
+    { "cache_memory_preferences", "adaptive and user-selected cache fractions",
+      [] () { return test_cache_memory_preferences (); } },
+    { "cache_scratch_preferences", "scratch mmap directory selection",
+      [] () { return test_cache_scratch_preferences (); } },
     { "lru_analyzer_dynamic_memory", "live analyzer reservations and global eviction",
       [] () { return test_lru_dynamic_analyzer_memory (); } },
     { "spectrum", "spectrum to xyz tests", [] () { return test_spectrum_dyes_to_xyz (); } },
