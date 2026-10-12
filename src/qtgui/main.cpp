@@ -482,6 +482,7 @@ bool colorSectionPreferencesSmoke() {
   state.rparams.contact_copy.simulate = true;
   const ParameterState initialState = state;
   int documentEdits = 0;
+  int expectedDocumentEdits = 0;
   auto getState = [&state]() { return state; };
   bool applyExplicitEdit = false;
   auto setState = [&state, &documentEdits, &applyExplicitEdit](
@@ -724,6 +725,9 @@ bool colorSectionPreferencesSmoke() {
             state.rparams.demosaic != colorscreen::image_data::demosaic_PPG)
           return fail(QStringLiteral(
               "Changing demosaic selection did not publish one saved edit"));
+        // This intentional parameter change is permitted; section folding
+        // and subsequent panel refreshes must make no additional edits.
+        ++expectedDocumentEdits;
         state.rparams.demosaic = initialState.rparams.demosaic;
         captureImage->raw_cfa_image = false;
         capture->updateUI();
@@ -985,7 +989,7 @@ bool colorSectionPreferencesSmoke() {
     if (!verify(*reopened, probe.keys, expected))
       return false;
   }
-  if (documentEdits != 0 || state != initialState)
+  if (documentEdits != expectedDocumentEdits || state != initialState)
     return fail(QStringLiteral("section preferences entered document/Undo state"));
   return true;
 }
