@@ -25,7 +25,7 @@ jobs:
           apt-get install -y --download-only --no-install-recommends \
             -o Dir::Cache::archives="$PWD/transport/debs" \
             libfftw3-dev libgsl-dev libturbojpeg0-dev liblcms2-dev \
-            libraw-dev libzip-dev libexiv2-dev libinireader-dev \
+            libraw-dev libzip-dev libexiv2-dev libinireader0 \
             qt6-base-dev qt6-base-dev-tools qt6-svg-dev
           rm -rf transport/debs/partial transport/debs/lock
       - uses: actions/upload-artifact@v4
