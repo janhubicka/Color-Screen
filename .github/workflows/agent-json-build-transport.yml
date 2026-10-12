@@ -1,0 +1,35 @@
+name: Agent JSON build transport
+on:
+  push:
+    branches: [agent/json-migration-build-transport]
+    paths: [.github/workflows/agent-json-build-transport.yml]
+permissions:
+  contents: read
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    container: debian:13
+    steps:
+      - name: Install transport tools
+        run: apt-get update && apt-get install -y --no-install-recommends git ca-certificates
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Bundle exact source and build dependencies
+        run: |
+          set -eu
+          mkdir -p transport/debs
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git branch transport-main 31298ba40bec0054809b2ecc7c11bc8c2c393bf8
+          git bundle create transport/colorscreen-main.bundle transport-main
+          apt-get install -y --download-only --no-install-recommends \
+            -o Dir::Cache::archives="$PWD/transport/debs" \
+            libfftw3-dev libgsl-dev libturbojpeg0-dev liblcms2-dev \
+            libraw-dev libzip-dev libexiv2-dev libinireader-dev \
+            qt6-base-dev qt6-base-dev-tools qt6-svg-dev
+          rm -rf transport/debs/partial transport/debs/lock
+      - uses: actions/upload-artifact@v4
+        with:
+          name: json-migration-debian13-build
+          path: transport/
+          retention-days: 7
