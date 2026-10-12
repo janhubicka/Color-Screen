@@ -1,0 +1,91 @@
+name: Agent JSON cleanup publication
+on:
+  push:
+    branches: [agent/json-migration-build-transport]
+    paths: [.github/workflows/agent-json-publish.yml]
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Reconstruct verified review Git objects
+        env:
+          EXPECTED_BASE: 31298ba40bec0054809b2ecc7c11bc8c2c393bf8
+          EXPECTED_HEAD: e2f8db5f7687aa0d1aa6f68ae4d45e8a8589ea64
+        run: |
+          python3 - <<'PY'
+          import base64
+          import hashlib
+          import json
+          import lzma
+          import os
+          import subprocess
+          from pathlib import Path, PurePosixPath
+
+          def git(*args, data=None):
+              return subprocess.check_output(['git', *args], input=data)
+
+          base, head = os.environ['EXPECTED_BASE'], os.environ['EXPECTED_HEAD']
+          encoded = ''.join(Path(f'.agent-transport/json-save-{i}.base64').read_text().strip()
+                            for i in range(1, 5))
+          packed = base64.b64decode(encoded, validate=True)
+          assert hashlib.sha256(packed).hexdigest() == '8a873003f725a1b94c74ddf0193f75a9825b8b2fac9dd2aa3fc7015a2e27abe5'
+          payload = json.loads(lzma.decompress(packed))
+          assert payload['base'] == base and payload['head'] == head
+          assert len(payload['files']) == 27
+          git('read-tree', base)
+          seen = set()
+          for entry in payload['files']:
+              name = entry['path']
+              path = PurePosixPath(name)
+              assert not path.is_absolute() and '..' not in path.parts
+              assert path.parts[0] not in ('.git', '.github', '.agent-transport', 'build-qt')
+              assert name not in seen and entry['mode'] in ('100644', '100755')
+              seen.add(name)
+              listed = git('ls-tree', base, '--', name).decode().split()
+              expected_old = listed[2] if listed else None
+              assert entry['base'] == expected_old, name
+              old = git('cat-file', 'blob', expected_old) if expected_old else b''
+              chunks = []
+              for chunk in entry['chunks']:
+                  if isinstance(chunk, list):
+                      start, end = chunk
+                      assert 0 <= start <= end <= len(old)
+                      chunks.append(old[start:end])
+                  elif isinstance(chunk, str):
+                      chunks.append(chunk.encode('utf-8'))
+                  else:
+                      assert set(chunk) == {'base64'}
+                      chunks.append(base64.b64decode(chunk['base64'], validate=True))
+              content = b''.join(chunks)
+              sha = git('hash-object', '-w', '--stdin', data=content).decode().strip()
+              assert sha == entry['sha'], name
+              git('update-index', '--add', '--cacheinfo', entry['mode'], sha, name)
+          tree = git('write-tree').decode().strip()
+          commit = base64.b64decode(payload['commit'], validate=True)
+          header = commit.split(b'\n\n', 1)[0].decode().splitlines()
+          assert header[0] == 'tree ' + tree
+          assert [line for line in header if line.startswith('parent ')] == ['parent ' + base]
+          actual = git('hash-object', '-t', 'commit', '-w', '--stdin', data=commit).decode().strip()
+          assert actual == head
+          git('diff', '--cached', '--check', base)
+          print('Verified exact local commit:', actual, 'tree:', tree)
+          print(git('diff', '--stat', base, head).decode())
+          PY
+      - name: Publish only the clean feature branch without force
+        run: |
+          set -eu
+          target=refs/heads/agent/json-save-cleanup
+          base=31298ba40bec0054809b2ecc7c11bc8c2c393bf8
+          head=e2f8db5f7687aa0d1aa6f68ae4d45e8a8589ea64
+          current=$(git ls-remote --heads origin "$target" | cut -f1)
+          if [ "$current" = "$head" ]; then
+            echo 'Exact review commit already published.'
+            exit 0
+          fi
+          test "$current" = "$base"
+          git push origin "$head:$target"
