@@ -74,6 +74,12 @@ CLEANFILES              = slanted-edge-1.log \
                           out-parameter-native-v2.cspar \
                           out-parameter-native-v2.tif \
                           out-parameter-v2-to-v1.cspar \
+                          out-parameter-v1-input.cspar \
+                          out-parameter-unrecognized-metadata-compat.cspar.before \
+                          out-parameter-unknown-existing.cspar.before \
+                          out-parameter-json-suffix-guard.par \
+                          out-parameter-json-suffix-guard.log \
+                          out-parameter-retired-zip.log \
                           out-parameter-legacy-loss-guard.cspar \
                           out-parameter-legacy-loss-guard.par \
                           out-parameter-legacy-loss-guard.log \

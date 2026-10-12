@@ -3,7 +3,9 @@
    This file is part of ColorScreen.  */
 
 #include "parameter-archive.h"
+#include "parameter-json-budget.h"
 #include "include/mesh.h"
+#include "include/colorscreen.h"
 
 #include <zip.h>
 
@@ -52,7 +54,7 @@ namespace
 constexpr size_t manifest_max_size = 1024 * 1024;
 constexpr uint64_t legacy_csp_max_size = UINT64_C (512) * 1024 * 1024;
 constexpr zip_int64_t archive_max_entries = 128;
-constexpr int json_max_depth = 32;
+constexpr int json_max_depth = parameter_json_max_depth;
 constexpr size_t json_max_nodes = 8192;
 
 /* Store MESSAGE in ERROR and return false. Defined below with the manifest
@@ -218,7 +220,7 @@ replace_parameter_staging_path (const std::filesystem::path &staging,
 #endif
 }
 
-/* Minimal JSON value used only by the parameter-archive manifest parser.  */
+/* JSON syntax-tree value shared by legacy manifests and native parameters. */
 struct json_value
 {
   enum class kind
@@ -1250,50 +1252,9 @@ json_escape (const std::string &text)
   return result;
 }
 
-/* Add CONTENT as archive entry NAME and select compression METHOD.  */
-bool
-add_archive_entry (zip_t *archive, const char *name, const std::string &content,
-                   zip_int32_t method, std::string *error)
-{
-  zip_source_t *source
-      = zip_source_buffer (archive, content.data (), content.size (), 0);
-  if (!source)
-    return archive_fail (error, zip_strerror (archive));
-
-  zip_int64_t index = zip_file_add (
-      archive, name, source, ZIP_FL_ENC_UTF_8 | ZIP_FL_OVERWRITE);
-  if (index < 0)
-    {
-      zip_source_free (source);
-      return archive_fail (error, zip_strerror (archive));
-    }
-  if (zip_set_file_compression (archive, (zip_uint64_t)index, method,
-                                method == ZIP_CM_DEFLATE ? 9 : 0)
-      != 0)
-    return archive_fail (error, zip_strerror (archive));
-  return true;
-}
 
 }
 
-/* Return authoritative structured archive values missing from legacy CSP. */
-parameter_archive_render_overrides
-parameter_archive_render_overrides_from (const render_parameters &rparam)
-{
-  parameter_archive_render_overrides result;
-  result.present = true;
-  result.ignore_infrared = rparam.ignore_infrared;
-  result.demosaiced_scaling = rparam.demosaiced_scaling;
-  result.observer_whitepoint = rparam.observer_whitepoint;
-  /* Schema v1 requires these compatibility keys, but displayed output
-     colourspace and gamut diagnostics now belong to individual views or
-     explicit file-render requests. Do not serialize a transient display
-     choice as if it were a reconstruction parameter. */
-  result.output_profile = render_output_parameters::output_profile_sRGB;
-  result.output_gamma = -1;
-  result.gamut_warning = false;
-  return result;
-}
 
 /* Apply structured archive values after the legacy CSP mirror was parsed. */
 void
@@ -1313,16 +1274,6 @@ apply_parameter_archive_render_overrides (
 
 }
 
-/* Extract the final frame from PARAM without changing other geometry. */
-parameter_archive_geometry_final_frame
-parameter_archive_geometry_final_frame_from (const scr_to_img_parameters &param)
-{
-  parameter_archive_geometry_final_frame frame;
-  frame.present = true;
-  frame.final_angle = param.final_angle;
-  frame.final_ratio = param.final_ratio;
-  return frame;
-}
 
 /* Apply only the final-frame fields represented by FRAME. */
 void
@@ -1336,15 +1287,6 @@ apply_parameter_archive_geometry_final_frame (
   param->final_ratio = frame.final_ratio;
 }
 
-/* Extract saved image bounds independently from SCAN_CROP. */
-parameter_archive_image_area
-parameter_archive_image_area_from (const render_parameters &rparam)
-{
-  parameter_archive_image_area result;
-  result.present = true;
-  result.area = rparam.image_area;
-  return result;
-}
 
 /* Restore the photographic bounds only when the reader supports the feature. */
 void
@@ -1540,194 +1482,89 @@ read_parameter_archive (const char *name, std::string *legacy_csp,
   return ok;
 }
 
-/* Write one schema-v1 parameter archive to staging path NAME.  */
+/* Decode a complete legacy profile metadata postamble TRAILING into SPOTS.
+   ERROR receives failures. Unknown extensions cannot be represented by JSON,
+   so reject them without publishing partial coordinates. */
 bool
-write_parameter_archive (
-    const char *name, const std::string &legacy_csp,
-    const char *generator_version, std::string *error,
-    const parameter_archive_render_overrides *render_overrides,
-    const parameter_archive_geometry_final_frame *geometry_final_frame,
-    const parameter_archive_image_area *image_area)
+parse_parameter_profile_spots (const std::string &trailing,
+                               std::vector<point_t> *spots,
+                               std::string *error)
 {
   if (error)
     error->clear ();
-  if (!name || legacy_csp.empty ())
-    return archive_fail (error, "invalid parameter archive write arguments");
-
-  std::string version = generator_version ? generator_version : "";
-  if (!valid_utf8 (version))
-    return archive_fail (error, "parameter archive generator version is not UTF-8");
-
-  const bool structured_render
-      = render_overrides && render_overrides->present;
-  if (structured_render)
+  if (!spots)
+    return archive_fail (error, "missing profile metadata destination");
+  std::istringstream source (trailing);
+  source.imbue (std::locale::classic ());
+  std::vector<point_t> parsed;
+  std::string line;
+  bool started = false, finished = false;
+  while (std::getline (source, line))
     {
-      const auto scaling = render_overrides->demosaiced_scaling;
-      const auto profile = render_overrides->output_profile;
-      const double white_x = render_overrides->observer_whitepoint.x;
-      const double white_y = render_overrides->observer_whitepoint.y;
-      const double output_gamma = render_overrides->output_gamma;
-      if ((int)scaling < 0
-          || scaling >= render_parameters::max_demosaiced_scaling
-          || (int)profile < 0 || profile >= render_output_parameters::output_profile_max
-          || !std::isfinite (white_x) || !std::isfinite (white_y)
-          || white_x < 0 || white_y <= 0 || white_x + white_y > 1
-          || !std::isfinite (output_gamma)
-          || (output_gamma != -1 && output_gamma <= 0))
-        return archive_fail (error,
-                             "invalid structured render override values");
-    }
-
-  const bool structured_geometry
-      = geometry_final_frame && geometry_final_frame->present;
-  if (structured_geometry
-      && (!my_isfinite (geometry_final_frame->final_angle)
-          || !my_isfinite (geometry_final_frame->final_ratio)
-          || geometry_final_frame->final_ratio <= 0))
-    return archive_fail (error, "invalid structured geometry final frame");
-
-  const bool structured_image_area = image_area && image_area->present;
-  if (structured_image_area && image_area->area.set)
-    {
-      const int_optional_image_area &area = image_area->area;
-      const int limit = std::numeric_limits<int>::max ();
-      if (area.x < 0 || area.y < 0 || area.width <= 0 || area.height <= 0
-          || area.x > limit - area.width || area.y > limit - area.height)
-        return archive_fail (error, "invalid structured photographic image area");
-    }
-
-  std::string manifest
-      = "{\n"
-        "  \"format\": \"org.colorscreen.parameters\",\n"
-        "  \"schema_version\": 1,\n";
-  if (structured_render || structured_geometry || structured_image_area)
-    {
-      std::string features;
-      if (structured_render)
-        features += "\"render-overrides-v1\"";
-      if (structured_geometry)
+      std::istringstream item (line);
+      item.imbue (std::locale::classic ());
+      std::string keyword;
+      if (!(item >> keyword))
+        continue;
+      if (finished)
         {
-          if (!features.empty ())
-            features += ", ";
-          features += "\"geometry-final-frame-v1\"";
+          if (error)
+            *error = "unexpected data after Qt profile metadata end";
+          return false;
         }
-      if (structured_image_area)
+      if (!started)
         {
-          if (!features.empty ())
-            features += ", ";
-          features += "\"image-area-v1\"";
+          int version;
+          if (keyword != "colorscreen_qt_metadata_version:"
+              || !(item >> version) || version != 1
+              || !(item >> std::ws).eof ())
+            {
+              if (error)
+                *error = "cannot convert unrecognized trailing metadata to JSON v2";
+              return false;
+            }
+          started = true;
+          continue;
         }
-      manifest += "  \"required_features\": [" + features + "],\n";
+      if (keyword == "colorscreen_qt_metadata_end")
+        {
+          if (!(item >> std::ws).eof ())
+            {
+              if (error)
+                *error = "invalid Qt profile metadata terminator";
+              return false;
+            }
+          finished = true;
+          continue;
+        }
+      double x = 0, y = 0;
+      if (keyword != "profile_spot:" || !(item >> x >> y)
+          || !(item >> std::ws).eof ()
+          || !my_isfinite (x) || !my_isfinite (y))
+        {
+          if (error)
+            *error = "invalid Qt profile spot metadata for JSON v2 conversion";
+          return false;
+        }
+      if (parsed.size () == parameter_json_max_points)
+        return archive_fail (error, "too many legacy profile spots for JSON");
+      parsed.push_back ({x, y});
     }
-  manifest
-      += "  \"generator\": {\n"
-         "    \"application\": \"Color-Screen\",\n"
-         "    \"version\": \""
-         + json_escape (version)
-         + "\"\n"
-           "  },\n"
-           "  \"state\": {\n"
-           "    \"legacy_csp\": \"state/legacy.par\"";
-  if (structured_render)
+  if (started && !finished)
     {
-      manifest
-          += ",\n"
-             "    \"render_overrides\": {\n"
-             "      \"ignore_infrared\": "
-             + std::string (render_overrides->ignore_infrared ? "true" : "false")
-             + ",\n"
-               "      \"demosaiced_scaling\": \""
-             + json_escape (
-                 render_parameters::demosaiced_scaling_names
-                     [(int)render_overrides->demosaiced_scaling]
-                         .name)
-             + "\",\n"
-               "      \"observer_whitepoint\": ["
-             + json_number (render_overrides->observer_whitepoint.x) + ", "
-             + json_number (render_overrides->observer_whitepoint.y)
-             + "],\n"
-               "      \"output_profile\": \""
-             + json_escape (render_output_parameters::output_profile_names
-                                [(int)render_overrides->output_profile])
-             + "\",\n"
-               "      \"output_gamma\": "
-             + json_number (render_overrides->output_gamma)
-             + ",\n"
-               "      \"gamut_warning\": "
-             + std::string (render_overrides->gamut_warning ? "true" : "false")
-             + "\n"
-               "    }";
-    }
-  if (structured_geometry)
-    manifest += ",\n"
-                "    \"geometry_final_frame\": {\n"
-                "      \"final_angle\": "
-                + json_number (geometry_final_frame->final_angle)
-                + ",\n"
-                  "      \"final_ratio\": "
-                + json_number (geometry_final_frame->final_ratio)
-                + "\n"
-                  "    }";
-  if (structured_image_area)
-    {
-      const int_optional_image_area &area = image_area->area;
-      manifest += ",\n"
-                  "    \"image_area\": {\n"
-                  "      \"enabled\": "
-                  + std::string (area.set ? "true" : "false")
-                  + ",\n"
-                    "      \"rect\": ["
-                  + std::to_string (area.set ? area.x : 0) + ", "
-                  + std::to_string (area.set ? area.y : 0) + ", "
-                  + std::to_string (area.set ? area.width : 0) + ", "
-                  + std::to_string (area.set ? area.height : 0)
-                  + "]\n"
-                    "    }";
-    }
-  manifest += "\n  },\n"
-              "  \"payloads\": []\n"
-              "}\n";
-
-  int open_error = 0;
-  zip_t *archive = zip_open (name, ZIP_CREATE | ZIP_TRUNCATE, &open_error);
-  if (!archive)
-    return archive_fail (error,
-                         "could not create parameter archive: "
-                             + zip_open_error (open_error));
-
-  bool ok
-      = add_archive_entry (archive, "manifest.json", manifest, ZIP_CM_STORE,
-                           error)
-        && add_archive_entry (archive, "state/legacy.par", legacy_csp,
-                              ZIP_CM_DEFLATE, error);
-  if (!ok)
-    {
-      zip_discard (archive);
-      remove_utf8_path (name);
+      if (error)
+        *error = "truncated Qt profile spot metadata";
       return false;
     }
-
-  if (zip_close (archive) != 0)
-    {
-      /* libzip retains ownership after a failed zip_close().  Release that
-         handle before removing the caller's staging file.  */
-      std::string message = zip_strerror (archive);
-      zip_discard (archive);
-      remove_utf8_path (name);
-      return archive_fail (
-          error, "could not finalize parameter archive: " + message);
-    }
+  *spots = std::move (parsed);
   return true;
 }
 
-/* Atomically replace one legacy or archive parameter payload. */
+/* Atomically replace UTF-8 path NAME with complete text PAYLOAD.
+   ERROR receives a diagnostic; every failure preserves the previous target. */
 bool
-write_parameter_payload_file (
-    const char *name, const std::string &payload, bool archive,
-    const char *generator_version, std::string *error,
-    const parameter_archive_render_overrides *render_overrides,
-    const parameter_archive_geometry_final_frame *geometry_final_frame,
-    const parameter_archive_image_area *image_area)
+write_parameter_text_file (const char *name, const std::string &payload,
+                           std::string *error)
 {
   if (error)
     error->clear ();
@@ -1751,31 +1588,23 @@ write_parameter_payload_file (
       return archive_fail (error, "could not encode parameter staging path");
     }
 
-  if (archive)
-    written = write_parameter_archive (staging_utf8.c_str (), payload,
-                                       generator_version, error,
-                                       render_overrides, geometry_final_frame,
-                                       image_area);
+  FILE *out = open_utf8_binary_write (staging_utf8.c_str ());
+  if (!out)
+    archive_fail (
+        error, std::string ("could not open parameter staging output: ")
+                   + std::strerror (errno));
   else
     {
-      FILE *out = open_utf8_binary_write (staging_utf8.c_str ());
-      if (!out)
-        archive_fail (
-            error, std::string ("could not open parameter staging output: ")
-                       + std::strerror (errno));
-      else
-        {
-          bool ok
-              = fwrite (payload.data (), 1, payload.size (), out)
-                == payload.size ();
-          if (fflush (out) != 0)
-            ok = false;
-          if (fclose (out) != 0)
-            ok = false;
-          if (!ok)
-            archive_fail (error, "could not write complete parameter payload");
-          written = ok;
-        }
+      bool ok
+          = fwrite (payload.data (), 1, payload.size (), out)
+            == payload.size ();
+      if (fflush (out) != 0)
+        ok = false;
+      if (fclose (out) != 0)
+        ok = false;
+      if (!ok)
+        archive_fail (error, "could not write complete parameter payload");
+      written = ok;
     }
 
   if (!written)
@@ -1812,16 +1641,14 @@ write_parameter_payload_file (
 }
 
 
-/* Native schema-v2 registration component. This is intentionally kept
-   separate from open_parameter_payload and write_parameter_payload_file:
-   neither can produce a complete v2 document until all persistent processing
-   domains have a native representation. These helpers NEVER parse CSP text. */
+/* Native JSON component codecs are shared by the complete document codec
+   and focused tests. These helpers never parse or embed legacy CSP text. */
 namespace
 {
-constexpr size_t v2_max_registration_points = 1000000;
-constexpr size_t v2_max_mesh_points = 1000000;
+constexpr size_t v2_max_registration_points = parameter_json_max_points;
+constexpr size_t v2_max_mesh_points = parameter_json_max_points;
 constexpr size_t v2_max_json_bytes = 128 * 1024 * 1024;
-constexpr size_t v2_max_json_nodes = 12000000;
+constexpr size_t v2_max_json_nodes = parameter_json_max_nodes;
 
 /* Validate point P before rendering it as an unquoted JSON pair. */
 bool
@@ -2241,6 +2068,8 @@ encode_parameter_json_v2_registration (
   text += "]\n  }\n}\n";
   if (text.size () > v2_max_json_bytes)
     return archive_fail (error, "v2 registration JSON exceeds memory budget");
+  if (!parameter_json_resources_fit (text, parameter_json_max_nodes))
+    return archive_fail (error, "parameter JSON exceeds aggregate value/depth limit");
   *output = std::move (text);
   return true;
 }
@@ -2409,10 +2238,8 @@ decode_parameter_json_v2_registration (
 }
 
 
-/* Capture-input scalar values are one independently testable component of
-   the proposed full v2 JSON document. They intentionally exclude colour
-   adjustments, scanner MTF and calibration grids; those need native codecs
-   before a new .cspar writer may be exposed. */
+/* Capture-input scalar values are independently testable. Colour adjustments,
+   scanner MTF and calibration grids use separate native document components. */
 namespace
 {
 constexpr size_t v2_max_capture_json_bytes = 128 * 1024;
@@ -2573,6 +2400,8 @@ encode_parameter_json_v2_capture (const render_parameters &capture,
   text += "\n  }\n}\n";
   if (text.size () > v2_max_capture_json_bytes)
     return archive_fail (error, "v2 capture JSON exceeds size limit");
+  if (!parameter_json_resources_fit (text, parameter_json_max_nodes))
+    return archive_fail (error, "parameter JSON exceeds aggregate value/depth limit");
   *output = std::move (text);
   return true;
 }
@@ -2782,6 +2611,8 @@ encode_parameter_json_v2_reconstruction (const render_parameters &render,
   text += "\n  }\n}\n";
   if (text.size () > v2_max_capture_json_bytes)
     return archive_fail (error, "v2 reconstruction JSON exceeds size limit");
+  if (!parameter_json_resources_fit (text, parameter_json_max_nodes))
+    return archive_fail (error, "parameter JSON exceeds aggregate value/depth limit");
   *output = std::move (text);
   return true;
 }
@@ -2993,6 +2824,8 @@ encode_parameter_json_v2_process (const render_parameters &render,
   text += "\n      }\n    }\n  }\n}\n";
   if (text.size () > v2_max_capture_json_bytes)
     return archive_fail (error, "v2 process JSON exceeds size limit");
+  if (!parameter_json_resources_fit (text, parameter_json_max_nodes))
+    return archive_fail (error, "parameter JSON exceeds aggregate value/depth limit");
   *output = std::move (text);
   return true;
 }
@@ -3238,6 +3071,8 @@ encode_parameter_json_v2_color (const render_parameters &render,
   text += "]\n    }\n  }\n}\n";
   if (text.size () > v2_max_color_json_bytes)
     return archive_fail (error, "v2 colour JSON exceeds size limit");
+  if (!parameter_json_resources_fit (text, parameter_json_max_nodes))
+    return archive_fail (error, "parameter JSON exceeds aggregate value/depth limit");
   *output = std::move (text);
   return true;
 }
@@ -3593,6 +3428,8 @@ encode_parameter_json_v2_sharpness (const render_parameters &render,
   text += "\n      ]\n    }\n  }\n}\n";
   if (text.size () > v2_max_sharpness_bytes || !valid_utf8 (text))
     return archive_fail (error, "v2 sharpness JSON exceeds size/UTF-8 limit");
+  if (!parameter_json_resources_fit (text, parameter_json_max_nodes))
+    return archive_fail (error, "parameter JSON exceeds aggregate value/depth limit");
   *output = std::move (text);
   return true;
 }
@@ -4131,6 +3968,8 @@ encode_parameter_json_v2_correction_grids (
   text += "]}\n  }\n}\n";
   if (text.size () > v2_max_grids_bytes || !valid_utf8 (text))
     return archive_fail (error, "v2 calibration JSON exceeds size/UTF-8 limit");
+  if (!parameter_json_resources_fit (text, parameter_json_max_nodes))
+    return archive_fail (error, "parameter JSON exceeds aggregate value/depth limit");
   *output = std::move (text);
   return true;
 }
@@ -4224,7 +4063,7 @@ decode_parameter_json_v2_correction_grids (
 namespace
 {
 constexpr size_t v2_max_document_bytes = 256 * 1024 * 1024;
-constexpr size_t v2_max_document_nodes = 12000000;
+constexpr size_t v2_max_document_nodes = parameter_json_max_nodes;
 
 /* Append the members of a trusted, validated component root to DOC.
    Each component emits a complete JSON object and knows its stable names.
@@ -4529,6 +4368,8 @@ encode_parameter_json_v2_document (
   text += "\n}\n";
   if (text.size () > v2_max_document_bytes || !valid_utf8 (text))
     return archive_fail (error, "v2 document exceeds UTF-8/size limit");
+  if (!parameter_json_resources_fit (text, parameter_json_max_nodes))
+    return archive_fail (error, "parameter JSON exceeds aggregate value/depth limit");
   *output = std::move (text);
   return true;
 }
@@ -4730,9 +4571,61 @@ legacy_csp_can_represent_parameters (const scr_to_img_parameters *geometry,
   return true;
 }
 
-/* Write the complete direct native JSON document atomically using the same
-   Unicode-path, sibling-staging and replace-on-success writer as schema-v1
-   archives. ARCHIVE=false here means raw bytes, never legacy CSP conversion. */
+/* Validate the entire supported parameter document at UTF-8 path NAME.
+   ERROR explains failures; no file or live processing state is changed. */
+bool
+validate_parameter_document_file (const char *name, std::string *error)
+{
+  if (error)
+    error->clear ();
+  scr_to_img_parameters geometry;
+  scr_detect_parameters detection;
+  render_parameters render;
+  solver_parameters solver;
+  std::vector<point_t> spots;
+  if (parameter_json_v2_signature_p (name))
+    return read_parameter_json_v2_file (
+        name, &geometry, &detection, &render, &solver, &spots, error);
+  if (!parameter_archive_signature_p (name))
+    return archive_fail (error, "unrecognized parameter document format");
+
+  FILE *payload = open_parameter_payload (name, nullptr, error);
+  if (!payload)
+    return false;
+  const char *parse_error = nullptr;
+  const bool loaded = load_csp (payload, &geometry, &detection, &render,
+                                &solver, &parse_error);
+  /* Copy the library's diagnostic before closing its borrowed stream. */
+  const std::string detail = parse_error ? parse_error : "";
+  std::string trailing;
+  bool ok = loaded && detail.empty ();
+  char buffer[8192];
+  while (ok)
+    {
+      const size_t count = fread (buffer, 1, sizeof (buffer), payload);
+      if (trailing.size () > legacy_csp_max_size - count)
+        {
+          ok = false;
+          break;
+        }
+      trailing.append (buffer, count);
+      if (count < sizeof (buffer))
+        {
+          ok = !ferror (payload);
+          break;
+        }
+    }
+  fclose (payload);
+  if (!ok)
+    return archive_fail (error, detail.empty ()
+                                   ? "invalid archived parameter payload"
+                                   : detail);
+  return parse_parameter_profile_spots (trailing, &spots, error);
+}
+
+/* Write all persistent inputs to UTF-8 path NAME as one native JSON document.
+   The text writer stages and atomically replaces the destination. ERROR
+   reports failure without a ZIP wrapper or legacy CSP intermediary. */
 bool
 write_parameter_json_v2_file (
     const char *name, const scr_to_img_parameters &geometry,
@@ -4749,8 +4642,7 @@ write_parameter_json_v2_file (
           geometry, detection, render, solver, profile_spots,
           &document, error))
     return false;
-  return write_parameter_payload_file (name, document,
-                                       /*archive=*/false, nullptr, error);
+  return write_parameter_text_file (name, document, error);
 }
 
 }

@@ -682,7 +682,7 @@ EXTRA_DIST = ColorScreenApplication.h AtomicFileSave.h DocumentLifecycleSmoke.h 
 	ToneCurveWidget.h ColorPanel.h SpectraChartWidget.h \
 	CIEChartWidget.h ThamesAnimation.h PagetAnimation.h \
 	JolyAnimation.h HurleyAnimation.h TaskQueue.h \
-	SubtitleOverlay.h Logging.h colorscreen.rc resources.qrc \
+	SubtitleOverlay.h Logging.h colorscreen.rc resources.qrc testdata/parameter-v1.cspar testdata/README.md \
 	icons/hand.svg icons/arrow.svg icons/plus.svg \
 	icons/crosshair.svg icons/rotate-left.svg \
 	icons/rotate-right.svg icons/zoom-in.svg icons/zoom-out.svg \
@@ -2907,7 +2907,7 @@ moc_%.cpp: %.h
 	$(MOC) $< -o $@
 
 # Rule to generate resource file (RCC is set by configure)
-qrc_resources.cpp: resources.qrc ../../images/icon.svg icons/hand.svg icons/arrow.svg icons/arrow.svg  icons/plus.svg   icons/rotate-right.svg  icons/zoom-fit.svg icons/zoom-out.svg icons/crosshair.svg  icons/rotate-left.svg  icons/zoom-100.svg      icons/zoom-in.svg icons/mirror.svg
+qrc_resources.cpp: resources.qrc testdata/parameter-v1.cspar ../../images/icon.svg icons/hand.svg icons/arrow.svg icons/arrow.svg  icons/plus.svg   icons/rotate-right.svg  icons/zoom-fit.svg icons/zoom-out.svg icons/crosshair.svg  icons/rotate-left.svg  icons/zoom-100.svg      icons/zoom-in.svg icons/mirror.svg
 	$(RCC) $< -o $@ 
 
 colorscreen_res.o: colorscreen.rc

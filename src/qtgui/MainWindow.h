@@ -148,20 +148,16 @@ public:
   /** Return the absolute path of the image assigned to this document. */
   QString currentImageFile() const { return m_currentImageFile; }
 
-  /** Format choice for an explicit parameter Save As operation. Automatic
-      mode preserves the physical format of an established target, or selects
-      v1 ZIP for a new .cspar and legacy text for a new .par. */
+  /** Output format for Save As. Automatic mode retains legacy .par targets;
+      new .cspar files and imported ZIP-v1 targets are saved as native JSON. */
   enum class ParameterSaveFormat {
     PreserveOrInfer,
     LegacyCsp,
-    ArchiveV1,
     JsonV2
   };
 
-  /** Save the current document parameters to FILENAME without opening a dialog.
-      Ordinary Save preserves the loaded physical file format. An explicit
-      Save As selection can request schema-v2 plain JSON while fresh alpha
-      documents continue to default to compatible v1 ZIP. */
+  /** Save FILENAME atomically. Imported ZIP-v1 becomes native JSON only
+      after success; failure preserves the target, dirty state and Undo. */
   bool saveParametersToFile(
       const QString &fileName,
       ParameterSaveFormat requestedFormat = ParameterSaveFormat::PreserveOrInfer);

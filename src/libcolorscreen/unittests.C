@@ -64,6 +64,7 @@
 #include "nmsimplex.h"
 #include "gsl-solver.h"
 #include "parameter-archive.h"
+#include "parameter-json-budget.h"
 
 
 using namespace colorscreen;
@@ -10340,6 +10341,31 @@ write_parameter_archive_fixture (
   return true;
 }
 
+/* Check exact generated-JSON value counts, escaping and reader depth limits. */
+static bool
+test_parameter_json_budget ()
+{
+  const std::pair<const char *, size_t> cases[] = {
+    {"{}", 1}, {"[]", 1}, {"null", 1}, {"[true,false,null,-1.5e+3]", 5},
+    {R"json({"key: [, ]": "string: [1,2]", "array": [[],{}]})json", 5},
+    {R"json({"escaped\"key": "backslash\\ and \"quote", "x": 2})json", 3},
+    {R"json({"registration":[{"image":[0,0],"screen":[0,0],"color":"red"}],
+       "profile":[[0,0]],"mesh":[[0,0]]})json", 18}
+  };
+  for (const auto &test : cases)
+    if (!parameter_json_resources_fit (test.first, test.second)
+        || parameter_json_resources_fit (test.first, test.second - 1))
+      {
+        fprintf (stderr, "Incorrect JSON value budget: %s\n", test.first);
+        return false;
+      }
+  /* Empty containers at depth 32 are valid; their children at 33 are not. */
+  const std::string at_limit = std::string (33, '[') + std::string (33, ']');
+  const std::string too_deep = std::string (33, '[') + "0" + std::string (33, ']');
+  return parameter_json_resources_fit (at_limit, 33)
+         && !parameter_json_resources_fit (too_deep, 34);
+}
+
 /* Verify schema-v1 parameter archives and hostile-input rejection. */
 static bool
 test_parameter_archive ()
@@ -10352,10 +10378,14 @@ test_parameter_archive ()
   std::string loaded;
   parameter_archive_manifest parsed;
 
+  const std::string simple_manifest = R"json({
+    "format":"org.colorscreen.parameters", "schema_version":1,
+    "state":{"legacy_csp":"state/legacy.par"}, "payloads":[]
+  })json";
   const std::string roundtrip = parameter_archive_test_path ("roundtrip");
   std::remove (roundtrip.c_str ());
-  if (!write_parameter_archive (roundtrip.c_str (), legacy, "2.0alpha-test",
-                                &error))
+  if (!write_parameter_archive_fixture (roundtrip, simple_manifest,
+                                         {{"state/legacy.par", legacy}}))
     {
       fprintf (stderr, "Parameter archive writer failed: %s\n", error.c_str ());
       return false;
@@ -10403,25 +10433,29 @@ test_parameter_archive ()
   structured_source.ignore_infrared = true;
   structured_source.demosaiced_scaling = render_parameters::lanczos3_scaling;
   structured_source.observer_whitepoint = xy_t (0.3127, 0.3290);
-  const parameter_archive_render_overrides structured_overrides
-      = parameter_archive_render_overrides_from (structured_source);
   scr_to_img_parameters structured_geometry;
   structured_geometry.final_angle = 108.375;
   structured_geometry.final_ratio = 0.803158;
-  const parameter_archive_geometry_final_frame geometry_frame
-      = parameter_archive_geometry_final_frame_from (structured_geometry);
   structured_source.image_area = int_optional_image_area (
       int_image_area (36, 47, 801, 540));
-  const parameter_archive_image_area photographic_bounds
-      = parameter_archive_image_area_from (structured_source);
+  const std::string structured_manifest = R"json({
+    "format":"org.colorscreen.parameters", "schema_version":1,
+    "required_features":["render-overrides-v1","geometry-final-frame-v1","image-area-v1"],
+    "state":{
+      "legacy_csp":"state/legacy.par",
+      "render_overrides":{"ignore_infrared":true,"demosaiced_scaling":"lanczos3",
+        "observer_whitepoint":[0.3127,0.3290],"output_profile":"sRGB",
+        "output_gamma":-1,"gamut_warning":false},
+      "geometry_final_frame":{"final_angle":108.375,"final_ratio":0.803158},
+      "image_area":{"enabled":true,"rect":[36,47,801,540]}
+    }, "payloads":[]
+  })json";
   const std::string structured
       = parameter_archive_test_path ("render-overrides");
   std::remove (structured.c_str ());
   error.clear ();
-  if (!write_parameter_archive (structured.c_str (), legacy,
-                                "2.0alpha-structured", &error,
-                                &structured_overrides, &geometry_frame,
-                                &photographic_bounds))
+  if (!write_parameter_archive_fixture (structured, structured_manifest,
+                                         {{"state/legacy.par", legacy}}))
     {
       fprintf (stderr, "Structured parameter archive writer failed: %s\n",
                error.c_str ());
@@ -10512,16 +10546,20 @@ test_parameter_archive ()
   /* Older v1 writers emitted view-local gamut/profile values as part of
      render-overrides-v1. Keep accepting those typed keys, but applying the
      archive must not modify display/output choices owned by each view. */
-  parameter_archive_render_overrides old_display = structured_overrides;
-  old_display.output_profile = render_output_parameters::output_profile_xyz;
-  old_display.output_gamma = 2.4;
-  old_display.gamut_warning = true;
+  const std::string historical_manifest = R"json({
+    "format":"org.colorscreen.parameters", "schema_version":1,
+    "required_features":["render-overrides-v1"],
+    "state":{"legacy_csp":"state/legacy.par",
+      "render_overrides":{"ignore_infrared":true,"demosaiced_scaling":"lanczos3",
+        "observer_whitepoint":[0.3127,0.3290],"output_profile":"XYZ",
+        "output_gamma":2.4,"gamut_warning":true}}, "payloads":[]
+  })json";
   const std::string historical
       = parameter_archive_test_path ("historical-view-settings");
   std::remove (historical.c_str ());
   error.clear ();
-  if (!write_parameter_archive (historical.c_str (), legacy,
-                                "2.0alpha-historical", &error, &old_display))
+  if (!write_parameter_archive_fixture (historical, historical_manifest,
+                                         {{"state/legacy.par", legacy}}))
     {
       fprintf (stderr, "Historical view-compatibility archive write failed: %s\\n",
                error.c_str ());
@@ -10621,8 +10659,8 @@ test_parameter_archive ()
   remove_unicode (unicode_archive);
   remove_unicode (unicode_plain);
 
-  if (!write_parameter_archive (unicode_archive.c_str (), legacy,
-                                "2.0alpha-unicode", &error))
+  if (!write_parameter_archive_fixture (unicode_archive, simple_manifest,
+                                         {{"state/legacy.par", legacy}}))
     {
       fprintf (stderr, "Unicode parameter archive writer failed: %s\n",
                error.c_str ());
@@ -10701,99 +10739,43 @@ test_parameter_archive ()
       }
   }
 
-  const char invalid_utf8_version[] = { (char)0xff, 0 };
-  error.clear ();
-  if (write_parameter_payload_file (atomic_target.c_str (), legacy, true,
-                                    invalid_utf8_version, &error))
+  /* Removing ZIP output must not weaken atomic error preservation. Both
+     malformed geometry and photographic bounds fail the native writer. */
+  scr_detect_parameters atomic_detection;
+  solver_parameters atomic_solver;
+  std::vector<point_t> atomic_spots {{0.25, 0.5}};
+  const auto preserved_target = [&] () {
+    std::ifstream file (std::filesystem::u8path (atomic_target), std::ios::binary);
+    const std::string bytes ((std::istreambuf_iterator<char> (file)),
+                            std::istreambuf_iterator<char> ());
+    return bytes == "stable-old-target";
+  };
+  scr_to_img_parameters bad_geometry = structured_geometry;
+  bad_geometry.final_ratio = 0;
+  render_parameters bad_bounds = structured_source;
+  bad_bounds.image_area.width = -1;
+  if (write_parameter_text_file (atomic_target.c_str (), "", &error)
+      || !preserved_target ()
+      || write_parameter_json_v2_file (
+          atomic_target.c_str (), bad_geometry, atomic_detection,
+          structured_source, atomic_solver, atomic_spots, &error)
+      || !preserved_target ()
+      || write_parameter_json_v2_file (
+          atomic_target.c_str (), structured_geometry, atomic_detection,
+          bad_bounds, atomic_solver, atomic_spots, &error)
+      || !preserved_target ())
     {
-      fprintf (stderr, "Invalid archive writer unexpectedly replaced target\n");
+      fprintf (stderr, "Failed native parameter write changed the old target\n");
       remove_unicode (atomic_target);
       return false;
     }
-  {
-    std::ifstream preserved (std::filesystem::u8path (atomic_target),
-                             std::ios::binary);
-    std::string bytes ((std::istreambuf_iterator<char> (preserved)),
-                       std::istreambuf_iterator<char> ());
-    if (bytes != "stable-old-target")
-      {
-        fprintf (stderr, "Failed atomic archive write changed old target\n");
-        remove_unicode (atomic_target);
-        return false;
-      }
-  }
-
-  // A malformed structured geometry value must fail before replacement,
-  // just like an invalid ZIP generator name or an I/O failure.
-  parameter_archive_geometry_final_frame invalid_frame = geometry_frame;
-  invalid_frame.final_ratio = 0;
-  error.clear ();
-  if (write_parameter_payload_file (atomic_target.c_str (), legacy, true,
-                                    "2.0alpha-geometry", &error,
-                                    nullptr, &invalid_frame)
-      || error.find ("invalid structured geometry final frame")
-             == std::string::npos)
+  if (!write_parameter_json_v2_file (
+          atomic_target.c_str (), structured_geometry, atomic_detection,
+          structured_source, atomic_solver, atomic_spots, &error)
+      || parameter_archive_signature_p (atomic_target.c_str ())
+      || !validate_parameter_document_file (atomic_target.c_str (), &error))
     {
-      fprintf (stderr, "Invalid geometry unexpectedly replaced archive target\n");
-      remove_unicode (atomic_target);
-      return false;
-    }
-  {
-    std::ifstream preserved (std::filesystem::u8path (atomic_target),
-                             std::ios::binary);
-    std::string bytes ((std::istreambuf_iterator<char> (preserved)),
-                       std::istreambuf_iterator<char> ());
-    if (bytes != "stable-old-target")
-      {
-        fprintf (stderr, "Invalid geometry write changed old target\n");
-        remove_unicode (atomic_target);
-        return false;
-      }
-  }
-
-  /* Reject unusable photographic bounds without touching an existing
-     archive target; the validation must run before committing staged bytes. */
-  parameter_archive_image_area bad_image_area = photographic_bounds;
-  bad_image_area.area.width = -1;
-  error.clear ();
-  if (write_parameter_payload_file (atomic_target.c_str (), legacy, true,
-                                    "2.0alpha-bad-image-area", &error,
-                                    nullptr, nullptr, &bad_image_area)
-      || error.find ("invalid structured photographic image area")
-             == std::string::npos)
-    {
-      fprintf (stderr, "Invalid image area unexpectedly replaced target\\n");
-      remove_unicode (atomic_target);
-      return false;
-    }
-  {
-    std::ifstream preserved (std::filesystem::u8path (atomic_target),
-                             std::ios::binary);
-    std::string bytes ((std::istreambuf_iterator<char> (preserved)),
-                       std::istreambuf_iterator<char> ());
-    if (bytes != "stable-old-target")
-      {
-        fprintf (stderr, "Invalid image-area write changed old target\\n");
-        remove_unicode (atomic_target);
-        return false;
-      }
-  }
-
-  error.clear ();
-  if (!write_parameter_payload_file (atomic_target.c_str (), legacy, true,
-                                     "2.0alpha-atomic", &error))
-    {
-      fprintf (stderr, "Atomic archive replacement failed: %s\n",
-               error.c_str ());
-      remove_unicode (atomic_target);
-      return false;
-    }
-  loaded.clear ();
-  if (!read_parameter_archive (atomic_target.c_str (), &loaded, nullptr, &error)
-      || loaded != legacy)
-    {
-      fprintf (stderr, "Atomic archive replacement lost payload: %s\n",
-               error.c_str ());
+      fprintf (stderr, "Native atomic replacement failed: %s\n", error.c_str ());
       remove_unicode (atomic_target);
       return false;
     }
@@ -10803,8 +10785,7 @@ test_parameter_archive ()
       = u8"parameter-archive-atomic-\u017Elu\u0165ou\u010Dk\u00FD.par";
   remove_unicode (atomic_legacy);
   error.clear ();
-  if (!write_parameter_payload_file (atomic_legacy.c_str (), legacy, false,
-                                     "ignored", &error))
+  if (!write_parameter_text_file (atomic_legacy.c_str (), legacy, &error))
     {
       fprintf (stderr, "Atomic legacy replacement failed: %s\n",
                error.c_str ());
@@ -10824,6 +10805,43 @@ test_parameter_archive ()
     }
   fclose (payload_stream);
   remove_unicode (atomic_legacy);
+
+  /* A syntactically plausible signature is not authorization to overwrite.
+     Check supported JSON identity/body and the complete legacy ZIP payload. */
+  const std::string destination = parameter_archive_test_path ("destination");
+  for (const char *bad : {"{}", "{broken",
+       "{\"format\":\"org.colorscreen.parameters\",\"schema_version\":999}",
+       "{\"format\":\"org.colorscreen.parameters\",\"schema_version\":2}"})
+    {
+      if (!write_parameter_text_file (destination.c_str (), bad, &error)
+          || !parameter_json_v2_signature_p (destination.c_str ())
+          || validate_parameter_document_file (destination.c_str (), &error)
+          || error.empty ())
+        {
+          std::remove (destination.c_str ());
+          return false;
+        }
+    }
+  for (const std::string &body : {
+           std::string ("not a CSP file"),
+           legacy + "unknown_vendor_extension: retain me\n",
+           legacy + "colorscreen_qt_metadata_version: 99\n"})
+    if (!write_parameter_archive_fixture (
+            destination, simple_manifest, {{"state/legacy.par", body}})
+        || !parameter_archive_signature_p (destination.c_str ())
+        || validate_parameter_document_file (destination.c_str (), &error))
+      {
+        std::remove (destination.c_str ());
+        return false;
+      }
+  if (!write_parameter_archive_fixture (
+          destination, structured_manifest, {{"state/legacy.par", legacy}})
+      || !validate_parameter_document_file (destination.c_str (), &error))
+    {
+      std::remove (destination.c_str ());
+      return false;
+    }
+  std::remove (destination.c_str ());
 
   const auto expect_read = [&legacy] (
                                const char *tag, const std::string &manifest,
@@ -13209,7 +13227,9 @@ main (int argc, char **argv)
     { "demosaic", "dufay and paget demosaicing tests", [] () { return test_demosaic (); } },
     { "monochrome_bayer", "monochrome Bayer candidate analysis tests",
       [] () { return test_monochrome_bayer_analysis (); } },
-    { "parameter_archive", "versioned parameter archive contract tests",
+    { "parameter_json_budget", "aggregate JSON writer/reader resource budget",
+      [] () { return test_parameter_json_budget (); } },
+    { "parameter_archive", "versioned parameter archive import contract tests",
       [] () { return test_parameter_archive (); } },
     { NULL, NULL, NULL }
   };

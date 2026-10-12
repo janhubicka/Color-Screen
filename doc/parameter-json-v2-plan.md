@@ -1,5 +1,11 @@
 # Native JSON parameter format v2: pre-beta migration
 
+> Historical rollout record. The October 12 decision retires ZIP-v1 output
+> and supersedes the format-preserving ZIP/compatibility-export rules below.
+> Current behavior and remaining schema redesign are tracked in
+> [parameter-json-migration-tracking.md](parameter-json-migration-tracking.md).
+> Version 2 remains the current complete JSON layout until schema 3 is ready.
+
 ## Decision
 
 New `.cspar` version 2 will be a **single UTF-8 JSON file**, not a ZIP archive,

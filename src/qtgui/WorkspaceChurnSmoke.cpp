@@ -3208,9 +3208,8 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         }
         parameterLoadFailure->close();
 
-        // Save the same complete document through the new archive path. The
-        // chosen/loaded physical format becomes part of the current target so
-        // an ordinary subsequent Save can never replace ZIP bytes with CSP text.
+        // Save the complete document through the native JSON path. Ordinary
+        // Save must retain every structured-only calibration field.
         const QString archiveFile =
             persistenceDir.filePath(
                 QStringLiteral("workspace-\u017Elu\u0165ou\u010Dk\u00FD-"
@@ -3226,8 +3225,8 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         archiveState.scrToImg.final_angle = 108.375;
         archiveState.scrToImg.final_ratio = 0.803158;
         // These saved fields deliberately have no legacy CSP keywords. A
-        // complete archive round trip therefore proves render-overrides-v1 is
-        // authoritative rather than merely re-reading the legacy mirror.
+        // complete native JSON round trip must preserve these inputs without
+        // a legacy text mirror.
         archiveState.rparams.ignore_infrared =
             !archiveState.rparams.ignore_infrared;
         archiveState.rparams.demosaiced_scaling =
@@ -3238,24 +3237,24 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
             archiveState, QStringLiteral("Archive persistence smoke edit"));
         if (!second->isDocumentModified() ||
             !second->saveParametersToFile(
-                archiveFile, MainWindow::ParameterSaveFormat::ArchiveV1) ||
+                archiveFile, MainWindow::ParameterSaveFormat::JsonV2) ||
             second->isDocumentModified() ||
             second->m_parameterFile.format !=
-                MainWindow::ParameterFileState::Format::Archive) {
+                MainWindow::ParameterFileState::Format::JsonV2) {
           fail(QStringLiteral(
               "Workspace churn archive save did not establish a clean archive target"));
           return;
         }
 
-        auto archiveHasZipSignature = [](const QString &path) {
+        auto parameterHasJsonSignature = [](const QString &path) {
           QFile file(path);
           if (!file.open(QIODevice::ReadOnly))
             return false;
-          return file.read(4).startsWith(QByteArray("PK"));
+          return file.read(1) == QByteArray("{");
         };
-        if (!archiveHasZipSignature(archiveFile)) {
+        if (!parameterHasJsonSignature(archiveFile)) {
           fail(QStringLiteral(
-              "Workspace churn .cspar save did not produce a ZIP archive"));
+              "Workspace churn .cspar save did not produce native JSON"));
           return;
         }
 
@@ -3293,7 +3292,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         if (!second->loadParameterFile(archiveFile) ||
             second->documentStateSnapshot() != archiveState ||
             second->m_parameterFile.format !=
-                MainWindow::ParameterFileState::Format::Archive ||
+                MainWindow::ParameterFileState::Format::JsonV2 ||
             second->isDocumentModified()) {
           fail(QStringLiteral(
               "Workspace churn archive load did not restore/adopt the complete clean archive state"));
@@ -3308,16 +3307,15 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
             !second->saveParametersToFile(second->m_parameterFile.path) ||
             second->documentStateSnapshot() != archiveResaveState ||
             second->m_parameterFile.format !=
-                MainWindow::ParameterFileState::Format::Archive ||
+                MainWindow::ParameterFileState::Format::JsonV2 ||
             second->isDocumentModified() ||
-            !archiveHasZipSignature(archiveFile)) {
+            !parameterHasJsonSignature(archiveFile)) {
           fail(QStringLiteral(
               "Ordinary Save on an archive target changed format or save semantics"));
           return;
         }
 
-        // Corrupt a copy after the ZIP signature. Archive detection must stay on
-        // the archive path and the transactional loader must publish nothing.
+        // Truncated JSON must fail transactionally without publishing state.
         QFile validArchive(archiveFile);
         if (!validArchive.open(QIODevice::ReadOnly)) {
           fail(QStringLiteral(

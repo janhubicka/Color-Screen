@@ -455,22 +455,83 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
     state->secondInitialMirror =
         second->documentStateSnapshot().rparams.scan_mirror;
 
+    // Fixed ZIP-v1 input, not produced by a retired application writer.
+    // Probe import/migration separately from the two active documents.
+    const QString migrationPath = state->temporaryDirectory->filePath(
+        QStringLiteral("imported-v1.cspar"));
+    if (!QFile::copy(QStringLiteral(":/tests/parameter-v1.cspar"), migrationPath)) {
+      qCritical() << "Could not copy independent ZIP-v1 reader fixture";
+      app.exit(documentLifecycleFailure);
+      return;
+    }
+    const QByteArray originalZip = readFile(migrationPath);
+    {
+      auto migration = std::make_unique<MainWindow>(
+          state->temporaryDirectory->filePath(QStringLiteral("migration-recovery")));
+      migration->hide();
+      if (!migration->loadParameterFile(migrationPath) ||
+          readFile(migrationPath) != originalZip ||
+          migration->m_parameterFile.format !=
+              MainWindow::ParameterFileState::Format::Archive) {
+        qCritical() << "ZIP-v1 import failed or rewrote the input";
+        app.exit(documentLifecycleFailure);
+        return;
+      }
+      const ParameterState imported = migration->documentStateSnapshot();
+      if (imported.rparams.gamma != colorscreen::luminosity_t(1.7) ||
+          imported.scrToImg.final_angle != 108.375 ||
+          imported.scrToImg.final_ratio != 0.803158 ||
+          !imported.rparams.image_area.set ||
+          imported.rparams.image_area.width != 16 ||
+          !imported.rparams.ignore_infrared ||
+          imported.profileSpots != std::vector<colorscreen::point_t>{{0.25, 0.5}}) {
+        qCritical() << "ZIP-v1 import lost structured fields or profile spots";
+        app.exit(documentLifecycleFailure);
+        return;
+      }
+      ParameterState invalid = imported;
+      invalid.scrToImg.final_ratio = 0;
+      migration->applySharedDocumentState(invalid, QStringLiteral("Invalid migration fixture"));
+      const int invalidUndoIndex = migration->m_undoStack->index();
+      if (migration->saveParametersToFile(migrationPath) ||
+          readFile(migrationPath) != originalZip ||
+          migration->m_parameterFile.format !=
+              MainWindow::ParameterFileState::Format::Archive ||
+          migration->m_undoStack->index() != invalidUndoIndex ||
+          !migration->isDocumentModified()) {
+        qCritical() << "Failed ZIP migration changed original bytes or target/Undo";
+        app.exit(documentLifecycleFailure);
+        return;
+      }
+      if (migration->m_parameterSaveFailurePrompt)
+        migration->m_parameterSaveFailurePrompt->close();
+      migration->m_undoStack->undo();
+      if (migration->documentStateSnapshot() != imported ||
+          !migration->saveParametersToFile(migrationPath) ||
+          migration->m_parameterFile.format !=
+              MainWindow::ParameterFileState::Format::JsonV2 ||
+          colorscreen::parameter_archive_signature_p(migrationPath.toUtf8().constData()) ||
+          !migration->loadParameterFile(migrationPath) ||
+          migration->documentStateSnapshot() != imported) {
+        qCritical() << "Successful Save did not migrate ZIP-v1 losslessly to JSON";
+        app.exit(documentLifecycleFailure);
+        return;
+      }
+    }
+
     if (!first->saveParametersToFile(
             state->firstParameters,
-            MainWindow::ParameterSaveFormat::ArchiveV1) ||
+            MainWindow::ParameterSaveFormat::JsonV2) ||
         !second->saveParametersToFile(state->secondParameters)) {
       qCritical() << "Document lifecycle smoke could not establish clean parameter files";
       app.exit(documentLifecycleFailure);
       return;
     }
-    // Newly created .cspar files now default to plain native JSON v2, even
-    // when the current document's established target is a ZIP-v1 archive.
-    // Both subsequent ordinary Save and return to the existing ZIP target
-    // must preserve physical file formats.
+    // Both fresh .cspar targets and subsequent ordinary Saves use native JSON.
     const QString defaultJsonParams = state->temporaryDirectory->filePath(
         QStringLiteral("default-native-json-v2.cspar"));
     if (first->m_parameterFile.format !=
-            MainWindow::ParameterFileState::Format::Archive ||
+            MainWindow::ParameterFileState::Format::JsonV2 ||
         !first->saveParametersToFile(defaultJsonParams) ||
         first->m_parameterFile.format !=
             MainWindow::ParameterFileState::Format::JsonV2 ||
@@ -488,51 +549,65 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
         readFile(defaultJsonParams) != initialDefaultJson ||
         !first->saveParametersToFile(state->firstParameters) ||
         first->m_parameterFile.format !=
-            MainWindow::ParameterFileState::Format::Archive ||
-        !colorscreen::parameter_archive_signature_p(
+            MainWindow::ParameterFileState::Format::JsonV2 ||
+        colorscreen::parameter_archive_signature_p(
             state->firstParameters.toUtf8().constData())) {
-      qCritical() << "Ordinary Save did not preserve JSON/ZIP target formats";
+      qCritical() << "Ordinary Save did not preserve native JSON targets";
       app.exit(documentLifecycleFailure);
       return;
     }
 
-    // A future/unknown .cspar target must not be overwritten by implicit
-    // JSON-v2 default inference. An explicit Save As filter is required.
+    // Signature probes must never authorize replacement of unrelated,
+    // malformed or future-schema JSON (or a broken ZIP) on an implicit Save.
     const QString unknownParams = state->temporaryDirectory->filePath(
         QStringLiteral("unknown-existing-version.cspar"));
-    const QByteArray unknownBytes("future schema: do not overwrite\n");
-    QFile unknownFile(unknownParams);
-    if (!unknownFile.open(QIODevice::WriteOnly) ||
-        unknownFile.write(unknownBytes) != unknownBytes.size()) {
-      qCritical() << "Could not stage unknown .cspar save-guard fixture";
-      app.exit(documentLifecycleFailure);
-      return;
-    }
-    unknownFile.close();
     const ParameterState beforeUnknownSave = first->documentStateSnapshot();
     const QString targetBeforeUnknownSave = first->m_parameterFile.path;
     const auto formatBeforeUnknownSave = first->m_parameterFile.format;
     const int undoBeforeUnknownSave = first->m_undoStack->index();
-    if (first->saveParametersToFile(unknownParams) ||
-        readFile(unknownParams) != unknownBytes ||
-        first->documentStateSnapshot() != beforeUnknownSave ||
-        first->m_parameterFile.path != targetBeforeUnknownSave ||
-        first->m_parameterFile.format != formatBeforeUnknownSave ||
-        first->m_undoStack->index() != undoBeforeUnknownSave) {
-      qCritical() << "Implicit Save overwrote unknown .cspar or changed state";
+    QByteArray unsupportedCompleteJson = initialDefaultJson;
+    unsupportedCompleteJson.insert(1, "\"future_setting\": true,");
+    const std::vector<QByteArray> unknownInputs = {
+      unsupportedCompleteJson,
+      QByteArray("future schema: do not overwrite\n"), QByteArray("{}"),
+      QByteArray("{broken"), QByteArray("PK\003\004broken"),
+      QByteArray(R"json({"format":"org.colorscreen.parameters","schema_version":999})json"),
+      QByteArray(R"json({"format":"org.colorscreen.parameters","schema_version":2})json")
+    };
+    for (const QByteArray &unknownBytes : unknownInputs) {
+      QFile unknownFile(unknownParams);
+      if (!unknownFile.open(QIODevice::WriteOnly | QIODevice::Truncate) ||
+          unknownFile.write(unknownBytes) != unknownBytes.size()) {
+        qCritical() << "Could not stage unknown .cspar save-guard fixture";
+        app.exit(documentLifecycleFailure);
+        return;
+      }
+      unknownFile.close();
+      if (first->saveParametersToFile(unknownParams) ||
+          readFile(unknownParams) != unknownBytes ||
+          first->documentStateSnapshot() != beforeUnknownSave ||
+          first->m_parameterFile.path != targetBeforeUnknownSave ||
+          first->m_parameterFile.format != formatBeforeUnknownSave ||
+          first->m_undoStack->index() != undoBeforeUnknownSave) {
+        qCritical() << "Implicit Save overwrote invalid .cspar or changed state";
+        app.exit(documentLifecycleFailure);
+        return;
+      }
+      QMessageBox *warning = first->m_parameterSaveFailurePrompt.data();
+      if (!warning || !warning->text().contains(QStringLiteral("unrecognized format"))) {
+        qCritical() << "Unknown .cspar Save refusal lacks a useful warning";
+        app.exit(documentLifecycleFailure);
+        return;
+      }
+      warning->close();
+    }
+    // An explicit Save As selection still authorizes deliberate replacement.
+    if (!first->saveParametersToFile(unknownParams, MainWindow::ParameterSaveFormat::JsonV2) ||
+        !first->saveParametersToFile(state->firstParameters)) {
+      qCritical() << "Explicit JSON replacement of an invalid destination failed";
       app.exit(documentLifecycleFailure);
       return;
     }
-    QMessageBox *unknownWarning = first->findChild<QMessageBox *>(
-        QStringLiteral("ParameterSaveFailureDialog"));
-    if (!unknownWarning ||
-        !unknownWarning->text().contains(
-            QStringLiteral("unrecognized format"))) {
-      qCritical() << "Unknown .cspar Save refusal lacks a useful warning";
-      app.exit(documentLifecycleFailure);
-      return;
-    }
-    unknownWarning->close();
 
     // Explicit JSON Save As is also supported; Open and ordinary Save must
     // preserve the complete native state and use the same physical encoding.
@@ -599,14 +674,13 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
       warning->close();
     }
 
-    // Restore the original compatibility-archive target for the rest of the
-    // existing crash-recovery and multi-document legacy-v1 smoke phases.
+    // Restore the primary JSON target for the remaining lifecycle checks.
     if (!first->saveParametersToFile(
             state->firstParameters,
-            MainWindow::ParameterSaveFormat::ArchiveV1) ||
+            MainWindow::ParameterSaveFormat::JsonV2) ||
         first->m_parameterFile.format !=
-            MainWindow::ParameterFileState::Format::Archive) {
-      qCritical() << "Native v2 smoke could not restore v1 archive target";
+            MainWindow::ParameterFileState::Format::JsonV2) {
+      qCritical() << "Native v2 smoke could not restore JSON target";
       app.exit(documentLifecycleFailure);
       return;
     }

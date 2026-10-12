@@ -1,5 +1,10 @@
 # Parameter-state ownership audit (2.0alpha)
 
+Current JSON redesign and validation work is tracked in
+[parameter-json-migration-tracking.md](parameter-json-migration-tracking.md).
+ZIP-v1 is now import-only: references below to emitting v1 compatibility
+placeholders describe the historical writer, not a current output path.
+
 This is an audit of the **meaning** of fields in the processing parameter
 structures, not merely a list of fields missing from legacy CSP. A field that
 isn't serialized may be an obsolete temporary, an algorithm-local working value,
