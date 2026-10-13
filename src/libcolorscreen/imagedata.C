@@ -59,6 +59,12 @@ public:
   const uint64_t cache_id = lru_caches::get ();
   std::string source_filename;
   int full_res_width = 0;
+  /* LibRaw::dcraw_process may change sizes.width/height/iwidth/iheight
+     (notably in half-size mode). Preserve the geometry and CFA marker as
+     they stood after unpack(), before ANY postprocessing, so subsequent
+     variants start from exactly the same sensor coordinate system. */
+  libraw_image_sizes_t unpacked_sizes {};
+  unsigned int unpacked_filters = 0;
   void *input_buffer = nullptr;
   uint64_t reserved_bytes = 0;
 
@@ -292,6 +298,8 @@ public:
     source->processor = std::move (m_processor);
     source->source_filename = std::move (m_source_filename);
     source->full_res_width = m_img->full_res_width;
+    source->unpacked_sizes = m_unpacked_sizes;
+    source->unpacked_filters = m_unpacked_filters;
     source->input_buffer = m_buffer;
     m_buffer = nullptr;
     return source;
@@ -306,6 +314,8 @@ private:
   /* Kept alive across this borrowed reprocessing pass, with the resource
      mutex held by the core cache's per-source decoder callback. */
   std::shared_ptr<unpacked_raw_source> m_reuse_source;
+  libraw_image_sizes_t m_unpacked_sizes {};
+  unsigned int m_unpacked_filters = 0;
   std::string m_source_filename;
   bool monochromatic = false;
   bool bayer_correction = false;
@@ -1028,10 +1038,26 @@ raw_image_data_loader::init_loader (const char *name, const char **error,
       *error = libraw_strerror (ret);
       return false;
     }
+  /* Restore the original unpacked geometry before each reprocessing pass.
+     Merely resetting params.half_size is insufficient: after dcraw_process
+     LibRaw can leave sizes.width/height as the half-resolution result.
+     free_image() frees RGB output but does not restore those size fields.
+     The source's captured dimensions and CFA marker are immutable. */
+  if (m_reuse_source)
+    {
+      m_processor->imgdata.sizes = m_reuse_source->unpacked_sizes;
+      m_processor->imgdata.idata.filters
+          = m_reuse_source->unpacked_filters;
+    }
   /* LibRaw reserves filter values below 1000 for special layouts: 0 is
      full-color, 1 is Leaf Catchlight's 16x16 layout and 9 is Fuji X-Trans.
      The compensation below relies specifically on a repeating 2x2 Bayer CFA.  */
   m_img->standard_bayer_cfa = m_processor->imgdata.idata.filters >= 1000;
+  /* Keep the identity of a CFA RAW independently of the selected interpolation
+     algorithm and of whether the unpacked source could fit the LRU budget.
+     In particular demosaic_linear / demosaic_none do not assign
+     demosaiced_by even though the operator may choose another method. */
+  m_img->raw_cfa_image = m_processor->imgdata.idata.filters != 0;
   if (!m_processor->imgdata.idata.filters)
     m_img->demosaiced_by = image_data::demosaic_max;
   if (bayer_correction && !m_img->standard_bayer_cfa)
@@ -1066,6 +1092,14 @@ raw_image_data_loader::init_loader (const char *name, const char **error,
         }
       *error = libraw_strerror (ret);
       return false;
+    }
+  if (!m_reuse_source)
+    {
+      /* Unpacked sensor sizes are the stable input coordinate system.
+         Preserve them before half-size or other postprocessing can modify
+         the LibRaw descriptor. */
+      m_unpacked_sizes = m_processor->imgdata.sizes;
+      m_unpacked_filters = m_processor->imgdata.idata.filters;
     }
   /* Save the full-resolution usable width before dcraw_process which may
      halve dimensions in half-size mode.  This is needed to correct

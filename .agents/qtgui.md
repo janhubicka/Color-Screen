@@ -341,12 +341,22 @@ inspector and always returns its content when closed. This rule applies uniforml
 to document, ordinary-view, and slanted-edge reference inspectors: while embedded,
 the workspace owns their floating docks; after detaching a presentation, that
 presentation window becomes the dock host. This avoids nested `QMainWindow` dock
-ownership without reintroducing panel-specific wiring. **Reload and demosaic** reloads both the source scan and every associated
+ownership without reintroducing panel-specific wiring. Changing Digital Capture's demosaic selection immediately requests the new
+cached RAW variant on a background worker (without a second Reload button).
+Capture demosaic Undo/Redo schedules the corresponding variant too, while
+generation cancellation suppresses stale results. Same-image demosaicing preserves the current document's Undo history
+even when a file-backed decode fallback is required; only independent file
+opens reset it.
+Every newly computed image_data variant has its own unique image UID, so
+all derivative caches keyed by `image_data::id` cannot confuse algorithms.
+**Reload and demosaic** previously reloaded both the source scan and every associated
 slanted-edge reference using the current saved demosaic mode. For a conventional
 Bayer RAW whose unpacked sensor mosaic was retained (draft PR #536), the
 primary image may request a cached/on-demand decoder variant instead of
-opening and unpacking the same source file again; the reference images still
-reload independently from their own filenames. Each displayed variant retains its
+opening and unpacking the same source file again; independent slanted-edge
+reference views likewise reuse their own retained Bayer mosaics when the
+selected demosaic method changes. An explicit same-method reference reload
+still performs a fresh file decode with a distinct image identity. Each displayed variant retains its
 own opaque libcolorscreen sensor-source handle. The GUI must **not** keep
 an extra original-image cache across variants or maintain a byte budget:
 `libcolorscreen::lru_cache` owns byte-aware variant retention and eviction. Never copy this
@@ -1359,3 +1369,22 @@ cache name. This is a lexicographic order on `(-bytes, -entries, name)`, not
 a frontend-local alphabetical sort; the Qt Cache Statistics dialog simply
 renders the core results. Entry size remains an estimate for legacy caches
 without byte callbacks and the shared memory budget remains a soft limit.
+
+The RAW/CFA capability is explicit image metadata, independent of
+`demosaiced_by`. Linear and noninterpolating LibRaw modes can leave that
+historical algorithm-result field at `demosaic_max`, and so must still
+show the Capture demosaic selector and react to parameter changes. The
+current requested method is `image_data::demosaic`; never infer it from
+`demosaiced_by`. For a cached hit the entire image object (including UID)
+is shared; newly computed methods get fresh `image_data::id`, and
+uncached CFA sources reload from disk as a safe fallback.
+
+Slanted-edge references keep one asynchronous decoder per view. If a
+capture demosaic edit arrives during an active reference load, the view
+records a pending replay and checks the latest document method before
+publishing. A superseded successful decode preserves its RAW-source pin
+but never updates the displayed reference; a superseded error must never
+close the view. The next event-loop turn reuses the cached RAW source for
+the latest method or decodes from disk if source retention was unavailable.
+Use `image_data::demosaic` for the exact requested method, not
+`demosaiced_by` (which need not distinguish linear/no-interpolation).

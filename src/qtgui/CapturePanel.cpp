@@ -14,8 +14,8 @@
 #include "../libcolorscreen/include/imagedata.h"
 #include "BacklightChartWidget.h"
 
-CapturePanel::CapturePanel(StateGetter stateGetter, StateSetter stateSetter, ImageGetter imageGetter, ReloadCallback reloadCallback, QWidget *parent)
-    : ParameterPanel(stateGetter, stateSetter, imageGetter, parent), m_reloadCallback(reloadCallback)
+CapturePanel::CapturePanel(StateGetter stateGetter, StateSetter stateSetter, ImageGetter imageGetter, QWidget *parent)
+    : ParameterPanel(stateGetter, stateSetter, imageGetter, parent)
 {
     setupUi();
 }
@@ -173,7 +173,9 @@ void CapturePanel::setupUi()
       }, "Capture type", QStringLiteral("capture.type"));
     });
 
-    // Demosaic (Enum) + Reload
+    // Demosaic selection immediately schedules core RAW reprocessing.
+    // There is no second Apply/Reload button: the document state setter
+    // also handles Undo/Redo of this saved capture-input choice.
     QWidget *demosaicContainer = new QWidget();
     QHBoxLayout *demosaicHLayout = new QHBoxLayout(demosaicContainer);
     demosaicHLayout->setContentsMargins(0, 0, 0, 0);
@@ -192,12 +194,10 @@ void CapturePanel::setupUi()
             m_demosaicCombo->setItemData(i, QString::fromUtf8(colorscreen::image_data::demosaic_names[i].help), Qt::ToolTipRole);
         }
     }
-    m_demosaicCombo->setToolTip("Algorithm to interpolate missing color information from CFA (Bayer) sensor.");
+    m_demosaicCombo->setToolTip(
+        tr("Choose a Bayer RAW demosaicing algorithm. The image is "
+           "reprocessed automatically, reusing the cached sensor data."));
     demosaicHLayout->addWidget(m_demosaicCombo, 1);
-
-    m_reloadDemosaicBtn = new QPushButton("Reload and demosaic");
-    m_reloadDemosaicBtn->setVisible(false);
-    demosaicHLayout->addWidget(m_reloadDemosaicBtn, 0);
 
     addFieldRow(tr("Demosaic"), demosaicContainer);
 
@@ -209,10 +209,6 @@ void CapturePanel::setupUi()
                   (colorscreen::image_data::demosaicing_t)val;
             },
             "Demosaic", QStringLiteral("capture.demosaic"));
-    });
-
-    connect(m_reloadDemosaicBtn, &QPushButton::clicked, this, [this]() {
-        if (m_reloadCallback) m_reloadCallback();
     });
 
     // 1. Image gamma (Slider)
@@ -655,15 +651,12 @@ void CapturePanel::setupUi()
         setVisibleRow(m_screenResolutionValue->parentWidget(), showScreenRes);
 
         // 0. Demosaic
-        bool canDemosaic = img && img->demosaiced_by != colorscreen::image_data::demosaic_max;
+        bool canDemosaic = img && img->raw_demosaicing_available_p();
         if (canDemosaic) {
             QSignalBlocker signalBlocker2(m_demosaicCombo);
             int idx = m_demosaicCombo->findData((int)state.rparams.demosaic);
             if (idx != -1) m_demosaicCombo->setCurrentIndex(idx);
             signalBlocker2.unblock();
-            
-            bool needsReload = (state.rparams.demosaic != img->demosaiced_by);
-            m_reloadDemosaicBtn->setVisible(needsReload);
         }
         setVisibleRow(m_demosaicCombo->parentWidget(), canDemosaic);
 

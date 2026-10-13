@@ -81,9 +81,10 @@ The shared LRU manager evicts globally old cached values regardless of
 renderer or decoder, while independently pinned views and the original
 unpacked mosaic stay alive when needed. Each image_data variant owns its
 reusable sensor handle and sources never own their variants, avoiding cycles.
-Qt only owns displayed images and in-flight requests; **Reload and demosaic**
-remains generation-gated, while ordinary Open and unsupported inputs retain
-the independent file decoder path. The public `get_cache_memory_statistics()`
+Qt only owns displayed images and in-flight requests; changing the **Demosaic**
+selector now directly schedules generation-gated reprocessing and retains Undo.
+Ordinary Open and unsupported/uncached sensor sources retain the independent
+file decoder fallback as appropriate. The public `get_cache_memory_statistics()`
 API reports available system memory, global cache budget and per-cache entry,
 pinned and retained-byte estimates. Qt Help → Cache Statistics… displays that
 read-only snapshot. Cache budgets are soft and never impose a hard process-RSS

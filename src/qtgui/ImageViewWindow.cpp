@@ -553,8 +553,15 @@ void ImageViewWindow::setupReferenceInspector() {
 /** Return any floating reference diagnostics to the Sharpness panel. */
 /** Load the reference scan asynchronously without touching document filenames. */
 void ImageViewWindow::loadReferenceImage(const QString &fileName) {
-  if (!m_slantedEdgeReference || fileName.isEmpty() || m_referenceLoadPending)
+  if (!m_slantedEdgeReference || fileName.isEmpty())
     return;
+  if (m_referenceLoadPending) {
+    /* ImageViewWindow allows one worker at a time. A rapid capture-mode edit
+       must be replayed after it completes, rather than lost or dispatched
+       concurrently against the same reusable RAW sensor processor. */
+    m_referenceReloadRequested = true;
+    return;
+  }
 
   if (m_referenceLoadFailurePrompt) {
     QPointer<QMessageBox> obsolete = m_referenceLoadFailurePrompt;
@@ -562,15 +569,28 @@ void ImageViewWindow::loadReferenceImage(const QString &fileName) {
     obsolete->close();
   }
 
+  const QString requestedFile = QFileInfo(fileName).absoluteFilePath();
+  const auto demosaic = m_document
+      ? m_document->documentStateSnapshot().rparams.demosaic
+      : colorscreen::image_data::demosaic_none;
+  /* A reference view has its own RAW sensor source. Reuse it when the
+     capture demosaic method changes, but preserve an explicit same-method
+     Reload as a fresh independent file decode (and image UID). */
+  const std::shared_ptr<colorscreen::image_data> cachedRawSource =
+      m_scan && requestedFile == m_referenceFile &&
+              m_scan->has_unpacked_raw_source() &&
+              m_scan->demosaic != demosaic
+          ? m_scan
+          : nullptr;
+
   // Invalidate immediately, even if the reload fails and leaves the old scan.
   cancelReferenceMtfMeasurement();
   m_referenceLoadPending = true;
-  m_referenceFile = QFileInfo(fileName).absoluteFilePath();
+  m_referenceReloadRequested = false;
+  m_referenceLoadMethod = demosaic;
+  m_referenceFile = requestedFile;
   statusBar()->showMessage(tr("Opening slanted-edge reference…"));
 
-  const colorscreen::image_data::demosaicing_t demosaic =
-      m_document ? m_document->documentStateSnapshot().rparams.demosaic
-                 : colorscreen::image_data::demosaic_none;
   auto scan = std::make_shared<colorscreen::image_data>();
   auto progress = std::make_shared<colorscreen::progress_info>();
   progress->set_task("Opening slanted edge reference", 0);
@@ -584,14 +604,21 @@ void ImageViewWindow::loadReferenceImage(const QString &fileName) {
     m_referenceLoad.pendingScan.reset();
   }
 
-  runSynchronized([this, scan, path, progress, demosaic]() {
+  runSynchronized([this, scan, path, progress, demosaic,
+                   cachedRawSource]() mutable {
     bool ok = false;
     QString message;
     try {
       const char *error = nullptr;
       colorscreen::sub_task task(progress.get());
-      ok = scan->load(path.toUtf8().constData(), true, &error,
-                      progress.get(), demosaic);
+      if (cachedRawSource) {
+        scan = cachedRawSource->demosaiced_variant(
+            demosaic, &error, progress.get());
+        ok = static_cast<bool>(scan);
+      } else {
+        ok = scan->load(path.toUtf8().constData(), true, &error,
+                        progress.get(), demosaic);
+      }
       if (!ok && error)
         message = QString::fromUtf8(error);
     } catch (const std::exception &error) {
@@ -632,6 +659,27 @@ void ImageViewWindow::finishReferenceLoad() {
   }
 
   m_referenceLoadPending = false;
+
+  /* A later demosaic selection can arrive while the only reference worker
+     is busy. Reject that stale completion (including its error prompt), but
+     preserve a successfully decoded RAW source so the replay can take the
+     cached route instead of unpacking the file a second time. */
+  const auto latestMethod = m_document
+      ? m_document->documentStateSnapshot().rparams.demosaic
+      : m_referenceLoadMethod;
+  const bool superseded =
+      m_referenceReloadRequested || latestMethod != m_referenceLoadMethod;
+  m_referenceReloadRequested = false;
+  if (superseded && m_document) {
+    if (ok)
+      m_scan = std::move(scan);
+    const QString currentFile = m_referenceFile;
+    QTimer::singleShot(0, this, [this, currentFile]() {
+      if (m_document && m_slantedEdgeReference)
+        loadReferenceImage(currentFile);
+    });
+    return;
+  }
   if (!ok) {
     auto *message = new QMessageBox(
         QMessageBox::Critical, tr("Error Loading Slanted Edge Reference"),

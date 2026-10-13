@@ -512,10 +512,11 @@ private:
   /** Return whether undo state or recovered state differs from the last save. */
   bool isDocumentModified() const;
 
-  /** Reload the current image using the selected demosaic mode without
-      prompting for parameter data. Existing unsaved parameter state remains
-      marked dirty across the asynchronous reload. If AUTODETECTSCREEN is true,
-      launch Screen detection only after the replacement image has loaded. */
+  /** Reprocess the selected RAW CFA method, using cached unpacked sensor
+      samples when available and falling back to disk otherwise. This is
+      an edit to the same image document and preserves Undo, dirty/clean
+      history and parameter-file identity. If AUTODETECTSCREEN is true,
+      launch Screen detection only after the current variant is accepted. */
   void reloadCurrentImageWithDemosaic(bool autodetectScreen = false);
 
   /** Offer conservative post-load setup guidance when ANALYSIS says the
@@ -1065,6 +1066,9 @@ private:
     bool pending = false;
     uint64_t generation = 0;
     std::optional<uint64_t> screenAutodetectAfterGeneration;
+    /* Identifies the method of the in-flight same-image decode.
+       Undo/Redo can supersede it without spawning duplicate requests. */
+    std::optional<colorscreen::image_data::demosaicing_t> pendingDemosaic;
     QPointer<QMessageBox> sidecarPrompt;
     QPointer<QMessageBox> failurePrompt;
     /* Cache ownership, byte-budgeting and source lifetimes live entirely in

@@ -930,14 +930,14 @@ void MainWindow::openRecentFile(const QString &fileName) {
     loadFile(fileName);
 }
 
-/** Reload the current scan with the selected demosaic mode.  Reloading clears
-   the undo stack after replacing image_data, so preserve the document's dirty
-   state explicitly when unsaved parameters preceded the reload. */
+/** Request a new RAW demosaic variant from the cached sensor source.
+    Fall back to disk decoding when RAW retention was unavailable. Both paths
+    represent the SAME image document and retain Undo, including the ability
+    to Undo the selection and return to a previously clean parameter state.
+    A genuinely independent Open still resets document Undo history. */
 void MainWindow::reloadCurrentImageWithDemosaic(bool autodetectScreen) {
   if (m_currentImageFile.isEmpty())
     return;
-  if (isDocumentModified())
-    m_recoveryDirty = true;
 
   if (autodetectScreen)
     m_imageLoad.screenAutodetectAfterGeneration = m_imageLoad.generation + 1;
@@ -1116,6 +1116,14 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
   const QString outgoingImageFile = m_currentImageFile;
   const auto outgoingScan = m_scan;
   const bool restoreOutgoingImage = static_cast<bool>(outgoingScan);
+  /* Reprocessing a different CFA method is not a new image Open. Keep the
+     already displayed, immutable source pixels visible while its replacement
+     is generated, instead of blanking a potentially very large canvas.
+     The panel data accessor still reports unavailable while pending, so
+     image-dependent commands cannot treat this old preview as new pixels. */
+  const bool preservePreview =
+      suppressParamPrompt && preferCachedRaw && outgoingScan &&
+      outgoingImageFile == requestedImageFile;
 
   // Return the completed scan through QFuture rather than sharing a mutable
   // pointer between the worker and the GUI thread. Cached demosaic requests
@@ -1177,6 +1185,11 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
       *m_imageLoad.screenAutodetectAfterGeneration != loadGeneration)
     m_imageLoad.screenAutodetectAfterGeneration.reset();
   m_imageLoad.pending = true;
+  m_imageLoad.pendingDemosaic =
+      suppressParamPrompt && preferCachedRaw
+          ? std::optional<colorscreen::image_data::demosaicing_t>(
+                m_rparams.demosaic)
+          : std::nullopt;
 
   // Progressive workers retain the outgoing m_scan until they unwind.  Marking
   // image replacement pending is therefore part of their staleness contract:
@@ -1189,10 +1202,13 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
   m_currentImageFile = requestedImageFile;
   updateWindowTitle();
 
-  // Clear current image and stop rendering. Processing panels deliberately
-  // see no usable source while replacement is pending even though m_scan keeps
-  // the outgoing image alive for transactional reload failure recovery.
-  m_imageWidget->setImage(nullptr, nullptr, nullptr, nullptr, nullptr, nullptr);
+  // Ordinary Open clears the old image immediately. For a same-document RAW
+  // demosaic edit, keep the prior immutable pixels as a visual preview until
+  // the new variant is ready (or decoding fails). Processing panels still see
+  // no usable data through panelImageData() while m_imageLoad.pending.
+  if (!preservePreview)
+    m_imageWidget->setImage(nullptr, nullptr, nullptr, nullptr, nullptr,
+                            nullptr);
   refreshImageAvailabilityPresentation();
 
   // Continue into the actual image worker only after the optional sidecar
@@ -1224,9 +1240,11 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
         // image_data (including a derived variant) retains its sensor mosaic.
         // Only an explicit same-file Reload and demosaic asks libcolorscreen
         // for a variant. Ordinary Open always reloads the file as before.
-        const std::shared_ptr<colorscreen::image_data> cachedRawSource =
+        const bool sameImageDemosaic =
             preferCachedRaw && outgoingImageFile == requestedImageFile &&
-                    outgoingScan && outgoingScan->has_unpacked_raw_source()
+            static_cast<bool>(outgoingScan);
+        const std::shared_ptr<colorscreen::image_data> cachedRawSource =
+            sameImageDemosaic && outgoingScan->has_unpacked_raw_source()
                 ? outgoingScan : nullptr;
         // A staged sidecar may select the demosaic algorithm needed to decode the
         // image, even though the rest of its state remains private until success.
@@ -1242,7 +1260,8 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
         connect(
             watcher, &QFutureWatcher<std::pair<bool, QString>>::finished, this,
             [this, watcher, progress, isCsprj, cachedRawSource,
-             requestedImageFile, allowInitialGuide, suggestDetectedMetadata,
+             sameImageDemosaic, requestedImageFile, allowInitialGuide,
+             suggestDetectedMetadata,
              loadGeneration, outgoingScan,
              outgoingImageFile, restoreOutgoingImage, sidecarStaging,
              suppressParamPrompt]() {
@@ -1271,6 +1290,7 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
                 m_imageLoad.screenAutodetectAfterGeneration.reset();
 
               m_imageLoad.pending = false;
+              m_imageLoad.pendingDemosaic.reset();
 
               if (result.first) {
                 const bool liveEditsWhileLoading =
@@ -1359,7 +1379,12 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
                 else if (m_rparams.gamma == -1)
                   m_rparams.gamma = -1;
 
-                m_undoStack->clear();
+                /* A demosaic reprocess is still the SAME document, even
+                   if an uncached Bayer source required a disk fallback.
+                   Retain the capture-mode edit, clean baseline and prior
+                   Undo commands. Only a new Open establishes a new history. */
+                if (!sameImageDemosaic)
+                  m_undoStack->clear();
                 if (!suppressParamPrompt)
                   m_recoveryDirty = liveEditsWhileLoading;
 

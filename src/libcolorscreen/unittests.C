@@ -6185,6 +6185,50 @@ test_stitch_tile_global_cache ()
   return true;
 }
 
+/* The same ordering is shared by Qt, CLI, and future frontends:
+   larger retained allocations first, then more entries, then cache name. */
+bool
+test_cache_statistics_lexicographic_order ()
+{
+  lru_cache_registry &registry = lru_cache_registry::instance ();
+  struct restore_budget
+  {
+    lru_cache_registry &registry;
+    ~restore_budget () { registry.set_test_budget_bytes (0); }
+  } restore {registry};
+  registry.set_test_budget_bytes (1024 * 1024);
+  lru_cache<test_params, weighted_test_value, get_new_weighted_test, 8>
+      biggest ("sort: biggest", 0, weighted_test_bytes),
+      numerous ("sort: numerous", 0, weighted_test_bytes),
+      alphabetically_first ("sort: alpha", 0, weighted_test_bytes),
+      alphabetically_last ("sort: zeta", 0, weighted_test_bytes),
+      smallest ("sort: smallest", 0, weighted_test_bytes);
+  test_params thirty {30}, thirteen {13}, seven {7},
+              twenty {20}, ten {10};
+  auto a = biggest.get (thirty, nullptr);
+  auto b = numerous.get (thirteen, nullptr);
+  auto c = numerous.get (seven, nullptr);
+  auto d = alphabetically_first.get (twenty, nullptr);
+  auto e = alphabetically_last.get (twenty, nullptr);
+  auto f = smallest.get (ten, nullptr);
+  if (!a || !b || !c || !d || !e || !f)
+    return false;
+  std::vector<std::string> selected;
+  for (const cache_entry_statistics &entry
+       : get_cache_memory_statistics ().caches)
+    if (entry.name.compare (0, 6, "sort: ") == 0)
+      selected.push_back (entry.name);
+  const std::vector<std::string> expected {
+      "sort: biggest", "sort: numerous", "sort: alpha", "sort: zeta",
+      "sort: smallest"};
+  if (selected != expected)
+    {
+      fprintf (stderr, "Global cache sorting is not size/count/name ordered\n");
+      return false;
+    }
+  return true;
+}
+
 /* Force a tiny global budget to validate eviction *across* otherwise
    independent LRU instances without allocating gigabytes or relying on the
    machine's free memory. The override is internal to libcolorscreen tests. */
@@ -12757,6 +12801,7 @@ test_raw_source_retention_contract ()
 {
   image_data synthetic;
   if (synthetic.has_unpacked_raw_source ()
+      || synthetic.raw_demosaicing_available_p ()
       || !synthetic.set_dimensions (8, 8, true, false))
     {
       fprintf (stderr, "Synthetic image unexpectedly carries RAW source\n");
@@ -12786,6 +12831,7 @@ test_raw_source_retention_contract ()
       return false;
     }
   if (loaded.has_unpacked_raw_source ()
+      || loaded.raw_demosaicing_available_p ()
       || !loaded.has_rgb ()
       || loaded.get_rgb_pixel (3, 5).r
              != synthetic.get_rgb_pixel (3, 5).r)
@@ -12810,13 +12856,24 @@ test_raw_source_variants ()
   const char *error = nullptr;
   image_data source;
   if (!source.load (path, true, &error, nullptr, image_data::demosaic_linear)
-      || !source.has_unpacked_raw_source () || !source.has_rgb ())
+      || !source.has_unpacked_raw_source () || !source.has_rgb ()
+      || !source.raw_demosaicing_available_p ()
+      || source.demosaic != image_data::demosaic_linear)
     {
       fprintf (stderr, "Could not cache synthetic Bayer source: %s\n",
                error ? error : "source not retained as Bayer RAW");
       return false;
     }
+  /* Linear/no-interpolation RAW variants are legitimate CFA sources even
+     if demosaiced_by does not identify a postprocessing algorithm. The
+     GUI must consult the stable CFA capability rather than that field. */
+  if (source.demosaiced_by != image_data::demosaic_max)
+    {
+      fprintf (stderr, "Linear RAW no longer covers demosaiced_by sentinel\n");
+      return false;
+    }
   const image_data::pixel baseline = source.get_rgb_pixel (47, 61);
+  std::vector<uint64_t> derived_ids;
 
   auto same_pixels = [] (const image_data &a, const image_data &b)
     {
@@ -12856,23 +12913,123 @@ test_raw_source_variants ()
       error = nullptr;
       std::shared_ptr<image_data> cached
           = source.demosaiced_variant (method, &error);
-      if (cached != computed)
+      if (cached != computed || cached->id != computed->id)
         {
-          fprintf (stderr, "Repeated RAW variant did not hit cache for %i\n",
+          fprintf (stderr, "Repeated RAW variant changed cached identity for %i\n",
                    (int)method);
           return false;
         }
+      /* Every pixel-changing method must receive its own image UID. Caches
+         for sharpening, detection, grayscale, rendering and screen analysis
+         key on image_data::id: reusing the original/other variant ID would
+         silently mix computations from distinct RGB pixels. */
+      if (computed->id == source.id ||
+          std::find (derived_ids.begin (), derived_ids.end (),
+                     computed->id) != derived_ids.end ())
+        {
+          fprintf (stderr, "Different RAW methods aliased image UID\n");
+          return false;
+        }
+      derived_ids.push_back (computed->id);
 
       image_data fresh;
       error = nullptr;
-      if (!fresh.load (path, true, &error, nullptr, method)
-          || !same_pixels (*computed, fresh))
+      if (!fresh.load (path, true, &error, nullptr, method))
         {
-          fprintf (stderr,
-                   "RAW cached %i differs from independent LibRaw decode: %s\n",
-                   (int)method, error ? error : "pixel/geometry mismatch");
+          fprintf (stderr, "Independent RAW decode failed for method %i: %s\n",
+                   (int)method, error ? error : "unknown error");
           return false;
         }
+      const bool pixel_match = same_pixels (*computed, fresh);
+      const bool unique_ids = computed->id != fresh.id;
+      const bool retained_cfa = computed->raw_demosaicing_available_p ();
+      const bool requested_method = computed->demosaic == method;
+      if (!pixel_match || !unique_ids || !retained_cfa || !requested_method)
+        {
+          fprintf (stderr,
+                   "RAW variant %i: pixel/geometry=%d, UID distinct=%d, "
+                   "CFA capability=%d, requested method=%d; "
+                   "cached %ix%i ID=%llu, fresh %ix%i ID=%llu\n",
+                   (int)method, (int)pixel_match, (int)unique_ids,
+                   (int)retained_cfa, (int)requested_method,
+                   computed->width, computed->height,
+                   (unsigned long long)computed->id,
+                   fresh.width, fresh.height,
+                   (unsigned long long)fresh.id);
+          if (!pixel_match && computed->width == fresh.width
+              && computed->height == fresh.height && computed->has_rgb ()
+              && fresh.has_rgb ())
+            for (int y = 0; y < computed->height; ++y)
+              {
+                bool reported = false;
+                for (int x = 0; x < computed->width; ++x)
+                  {
+                    const auto got = computed->get_rgb_pixel (x, y);
+                    const auto wanted = fresh.get_rgb_pixel (x, y);
+                    if (got.r != wanted.r || got.g != wanted.g
+                        || got.b != wanted.b)
+                      {
+                        fprintf (stderr,
+                                 "First RAW pixel mismatch at %i,%i: "
+                                 "cached %u,%u,%u; fresh %u,%u,%u\n",
+                                 x, y, (unsigned)got.r, (unsigned)got.g,
+                                 (unsigned)got.b, (unsigned)wanted.r,
+                                 (unsigned)wanted.g, (unsigned)wanted.b);
+                        reported = true;
+                        break;
+                      }
+                  }
+                if (reported)
+                  break;
+              }
+          return false;
+        }
+      /* Rendered scanner sharpening is an image-dependent shared LRU.
+         Compare the cached-variant result with a newly opened independent
+         image, using identical sharpening parameters. This catches an
+         accidental image UID reuse that would alias otherwise unrelated RGB
+         pixel buffers even when the source decoded pixel arrays are correct.
+         The screen/analysis caches use this same UID and its derived
+         image-layer ID for their pixel-dependent keys. */
+      render_parameters sharpened_params;
+      sharpened_params.gamma = 1;
+      sharpened_params.sharpen.mode = sharpen_parameters::unsharp_mask;
+      sharpened_params.sharpen.usm_radius = 1.25;
+      sharpened_params.sharpen.usm_amount = 0.6;
+      render cached_render (*computed, sharpened_params, 65535);
+      render independent_render (fresh, sharpened_params, 65535);
+      const rgbdata fractions { (luminosity_t)1 / 3,
+                                (luminosity_t)1 / 3,
+                                (luminosity_t)1 / 3 };
+      if (!cached_render.precompute_all (PRECOMPUTE_RGB_IMAGE, fractions,
+                                         nullptr)
+          || !independent_render.precompute_all (
+              PRECOMPUTE_RGB_IMAGE, fractions, nullptr))
+        {
+          fprintf (stderr,
+                   "Failed preparing image-keyed RAW sharpening for %i\n",
+                   (int)method);
+          return false;
+        }
+      for (int y = 4; y < computed->height - 4; y += 23)
+        for (int x = 4; x < computed->width - 4; x += 19)
+          {
+            const rgbdata first
+                = cached_render.get_linearized_rgb_pixel ({x, y});
+            const rgbdata second
+                = independent_render.get_linearized_rgb_pixel ({x, y});
+            if (fabs (first.red - second.red) > 0.0001
+                || fabs (first.green - second.green) > 0.0001
+                || fabs (first.blue - second.blue) > 0.0001)
+              {
+                fprintf (stderr,
+                         "Image-keyed RAW sharpening reused stale variant "
+                         "buffers for method %i at %i,%i\n",
+                         (int)method, x, y);
+                return false;
+              }
+          }
+
       if (!source.has_unpacked_raw_source ()
           || !source.has_rgb () || !computed->has_unpacked_raw_source ())
         {
@@ -13159,6 +13316,8 @@ main (int argc, char **argv)
       [] () { return test_lru_cache_byte_budget (); } },
     { "lru_global_memory", "global LRU eviction, diagnostics and RAM admission",
       [] () { return test_lru_global_memory_budget (); } },
+    { "cache_statistics_order", "global size/entry/name cache ordering",
+      [] () { return test_cache_statistics_lexicographic_order (); } },
     { "stitch_tile_global_cache", "decoded stitch tiles use the shared LRU",
       [] () { return test_stitch_tile_global_cache (); } },
     { "cache_memory_preferences", "adaptive and user-selected cache fractions",

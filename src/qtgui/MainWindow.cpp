@@ -1017,9 +1017,7 @@ void MainWindow::setupUi() {
                              const QString &parameterKey) {
                          changeParameters(s, desc, parameterKey);
                        },
-                       [this]() { return panelImageData(); },
-                       [this]() { reloadCurrentImageWithDemosaic(); },
-                       this);
+                       [this]() { return panelImageData(); }, this);
 
   // Create Geometry Panel
   m_geometryPanel =
@@ -2887,6 +2885,8 @@ void MainWindow::createMenus() {
     table->setEditTriggers(QAbstractItemView::NoEditTriggers);
     table->setSelectionMode(QAbstractItemView::NoSelection);
     table->setAlternatingRowColors(true);
+    table->setToolTip(tr("Sorted lexicographically by retained memory "
+                         "(descending), entry count (descending), then name."));
     table->verticalHeader()->hide();
     table->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
     for (int col = 1; col <= 5; ++col)
@@ -3490,6 +3490,9 @@ void MainWindow::clearDetectedScreenDiagnostics() {
    NavigationView, refreshes all panels, and rebuilds the mode menu.
    Called by undo/redo commands and by changeParameters().  */
 void MainWindow::applyState(const ParameterState &state) {
+  const bool demosaicSelectionChanged =
+      m_rparams.demosaic != state.rparams.demosaic;
+
   // Final-result one-shot operations consume an exact document snapshot. Any
   // accepted parameter change (including Undo/Redo) makes that result stale.
   dismissOneShotPrompts();
@@ -3562,6 +3565,38 @@ void MainWindow::applyState(const ParameterState &state) {
   if (invalidateFocusAreas)
     clearFocusAreaAnalysis(
         tr("Focus-area inputs changed; find focus areas again."));
+
+  /* A capture demosaic edit is actionable immediately, including via Undo
+     and Redo. Defer the load until the full state change is published, so
+     a same-turn setup-guide explicit reload can establish its requested
+     detection handoff first. Obsolete queued choices cannot launch a worker.
+     While another variant is processing, restart only if its requested
+     method differs; ordinary Open/sidecar remains transactional. */
+  if (demosaicSelectionChanged && m_scan &&
+      m_scan->raw_demosaicing_available_p() &&
+      !m_currentImageFile.isEmpty()) {
+    const auto selectedMethod = state.rparams.demosaic;
+    QTimer::singleShot(0, this, [this, selectedMethod]() {
+      if (m_closeLifecycle.closing() || !m_scan ||
+          m_currentImageFile.isEmpty() ||
+          !m_scan->raw_demosaicing_available_p() ||
+          m_rparams.demosaic != selectedMethod)
+        return;
+      if (m_imageLoad.pending) {
+        /* A fresh Open/sidecar request still retains the outgoing m_scan
+           for rollback, but its target filename may already differ.
+           Never supersede that independent Open with an old document's
+           Undo/Redo-triggered demosaic request. Only same-image reprocess
+           requests carry a pendingDemosaic identity. */
+        if (!m_imageLoad.pendingDemosaic ||
+            *m_imageLoad.pendingDemosaic == selectedMethod)
+          return;
+      } else if (m_scan->demosaic == selectedMethod) {
+        return;
+      }
+      reloadCurrentImageWithDemosaic();
+    });
+  }
 }
 
 QString MainWindow::mtfCalibrationSummary() const {

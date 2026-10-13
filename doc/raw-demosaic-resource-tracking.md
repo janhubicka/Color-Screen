@@ -71,9 +71,12 @@ those estimates must not be presented as precise.
 Every decoded variant retains its own shared opaque sensor resource; no
 source points back to its variants, so ownership is acyclic. Qt therefore
 keeps only the currently displayed image and outgoing worker references,
-not a separate cached original RAW. Explicit Reload and demosaic asks the
-core to reuse that source; ordinary Open still performs independent file
-loading, including for unsupported RAW formats.
+not a separate cached original RAW. Changing the saved Demosaic combo or
+Undoing/Redoing that edit immediately asks the core to reuse that source;
+the obsolete Reload button is no longer necessary. Ordinary Open still
+performs independent file loading, including for unsupported RAW formats.
+Fallback to file decoding is used when retaining the original sensor
+samples would exceed the global budget.
 
 **Important:** cache-owned bytes are not total process RSS. A renderer/view
 may retain an image after its cached entry is evicted; LibRaw scratch buffers

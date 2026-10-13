@@ -482,6 +482,7 @@ bool colorSectionPreferencesSmoke() {
   state.rparams.contact_copy.simulate = true;
   const ParameterState initialState = state;
   int documentEdits = 0;
+  int expectedDocumentEdits = 0;
   auto getState = [&state]() { return state; };
   bool applyExplicitEdit = false;
   auto setState = [&state, &documentEdits, &applyExplicitEdit](
@@ -588,7 +589,7 @@ bool colorSectionPreferencesSmoke() {
         QStringLiteral("capture.corrections")},
        [&]() {
          return std::make_unique<CapturePanel>(
-             getState, setState, getCaptureImage, []() {});
+             getState, setState, getCaptureImage);
        }},
       {{QStringLiteral("sharpness.capture"),
         QStringLiteral("sharpness.measurements"),
@@ -691,6 +692,49 @@ bool colorSectionPreferencesSmoke() {
             !imageAreaButton->isEnabled() || clearImageArea->isEnabled())
           return fail(QStringLiteral(
               "Digital Capture image actions stayed disabled after image load"));
+
+        // RAW input capability, not the most recent demosaic RESULT, controls
+        // whether this is actionable. A linear CFA decode can retain
+        // demosaiced_by == demosaic_max yet still allow an immediate edit.
+        auto *demosaicCombo = capture->findChild<QComboBox *>(
+            QStringLiteral("CaptureDemosaicCombo"));
+        if (!demosaicCombo || !demosaicCombo->parentWidget() ||
+            demosaicCombo->parentWidget()
+                ->property("parameterApplicable").toBool())
+          return fail(QStringLiteral(
+              "Demosaic selector incorrectly offered for a non-RAW image"));
+        captureImage->raw_cfa_image = true;
+        captureImage->demosaiced_by = colorscreen::image_data::demosaic_max;
+        capture->updateUI();
+        if (!demosaicCombo->parentWidget()
+                 ->property("parameterApplicable").toBool())
+          return fail(QStringLiteral(
+              "Linear CFA RAW did not enable immediate Demosaic selection"));
+        const int ppgIndex =
+            demosaicCombo->findData((int)colorscreen::image_data::demosaic_PPG);
+        if (ppgIndex < 0)
+          return fail(QStringLiteral("PPG missing from demosaic choices"));
+        const int beforeDemosaicEdit = documentEdits;
+        applyExplicitEdit = true;
+        demosaicCombo->setCurrentIndex(ppgIndex);
+        const bool activated = QMetaObject::invokeMethod(
+            demosaicCombo, "activated", Qt::DirectConnection,
+            Q_ARG(int, ppgIndex));
+        applyExplicitEdit = false;
+        if (!activated || documentEdits != beforeDemosaicEdit + 1 ||
+            state.rparams.demosaic != colorscreen::image_data::demosaic_PPG)
+          return fail(QStringLiteral(
+              "Changing demosaic selection did not publish one saved edit"));
+        // This intentional parameter change is permitted; section folding
+        // and subsequent panel refreshes must make no additional edits.
+        ++expectedDocumentEdits;
+        state.rparams.demosaic = initialState.rparams.demosaic;
+        captureImage->raw_cfa_image = false;
+        capture->updateUI();
+        if (demosaicCombo->parentWidget()
+                ->property("parameterApplicable").toBool())
+          return fail(QStringLiteral(
+              "Demosaic selector remained enabled for non-RAW images"));
 
         // Section-folding smoke must not make real document edits. Verify
         // enabling/disabling the Clear action from saved state here; its
@@ -945,7 +989,7 @@ bool colorSectionPreferencesSmoke() {
     if (!verify(*reopened, probe.keys, expected))
       return false;
   }
-  if (documentEdits != 0 || state != initialState)
+  if (documentEdits != expectedDocumentEdits || state != initialState)
     return fail(QStringLiteral("section preferences entered document/Undo state"));
   return true;
 }
