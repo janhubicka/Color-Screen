@@ -64,8 +64,12 @@ policies, temporary-worker state and derived plots remain **excluded**.
   silently discarding them. Source dimensions and ROI use explicit `status`;
   historical sentinel values are retained for lossless migration, but
   changing a status without changing the dimensions is rejected.
-  The reference adapter does **not** yet implement Save As rebasing or the
-  GUI lifecycle. Those must be addressed before shipping v3.
+  The reference adapter includes an in-memory
+  `rebase_v3_source_paths()` experiment for POSIX and Windows Save As, keeping
+  absolute references and missing-source records unchanged and falling back
+  to absolute paths for cross-volume Windows moves. It neither writes files
+  nor implements the native C++/Qt Save As transaction; that integration and
+  any real source-file path resolution remain prerequisites for shipping v3.
 * Downgrading a v3 document whose capture group is noncontiguous in the
   measurement order fails rather than silently changing group membership.
   An unknown measurement ID, duplicate ID or unknown field also fails.
@@ -78,7 +82,8 @@ identity**. Independent synthetic nondefault tests cover crop, orientation,
 gamma, widths, final-frame geometry, inactive sharpening controls, Unicode
 MTF source labels, scanner channel vs image-layer provenance, unavailable
 source/ROI metadata, capture-group reordering, ID validity, source path-base agreement,
-missing-source semantics, available/unavailable status consistency, and
+missing-source semantics, available/unavailable status consistency,
+POSIX/Windows Save As rebasing without touching the original document, and
 nested unknown fields. It does not replace the existing v2 corpus test, which separately
 checks canonical `.par` output byte-for-byte after a real C++ v2 decode.
 
