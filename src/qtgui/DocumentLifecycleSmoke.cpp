@@ -54,7 +54,7 @@ struct DocumentLifecycleState {
   QString failedOpenParameterPath;
   QString failedOpenImagePath;
   bool failedOpenParameterSuggested = false;
-  bool failedOpenParameterArchive = false;
+  bool failedOpenParameterJson = false;
   bool failedOpenRecoveryDirty = false;
   std::unique_ptr<QTemporaryDir> temporaryDirectory;
   QString recoveryProbeDirectory;
@@ -994,21 +994,21 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
         const QString missingLegacySidecarPath =
             state->temporaryDirectory->filePath(
                 QStringLiteral("missing-image-load.par"));
-        const QString missingArchiveSidecarPath =
+        const QString missingJsonSidecarPath =
             state->temporaryDirectory->filePath(
                 QStringLiteral("missing-image-load.cspar"));
         QFile::remove(missingLegacySidecarPath);
-        QFile::remove(missingArchiveSidecarPath);
+        QFile::remove(missingJsonSidecarPath);
         // The first document is now stored as an authoritative structured
         // archive because its photographic image area cannot be represented
         // in legacy CSP.  The second document retains a genuine legacy .par
         // target. Copy each sidecar in its native format.
         if (!QFile::copy(state->secondParameters, missingLegacySidecarPath) ||
-            !QFile::copy(state->firstParameters, missingArchiveSidecarPath)) {
+            !QFile::copy(state->firstParameters, missingJsonSidecarPath)) {
           delete loadProbe;
           state->recoveryProbe = nullptr;
           fail(QStringLiteral(
-              "Image-load failure smoke could not create legacy/archive sidecars"));
+              "Image-load failure smoke could not create legacy/JSON sidecars"));
           return;
         }
 
