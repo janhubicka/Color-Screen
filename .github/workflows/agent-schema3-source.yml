@@ -1,0 +1,28 @@
+name: Agent schema 3 source transport
+on:
+  push:
+    branches: [agent/json-migration-build-transport]
+    paths: [.github/workflows/agent-schema3-source.yml]
+permissions:
+  contents: read
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 25ee01674907e0f7ff96e812d59e64b4588d0823
+          fetch-depth: 1
+      - name: Archive exact reviewed revision
+        run: |
+          set -eu
+          test "$(git rev-parse HEAD)" = 25ee01674907e0f7ff96e812d59e64b4588d0823
+          mkdir -p /tmp/agent-source
+          git archive --format=tar.gz HEAD -o /tmp/agent-source/colorscreen-schema3-source.tar.gz
+          echo "source sha: $(git rev-parse HEAD)"
+          sha256sum /tmp/agent-source/colorscreen-schema3-source.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: schema3-nozip-source
+          path: /tmp/agent-source/colorscreen-schema3-source.tar.gz
+          retention-days: 4
