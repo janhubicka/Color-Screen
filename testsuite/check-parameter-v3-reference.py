@@ -192,6 +192,44 @@ def main() -> int:
     check_raises(lambda: module.upgrade_v2(corrupt),
                  "nonboolean MTF same_capture accepted")
     print("# Source-path, availability, crop, and migration-flag integrity passed")
+
+    # Saving the parameter document in another directory must not change
+    # which image each relative measurement path refers to.
+    original = module.upgrade_v2(rich)
+    rebased = module.rebase_v3_source_paths(
+        original, "/srv/photos/session/state.cspar", "/srv/exports/new.cspar")
+    srcs = original["calibration"]["capture"]["mtf"]["measurements"]
+    moved = rebased["calibration"]["capture"]["mtf"]["measurements"]
+    assert moved[0]["source"]["path"] == srcs[0]["source"]["path"]
+    assert moved[1]["source"]["path"] == {
+        "base": "parameter_file", "value": "../photos/relative/edge.tif"}
+    assert original["calibration"]["capture"]["mtf"]["measurements"] == srcs
+
+    import ntpath
+    windows_old = r"C:\archive\session\params.cspar"
+    windows_new = r"C:\archive\exports\params.cspar"
+    moved_windows = module.rebase_v3_source_paths(original, windows_old, windows_new)
+    win_path = moved_windows["calibration"]["capture"]["mtf"]["measurements"][1]["source"]["path"]
+    assert ntpath.normpath(ntpath.join(ntpath.dirname(windows_new), win_path["value"])) == (
+        r"C:\archive\relative\edge.tif")
+    assert win_path["base"] == "parameter_file"
+    across_volumes = module.rebase_v3_source_paths(
+        original, windows_old, r"D:\archive\params.cspar")
+    different = across_volumes["calibration"]["capture"]["mtf"]["measurements"][1]["source"]["path"]
+    assert different == {"base": "absolute", "value": r"C:\archive\relative\edge.tif"}
+    assert module.rebase_v3_source_paths(upgraded_no_source,
+        "/srv/photos/session/state.cspar", "/srv/exports/new.cspar")[
+            "calibration"]["capture"]["mtf"]["measurements"][1]["source"]["path"] is None
+
+    check_raises(lambda: module.rebase_v3_source_paths(original,
+                 "session/state.cspar", "/srv/exports/new.cspar"),
+                 "relative document path accepted for Save As")
+    invalid_rebase = deepcopy(original)
+    invalid_rebase["calibration"]["capture"]["mtf"]["measurements"][1]["source"]["path"]["base"] = "absolute"
+    check_raises(lambda: module.rebase_v3_source_paths(invalid_rebase,
+                 "/srv/photos/session/state.cspar", "/srv/exports/new.cspar"),
+                 "contradictory path base accepted for Save As")
+    print("# Reference-only POSIX/Windows Save As path rebasing passed")
     return 0
 
 
