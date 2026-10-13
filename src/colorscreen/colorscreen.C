@@ -1475,7 +1475,7 @@ autodetect (int argc, char **argv)
         }
       std::string parameter_error;
       if (!load_parameter_filename (cspname, &param, &dparam, &rparam,
-                                    &solver_param, &parameter_error, nullptr,
+                                    &solver_param, &parameter_error,
                                     &input_trailing))
         {
           progress.pause_stdout ();
@@ -2017,9 +2017,9 @@ analyze_scanner_blur (int argc, char **argv)
   const bool explicit_parameter_output = outcspname != nullptr;
   if (!outcspname)
     outcspname = cspname;
-  const bool output_json =
-      explicit_parameter_output ? parameter_archive_suffix_p (outcspname)
-                                : input_archive;
+  /* The output suffix selects the sole native .cspar format.  No ZIP-v1
+     identity is retained or propagated by the parameter loader.  */
+  const bool output_json = parameter_archive_suffix_p (outcspname);
   progress.set_task ("writing parameters", 1);
   if (verbose)
     {
