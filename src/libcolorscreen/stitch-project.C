@@ -17,7 +17,7 @@ namespace colorscreen
 {
 
 /* Load a user-supplied stitch parameter filename through the shared
-   legacy/archive dispatcher.  */
+   legacy .par reader.  */
 static bool
 load_stitch_parameter_file (const char *name, scr_to_img_parameters *param,
                             scr_detect_parameters *dparam,
@@ -25,7 +25,7 @@ load_stitch_parameter_file (const char *name, scr_to_img_parameters *param,
                             solver_parameters *sparam)
 {
   std::string open_error;
-  FILE *in = open_parameter_payload (name, nullptr, &open_error);
+  FILE *in = open_parameter_legacy_file (name, &open_error);
   if (!in)
     {
       fprintf (stderr, "Can not load %s: %s\n", name, open_error.c_str ());

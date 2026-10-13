@@ -1,23 +1,16 @@
 ## -*- sh -*-
-## parameter-archive-cli.test -- CLI legacy/archive parameter parity
+## parameter-archive-cli.test -- native JSON and historical .par persistence
 
 if test -z "$srcdir"; then
     srcdir=$(echo "$0" | sed 's,[^/]*$,,')
     test "$srcdir" = "$0" && srcdir=.
     test -z "$srcdir" && srcdir=.
-    test "${VERBOSE+set}" != set && VERBOSE=1
 fi
+. "$srcdir/defs.sh"
+echo 1..15
 
-echo 1..17
-. $srcdir/defs.sh
-
-# Dynamic MinGW builds are normally launched through libtool's POSIX wrapper.
-# That wrapper adds a second MSYS -> native exec boundary and can replace
-# characters outside the active Windows code page before the real executable's
-# UTF-16 command-line recovery runs. Exercise the installed-program semantics
-# directly when the libtool binary exists, while keeping its build-tree DLL
-# dependency discoverable.
-case `uname -s 2>/dev/null` in
+# Use the real native Windows command line, not libtool's ANSI argv wrapper.
+case $(uname -s 2>/dev/null) in
   MINGW*|MSYS*)
     real_colorscreen="$top_builddir/src/colorscreen/.libs/colorscreen.exe"
     if test -x "$real_colorscreen"; then
@@ -28,385 +21,166 @@ case `uname -s 2>/dev/null` in
     ;;
 esac
 
-archive=$(python3 -X utf8 - <<'PY'
-print("out-parameter-\u017elu\u0165ou\u010dk\u00fd-\u6d4b\u8bd5.cspar")
+unicode=$(python3 -X utf8 - <<'PY'
+print("out-parameter-žluťoučký-测试.cspar")
 PY
 )
-legacy_out=out-parameter-legacy.tif
-archive_out=out-parameter-archive.tif
+legacy=out-parameter-legacy-normal.par
+legacy_metadata=out-parameter-profile.par
 native=out-parameter-native-v2.cspar
-native_out=out-parameter-native-v2.tif
-zip_roundtrip=out-parameter-v2-to-v1.cspar
-zip_input=out-parameter-v1-input.cspar
-rm -f "$archive" "$legacy_out" "$archive_out" "$native" "$native_out" "$zip_roundtrip" "$zip_input"
+legacy_image=out-parameter-legacy.tif
+native_image=out-parameter-native.tif
+out=out-parameter-output.cspar
+unknown=out-parameter-unknown.cspar
+rm -f "$legacy" "$legacy_metadata" "$native" "$unicode" "$out" \
+      "$unknown" "$legacy_image" "$native_image"
 
-python3 - "$srcdir/empty.par" "$archive" <<'PY' || exit 1
-import json
-import sys
-import zipfile
-
-source, destination = sys.argv[1:3]
-with open(source, "rb") as f:
-    payload = f.read()
-if not payload.endswith(b"\n"):
-    payload += b"\n"
-# Qt metadata is an extension after the portable CSP end marker.  empty.par is
-# deliberately only the version header, so complete that minimal CSP before
-# appending GUI metadata.
-if b"screen_alignment_end\n" not in payload:
-    payload += b"screen_alignment_end\n"
-payload += (
-    b"colorscreen_qt_metadata_version: 1\n"
-    b"profile_spot: 0.25 0.5\n"
-    b"colorscreen_qt_metadata_end\n"
-)
-manifest = {
-    "format": "org.colorscreen.parameters",
-    "schema_version": 1,
-    "required_features": ["render-overrides-v1", "geometry-final-frame-v1", "image-area-v1"],
-    "generator": {
-        "application": "Color-Screen testsuite",
-        "version": "2.0alpha",
-    },
-    "state": {
-        "legacy_csp": "state/legacy.par",
-        "geometry_final_frame": {"final_angle": 108.375, "final_ratio": 0.803158},
-        "image_area": {"enabled": False, "rect": [0, 0, 0, 0]},
-        "render_overrides": {
-            "ignore_infrared": False,
-            "demosaiced_scaling": "nearest",
-            "observer_whitepoint": [0.3457, 0.3585],
-            "output_profile": "sRGB",
-            "output_gamma": -1,
-            "gamut_warning": False,
-        },
-    },
-    "payloads": [],
-}
-with zipfile.ZipFile(destination, "w") as z:
-    z.writestr(
-        "manifest.json",
-        json.dumps(manifest, indent=2, sort_keys=True) + "\n",
-        compress_type=zipfile.ZIP_STORED,
-    )
-    z.writestr(
-        "state/legacy.par", payload, compress_type=zipfile.ZIP_DEFLATED
-    )
-PY
-
+pexec $RUNCOLORSCREEN adjust-par --out "$legacy" "$srcdir/empty.par" || exit 1
 pexec $RUNCOLORSCREEN render --mode original --geometry scan \
-  --output-profile=original "$srcdir/checkerboard.tif" "$srcdir/empty.par" \
-  "$legacy_out" || exit 1
-echo 'ok 1 - legacy parameter render'
+  --output-profile=original "$srcdir/checkerboard.tif" "$legacy" \
+  "$legacy_image" || exit 1
+echo 'ok 1 - historical .par reads and renders'
 
-pexec $RUNCOLORSCREEN render --mode original --geometry scan \
-  --output-profile=original "$srcdir/checkerboard.tif" "$archive" \
-  "$archive_out" || exit 1
-echo 'ok 2 - archive parameter render'
-
-pexec $RUNCOLORSCREEN lab compare-images "$legacy_out" "$archive_out" || exit 1
-echo 'ok 3 - legacy/archive outputs match'
-
-# First verify old-style output equality with an inactive inner crop. Now add
-# a selected photographic rectangle and prove adjust-par retains it instead
-# of silently rewriting the feature to its default.
-python3 - "$archive" <<'PY' || exit 1
-import json
-import os
-import sys
-import zipfile
-
-path = sys.argv[1]
-with zipfile.ZipFile(path, "r") as source:
-    manifest = json.loads(source.read("manifest.json"))
-    payload = source.read("state/legacy.par")
-manifest["state"]["image_area"] = {"enabled": True, "rect": [1, 1, 4, 4]}
-temp = path + ".tmp"
-with zipfile.ZipFile(temp, "w") as out:
-    out.writestr("manifest.json", json.dumps(manifest, sort_keys=True) + "\n",
-                 compress_type=zipfile.ZIP_STORED)
-    out.writestr("state/legacy.par", payload, compress_type=zipfile.ZIP_DEFLATED)
-os.replace(temp, path)
-PY
-
-# Retain an independent v1 input for later import and overwrite tests.
-cp "$archive" "$zip_input" || exit 1
-pexec $RUNCOLORSCREEN adjust-par "$archive" || exit 1
-python3 - "$archive" <<'PYTEST' || exit 1
-import json, pathlib, sys, zipfile
-path = pathlib.Path(sys.argv[1])
-if zipfile.is_zipfile(path):
-    raise SystemExit("in-place rewrite retained the retired ZIP output")
-doc = json.loads(path.read_text(encoding="utf-8"))
-assert doc["schema_version"] == 2
-assert doc["geometry"]["final_angle"] == 108.375
-assert doc["geometry"]["final_ratio"] == 0.803158
-assert doc["capture"]["image_area"] == {"enabled": True, "rect": [1, 1, 4, 4]}
-assert doc["reconstruction"]["demosaiced_scaling"] == "nearest"
-assert doc["profile"]["spots"] == [[0.25, 0.5]]
-PYTEST
-echo 'ok 4 - in-place ZIP-v1 rewrite migrates all state to native JSON'
-
-pexec $RUNCOLORSCREEN render --mode original --geometry scan \
-  --output-profile=original "$srcdir/checkerboard.tif" "$archive" \
-  "$archive_out" || exit 1
-echo 'ok 5 - rewritten Unicode archive remains readable'
-
-# Explicitly convert one ZIP-v1 project, including Qt profile spots and
-# structured-only geometry/photographic fields, to one plain native JSON file.
-pexec $RUNCOLORSCREEN adjust-par --json-v2 --out "$native" "$zip_input" || exit 1
+pexec $RUNCOLORSCREEN adjust-par --out "$native" "$legacy" || exit 1
 python3 - "$native" <<'PY' || exit 1
-import json
-import pathlib
-import sys
-import zipfile
-path = pathlib.Path(sys.argv[1])
-if zipfile.is_zipfile(path):
-    raise SystemExit("explicit --json-v2 still wrote ZIP")
-content = path.read_bytes()
-if not content.startswith(b"{"):
-    raise SystemExit("v2 payload is not plain UTF-8 JSON")
-state = json.loads(content)
-if state.get("format") != "org.colorscreen.parameters" or state.get("schema_version") != 2:
-    raise SystemExit("v2 payload lacks schema identity")
-if "legacy_csp" in content.decode("utf-8") or "state/legacy.par" in content.decode("utf-8"):
-    raise SystemExit("v2 still embeds a legacy CSP mirror")
-if state["geometry"]["final_angle"] != 108.375 or state["geometry"]["final_ratio"] != 0.803158:
-    raise SystemExit("v2 conversion lost final-frame calibration")
-if state["capture"]["image_area"] != {"enabled": True, "rect": [1, 1, 4, 4]}:
-    raise SystemExit("v2 conversion lost the inner photographic area")
-if state["reconstruction"]["demosaiced_scaling"] != "nearest":
-    raise SystemExit("v2 conversion lost reconstructed scaling")
-if state["profile"]["spots"] != [[0.25, 0.5]]:
-    raise SystemExit("v2 conversion dropped Qt profile spots")
+import json, pathlib, sys
+path=pathlib.Path(sys.argv[1])
+doc=json.loads(path.read_text(encoding='utf-8'))
+assert doc['format']=='org.colorscreen.parameters' and doc['schema_version']==2
+assert 'state' not in doc and 'legacy_csp' not in doc
 PY
-echo 'ok 6 - ZIP v1 converted to complete native JSON v2'
+echo 'ok 2 - .par to native JSON has complete schema identity'
 
-pexec $RUNCOLORSCREEN render --mode original --geometry scan   --output-profile=original "$srcdir/checkerboard.tif" "$native"   "$native_out" || exit 1
-pexec $RUNCOLORSCREEN lab compare-images "$archive_out" "$native_out" || exit 1
-echo 'ok 7 - CLI native JSON and ZIP v1 rendering parity'
+pexec $RUNCOLORSCREEN render --mode original --geometry scan \
+  --output-profile=original "$srcdir/checkerboard.tif" "$native" \
+  "$native_image" || exit 1
+pexec $RUNCOLORSCREEN lab compare-images "$legacy_image" "$native_image" || exit 1
+echo 'ok 3 - legacy and JSON render the same pixels'
 
-# Ordinary in-place adjust-par must preserve the loaded native JSON encoding.
+cp "$native" "$out" || exit 1
 pexec $RUNCOLORSCREEN adjust-par "$native" || exit 1
-python3 - "$native" <<'PY' || exit 1
-import json, pathlib, sys, zipfile
-path = pathlib.Path(sys.argv[1])
-if zipfile.is_zipfile(path):
-    raise SystemExit("ordinary adjust-par downgraded JSON v2 to ZIP")
-state = json.loads(path.read_text(encoding="utf-8"))
-if state["schema_version"] != 2 or state["profile"]["spots"] != [[0.25, 0.5]]:
-    raise SystemExit("ordinary adjust-par changed v2 state or lost profile spots")
+cmp "$native" "$out" || exit 1
+echo 'ok 4 - canonical native JSON is stable on ordinary rewriting'
+
+pexec $RUNCOLORSCREEN adjust-par --json-v2 --out "$unicode" "$legacy" || exit 1
+cmp "$native" "$unicode" || exit 1
+echo 'ok 5 - explicit conversion is canonical with Unicode output names'
+
+# Profile spots are Qt document parameters but also supported by the CLI.
+cp "$legacy" "$legacy_metadata" || exit 1
+printf 'colorscreen_qt_metadata_version: 1\nprofile_spot: 0.25 0.5\ncolorscreen_qt_metadata_end\n' >> "$legacy_metadata"
+pexec $RUNCOLORSCREEN adjust-par --out "$out" "$legacy_metadata" || exit 1
+python3 - "$out" <<'PY' || exit 1
+import json,pathlib,sys
+state=json.loads(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))
+assert state['profile']['spots']==[[0.25,0.5]]
 PY
-echo 'ok 8 - CLI preserves native JSON format and Qt metadata'
+echo 'ok 6 - legacy Qt profile spots convert to native JSON'
 
-# ZIP-v1 is an import format only, not a retained compatibility output.
-printf 'old target must remain unchanged\n' > "$zip_roundtrip"
-if $RUNCOLORSCREEN adjust-par --zip-v1 --out "$zip_roundtrip" "$native" \
-    >out-parameter-retired-zip.log 2>&1; then
-    echo "retired ZIP-v1 writer was still accepted" >&2
-    exit 1
+pexec $RUNCOLORSCREEN adjust-par --out out-parameter-profile-restored.par "$out" || exit 1
+pexec $RUNCOLORSCREEN adjust-par --out out-parameter-profile-restored.cspar out-parameter-profile-restored.par || exit 1
+cmp "$out" out-parameter-profile-restored.cspar || exit 1
+echo 'ok 7 - Qt profile spots survive JSON to .par to JSON'
+
+if $RUNCOLORSCREEN adjust-par --json-v2 --out out-parameter-invalid-json.par "$native" \
+    >out-parameter-format-refusal.log 2>&1; then
+  echo 'explicit JSON save accepted .par suffix' >&2
+  exit 1
 fi
-if ! grep -q "ZIP-v1 output was retired" out-parameter-retired-zip.log ||
-   test "$(cat "$zip_roundtrip")" != "old target must remain unchanged"; then
-    echo "retired ZIP option changed output or lacked a diagnostic" >&2
-    exit 1
+test ! -e out-parameter-invalid-json.par || exit 1
+echo 'ok 8 - explicit JSON requests require .cspar extension'
+
+# A historical .par cannot represent selected photographic bounds/final frame.
+python3 - "$native" "$out" <<'PY' || exit 1
+import json,pathlib,sys
+s=json.loads(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))
+s['geometry']['final_angle']=108.375
+s['geometry']['final_ratio']=0.803158
+pathlib.Path(sys.argv[2]).write_text(json.dumps(s,ensure_ascii=False)+'\n',encoding='utf-8')
+PY
+if $RUNCOLORSCREEN adjust-par --out out-parameter-loss.par "$out" \
+    >out-parameter-loss.log 2>&1; then
+  echo 'native-only geometry was lost in .par export' >&2
+  exit 1
 fi
-echo 'ok 9 - retired ZIP output is refused without changing the destination'
+test ! -e out-parameter-loss.par || exit 1
+grep -q 'final screen angle/ratio' out-parameter-loss.log || exit 1
+echo 'ok 9 - incompatible .par export refuses to lose final frame'
 
-# An existing, validated ZIP-v1 destination migrates to JSON as well.
-cp "$zip_input" "$zip_roundtrip" || exit 1
-pexec $RUNCOLORSCREEN adjust-par --out "$zip_roundtrip" "$native" || exit 1
-cmp "$zip_roundtrip" "$native" || exit 1
-echo 'ok 10 - implicit overwrite of a recognized ZIP target uses native JSON'
+# The legacy parser may leave a linefeed after a CRLF terminator.
+python3 - <<'PY' || exit 1
+from pathlib import Path
+Path('out-parameter-crlf.par').write_bytes(b'screen_alignment_version: 1\nscreen_alignment_end\r\n')
+Path('out-parameter-vendor.par').write_bytes(b'screen_alignment_version: 1\nscreen_alignment_end\r\nother_vendor_metadata: retained\n')
+PY
+pexec $RUNCOLORSCREEN adjust-par --out out-parameter-crlf-normal.par out-parameter-crlf.par || exit 1
+pexec $RUNCOLORSCREEN adjust-par --out out-parameter-crlf.cspar out-parameter-crlf-normal.par || exit 1
+pexec $RUNCOLORSCREEN adjust-par --out out-parameter-crlf-roundtrip.par out-parameter-crlf.cspar || exit 1
+cmp out-parameter-crlf-normal.par out-parameter-crlf-roundtrip.par || exit 1
+echo 'ok 10 - legacy CRLF normalization is byte-stable through JSON'
 
-suffix_guard=out-parameter-json-suffix-guard.par
-rm -f "$suffix_guard"
-if $RUNCOLORSCREEN adjust-par --json-v2 --out "$suffix_guard" "$native" \
-    >out-parameter-json-suffix-guard.log 2>&1; then
-    echo "explicit JSON output accepted a legacy .par suffix" >&2
-    exit 1
+pexec $RUNCOLORSCREEN adjust-par --out out-parameter-vendor-keep.par out-parameter-vendor.par || exit 1
+grep -q 'other_vendor_metadata: retained' out-parameter-vendor-keep.par || exit 1
+echo 'ok 11 - legacy rewriting retains unknown extensions verbatim'
+
+if $RUNCOLORSCREEN adjust-par --out out-parameter-vendor.cspar out-parameter-vendor.par \
+    >out-parameter-vendor.log 2>&1; then
+  echo 'unknown metadata silently dropped on JSON conversion' >&2
+  exit 1
 fi
-test ! -e "$suffix_guard" || exit 1
-echo 'ok 11 - explicit JSON output requires a .cspar destination'
+test ! -e out-parameter-vendor.cspar || exit 1
+grep -q 'unrecognized trailing metadata' out-parameter-vendor.log || exit 1
+echo 'ok 12 - JSON conversion refuses unknown legacy metadata'
 
-# A legacy .par writer has no representation for the structured final frame.
-# Clear the independent photographic bounds so the negative test exercises
-# final_angle/final_ratio (not merely the existing image-area guard). Even a
-# deliberate --out to .par must refuse the loss before creating the target.
-guard_json=out-parameter-legacy-loss-guard.cspar
-guard_par=out-parameter-legacy-loss-guard.par
-rm -f "$guard_json" "$guard_par"
-python3 - "$native" "$guard_json" <<'PY' || exit 1
-import json
-import pathlib
-import sys
-state = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
-state["capture"]["image_area"] = {
-    "enabled": False, "rect": [0, 0, 0, 0]
+# Implicit replacement checks the entire schema, not the leading '{'.
+for kind in text empty malformed future incomplete unknown_field bad_type binary; do
+  python3 - "$unknown" "$kind" "$native" <<'PY' || exit 1
+from pathlib import Path
+import json,sys
+path=Path(sys.argv[1]);kind=sys.argv[2]
+raw={
+  'text':b'unknown format\n', 'empty':b'{}', 'malformed':b'{broken',
+  'future':b'{"format":"org.colorscreen.parameters","schema_version":999}',
+  'incomplete':b'{"format":"org.colorscreen.parameters","schema_version":2}',
+  'binary':b'PK\x03\x04unsupported format'
 }
-pathlib.Path(sys.argv[2]).write_text(
-    json.dumps(state, ensure_ascii=False, indent=2) + "\n",
-    encoding="utf-8",
-)
+if kind in ('unknown_field','bad_type'):
+  doc=json.loads(Path(sys.argv[3]).read_text(encoding='utf-8'))
+  if kind=='unknown_field':doc['capture']['future_key']=True
+  else:doc['capture']['gamma']='invalid'
+  raw=json.dumps(doc).encode('utf-8')
+else:raw=raw[kind]
+path.write_bytes(raw)
 PY
-if $RUNCOLORSCREEN adjust-par "$guard_json" --out "$guard_par" \
-    >out-parameter-legacy-loss-guard.log 2>&1; then
-    echo "legacy .par silently accepted unsupported final geometry" >&2
-    exit 1
-fi
-if test -e "$guard_par" ||
-   ! grep -q "final screen angle/ratio" out-parameter-legacy-loss-guard.log; then
-    echo "legacy .par guard failed to preserve nondefault final geometry" >&2
-    cat out-parameter-legacy-loss-guard.log >&2
-    exit 1
-fi
-echo 'ok 12 - legacy export refuses loss of native final geometry'
-
-# CSP load_csp accepts either CR or LF as an end-marker terminator. When a
-# source contains CRLF the CR can be consumed while the LF remains after the
-# end marker; whitespace-only residue must not be duplicated by the legacy
-# writer on some C stdio implementations (notably Windows clang64). A real
-# nonblank metadata extension must still be retained unchanged.
-crlf_input=out-parameter-crlf-input.par
-crlf_normal=out-parameter-crlf-normal.par
-crlf_json=out-parameter-crlf-native.cspar
-crlf_restored=out-parameter-crlf-restored.par
-crlf_with_extension=out-parameter-crlf-extension.par
-crlf_with_extension_normal=out-parameter-crlf-extension-normal.par
-rm -f "$crlf_input" "$crlf_normal" "$crlf_json" "$crlf_restored" \
-      "$crlf_with_extension" "$crlf_with_extension_normal"
-python3 - "$crlf_input" "$crlf_with_extension" <<'PY' || exit 1
-from pathlib import Path
-import sys
-header = b"screen_alignment_version: 1\nscreen_alignment_end\r\n"
-Path(sys.argv[1]).write_bytes(header)
-Path(sys.argv[2]).write_bytes(header + b"other_vendor_metadata: retained\n")
-PY
-pexec $RUNCOLORSCREEN adjust-par "$crlf_input" --out "$crlf_normal" || exit 1
-pexec $RUNCOLORSCREEN adjust-par --json-v2 --out "$crlf_json" "$crlf_normal" || exit 1
-pexec $RUNCOLORSCREEN adjust-par "$crlf_json" --out "$crlf_restored" || exit 1
-pexec $RUNCOLORSCREEN adjust-par "$crlf_with_extension" \
-    --out "$crlf_with_extension_normal" || exit 1
-python3 - "$crlf_normal" "$crlf_restored" \
-          "$crlf_with_extension_normal" <<'PY' || exit 1
-from pathlib import Path
-import sys
-canonical, restored, extension = (Path(p).read_bytes() for p in sys.argv[1:])
-if canonical != restored:
-    raise SystemExit("legacy CRLF -> normalized PAR -> JSON v2 -> PAR was not byte-stable")
-if not extension.endswith(b"\nother_vendor_metadata: retained\n"):
-    raise SystemExit("nonblank legacy metadata extension was lost")
-PY
-echo 'ok 13 - CRLF end-marker residue is normalized without dropping extensions'
-
-# A new .cspar defaults to JSON, even when the source is ZIP-v1. The two
-# conversion paths must produce identical canonical bytes and profile spots.
-implicit_native=out-parameter-implicit-v2.cspar
-rm -f "$implicit_native"
-pexec $RUNCOLORSCREEN adjust-par --out "$implicit_native" "$zip_input" || exit 1
-python3 - "$implicit_native" "$native" <<'PY' || exit 1
-import pathlib, sys, zipfile
-new, explicit = (pathlib.Path(p) for p in sys.argv[1:])
-if zipfile.is_zipfile(new) or not new.read_bytes().startswith(b"{"):
-    raise SystemExit("new .cspar implicitly used the old ZIP writer")
-if new.read_bytes() != explicit.read_bytes():
-    raise SystemExit("implicit JSON differs from explicit --json-v2")
-PY
-echo 'ok 14 - new .cspar defaults to complete native JSON v2'
-
-implicit_legacy_native=out-parameter-legacy-to-default-v2.cspar
-rm -f "$implicit_legacy_native"
-pexec $RUNCOLORSCREEN adjust-par --out "$implicit_legacy_native" \
-    "$srcdir/empty.par" || exit 1
-python3 - "$implicit_legacy_native" <<'PY' || exit 1
-import json, pathlib, sys, zipfile
-path = pathlib.Path(sys.argv[1])
-if zipfile.is_zipfile(path):
-    raise SystemExit("legacy -> new .cspar unexpectedly wrote ZIP")
-doc = json.loads(path.read_text(encoding="utf-8"))
-if doc.get("schema_version") != 2 or doc.get("profile", {}).get("spots") != []:
-    raise SystemExit("legacy -> new .cspar lost typed v2 state")
-PY
-echo 'ok 15 - new .cspar from legacy .par defaults to native JSON'
-
-# Unknown legacy extensions must not disappear in an implicit v2 conversion.
-unknown_json=out-parameter-unrecognized-metadata.cspar
-unknown_zip=out-parameter-unrecognized-metadata-compat.cspar
-rm -f "$unknown_json" "$unknown_zip"
-if $RUNCOLORSCREEN adjust-par --out "$unknown_json" \
-    "$crlf_with_extension" >out-parameter-unknown-metadata.log 2>&1; then
-    echo "implicit conversion discarded unknown legacy metadata" >&2
-    exit 1
-fi
-if test -e "$unknown_json" ||
-   ! grep -q "unrecognized trailing metadata" out-parameter-unknown-metadata.log; then
-    echo "unknown trailing metadata was not rejected safely" >&2
-    cat out-parameter-unknown-metadata.log >&2
-    exit 1
-fi
-# Unknown metadata in an old ZIP must also block in-place migration, with
-# the entire original archive retained. Do not recreate a ZIP writer fallback.
-python3 - "$zip_input" "$crlf_with_extension" "$unknown_zip" <<'PYTEST' || exit 1
-import pathlib, sys, zipfile
-old, legacy, target = sys.argv[1:]
-with zipfile.ZipFile(old) as source, zipfile.ZipFile(target, "w") as out:
-    out.writestr("manifest.json", source.read("manifest.json"))
-    out.writestr("state/legacy.par", pathlib.Path(legacy).read_bytes())
-PYTEST
-cp "$unknown_zip" "$unknown_zip.before" || exit 1
-if $RUNCOLORSCREEN adjust-par "$unknown_zip" \
-    >out-parameter-unknown-metadata.log 2>&1; then
-    echo "in-place ZIP migration discarded unknown metadata" >&2
-    exit 1
-fi
-cmp "$unknown_zip" "$unknown_zip.before" || exit 1
-echo 'ok 16 - unknown metadata refuses migration and preserves original ZIP bytes'
-
-# Validate full destinations, never authorize overwrite from a leading '{'.
-unknown_target=out-parameter-unknown-existing.cspar
-for fixture in text empty malformed future incomplete broken_zip unknown_field bad_type; do
-    python3 - "$unknown_target" "$fixture" "$native" <<'PYTEST' || exit 1
-from pathlib import Path
-import sys
-cases = {
-    "text": b"Unknown future format\n", "empty": b"{}", "malformed": b"{broken",
-    "future": b'{"format":"org.colorscreen.parameters","schema_version":999}',
-    "incomplete": b'{"format":"org.colorscreen.parameters","schema_version":2}',
-    "broken_zip": b"PK\x03\x04broken"
-}
-kind = sys.argv[2]
-if kind in ("unknown_field", "bad_type"):
-    import json
-    doc = json.loads(Path(sys.argv[3]).read_text(encoding="utf-8"))
-    if kind == "unknown_field":
-        doc["capture"]["future_setting"] = True
-    else:
-        doc["capture"]["gamma"] = "not-a-number"
-    data = json.dumps(doc).encode("utf-8")
-else:
-    data = cases[kind]
-Path(sys.argv[1]).write_bytes(data)
-PYTEST
-    cp "$unknown_target" "$unknown_target.before" || exit 1
-    if $RUNCOLORSCREEN adjust-par --out "$unknown_target" "$archive" \
-        >out-parameter-unknown-existing.log 2>&1; then
-        echo "implicit output replaced invalid .cspar: $fixture" >&2
-        exit 1
-    fi
-    grep -q "Refusing to replace unrecognized existing" \
-        out-parameter-unknown-existing.log || exit 1
-    cmp "$unknown_target" "$unknown_target.before" || exit 1
+  cp "$unknown" "$unknown.before" || exit 1
+  if $RUNCOLORSCREEN adjust-par --out "$unknown" "$native" \
+      >out-parameter-unknown.log 2>&1; then
+    echo "implicit overwrite accepted $kind" >&2; exit 1
+  fi
+  cmp "$unknown" "$unknown.before" || exit 1
+  grep -q 'Refusing to replace unrecognized existing' out-parameter-unknown.log || exit 1
 done
-# An explicit conversion still permits intentional replacement.
-pexec $RUNCOLORSCREEN adjust-par --json-v2 --out "$unknown_target" "$native" || exit 1
-cmp "$unknown_target" "$native" || exit 1
-echo 'ok 17 - full destination validation preserves invalid files; explicit conversion works'
+echo 'ok 13 - implicit saves preserve malformed, future and unsupported files'
 
-rm -f "$guard_json" "$guard_par" "$archive" "$native" "$native_out" "$zip_roundtrip" \
-      "$crlf_input" "$crlf_normal" "$crlf_json" "$crlf_restored" \
-      "$crlf_with_extension" "$crlf_with_extension_normal" \
-      "$implicit_native" "$implicit_legacy_native" "$unknown_json" \
-      "$unknown_zip" "$unknown_target" "out-parameter-unknown-metadata.log" \
-      "out-parameter-unknown-existing.log" "$unknown_zip.before" \
-      "$unknown_target.before" "$zip_input" "$suffix_guard" \
-      out-parameter-json-suffix-guard.log out-parameter-retired-zip.log
+pexec $RUNCOLORSCREEN adjust-par --json-v2 --out "$unknown" "$native" || exit 1
+cmp "$unknown" "$native" || exit 1
+echo 'ok 14 - explicit JSON conversion may replace an invalid destination'
+
+# A raw ZIP signature must not be silently accepted as a parameter file.
+python3 - <<'PY' || exit 1
+from pathlib import Path
+Path('out-parameter-nonexistent-zip.cspar').write_bytes(b'PK\x03\x04unsupported old parameter archive')
+PY
+if $RUNCOLORSCREEN adjust-par out-parameter-nonexistent-zip.cspar \
+    >out-parameter-nozip.log 2>&1; then
+  echo 'unsupported old parameter ZIP unexpectedly loaded' >&2; exit 1
+fi
+cmp out-parameter-nonexistent-zip.cspar out-parameter-nonexistent-zip.cspar || exit 1
+echo 'ok 15 - parameter ZIP archives are not supported'
+
+rm -f "$legacy" "$legacy_metadata" "$native" "$unicode" "$out" \
+      "$unknown" "$unknown.before" "$legacy_image" "$native_image" \
+      out-parameter-profile-restored.* out-parameter-format-refusal.log \
+      out-parameter-loss.log out-parameter-crlf* out-parameter-vendor* \
+      out-parameter-unknown.log out-parameter-nozip.log \
+      out-parameter-nonexistent-zip.cspar

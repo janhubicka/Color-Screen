@@ -298,11 +298,11 @@ void startWorkspaceChurnSmoke(ColorScreenApplication &app,
         }
         parameterFileProbe.setLoaded(
             QStringLiteral("/tmp/loaded.cspar"),
-            MainWindow::ParameterFileState::Format::Archive);
+            MainWindow::ParameterFileState::Format::JsonV2);
         if (parameterFileProbe.path != QStringLiteral("/tmp/loaded.cspar") ||
             parameterFileProbe.suggested ||
             parameterFileProbe.format !=
-                MainWindow::ParameterFileState::Format::Archive) {
+                MainWindow::ParameterFileState::Format::JsonV2) {
           fail(QStringLiteral(
               "Loaded parameter-file target lost its explicit archive format"));
           return;

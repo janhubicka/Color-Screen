@@ -12,6 +12,5 @@
     <file>icons/zoom-100.svg</file>
     <file>icons/zoom-fit.svg</file>
     <file>icons/mirror.svg</file>
-    <file alias="tests/parameter-v1.cspar">testdata/parameter-v1.cspar</file>
   </qresource>
 </RCC>

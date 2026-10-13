@@ -126,21 +126,18 @@ serialize_cli_profile_spot_postamble (const std::vector<point_t> &spots)
   return output.str ();
 }
 
-/* Load one user-supplied parameter filename through the shared legacy/archive
-   dispatch, then parse the ordinary CSP payload.  This keeps every CLI command
-   on the same content-based format semantics as the Qt frontend.  */
+/* Read either native JSON or historical .par without a ZIP intermediary.
+   All frontends share the native JSON codec and UTF-8 path handling. */
 static bool
 load_parameter_filename (const char *filename, scr_to_img_parameters *param,
                          scr_detect_parameters *dparam,
                          render_parameters *rparam,
                          solver_parameters *sparam, std::string *error,
-                         bool *is_archive = nullptr,
                          std::string *trailing_payload = nullptr,
                          bool *is_json_v2 = nullptr,
                          std::vector<point_t> *profile_spots = nullptr)
 {
-  // Native JSON files share .cspar with ZIP v1. Dispatch by content instead
-  // of passing JSON text to load_csp's legacy FILE* parser.
+  // Dispatch JSON by signature, then validate the complete typed document.
   if (parameter_json_v2_signature_p (filename))
     {
       scr_to_img_parameters g;
@@ -161,8 +158,6 @@ load_parameter_filename (const char *filename, scr_to_img_parameters *param,
         *sparam = std::move (solver);
       if (profile_spots)
         *profile_spots = std::move (spots);
-      if (is_archive)
-        *is_archive = true;
       if (is_json_v2)
         *is_json_v2 = true;
       if (trailing_payload)
@@ -173,17 +168,9 @@ load_parameter_filename (const char *filename, scr_to_img_parameters *param,
       return true;
     }
 
-  std::string open_error;
-  bool archive = false;
-  parameter_archive_manifest archive_manifest;
-  FILE *in = open_parameter_payload (filename, &archive, &open_error,
-                                     &archive_manifest);
+  FILE *in = open_parameter_legacy_file (filename, error);
   if (!in)
-    {
-      if (error)
-        *error = open_error;
-      return false;
-    }
+    return false;
 
   const char *parse_error = nullptr;
   const bool loaded
@@ -194,20 +181,6 @@ load_parameter_filename (const char *filename, scr_to_img_parameters *param,
       if (error)
         *error = parse_error ? parse_error : "invalid parameter data";
       return false;
-    }
-
-  if (archive)
-    {
-      if (rparam)
-        {
-          apply_parameter_archive_render_overrides (
-              archive_manifest.render_overrides, rparam);
-          apply_parameter_archive_image_area (archive_manifest.image_area,
-                                             rparam);
-        }
-      if (param)
-        apply_parameter_archive_geometry_final_frame (
-            archive_manifest.geometry_final_frame, param);
     }
 
   std::string trailing;
@@ -244,8 +217,6 @@ load_parameter_filename (const char *filename, scr_to_img_parameters *param,
       == std::string::npos)
     trailing.clear ();
 
-  if (is_archive)
-    *is_archive = archive;
   if (is_json_v2)
     *is_json_v2 = false;
   if (profile_spots)
@@ -257,7 +228,7 @@ load_parameter_filename (const char *filename, scr_to_img_parameters *param,
   return true;
 }
 
-/* Return whether FILENAME explicitly asks for the archive format.  */
+/* Return whether FILENAME has the native JSON parameter-file suffix. */
 static bool
 parameter_archive_suffix_p (const char *filename)
 {
@@ -1973,12 +1944,11 @@ analyze_scanner_blur (int argc, char **argv)
       printf ("Loading color screen parameters: %s\n", cspname);
       progress.resume_stdout ();
     }
-  bool input_archive = false;
   std::string input_trailing;
   std::string parameter_error;
   if (!load_parameter_filename (cspname, &param, &dparam, &rparam,
                                 &solver_param, &parameter_error,
-                                &input_archive, &input_trailing))
+                                &input_trailing))
     {
       progress.pause_stdout ();
       fprintf (stderr, "Cannot load %s: %s\n", cspname,
@@ -4497,7 +4467,7 @@ do_adjust_par (int argc, char **argv)
   render_parameters rparam;
   scr_detect_parameters dparam;
   struct solver_parameters solver_param;
-  bool input_archive = false, input_json_v2 = false;
+  bool input_json_v2 = false;
   std::string input_trailing;
   std::string parameter_error;
   std::vector<point_t> profile_spots;
@@ -4509,7 +4479,7 @@ do_adjust_par (int argc, char **argv)
 	}
       if (!load_parameter_filename (cspname, &param, &dparam, &rparam,
                                     &solver_param, &parameter_error,
-                                    &input_archive, &input_trailing,
+                                    &input_trailing,
                                     &input_json_v2, &profile_spots))
 	{
 	  fprintf (stderr, "Can not load %s: %s\n", cspname,
@@ -4541,13 +4511,10 @@ do_adjust_par (int argc, char **argv)
       fprintf (stderr, "JSON output requires a .cspar target; use --out\n");
       return 1;
     }
-  /* ZIP-v1 is import-only. In-place rewrites migrate it, including files
-     whose old names lack .cspar. An explicit legacy target remains legacy. */
-  const bool output_json_v2
-      = force_json_v2 || cspar_suffix
-        || (!explicit_parameter_output && input_archive);
+  /* New and existing .cspar files use only JSON; explicit .par remains legacy. */
+  const bool output_json_v2 = force_json_v2 || cspar_suffix;
 
-  // An explicit v1 -> v2 conversion must account for the GUI's profile-spot
+  // Conversion from legacy .par must account for the GUI's profile-spot
   // postamble. Unknown metadata is never discarded just to create JSON.
   if (output_json_v2 && !input_json_v2
       && !parse_parameter_profile_spots (

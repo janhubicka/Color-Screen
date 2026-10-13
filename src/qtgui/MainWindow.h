@@ -149,15 +149,15 @@ public:
   QString currentImageFile() const { return m_currentImageFile; }
 
   /** Output format for Save As. Automatic mode retains legacy .par targets;
-      new .cspar files and imported ZIP-v1 targets are saved as native JSON. */
+      new .cspar files use native JSON. The old ZIP parameter format is unsupported. */
   enum class ParameterSaveFormat {
     PreserveOrInfer,
     LegacyCsp,
     JsonV2
   };
 
-  /** Save FILENAME atomically. Imported ZIP-v1 becomes native JSON only
-      after success; failure preserves the target, dirty state and Undo. */
+  /** Save FILENAME atomically as JSON or compatible legacy .par.
+      Failure preserves the target, dirty state and Undo. */
   bool saveParametersToFile(
       const QString &fileName,
       ParameterSaveFormat requestedFormat = ParameterSaveFormat::PreserveOrInfer);
@@ -1028,7 +1028,7 @@ private:
       A suggested path is only a Save-As default and must never be overwritten
       without confirmation as though it had already been loaded/saved. */
   struct ParameterFileState {
-    enum class Format { LegacyCsp, Archive, JsonV2 };
+    enum class Format { LegacyCsp, JsonV2 };
 
     QString path;
     bool suggested = false;

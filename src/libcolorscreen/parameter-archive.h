@@ -14,66 +14,6 @@
 namespace colorscreen
 {
 
-/* Structured render fields that the legacy CSP mirror cannot represent.
-
-   PRESENT is false for legacy files and schema-v1 archives without the
-   render-overrides-v1 required feature. Three values remain authoritative
-   reconstruction inputs applied after parsing state/legacy.par. Schema v1
-   also requires historical OUTPUT_PROFILE and GAMUT_WARNING fields for
-   interoperability: validate them on import,
-   but never apply them as saved document state. Views and export requests
-   own those choices independently. */
-struct parameter_archive_render_overrides
-{
-  bool present = false;
-  bool ignore_infrared = false;
-  render_parameters::demosaiced_scaling_t demosaiced_scaling
-      = render_parameters::default_scaling;
-  xy_t observer_whitepoint = d50_white;
-  render_output_parameters::output_profile_t output_profile
-      = render_output_parameters::output_profile_sRGB;
-  luminosity_t output_gamma = -1;
-  bool gamut_warning = false;
-};
-
-/* Apply authoritative structured fields from OVERRIDES to RPARAM. */
-DLL_PUBLIC void
-apply_parameter_archive_render_overrides (
-    const parameter_archive_render_overrides &overrides,
-    render_parameters *rparam);
-
-/* Authoritative final-frame geometry omitted by the legacy CSP serializer.
-
-   PRESENT is false for plain CSP and earlier schema-v1 archives. An archive
-   advertising geometry-final-frame-v1 must provide both values. */
-struct parameter_archive_geometry_final_frame
-{
-  bool present = false;
-  coord_t final_angle = 90;
-  coord_t final_ratio = 1;
-};
-
-/* Apply a validated final-frame supplement after loading legacy CSP. */
-DLL_PUBLIC void
-apply_parameter_archive_geometry_final_frame (
-    const parameter_archive_geometry_final_frame &frame,
-    scr_to_img_parameters *param);
-
-/* Persist the inner photographic bounds separately from the physical-object
-   scan crop stored by legacy CSP. A missing required image-area-v1 feature
-   means that older files have no independent photographic image boundary. */
-struct parameter_archive_image_area
-{
-  bool present = false;
-  int_optional_image_area area;
-};
-
-
-/* Apply parsed photographic BOUNDS to RPARAM after successful legacy import. */
-DLL_PUBLIC void
-apply_parameter_archive_image_area (const parameter_archive_image_area &bounds,
-                                    render_parameters *rparam);
-
 /* Return false with a diagnostic if document parameters include saved values
    that the historical .par serializer cannot represent at all. Reject such
    output before truncating/replacing any destination rather than silently
@@ -84,42 +24,11 @@ legacy_csp_can_represent_parameters (
     const scr_to_img_parameters *geometry,
     const render_parameters *render, std::string *error);
 
-/* Parsed compatibility information from a Color-Screen parameter archive.  */
-struct parameter_archive_manifest
-{
-  int schema_version = 0;
-  std::string legacy_csp_path;
-  parameter_archive_render_overrides render_overrides;
-  parameter_archive_geometry_final_frame geometry_final_frame;
-  parameter_archive_image_area image_area;
-};
-
-/* Return true if UTF-8 host path NAME starts with a ZIP signature and may
-   therefore be a Color-Screen parameter archive. This is only format dispatch;
-   callers must still validate the archive with read_parameter_archive. */
-DLL_PUBLIC bool parameter_archive_signature_p (const char *name);
-
-/* Open UTF-8 host path NAME as a parameter payload stream.
-
-   Plain CSP text is opened directly. A ZIP signature is treated as a
-   Color-Screen archive and its validated schema-v1 legacy payload is copied to
-   a private temporary stream. The returned FILE* is positioned at byte zero and
-   belongs to the caller. IS_ARCHIVE, when non-null, reports which path was
-   taken. ERROR receives a diagnostic on failure. */
-DLL_PUBLIC FILE *open_parameter_payload (
-    const char *name, bool *is_archive, std::string *error,
-    parameter_archive_manifest *manifest = nullptr);
-
-/* Read and validate parameter archive at UTF-8 host path NAME.
-
-   On success copy the schema-v1 legacy CSP payload to LEGACY_CSP and, when
-   non-null, parsed manifest information to MANIFEST.  ERROR receives a
-   user-facing diagnostic on failure.  No archive entry is extracted to the
-   filesystem.  */
-DLL_PUBLIC bool
-read_parameter_archive (const char *name, std::string *legacy_csp,
-                        parameter_archive_manifest *manifest,
-                        std::string *error);
+/* Open a historical .par file at UTF-8 host path NAME for reading.
+   The returned FILE* belongs to the caller; ERROR receives a useful failure
+   diagnostic. ZIP parameter archives are no longer recognized or supported. */
+DLL_PUBLIC FILE *open_parameter_legacy_file (const char *name,
+                                              std::string *error);
 
 /* Parse the complete legacy profile-spots postamble TRAILING into SPOTS.
    Unknown metadata is rejected rather than lost when converting to JSON.
@@ -128,10 +37,9 @@ DLL_PUBLIC bool
 parse_parameter_profile_spots (const std::string &trailing,
                                std::vector<point_t> *spots, std::string *error);
 
-/* Validate UTF-8 path NAME as a supported JSON or ZIP-v1 parameter document.
-   This checks the full schema, embedded legacy state and profile metadata,
-   not merely a signature. No caller state or file is changed. ERROR explains
-   failures. Use this before an implicit overwrite of an existing .cspar. */
+/* Validate the full native JSON schema or legacy CSP payload before an
+   implicit overwrite. Neither malformed JSON nor unsupported formats are
+   treated as safe destinations. ERROR receives a diagnostic. */
 DLL_PUBLIC bool
 validate_parameter_document_file (const char *name, std::string *error);
 
@@ -189,7 +97,7 @@ read_parameter_json_v2_file (
 /* Atomically save one complete JSON v2 parameter file to UTF-8 path NAME.
    The existing sibling-staging and native replacement primitive preserves
    an older destination if any serialization, write or rename fails.
-   All current .cspar save paths use this writer; ZIP-v1 is import-only. */
+   All current .cspar save paths use this writer; historical .par files remain readable. */
 DLL_PUBLIC bool
 write_parameter_json_v2_file (
     const char *name, const scr_to_img_parameters &geometry,

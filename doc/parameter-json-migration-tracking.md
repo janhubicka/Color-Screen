@@ -1,22 +1,24 @@
 # Parameter JSON redesign: decisions, implementation and validation
 
-Status: **first implementation stage complete; semantic redesign planned**,
+Status: **ZIP removal in local validation; semantic redesign planned**,
 Color-Screen **2.0alpha**. Baseline: `31298ba4`.
-Decision date: 12 October 2026. This is the current implementation tracker;
+Decision updated: 13 October 2026 (all ZIP parameter support removed). This is the current implementation tracker;
 `parameter-json-v2-plan.md` is the historical v2 rollout record.
 
 ## Scope and non-negotiable invariants
 
-The unused ZIP-v1 parameter writer is retired. ZIP-v1 remains an import
-format, together with historical `.par` and native JSON v2. Opening never
-rewrites a source file. A successful Save migrates an imported ZIP `.cspar`
-to the current JSON representation. Failed serialization, validation or file
-replacement preserves the original bytes and the document's target/dirty state.
+The unused ZIP-v1 parameter format is **entirely removed**: no reader, writer,
+manifest, UI selection, recovery fallback, or compatibility fixture. The only
+supported input formats are historical plain-text `.par` and native JSON.
+Opening never rewrites a source file. Failed serialization, validation or
+file replacement preserves the original bytes and document target/dirty state.
+The ZIP-based `.csprj` stitching container is unrelated and remains supported.
 
 Legacy `.par` export remains available with the existing loss-prevention
 checks. Unknown vendor/postamble metadata must never disappear in conversion:
 refuse conversion, retain the old file, and explain the unsupported metadata.
-No version-specific ZIP output option remains in the application or CLI.
+The retired `--zip-v1` command-line flag reports an error without writing;
+there is no ZIP parameter-file encoding or decoding path.
 
 The semantic redesign will use **schema version 3**, not redefine schema 2.
 Until its complete codec, import mapping and tests are ready, the sole JSON
@@ -37,9 +39,9 @@ validation from CI. No beta/final release is authorized by this work.
 
 | ID | Requirement | Status | Implementation / acceptance evidence |
 | --- | --- | --- | --- |
-| JSON-001 | Remove ZIP-v1 writer, Save As entry and CLI output option | Implemented | Product archive encoder and ArchiveV1 save choice removed. Retired --zip-v1 explicitly errors without writing. Reader fixtures are independently constructed. |
-| JSON-002 | Migrate imported ZIP on next successful Save | Implemented, locally tested | CLI migration and document-lifecycle smoke pass; source bytes unchanged on Open/failed Save; format identity changes only after successful JSON replacement. |
-| JSON-003 | Validate implicitly overwritten destinations, not just signatures | Implemented, locally tested | Shared full validator rejects `{}`, malformed/future/incomplete/unknown-field/type-invalid JSON and corrupt ZIP. Core/CLI/Qt tests preserve bytes and target/Undo; explicit replacement still works. |
+| JSON-001 | Remove ZIP-v1 completely from parameter persistence | Implemented locally; CI pending | Delete archive reader, manifest structures, parser/writer, GUI format state, sidecar/recovery handling and ZIP test fixtures. Retired --zip-v1 errors without writing. `.csprj` stitching remains separate. |
+| JSON-002 | Delete obsolete ZIP migration paths | Implemented locally; CI pending | Only plain `.par` and JSON can be opened. Tests cover .par-to-JSON conversion, failed Save nonmutation and successful Save without ZIP format identity. |
+| JSON-003 | Validate implicitly overwritten destinations, not just signatures | Implemented, locally tested | Shared full validator rejects `{}`, malformed/future/incomplete/unknown-field/type-invalid JSON and unsupported binary content. Core/CLI/Qt tests preserve bytes and target/Undo; explicit replacement still works. |
 | JSON-004 | Writer/reader aggregate resource-budget agreement | Implemented, locally tested | Every component and full writer preflights the shared node/depth budget before publishing. Boundary/escaped-string/combined-collection tests plus an independent 10,000-tree value-count probe pass. Large real-project memory testing is still required. |
 | JSON-005 | Versioned semantic organization and naming | Planned | Complete v2-to-v3 field map below, native codec and single-current-writer dispatch; no persistent field left unmapped. |
 | JSON-006 | Explicit sentinels, units and coordinate conventions | Planned | Tagged input transfer; null absent bounds; inactive settings retained; audit pixel/screen/physical coordinate domains. |
@@ -49,7 +51,7 @@ validation from CI. No beta/final release is authorized by this work.
 | JSON-010 | Shared field descriptions and clear subsystem boundaries | Planned | Split legacy import, JSON codecs and atomic I/O; avoid three independent field vocabularies. |
 | JSON-011 | Authoritative schema and complete examples | Planned | Checked-in JSON Schema, valid default and rich fixtures; schema/core agreement and unknown-key tests. |
 | JSON-012 | Nested member coverage and field-rich diagnostics | Planned | Nondefault and inactive settings; full object/array paths in failures; don't equate legacy corpus coverage with full C++ coverage. |
-| JSON-013 | Historical corpus and typed-state equivalence | Current v2/ZIP retirement verified locally; v3 planned | All 128 `.par` fixtures round-trip byte-exactly with canonical JSON rewrites. Rich ZIP input, v2 components, grids and MTF tests pass. No schema-3 equivalence claim yet. |
+| JSON-013 | Historical corpus and typed-state equivalence | Native v2/legacy conversion validated locally; v3 planned | All 128 `.par` fixtures round-trip byte-exactly with canonical JSON rewrites on the previous tested revision. Current no-ZIP change must pass the same corpus and typed-state checks; no schema-3 equivalence claim yet. |
 | JSON-014 | Platform, sanitizer and real-project validation | Local Linux checks passed; full CI pending | GCC O2 checking core/CLI/Qt build; focused core, CLI, full document-lifecycle and workspace-churn smoke pass. Request [ci:all] on the review PR. Field testing remains a beta gate. |
 
 ## Target semantic organization (schema 3)
@@ -108,16 +110,16 @@ renderer ownership or changing numerical algorithms.
 
 ## Compatibility and rollout sequence
 
-1. Retire ZIP output and fix implicit-overwrite validation without changing
-   v2 field names. Preserve/expand independent reader fixtures and failure tests.
+1. Remove *all* ZIP-v1 parameter handling and fix implicit-overwrite
+   validation without changing v2 field names. Retain `.par` and JSON tests.
 2. Make aggregate writer budgets match the reader without allocating a second
-   large JSON tree just to count values. Keep ZIP manifest limits independent.
+   large JSON tree just to count values. No ZIP manifest remains.
 3. Complete the member/units audit and schema-3 field map. Implement all domains
    before switching the writer; current JSON-v2 remains a read-compatible import.
 4. Add IDs/groups and portable provenance with their editing/lifecycle support.
    Do not claim stability from regenerating IDs from array indices on each Save.
 5. Add schema, complete fixtures and cross-version equivalence tests, then switch
-   GUI/CLI/recovery atomically to one current writer. Keep old reader fixtures.
+   GUI/CLI/recovery atomically to one current writer. Retain JSON-v2 and `.par` import tests.
 6. Full platform/sanitizer CI and operator field validation precede beta.
 
 ## Validation log
@@ -131,22 +133,36 @@ renderer ownership or changing numerical algorithms.
 - Focused core: **11/11 groups pass** (`parameter_archive`,
   `parameter_json_budget`, eight `json_v2_*` component/full-document groups,
   and `legacy_csp_representability`).
-- CLI integration: **17/17 TAP cases pass**, including independent ZIP imports,
-  native rendering parity, retired-output refusal, malformed/future/unknown-key
+- First-stage CLI integration: **17/17 TAP cases passed** before deleting ZIP import,
+  including rendering parity, retired-output refusal, malformed/future/unknown-key
   destinations, explicit replacement, Unicode paths and unknown postamble guards.
 - Corpus: **128/128** normalized `.par` -> JSON -> `.par` byte comparisons and
   canonical JSON rewrites pass. No original fixture is rewritten.
-- Qt offscreen: the full **document-lifecycle** probe passes, including old ZIP
-  import, failed Save preserving original bytes/target/Undo, successful migration,
-  unknown destination refusal and recovery. The full **workspace-churn** probe
-  passes without skipping its analysis phases.
+- First-stage Qt offscreen **document-lifecycle** and **workspace-churn** probes
+  passed; the new no-ZIP edition replaces the ZIP migration probes with
+  legacy `.par` and JSON lifecycle, failed Save nonmutation and recovery checks.
 - The standalone resource-count probe also agrees with an independent Python
   JSON-tree counter for **10,000** deterministically generated documents,
   accepting their exact count and rejecting a budget one below it.
 - `make dist` succeeds. Packaging is checked for this tracker, the internal
-  budget header and immutable embedded ZIP import fixture; no product ZIP
-  writer is reinstated for tests.
+  budget header. ZIP parameter fixtures are removed rather than regenerated.
 - These are local correctness checks, not a claim of a completed sanitizer,
   macOS, Windows or full `make distcheck` run on the review commit.
 - No claim that the semantic schema-3 redesign is complete merely because
   version-2 corpus tests pass.
+
+## 13 October 2026: no-ZIP continuation
+
+- User confirmed ZIP-v1 was never used: **no compatibility reader is needed**.
+  Previous decisions and first-stage tests involving ZIP are historical, not
+  part of the supported input contract.
+- Library removes all ZIP parameter manifest structures, archive dispatch and
+  archive parsing. GUI saves/loads track only legacy `.par` versus JSON-v2;
+  sidecars and recovery obey the same rule. Existing stitch-project ZIP is
+  unrelated and must remain functional.
+- Replace fixed ZIP-reader tests with independent `.par` import, JSON format,
+  corrupt/unsupported binary, metadata preservation and atomic-write tests.
+- This follow-up is separate from the upcoming schema-3 renaming and the full
+  nested persistent-member audit. Release remains 2.0alpha.
+- Exact updated commit and CI results are to be recorded after publication;
+  do not report the earlier PR-head results as validation of this follow-up.
