@@ -1,6 +1,6 @@
 # Parameter JSON redesign: decisions, implementation and validation
 
-Status: **ZIP removal in local validation; semantic redesign planned**,
+Status: **ZIP-v1 parameter support removed on PR #549; semantic redesign planned**,
 Color-Screen **2.0alpha**. Baseline: `31298ba4`.
 Decision updated: 13 October 2026 (all ZIP parameter support removed). This is the current implementation tracker;
 `parameter-json-v2-plan.md` is the historical v2 rollout record.
@@ -39,8 +39,8 @@ validation from CI. No beta/final release is authorized by this work.
 
 | ID | Requirement | Status | Implementation / acceptance evidence |
 | --- | --- | --- | --- |
-| JSON-001 | Remove ZIP-v1 completely from parameter persistence | Implemented locally; CI pending | Delete archive reader, manifest structures, parser/writer, GUI format state, sidecar/recovery handling and ZIP test fixtures. Retired --zip-v1 errors without writing. `.csprj` stitching remains separate. |
-| JSON-002 | Delete obsolete ZIP migration paths | Implemented locally; CI pending | Only plain `.par` and JSON can be opened. Tests cover .par-to-JSON conversion, failed Save nonmutation and successful Save without ZIP format identity. |
+| JSON-001 | Remove ZIP-v1 completely from parameter persistence | Committed on PR #549; CI pending | Delete archive reader, manifest structures, parser/writer, GUI format state, sidecar/recovery handling and ZIP test fixtures. Retired --zip-v1 errors without writing. `.csprj` stitching remains separate. |
+| JSON-002 | Delete obsolete ZIP migration paths | Committed on PR #549; CI pending | Only plain `.par` and JSON can be opened. Tests cover .par-to-JSON conversion, failed Save nonmutation and successful Save without ZIP format identity. |
 | JSON-003 | Validate implicitly overwritten destinations, not just signatures | Implemented, locally tested | Shared full validator rejects `{}`, malformed/future/incomplete/unknown-field/type-invalid JSON and unsupported binary content. Core/CLI/Qt tests preserve bytes and target/Undo; explicit replacement still works. |
 | JSON-004 | Writer/reader aggregate resource-budget agreement | Implemented, locally tested | Every component and full writer preflights the shared node/depth budget before publishing. Boundary/escaped-string/combined-collection tests plus an independent 10,000-tree value-count probe pass. Large real-project memory testing is still required. |
 | JSON-005 | Versioned semantic organization and naming | Planned | Complete v2-to-v3 field map below, native codec and single-current-writer dispatch; no persistent field left unmapped. |
@@ -164,5 +164,10 @@ renderer ownership or changing numerical algorithms.
   corrupt/unsupported binary, metadata preservation and atomic-write tests.
 - This follow-up is separate from the upcoming schema-3 renaming and the full
   nested persistent-member audit. Release remains 2.0alpha.
-- Exact updated commit and CI results are to be recorded after publication;
-  do not report the earlier PR-head results as validation of this follow-up.
+- No-ZIP removal was published in commit `c8a83afaa0feaf6016f7ed50c859c0af316550f1`
+  on draft PR #549. Its initial workflow runs reported `action_required`
+  (not test passes); refresh CI with an ordinary contributor-authored push.
+  Track outcomes against the new exact head revision.
+- The previous PR-head platform/sanitizer results do not validate the no-ZIP
+  commit. Do not label schema 3 complete or promote to beta until its typed
+  codecs, field audit and CI are ready.
