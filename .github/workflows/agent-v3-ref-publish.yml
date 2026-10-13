@@ -1,0 +1,71 @@
+name: Agent parameter-v3 reference publication
+on:
+  push:
+    branches: [agent/json-migration-build-transport]
+    paths: [.github/workflows/agent-v3-ref-publish.yml]
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verify exact reference data and update feature branch
+        run: |
+          set -eu
+          python3 - <<'PY'
+          import base64, hashlib, json, lzma
+          from pathlib import Path
+          encoded = ''.join(Path(f'.agent-transport/v3-ref20261013-{i:02}.b64').read_text().strip() for i in range(1, 8))
+          blob = base64.b64decode(encoded, validate=True)
+          assert hashlib.sha256(blob).hexdigest() == '6e8a866cf2e4a426e4b377c9897be3d7a6b4c2d9169aa6ade358bc92582a0076'
+          payload = json.loads(lzma.decompress(blob))
+          assert payload['expected_parent'] == 'b5934b8949583235555a946a61d52f1fe3d32c25'
+          assert len(payload['files']) == 8
+          for file in payload['files']:
+              assert file['path'] in {
+                  'testsuite/parameter-json-v3-reference.py',
+                  'testsuite/check-parameter-v3-reference.py',
+                  'testsuite/parameter-v3-reference.test',
+                  'doc/parameter-json-v3-reference.md',
+                  'Makefile.am', 'Makefile.in',
+                  'testsuite/Makefile.am', 'testsuite/Makefile.in'
+              }
+          Path('/tmp/verified-reference.json').write_text(json.dumps(payload))
+          print('Verified schema-v3 test source:', len(payload['files']), 'files')
+          PY
+          expected=b5934b8949583235555a946a61d52f1fe3d32c25
+          ref=refs/heads/agent/parameter-json-v3-reference
+          actual=$(git ls-remote --heads origin "$ref" | cut -f1)
+          test "$actual" = "$expected" || { echo "Branch moved: $actual"; exit 1; }
+          git fetch origin "$ref"
+          git checkout -B v3-reference FETCH_HEAD
+          python3 - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+          d=json.loads(Path('/tmp/verified-reference.json').read_text())
+          for file in d['files']:
+              p=Path(file['path'])
+              if file['mode']=='create':
+                  assert not p.exists(), 'target already exists: '+str(p)
+                  content=file['content']
+              else:
+                  assert file['mode']=='update', file['mode']
+                  assert hashlib.sha256(p.read_bytes()).hexdigest()==file['old_hash'], 'unexpected base: '+str(p)
+                  content=p.read_text()
+                  for source, replacement in file['subs']:
+                      assert content.count(source)==1, 'missing or ambiguous anchor: '+str(p)
+                      content=content.replace(source,replacement)
+              assert hashlib.sha256(content.encode('utf-8')).hexdigest()==file['new_hash'], 'invalid output: '+str(p)
+              p.write_text(content)
+              print('Verified',p, len(content))
+          PY
+          git add -A -- Makefile.am Makefile.in doc/parameter-json-v3-reference.md testsuite/Makefile.am testsuite/Makefile.in testsuite/parameter-json-v3-reference.py testsuite/check-parameter-v3-reference.py testsuite/parameter-v3-reference.test
+          git diff --cached --check
+          git diff --cached --stat
+          git config user.name 'Color-Screen agent'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'parameters: add reversible schema-v3 reference and 128-file field audit' -m 'Keep production .cspar writer and readers on schema v2. A strict external reference mapping documents semantic ownership, typed sentinels, units, stable MTF IDs and explicit groups. Automake test uses the actual C++ v2 writer across 128 legacy fixtures plus rich provenance, disabled options, reorder and unknown-field rejection cases. Track remaining native codec, path rebasing and GUI lifetime work before version switching.'
+          git push origin "HEAD:$ref"
