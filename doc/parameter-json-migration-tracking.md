@@ -47,7 +47,7 @@ validation from CI. No beta/final release is authorized by this work.
 | JSON-006 | Explicit sentinels, units and coordinate conventions | Reference prototype tested; native codec planned | Tagged input transfer; null absent bounds; inactive settings retained; audit pixel/screen/physical coordinate domains. |
 | JSON-007 | Stable MTF record identity and explicit capture groups | Reference prototype tested; C++/Qt lifetime model planned | IDs survive load/edit/save; reordering and insertion cannot change selection or group relationships; v2 adjacency importer. |
 | JSON-008 | Named heterogeneous measurement metadata | Reference prototype tested; native codec planned | Named edge quality and source/ROI, compact homogeneous samples with explicit unit convention. |
-| JSON-009 | Portable reference provenance | Reference audit and tests; native implementation planned | V3 prototype models absent sources with null, validates absolute versus parameter-relative path bases (including Windows paths), and rejects contradictory availability flags. Native Save As rebasing and GUI lifecycle remain unimplemented. |
+| JSON-009 | Portable reference provenance | Reference audit and tests; native implementation planned | V3 prototype models absent sources with null, validates absolute versus parameter-relative path bases, rejects contradictory availability flags, and tests an in-memory POSIX/Windows Save As path rebase. Native C++ Save As and GUI lifecycle remain unimplemented. |
 | JSON-010 | Shared field descriptions and clear subsystem boundaries | Planned | Split legacy import, JSON codecs and atomic I/O; avoid three independent field vocabularies. |
 | JSON-011 | Authoritative schema and complete examples | Planned | Checked-in JSON Schema, valid default and rich fixtures; schema/core agreement and unknown-key tests. |
 | JSON-012 | Nested member coverage and field-rich diagnostics | Planned | Nondefault and inactive settings; full object/array paths in failures; don't equate legacy corpus coverage with full C++ coverage. |
@@ -204,8 +204,9 @@ renderer ownership or changing numerical algorithms.
 - Stacked draft PR #551 adds absent-source semantics, cross-platform path-base
   validation and availability/crop/migration-flag integrity tests. Local
   checking-enabled core/CLI runs pass 128/128 legacy fixture mappings and the
-  new malformed-data cases. This is reference-level evidence, not a native
-  C++ schema-3 codec or a Windows/macOS sanitizer result.
+  new malformed-data cases, including POSIX/Windows Save As rebasing in memory.
+  This is reference-level evidence, not a native C++ schema-3 codec or a
+  Windows/macOS sanitizer result.
 - Before promoting schema 3, implement persistent record/group IDs in the
   Qt-free core and preserve them through edits and Save/Save As, including
   source path rebasing and migration-failure atomicity. Never infer stable
