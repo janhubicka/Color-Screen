@@ -10333,7 +10333,12 @@ test_parameter_legacy_import ()
   if (in)
     fclose (in);
   ok = ok && render.gamma == (luminosity_t)1.7;
-  std::remove (path.c_str ());
+  /* NAME is a UTF-8 path.  std::remove's narrow Windows spelling uses the
+     system code page and can fail to delete this perfectly valid file.  */
+  std::error_code remove_error;
+  if (!std::filesystem::remove (std::filesystem::u8path (path), remove_error)
+      || remove_error)
+    return false;
   FILE *missing = open_parameter_legacy_file (path.c_str (), &error);
   if (missing)
     fclose (missing);
