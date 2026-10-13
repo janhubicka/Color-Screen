@@ -28,13 +28,24 @@ def say(message: str) -> None:
 
 
 def corpus_files(root: Path) -> list[Path]:
-    """Find every source .par in testsuite and examples, recursively."""
+    """Find source .par fixtures, excluding generated testsuite outputs.
+
+    The testsuite writes out-* and out2-* files in its build directory.
+    In an in-tree build this is also the source fixture directory, so a prior
+    or concurrent test must not change the set of inputs being validated.
+    Examples do not use the testsuite output naming convention.
+    """
     return sorted(
         (
             path
             for directory in (root / "testsuite", root / "examples")
             for path in directory.rglob("*")
-            if path.is_file() and path.suffix.lower() == ".par"
+            if path.is_file()
+            and path.suffix.lower() == ".par"
+            and not (
+                directory.name == "testsuite"
+                and path.name.startswith(("out-", "out2-"))
+            )
         ),
         key=lambda path: path.relative_to(root).as_posix(),
     )
