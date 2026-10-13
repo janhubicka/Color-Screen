@@ -151,6 +151,47 @@ def main() -> int:
     invalid["color"]["viewing"]["display_profile"] = "sRGB"
     check_raises(lambda: module.downgrade_v3(invalid), "display profile silently persisted")
     print("# Unknown-field traps passed")
+
+    # Empty source filenames mean missing provenance, not a relative path
+    # naming the current parameter-file directory.
+    no_source = deepcopy(rich)
+    no_source["sharpness"]["mtf"]["measurements"][1]["source_filename"] = ""
+    upgraded_no_source = module.upgrade_v2(no_source)
+    assert upgraded_no_source["calibration"]["capture"]["mtf"]["measurements"][1]["source"]["path"] is None
+    assert module.downgrade_v3(upgraded_no_source) == no_source
+
+    def malformed_v3(mutator):
+        candidate = module.upgrade_v2(rich)
+        mutator(candidate)
+        check_raises(lambda: module.downgrade_v3(candidate),
+                     "malformed v3 provenance/status accepted")
+
+    def wrong_base(doc):
+        # The first source is Windows-absolute even when validated on Unix.
+        doc["calibration"]["capture"]["mtf"]["measurements"][0]["source"]["path"]["base"] = "parameter_file"
+    malformed_v3(wrong_base)
+
+    def empty_path(doc):
+        doc["calibration"]["capture"]["mtf"]["measurements"][0]["source"]["path"]["value"] = ""
+    malformed_v3(empty_path)
+
+    def wrong_status(doc):
+        doc["calibration"]["capture"]["mtf"]["measurements"][0]["source"]["roi"]["width_px"] = 0
+    malformed_v3(wrong_status)
+
+    def wrong_legacy_flag(doc):
+        doc["calibration"]["capture"]["mtf"]["legacy_first_same_capture"] = "false"
+    malformed_v3(wrong_legacy_flag)
+
+    def bad_crop(doc):
+        doc["capture"]["bounds"]["photograph"]["width_px"] = 0
+    malformed_v3(bad_crop)
+
+    corrupt = deepcopy(rich)
+    corrupt["sharpness"]["mtf"]["measurements"][0]["same_capture"] = "false"
+    check_raises(lambda: module.upgrade_v2(corrupt),
+                 "nonboolean MTF same_capture accepted")
+    print("# Source-path, availability, crop, and migration-flag integrity passed")
     return 0
 
 
