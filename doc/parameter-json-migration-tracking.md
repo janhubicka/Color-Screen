@@ -1,6 +1,6 @@
 # Parameter JSON redesign: decisions, implementation and validation
 
-Status: **ZIP-v1 parameter support removed on PR #549; semantic redesign planned**,
+Status: **ZIP-v1 removed and merged; schema-3 reference audited, native codec pending**,
 Color-Screen **2.0alpha**. Baseline: `31298ba4`.
 Decision updated: 13 October 2026 (all ZIP parameter support removed). This is the current implementation tracker;
 `parameter-json-v2-plan.md` is the historical v2 rollout record.
@@ -39,20 +39,20 @@ validation from CI. No beta/final release is authorized by this work.
 
 | ID | Requirement | Status | Implementation / acceptance evidence |
 | --- | --- | --- | --- |
-| JSON-001 | Remove ZIP-v1 completely from parameter persistence | Committed on PR #549; CI pending | Delete archive reader, manifest structures, parser/writer, GUI format state, sidecar/recovery handling and ZIP test fixtures. Retired --zip-v1 errors without writing. `.csprj` stitching remains separate. |
-| JSON-002 | Delete obsolete ZIP migration paths | Committed on PR #549; CI pending | Only plain `.par` and JSON can be opened. Tests cover .par-to-JSON conversion, failed Save nonmutation and successful Save without ZIP format identity. |
+| JSON-001 | Remove ZIP-v1 completely from parameter persistence | Merged PR #549; platform CI passed | Delete archive reader, manifest structures, parser/writer, GUI format state, sidecar/recovery handling and ZIP test fixtures. Retired --zip-v1 errors without writing. `.csprj` stitching remains separate. |
+| JSON-002 | Delete obsolete ZIP migration paths | Merged PR #549; platform CI passed | Only plain `.par` and JSON can be opened. Tests cover .par-to-JSON conversion, failed Save nonmutation and successful Save without ZIP format identity. |
 | JSON-003 | Validate implicitly overwritten destinations, not just signatures | Implemented, locally tested | Shared full validator rejects `{}`, malformed/future/incomplete/unknown-field/type-invalid JSON and unsupported binary content. Core/CLI/Qt tests preserve bytes and target/Undo; explicit replacement still works. |
 | JSON-004 | Writer/reader aggregate resource-budget agreement | Implemented, locally tested | Every component and full writer preflights the shared node/depth budget before publishing. Boundary/escaped-string/combined-collection tests plus an independent 10,000-tree value-count probe pass. Large real-project memory testing is still required. |
-| JSON-005 | Versioned semantic organization and naming | Planned | Complete v2-to-v3 field map below, native codec and single-current-writer dispatch; no persistent field left unmapped. |
-| JSON-006 | Explicit sentinels, units and coordinate conventions | Planned | Tagged input transfer; null absent bounds; inactive settings retained; audit pixel/screen/physical coordinate domains. |
-| JSON-007 | Stable MTF record identity and explicit capture groups | Planned | IDs survive load/edit/save; reordering and insertion cannot change selection or group relationships; v2 adjacency importer. |
-| JSON-008 | Named heterogeneous measurement metadata | Planned | Named edge quality and source/ROI, compact homogeneous samples with explicit unit convention. |
+| JSON-005 | Versioned semantic organization and naming | Reversible reference prototype; C++ codec planned | Complete v2-to-v3 field map below, native codec and single-current-writer dispatch; no persistent field left unmapped. |
+| JSON-006 | Explicit sentinels, units and coordinate conventions | Reference prototype tested; native codec planned | Tagged input transfer; null absent bounds; inactive settings retained; audit pixel/screen/physical coordinate domains. |
+| JSON-007 | Stable MTF record identity and explicit capture groups | Reference prototype tested; C++/Qt lifetime model planned | IDs survive load/edit/save; reordering and insertion cannot change selection or group relationships; v2 adjacency importer. |
+| JSON-008 | Named heterogeneous measurement metadata | Reference prototype tested; native codec planned | Named edge quality and source/ROI, compact homogeneous samples with explicit unit convention. |
 | JSON-009 | Portable reference provenance | Planned | Relative paths resolved against document location, rebased on Save As, old absolute paths accepted; absent sources do not invalidate stored curves. |
 | JSON-010 | Shared field descriptions and clear subsystem boundaries | Planned | Split legacy import, JSON codecs and atomic I/O; avoid three independent field vocabularies. |
 | JSON-011 | Authoritative schema and complete examples | Planned | Checked-in JSON Schema, valid default and rich fixtures; schema/core agreement and unknown-key tests. |
 | JSON-012 | Nested member coverage and field-rich diagnostics | Planned | Nondefault and inactive settings; full object/array paths in failures; don't equate legacy corpus coverage with full C++ coverage. |
-| JSON-013 | Historical corpus and typed-state equivalence | Native v2/legacy conversion validated locally; v3 planned | All 128 `.par` fixtures round-trip byte-exactly with canonical JSON rewrites on the previous tested revision. Current no-ZIP change must pass the same corpus and typed-state checks; no schema-3 equivalence claim yet. |
-| JSON-014 | Platform, sanitizer and real-project validation | Local Linux checks passed; full CI pending | GCC O2 checking core/CLI/Qt build; focused core, CLI, full document-lifecycle and workspace-churn smoke pass. Request [ci:all] on the review PR. Field testing remains a beta gate. |
+| JSON-013 | Historical corpus and typed-state equivalence | v2/legacy tested; v3 reference 128/128 tested; native v3 planned | All 128 `.par` fixtures round-trip byte-exactly with canonical JSON rewrites on the previous tested revision. Current no-ZIP change must pass the same corpus and typed-state checks; no schema-3 equivalence claim yet. |
+| JSON-014 | Platform, sanitizer and real-project validation | No-ZIP PR #549 full CI passed; v3 reference CI pending | GCC O2 checking core/CLI/Qt build; focused core, CLI, full document-lifecycle and workspace-churn smoke pass. Request [ci:all] on the review PR. Field testing remains a beta gate. |
 
 ## Target semantic organization (schema 3)
 
@@ -171,3 +171,28 @@ renderer ownership or changing numerical algorithms.
 - The previous PR-head platform/sanitizer results do not validate the no-ZIP
   commit. Do not label schema 3 complete or promote to beta until its typed
   codecs, field audit and CI are ready.
+
+## 13 October 2026: schema-3 reference validation (PR #550)
+
+- The no-ZIP cleanup was merged to main in PR #549 (merge commit
+  `9cadfbc9757f30c527f8743007919d18251570d0`). Ubuntu, macOS,
+  Windows GCC/Clang and the sanitizer matrix passed on the exact PR head;
+  the Windows AddressSanitizer multi-window smoke required a successful rerun.
+- A separate **nonshipping** Python reference translator and design note are
+  introduced in PR #550. They map all existing schema-2 sections to a
+  semantically grouped schema-3 proposal and back; persistent legacy state is
+  never interpreted as display/runtime configuration.
+- Local Debian 13, GCC 14, checking-enabled C++ CLI: all **128/128** checked-in
+  legacy .par fixtures were serialized with the actual native-v2 writer, then
+  round-tripped v2 -> prototype v3 -> v2 with exact parsed-JSON equality.
+  The new TAP wrapper passed (1/1), and `make dist` packaged the reference
+  mapping, tests and documentation.
+- Rich regression checks cover optional bounds, explicit input gamma/strip
+  sentinels, final-frame geometry, inactive sharpen settings, Unicode MTF
+  provenance, selected measurement IDs, capture-group reordering and
+  deterministic rejection of unknown keys, duplicate/dangling IDs or
+  nonrepresentable discontiguous groups.
+- Prototype-generated MTF record IDs must **not** be confused with lifetime-
+  stable native identities. The final C++/Qt model, Save As path rebasing,
+  schemas/examples and native-v3 writer/readers are still pending. All
+  production .cspar output remains native JSON schema version **2**.
