@@ -1,0 +1,84 @@
+name: Agent no-ZIP parameter cleanup publication
+on:
+  push:
+    branches: [agent/json-migration-build-transport]
+    paths: [.github/workflows/agent-nozip-publish.yml]
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verify delta and its complete payload
+        run: |
+          python3 - <<'PY'
+          import base64
+          import hashlib
+          import json
+          import lzma
+          from pathlib import Path
+          b64 = ''.join(Path('.agent-transport/nozip-20261013-%02d.b64' % i).read_text().strip()
+                        for i in range(1, 5))
+          packed = base64.b64decode(b64, validate=True)
+          assert hashlib.sha256(packed).hexdigest() == '68d3ce62cfcf8339f978b6a3515d0bcabf6c8fc3e1bea22700250deeabeadad3'
+          payload = lzma.decompress(packed)
+          doc = json.loads(payload)
+          assert doc['expected_parent'] == 'e2f8db5f7687aa0d1aa6f68ae4d45e8a8589ea64'
+          assert len(doc['files']) == 19
+          Path('/tmp/nozip-verified.json').write_bytes(payload)
+          print('Verified compressed delta:', len(packed), 'bytes,', len(doc['files']), 'files')
+          PY
+      - name: Publish to existing draft PR branch, without force
+        env:
+          EXPECTED: e2f8db5f7687aa0d1aa6f68ae4d45e8a8589ea64
+        run: |
+          set -eu
+          target=refs/heads/agent/json-save-cleanup
+          actual=$(git ls-remote --heads origin "$target" | cut -f1)
+          test "$actual" = "$EXPECTED" || { echo "PR head moved, refusing to overwrite: $actual"; exit 1; }
+          git fetch origin "$target"
+          git checkout -B nozip-review FETCH_HEAD
+          python3 - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path, PurePosixPath
+          doc = json.loads(Path('/tmp/nozip-verified.json').read_bytes())
+          for entry in doc['files']:
+              name = entry['path']
+              path = PurePosixPath(name)
+              assert not path.is_absolute() and '..' not in path.parts
+              assert path.parts[0] not in ('.git', '.github', '.agent-transport')
+              target = Path(name)
+              old = target.read_bytes() if target.exists() else None
+              sha = hashlib.sha256(old).hexdigest() if old is not None else None
+              assert sha == entry['was'], 'Base file mismatch: ' + name
+              if entry.get('delete'):
+                  assert entry['now'] is None and old is not None
+                  target.unlink()
+                  continue
+              assert old is not None
+              blocks = []
+              for piece in entry['parts']:
+                  if isinstance(piece, list):
+                      start, end = piece
+                      assert isinstance(start, int) and isinstance(end, int)
+                      assert 0 <= start <= end <= len(old)
+                      blocks.append(old[start:end])
+                  else:
+                      assert set(piece) == {'literal'}
+                      blocks.append(piece['literal'].encode('utf-8'))
+              new = b''.join(blocks)
+              assert hashlib.sha256(new).hexdigest() == entry['now'], 'Output mismatch: ' + name
+              target.write_bytes(new)
+              print('Verified', name, len(new), 'bytes')
+          PY
+          git add -A -- NEWS doc/parameter-json-migration-tracking.md src/colorscreen src/libcolorscreen src/qtgui testsuite
+          git diff --cached --check
+          git diff --cached --stat
+          git config user.name 'Color-Screen agent'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'parameters: remove unused ZIP-v1 reader and all parameter ZIP state' -m 'Only legacy .par and native JSON remain supported. Delete the ZIP manifest/parser, Qt format and recovery branching, and obsolete reader fixtures; update CLI and GUI tests and the migration tracker. The ZIP library remains available for stitched-image project loading. Preserve transactionality, atomic saves and the 128-file legacy corpus.'
+          git push origin "HEAD:$target"
