@@ -91,15 +91,15 @@ each document has independent:
 - current image filename, one `ParameterFileState` (path + suggested/loaded
   status + physical LegacyCsp/Archive/JsonV2 format), and a UUID-named recovery
   directory. A fresh target defaults to JsonV2; explicitly loaded or
-  suggested legacy and ZIP-v1 targets retain their original format. Never let a suggested parameter filename
+  suggested legacy targets retain their original format. ZIP-v1 is import-only
+  and migrates to native JSON on the next successful Save. Never let a suggested parameter filename
   become an overwrite target without an explicit save/load transition. An
-  established target must preserve
-  its loaded format on ordinary Save. Legacy CSP writes stage the complete FILE*
-  payload through `qtgui_io::saveStdioAtomically()`. Compatible ZIP-v1 `.cspar`
-  writes serialize the CSP+Qt payload and use `write_parameter_payload_file()`;
-  native JSON-v2 `.cspar` writes use `write_parameter_json_v2_file()` directly
-  on typed processing state, without a legacy mirror. Both core writers stage
-  a sibling file and atomically replace the target
+  established legacy or JSON target preserves its format on ordinary Save;
+  an imported ZIP target becomes JSON only after a successful atomic write.
+  Legacy CSP writes use `qtgui_io::saveStdioAtomically()`; native JSON `.cspar`
+  writes use `write_parameter_json_v2_file()` directly on typed state with
+  `write_parameter_text_file()` as their format-neutral atomic primitive.
+  There is no ZIP encoder. Writers stage a sibling file and replace the target
   using the platform-native rename primitive already exercised by core Unicode
   and failure-preservation tests. A failed serializer/write/replace must leave
   any previous usable target unchanged. Archive state includes independently
@@ -126,7 +126,14 @@ transactionally; a schema-v1 ZIP and legacy CSP still use their existing
 readers. `ParameterFileState::Format::JsonV2` is a *physical file identity*,
 not a document processing property: ordinary Save never changes JSON v2 to
 ZIP v1 just because both paths end with .cspar. Save As offers native JSON
-v2 first (the default for new targets), compatible ZIP v1 and legacy .par.
+parameters first (the default for all .cspar output) and legacy .par.
+The enum value `Archive` describes imported/recovered target identity only;
+never expose it as a write choice. Successful Save promotes it to `JsonV2`.
+On implicit replacement of a different existing .cspar, call the core
+`validate_parameter_document_file()` rather than trusting signature probes.
+Explicit Save As format selection can authorize intentional replacement of an
+unrecognized file. Unknown legacy metadata is refused by GUI import rather
+than lost during later JSON conversion; CLI legacy rewrites may preserve it.
 JSON saves bypass legacy CSP serialization and include persistent profile
 spots. New image sidecars are suggested as JsonV2, while existing sidecars
 retain their physical file identities. Asynchronous sidecar
@@ -135,9 +142,10 @@ crash-recovery target metadata records `json-v2` independently of its
 complete native-JSON v2 snapshot. Existing ZIP-v1 and .par recovery
 snapshots remain supported by content-based parsing. The document lifecycle smoke verifies
 native JSON Save/Open/ordinary Save, corrupt-input failure nonmutation and
-return to the v1 compatibility target. See
-`doc/parameter-json-v2-plan.md` for the complete migration, nested-field
-audit, and remaining full CI/operator field-testing gates.
+migration from an independently constructed v1 fixture, including failed-Save
+preservation of old bytes/format and successful promotion. See
+`doc/parameter-json-migration-tracking.md` for decisions, evidence and the
+planned semantic schema-3 redesign; the v2 plan is a historical rollout record.
 
 Workspace geometry, image/parameter file-dialog directory history, and
 recent-file lists remain application preferences in `QSettings`; they are not

@@ -69,22 +69,7 @@ CLEANFILES              = slanted-edge-1.log \
                           paget_amaze_test.tiff \
                           paget_rcd_test.tiff \
                           paget_lmmse_test.tiff \
-                          dufay_rcd_test.tiff \
-                          out-parameter-archive.cspar \
-                          out-parameter-native-v2.cspar \
-                          out-parameter-native-v2.tif \
-                          out-parameter-v2-to-v1.cspar \
-                          out-parameter-legacy-loss-guard.cspar \
-                          out-parameter-legacy-loss-guard.par \
-                          out-parameter-legacy-loss-guard.log \
-                          out-parameter-crlf-input.par \
-                          out-parameter-crlf-normal.par \
-                          out-parameter-crlf-native.cspar \
-                          out-parameter-crlf-restored.par \
-                          out-parameter-crlf-extension.par \
-                          out-parameter-crlf-extension-normal.par \
-                          out-parameter-legacy.tif \
-                          out-parameter-archive.tif
+                          dufay_rcd_test.tiff
 
 TESTS                   = unittests.test \
                           raw-demosaic-cache.test \

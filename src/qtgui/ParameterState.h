@@ -58,8 +58,8 @@ inline bool save_csp_with_profile_spots(
     successful parameter load invalidates them.  GUI-only state is committed
     only after the complete postamble has parsed successfully, matching the
     transactional restore-on-error behaviour of MainWindow::loadParameterFile.
-    Unknown trailing data without our version marker is ignored for
-    compatibility with other future extensions. */
+    Unknown trailing data is refused: accepting it would silently lose it
+    on a later native JSON Save. */
 inline bool load_csp_with_profile_spots(
     FILE *f, scr_to_img_parameters *param, scr_detect_parameters *dparam,
     render_parameters *rparam, solver_parameters *sparam, const char **error,
@@ -86,14 +86,9 @@ inline bool load_csp_with_profile_spots(
             if (std::sscanf(text, "colorscreen_qt_metadata_version: %d %n",
                             &version, &consumed) != 1 ||
                 !qt_parameter_metadata_only_whitespace(text + consumed)) {
-                // The core format explicitly ends before this data.  Leave an
-                // extension we do not recognize to its owner, but still apply
-                // the successful legacy/core load semantics to GUI-only state.
-                if (profileSpots)
-                    profileSpots->clear();
-                if (profileSpotResults)
-                    profileSpotResults->clear();
-                return true;
+                if (error)
+                    *error = "cannot import unrecognized trailing parameter metadata";
+                return false;
             }
             if (version != 1) {
                 if (error)
@@ -129,6 +124,20 @@ inline bool load_csp_with_profile_spots(
     if (metadataStarted && !metadataEnded) {
         if (error)
             *error = "truncated Qt parameter metadata";
+        return false;
+    }
+
+    // A recognized prefix must not hide a second, unsupported extension.
+    while (std::fgets(line, sizeof(line), f)) {
+        if (!qt_parameter_metadata_only_whitespace(line)) {
+            if (error)
+                *error = "unexpected data after Qt parameter metadata end";
+            return false;
+        }
+    }
+    if (std::ferror(f)) {
+        if (error)
+            *error = "error reading parameter metadata";
         return false;
     }
 
