@@ -15,6 +15,7 @@ import json
 import os
 from pathlib import Path
 import ntpath
+import posixpath
 from typing import Any
 
 FORMAT = "org.colorscreen.parameters"
@@ -112,6 +113,63 @@ def _source_to_old(value: Any) -> str:
     if _source_path(path["value"])["base"] != path["base"]:
         raise ValueError("measurement.source.path: base contradicts filename")
     return path["value"]
+
+
+def rebase_v3_source_paths(v3: dict[str, Any], old_document: str,
+                           new_document: str) -> dict[str, Any]:
+    """Reference-only Save As path rebasing without filesystem I/O.
+
+    A relative measurement source should continue referring to the same
+    absolute image after the parameter document moves. The original v3 object
+    remains unchanged if any path cannot be interpreted unambiguously.
+    This adapter does not implement the Qt/C++ document transaction.
+    """
+    if not isinstance(old_document, str) or not isinstance(new_document, str):
+        raise ValueError("source and destination document paths must be text")
+
+    def windows_path(value: str) -> bool:
+        return bool(ntpath.splitdrive(value)[0]) or "\\" in value
+
+    old_windows = windows_path(old_document)
+    if old_windows != windows_path(new_document):
+        raise ValueError("cannot rebase between Windows and POSIX document paths")
+    lib = ntpath if old_windows else posixpath
+    if not lib.isabs(old_document) or not lib.isabs(new_document):
+        raise ValueError("Save As requires absolute old and new document paths")
+
+    changed = deepcopy(v3)
+    try:
+        measurements = changed["calibration"]["capture"]["mtf"]["measurements"]
+    except (TypeError, KeyError) as exc:
+        raise ValueError("calibration.capture.mtf.measurements: missing") from exc
+    if not isinstance(measurements, list):
+        raise ValueError("calibration.capture.mtf.measurements: expected array")
+    original_dir = lib.dirname(lib.normpath(old_document))
+    destination_dir = lib.dirname(lib.normpath(new_document))
+    for i, measurement in enumerate(measurements):
+        location = f"calibration.capture.mtf.measurements[{i}].source.path"
+        try:
+            path = measurement["source"]["path"]
+        except (TypeError, KeyError) as exc:
+            raise ValueError(f"{location}: missing") from exc
+        _source_to_old(path)  # Validate missing/absolute/relative spelling.
+        if path is None or path["base"] == "absolute":
+            continue
+        spelling = path["value"]
+        if (old_windows and not lib.isabs(spelling)
+                and ntpath.splitdrive(spelling)[0]):
+            raise ValueError(f"{location}: drive-relative Windows path is ambiguous")
+        if not old_windows and "\\" in spelling:
+            raise ValueError(f"{location}: Windows separators in a POSIX-relative path")
+        resolved = lib.normpath(lib.join(original_dir, spelling))
+        try:
+            relative = lib.relpath(resolved, destination_dir)
+        except ValueError:
+            # ntpath.relpath cannot express paths across Windows volumes.
+            path.update({"value": resolved, "base": "absolute"})
+        else:
+            path["value"] = relative
+    return changed
 
 
 def _mtf_measurement_upgrade(m: dict[str, Any], index: int, group_id: str) -> dict[str, Any]:
