@@ -340,7 +340,11 @@ an uncertainty estimate is explicitly available.
 
 `same_capture` groups adjacent measurements. Curves in one group share a fitted
 defocus coordinate, while a new group receives an independent defocus
-coordinate.
+coordinate. In the JSON-v2 GUI, moving a single curve is rejected if it would
+split its original capture into nonadjacent records; otherwise a move repairs
+the adjacency flags and follows the previously selected measured curve.
+The new Qt-free identity/group fields support future schema-3 documents but
+are not yet saved or consumed by the production MTF fitter.
 
 The current persistent analytical model still stores one scalar active
 `defocus` and one scalar active `wavelength`. After a multi-capture explicit fit,
