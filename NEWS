@@ -1,60 +1,14 @@
 Changes planned for version 2.0 (development version 2.0alpha)
  - New features:
-   - Parameter .cspar output is native JSON only. The transitional ZIP-v1
-     writer, reader and compatibility export option have all been removed.
-     Only legacy .par and native JSON parameter files are supported. Invalid or future
-     JSON destinations cannot be overwritten implicitly just because they
-     start with a JSON signature. Legacy .par export remains available with
-     loss-prevention checks.
-   - New QT based graphical user interface
-   - The Qt GUI can keep multiple images open in a standard MDI workspace. The
-     document tab bar stays visible below the toolbar even with one attached
-     image, keeping its detach/close affordances stable; documents can be
-     rearranged as tabs, tiles, or cascaded windows,
-     and tabs can be detached/re-attached without losing document state. Every
-     image retains its own parameters, undo history, background tasks, progress
-     reporting, and crash recovery. In tabbed mode the active image fills the
-     document area, while its messages and transient progress controls use the
-     workspace's single one-line status bar. Long-running user-visible tasks use
-     dedicated rows in a task strip above it, so short background work cannot
-     repeatedly resize the status line. Tiled and cascaded documents keep stable
-     screen positions when another image is activated.
-   - Long-running GUI operations can register dedicated rows in the global
-     status bar so they remain visible and directly cancellable across document
-     switches. Rendering to file, coordinate autodetection, automatic point
-     addition, and adaptive sharpening analysis use these rows; incremental automatic
-     point addition offers "Stop" so points already added remain in the image.
-   - The Window menu provides New View for opening a second view of the same
-     image as another workspace tab. Ordinary views expose the same complete
-     Navigation and parameter-panel controls as the primary view; panel image
-     tools follow the view currently presenting the inspector. Secondary views
-     share document state and transforms such as rotation and mirroring, while
-     render mode, Color/IR, zoom and pan remain independent. Ordinary image
-     views can also switch independently between raw Scan coordinates and the
-     geometrically corrected Screen coordinate canvas (called final coordinates
-     by libcolorscreen). Final-coordinate views use that plane directly and do
-     not reapply scan crop, 90-degree rotation, or scan mirroring. Final
-     orientation instead has a smooth degree-valued rotation and a persistent
-     final mirror stored with the screen geometry. Views can still be detached
-     when needed, with the
-     document inspector moving to the active detached view rather than
-     duplicating document/undo state.
-   - The Sharpness panel can open a separate slanted-edge reference scan while
-     keeping the current scan's parameter file and undo history. Reference
-     scans keep the normal navigation preview above a single Sharpness tab and
-     expose only Original digital capture and Image layer rendering modes.
-     Changing the RAW Demosaic choice reprocesses the main image and all
-     associated slanted-edge reference scans automatically, using retained
-     sensor samples when available and keeping same-document Undo history.
-     Crash recovery records those reference filenames per document and reopens
-     them with the recovered image; ordinary New Views and view-local layout,
-     zoom, pan, and render-mode state are intentionally not recovered yet.
+   - JSON based parameter file format .cspar.  Old .par files remains
+     readable.
+   - QT based graphical user interface
    - Support for new processes:
      - Dioptrichrome-B 
      - Improved Dioptrichrome-B
      - Warner-Powrie
      - Joly
-   - New dye measurements
+   - Dye measurements
      - Thames, Dioptichrome and Autochrome dyes by Lavedrine, Mees and Pledge (1910)
    - Support for RAW files from achromatic camera backs
    - Official binaries are now built with link-time optimization, stripped from
@@ -65,7 +19,7 @@ Changes planned for version 2.0 (development version 2.0alpha)
    - The public `render_tile` API can render either scan coordinates or the
      zero-based final-coordinate canvas used by screen-geometry file output.
    - More effective parallelism while rendering files.
-   - New rendering modes "screen" to render screen filter and "simulate process"
+   - Rendering modes "screen" to render screen filter and "simulate process"
      to turn color images into simulated additive process scans.
    - `colorscreen autodetect` now works on stitched projects.
    - Tone curves are now saved to parameter files.
@@ -93,23 +47,23 @@ Changes planned for version 2.0 (development version 2.0alpha)
    - suport for demosaicing of RAW files specialized for converted monochromatic camera
    - fixed bug in backlight correction of monochromatic scans
    - gammut warnings
-   - New demosaicing algorithms
+   - Demosaicing algorithms
      - Hamilton-Adams
      - AMaZE
      - RCD (Ratio corrected demosaicing)
      - LMMSE (Linear minimum square error)
-   - New scaling algorithms
+   - Scaling algorithms
      - Lanczos3
      - B-spline
      - linear
      - nearest neighbour
-   - New contact copy (darkroom) simulator replacing former invert, film-gamma,
+   - Contact copy (darkroom) simulator replacing former invert, film-gamma,
      target-film-gamma and output-curve parameters.
    - Slanted edge MTF computation
  - Scanner MTF can now be specified for more precise handling of sharpness of
    the scanner lens.  This curve can be measured using slanted edge method, i.e
-   using quickMTF
- - New sharpening algorithms: Wiener filter and Richardson-Lucy deconvolution
+   using quickMTF or using new MTF measurement module
+ - Sharpening algorithms: Wiener filter and Richardson-Lucy deconvolution
  - Data collection now supports three modes
    - fast collection (original precise == false)
    - simple screen collection (original precise == true)
