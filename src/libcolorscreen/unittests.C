@@ -11260,6 +11260,63 @@ test_native_json_v3_document ()
       || !invalid ("{}", "empty schema-3 document"))
     return false;
 
+  /* Save As rebases measurement evidence against document directories,
+     independent of the current host OS and without touching live parameters
+     on a late invalid path. */
+  auto rebase_check = [&] (const std::string &old_document,
+                          const std::string &new_document,
+                          const std::string &source,
+                          const std::string &expected)
+    {
+      mtf_parameters p;
+      p.measurements.resize (1);
+      p.measurements[0].source_filename = source;
+      std::string problem;
+      return rebase_parameter_mtf_source_paths (
+               &p, old_document, new_document, &problem)
+             && p.measurements[0].source_filename == expected;
+    };
+  if (!rebase_check ("/archive/old/plate.cspar",
+                     "/archive/new/plate.cspar", "scan.tif",
+                     "../old/scan.tif")
+      || !rebase_check ("/archive/old/plate.cspar",
+                        "/archive/new/plate.cspar", "../images/scan.tif",
+                        "../images/scan.tif")
+      || !rebase_check ("C:\\plates\\old\\plate.cspar",
+                        "C:\\plates\\new\\plate.cspar",
+                        "..\\images\\scan.tif",
+                        "..\\images\\scan.tif")
+      || !rebase_check ("C:\\plates\\old\\plate.cspar",
+                        "D:\\publication\\plate.cspar",
+                        "..\\images\\scan.tif",
+                        "C:\\plates\\images\\scan.tif")
+      || !rebase_check ("\\\\server\\share\\old\\plate.cspar",
+                        "\\\\server\\share\\new\\plate.cspar",
+                        "scan.tif", "..\\old\\scan.tif")
+      || !rebase_check ("/archive/old/plate.cspar",
+                        "/archive/new/plate.cspar",
+                        "/absolute/scan.tif", "/absolute/scan.tif")
+      || !rebase_check ("/archive/old/plate.cspar",
+                        "/archive/new/plate.cspar", "", ""))
+    {
+      fprintf (stderr, "MTF source provenance Save As rebasing failed\n");
+      return false;
+    }
+  mtf_parameters invalid_rebase = parsed_render.sharpen.scanner_mtf;
+  invalid_rebase.measurements[0].source_filename = "scan.tif";
+  invalid_rebase.measurements[1].source_filename = "\\rooted\\image.tif";
+  const mtf_parameters original_rebase = invalid_rebase;
+  std::string rebase_error;
+  if (rebase_parameter_mtf_source_paths (
+          &invalid_rebase, "C:\\plates\\old\\plate.cspar",
+          "C:\\plates\\new\\plate.cspar", &rebase_error)
+      || rebase_error.empty ()
+      || !invalid_rebase.equal_p (original_rebase))
+    {
+      fprintf (stderr, "Invalid MTF Save As changed a live source\n");
+      return false;
+    }
+
   /* Even a legacy .par-based state without initialized MTF record IDs can
      produce a complete canonical JSON document without mutating its source. */
   render_parameters legacy_render = render;
