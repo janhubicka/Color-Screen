@@ -4136,10 +4136,9 @@ v3_mtf_metadata (const json_value &object, const std::string &path,
                          "contradicts saved dimensions");
 }
 
-/* Validate a typed schema-3 MTF collection before output publication.
-   Legacy adjacency is still used by the current fitter, so for now reject
-   non-contiguous groups instead of loading the wrong fitted focus model.
-   The group-aware numerical migration will remove this temporary restriction. */
+/* Validate native schema-3 capture data before output publication. The
+   numerical fitter and channel specialization now use explicit group IDs, so
+   unlike legacy .par a capture may have nonadjacent measurement records. */
 bool
 v3_mtf_validate (const mtf_parameters &mtf, std::string *error)
 {
@@ -4148,23 +4147,14 @@ v3_mtf_validate (const mtf_parameters &mtf, std::string *error)
     return v3_mtf_fail (error, "calibration.capture.mtf",
                         "invalid numeric values or record identities");
 
-  std::set<std::string> groups;
-  std::string previous_group;
   for (size_t i = 0; i < mtf.measurements.size (); ++i)
     {
       const mtf_measurement &m = mtf.measurements[i];
       const std::string path
         = "calibration.capture.mtf.measurements["
           + std::to_string (i) + "]";
-      if (m.capture_group_id != previous_group)
-        {
-          if (!groups.insert (m.capture_group_id).second)
-            return v3_mtf_fail (error, path + ".capture_group_id",
-                                "discontiguous capture group not yet supported");
-        }
-      if (m.same_capture != (i && m.capture_group_id == previous_group))
-        return v3_mtf_fail (error, path + ".capture_group_id",
-                            "legacy same_capture flags disagree with group IDs");
+      /* No SAME_CAPTURE checks: it is strictly a legacy .par import field
+         and must not constrain the first canonical JSON representation. */
       if (!valid_utf8 (m.id) || !valid_utf8 (m.capture_group_id))
         return v3_mtf_fail (error, path, "invalid UTF-8 identifier");
       if (!m.source_filename.empty ())
@@ -4405,7 +4395,6 @@ decode_parameter_json_v3_mtf (const std::string &input,
                         "invalid record count");
   parsed.measurements.reserve (measurements->array_value.size ());
   size_t total_samples = 0;
-  std::set<std::string> groups;
   std::string previous_group;
   for (size_t i = 0; i < measurements->array_value.size (); ++i)
     {
@@ -4447,10 +4436,8 @@ decode_parameter_json_v3_mtf (const std::string &input,
           }
       if (!channel_found)
         return v3_mtf_fail (error, path + ".channel", "unknown channel");
-      if (m.capture_group_id != previous_group
-          && !groups.insert (m.capture_group_id).second)
-        return v3_mtf_fail (error, path + ".capture_group_id",
-                            "discontiguous capture group not yet supported");
+      /* Derive the old .par adjacency hint for current UI consumers. Group
+         identity itself is taken solely from the native capture_group_id. */
       m.same_capture = i && m.capture_group_id == previous_group;
       previous_group = m.capture_group_id;
 
