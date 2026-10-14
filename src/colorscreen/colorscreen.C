@@ -138,7 +138,7 @@ load_parameter_filename (const char *filename, scr_to_img_parameters *param,
                          std::vector<point_t> *profile_spots = nullptr)
 {
   // Dispatch JSON by signature, then validate the complete typed document.
-  if (parameter_json_v2_signature_p (filename))
+  if (parameter_json_signature_p (filename))
     {
       scr_to_img_parameters g;
       scr_detect_parameters d;
