@@ -11,7 +11,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: 805b527c9320ac9805717ce5185b9f78dda7b242
+          ref: 38d930806381394c2375a33ac906107c5548a432
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
@@ -41,6 +41,10 @@ jobs:
           print('exact_equal', resolved == expected, 'case_equal', ntpath.normcase(resolved) == ntpath.normcase(expected))
           print('normcase', repr(ntpath.normcase(resolved)),repr(ntpath.normcase(expected)))
           assert resolved == expected, (resolved,expected)
+          moved_cross = mod.rebase_v3_source_paths(root, old, r'D:\archive\params.cspar')
+          cross = moved_cross['calibration']['capture']['mtf']['measurements'][1]['source']['path']
+          print('cross-volume result', repr(cross))
+          assert cross == {'value': expected, 'base': 'absolute'}, cross
           '@ | Set-Content -Path mtf-path-probe.py -Encoding utf8
           python mtf-path-probe.py
       - uses: msys2/setup-msys2@v2
