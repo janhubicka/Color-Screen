@@ -33,6 +33,8 @@
 #include <QSignalBlocker>
 #include <QTimer>
 #include <QToolButton>
+#include <QToolTip>
+#include <QCursor>
 #include <QTabWidget>
 #include <QVBoxLayout>
 #include <QMimeData>
@@ -470,13 +472,20 @@ void SharpnessPanel::setupUi() {
   addButtonParameter("", "Load QuickMTF measurement", [this]() { loadMTF(); });
 
   QWidget *measContainer = new MeasurementContainer([this](int from, int to) {
+    // Validate before applying a document edit. JSON-v2 saves capture groups
+    // as adjacency flags, so a drag may not split one capture into two blocks.
+    colorscreen::mtf_parameters preview =
+        m_stateGetter().rparams.sharpen.scanner_mtf;
+    if (!preview.move_measurement(from, to)) {
+      QToolTip::showText(
+          QCursor::pos(),
+          tr("Keep measurements from each capture adjacent. Change the "
+             "'Same' links before moving a curve between captures."),
+          this);
+      return;
+    }
     applyChange([from, to](ParameterState &s) {
-        auto &ms = s.rparams.sharpen.scanner_mtf.measurements;
-        if (from >= 0 && from < (int)ms.size() && to >= 0 && to < (int)ms.size()) {
-            auto item = ms[from];
-            ms.erase(ms.begin() + from);
-            ms.insert(ms.begin() + to, item);
-        }
+      s.rparams.sharpen.scanner_mtf.move_measurement(from, to);
     }, tr("Reorder MTF measurements"));
   });
   m_measurementsLayout = new QVBoxLayout(measContainer);
