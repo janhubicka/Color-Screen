@@ -39,6 +39,14 @@ struct mtf_measurement
   /* True if this measurement comes from the same capture as the preceding
      measurement.  */
   bool same_capture;
+  /* Stable document-local identity for eventual schema-3 persistence.
+     Legacy .par and JSON-v2 records leave these fields empty.  Upgrading a
+     document assigns IDs once; renaming/reordering does not replace them.  */
+  std::string id;
+  /* A capture group is independent of record order in schema 3.  Until the
+     native schema-3 writer is enabled, SAME_CAPTURE remains the authoritative
+     representation in saved JSON-v2 and legacy files.  */
+  std::string capture_group_id;
   /* Name.  */
   std::string name;
 
@@ -134,6 +142,7 @@ struct mtf_measurement
   {
     return channel == o.channel && image_layer == o.image_layer
            && wavelength == o.wavelength && same_capture == o.same_capture
+           && id == o.id && capture_group_id == o.capture_group_id
            && name == o.name && source_filename == o.source_filename
            && source_width == o.source_width && source_height == o.source_height
            && roi.x == o.roi.x && roi.y == o.roi.y
@@ -264,6 +273,29 @@ struct mtf_parameters
 
   std::vector <mtf_measurement> measurements;
 
+  /* Assign missing document-local record and capture-group IDs using the
+     legacy SAME_CAPTURE adjacency boundary. Existing IDs are never replaced,
+     and duplicate existing record IDs cause failure without mutation.  This
+     explicit migration primitive is NOT called by JSON-v2 or .par writers.  */
+  DLL_PUBLIC bool assign_missing_measurement_ids ();
+
+  /* Return true if every record and capture group has a usable ID, record
+     IDs are unique, and the selected measurement index is valid. Non-adjacent
+     records may belong to the same capture in the future schema-3 format.  */
+  DLL_PUBLIC bool measurement_ids_valid_p () const;
+
+  /* Resolve the selected curve to its ID, or return empty for no selection.  */
+  DLL_PUBLIC std::string selected_measurement_id () const;
+
+  /* Select one record by identity. Empty ID clears selection; an unknown or
+     duplicated ID fails without changing the current selection.  */
+  DLL_PUBLIC bool select_measurement_id (const std::string &id);
+
+  /* Move record FROM to TO while preserving selected-curve identity and
+     legacy capture membership. Reject a move that would split a capture group
+     into discontiguous records, since current JSON-v2 cannot represent that
+     grouping without changing its meaning.  */
+  DLL_PUBLIC bool move_measurement (int from, int to);
 
   /* Return true when at least one non-empty measurement is available.  */
   bool
