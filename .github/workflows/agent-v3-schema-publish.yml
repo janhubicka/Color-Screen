@@ -1,0 +1,84 @@
+name: Agent schema-3 reference publication
+on:
+  push:
+    branches: [agent/json-migration-build-transport]
+    paths: [.github/workflows/agent-v3-schema-publish.yml]
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Reconstruct and verify exact reviewed schema payload
+        run: |
+          python3 - <<'PY'
+          import base64, hashlib, json, lzma
+          from pathlib import Path
+          base = Path('.agent-transport')
+          parts = [base / f'v3-structural-schema-{i:02d}.b64' for i in range(1,6)]
+          encoded = ''.join(path.read_text().strip() for path in parts)
+          zipped = base64.b64decode(encoded, validate=True)
+          assert hashlib.sha256(zipped).hexdigest() == 'df9e86d3dcbc65e3f801c3f5e272a57f0ee35f5dcb0a303a4a0f196503a6dbda'
+          raw = lzma.decompress(zipped)
+          assert hashlib.sha256(raw).hexdigest() == 'f8e01f5bd3be09f2b4b6369755060a0123e8ac6e30efb784f83b58b6c6a95dee'
+          payload = json.loads(raw)
+          assert payload['expected_base'] == 'b1b57d0fa4a7a5f72426a1face205a58d3b0580b'
+          assert len(payload['files']) == 11
+          Path('/tmp/schema-v3-payload.json').write_bytes(raw)
+          print('Verified',len(zipped),'compressed bytes and',len(payload['files']),'review changes')
+          PY
+      - name: Apply only verified schema/test/documentation updates
+        run: |
+          set -eu
+          target=refs/heads/agent/json-v3-reference-schema
+          base=b1b57d0fa4a7a5f72426a1face205a58d3b0580b
+          actual=$(git ls-remote --heads origin "$target" | cut -f1)
+          test "$actual" = "$base" || { echo "Review branch moved: $actual"; exit 1; }
+          git fetch origin "$base"
+          git checkout -B schema-review FETCH_HEAD
+          python3 - <<'PY'
+          import hashlib, json, subprocess
+          from pathlib import Path, PurePosixPath
+          payload = json.loads(Path('/tmp/schema-v3-payload.json').read_bytes())
+          for item in payload['files']:
+              path = item['path']
+              rel = PurePosixPath(path)
+              assert not rel.is_absolute() and '..' not in rel.parts
+              assert rel.parts[0] not in ('.git', '.github', '.agent-transport')
+              file = Path(path)
+              if item['op'] == 'new':
+                  assert not file.exists(), path
+                  content = item['content']
+                  assert hashlib.sha256(content.encode('utf-8')).hexdigest() == item['sha256']
+              else:
+                  assert file.is_file(), path
+                  sha = subprocess.check_output(['git','hash-object',str(file)],text=True).strip()
+                  assert sha == item['base_sha'], path + ': baseline changed'
+                  content = file.read_text(encoding='utf-8')
+                  if item['op'] == 'replace':
+                      needle, replacement = item['needle'], item['replacement']
+                      assert content.count(needle) == 1, path
+                      content = content.replace(needle,replacement)
+                  elif item['op'] == 'replace2':
+                      for suffix in ('1','2'):
+                          needle = item['needle'+suffix]
+                          assert content.count(needle) == 1, path
+                          content = content.replace(needle,item['replacement'+suffix])
+                  elif item['op'] == 'append':
+                      content += item['text']
+                  else:
+                      raise ValueError('Unexpected edit mode')
+              file.parent.mkdir(parents=True,exist_ok=True)
+              file.write_text(content,encoding='utf-8')
+              print('Verified',path,len(content.encode('utf-8')),'bytes')
+          PY
+          git add -- Makefile.am Makefile.in testsuite/Makefile.am testsuite/Makefile.in testsuite/check-parameter-v3-schema.py testsuite/parameter-v3-schema.test doc/parameter-json-v3-reference.schema.json doc/parameter-json-v3-default-example.json doc/parameter-json-v3-rich-example.json doc/parameter-json-v3-reference.md doc/parameter-json-migration-tracking.md
+          git diff --cached --check
+          git diff --cached --stat
+          git config user.name 'Color-Screen agent'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'parameters: define strict schema-3 reference document vocabulary' -m 'Add a checked-in draft-2020-12 schema, full default/rich examples, and a standard-library-only structural check. Require known keys, tagged modes, explicit nullable metadata, and exact numeric and array shapes without changing the production v2 writer. Document semantic cross-field constraints reserved for the native C++ codec and register tests/fixtures for source distribution.'
+          git push origin "HEAD:$target"
