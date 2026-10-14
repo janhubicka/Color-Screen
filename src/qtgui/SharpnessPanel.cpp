@@ -1255,15 +1255,24 @@ void SharpnessPanel::updateMeasurementList() {
         updateSelectedMeasurementDetails();
         return;
     }
+    /* On schema-3 documents, inspection is attached to the record ID, not
+       its former row. A deleted record clears inspection; a reordered or
+       renamed record retains the same provenance/overlay in every view. */
+    int nextSelection = -1;
+    if (m_measurementUiInitialized && m_selectedMtfMeasurement >= 0
+        && m_selectedMtfMeasurement
+               < static_cast<int>(m_lastMeasurements.size())) {
+        const std::string oldId =
+            m_lastMeasurements[m_selectedMtfMeasurement].id;
+        if (!oldId.empty())
+            nextSelection = currentMeasurementIndex(state.rparams.sharpen.scanner_mtf,
+                                                    oldId, -1);
+    }
     m_measurementUiInitialized = true;
     m_lastMeasurements = measurements;
-
-    /* Structural/metadata edits can reorder or replace records. Clear the
-       inspection index rather than accidentally associating an old overlay
-       with a different measurement occupying the same vector position. */
-    m_selectedMtfMeasurement = -1;
+    m_selectedMtfMeasurement = nextSelection;
     if (m_mtfChart)
-        m_mtfChart->setSelectedMeasurement(-1);
+        m_mtfChart->setSelectedMeasurement(nextSelection);
     if (m_measurementSelector) {
         const QSignalBlocker blocker(m_measurementSelector);
         m_measurementSelector->clear();
@@ -1274,11 +1283,12 @@ void SharpnessPanel::updateMeasurementList() {
                                 .arg(QString::fromStdString(measurements[i].name));
             m_measurementSelector->addItem(label, i);
         }
-        m_measurementSelector->setCurrentIndex(0);
+        const int row = m_measurementSelector->findData(nextSelection);
+        m_measurementSelector->setCurrentIndex(row >= 0 ? row : 0);
         m_measurementSelector->setEnabled(!measurements.empty());
     }
     updateSelectedMeasurementDetails();
-    emit mtfMeasurementSelected(-1);
+    emit mtfMeasurementSelected(nextSelection);
 
     // Clear layout
     QLayoutItem *item;
