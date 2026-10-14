@@ -51,6 +51,34 @@ write_parameter_text_file (const char *name, const std::string &payload,
                            std::string *error);
 
 
+/* Construct the first public native .cspar JSON document directly from
+   typed processing state, using the canonical semantic schema-3 layout.
+   Legacy .par records are upgraded to stable record/capture IDs on a private
+   copy; original caller values are never modified. No JSON-v1/v2 input is
+   accepted by the new reader. This format is not yet selected by GUI/CLI
+   until the document/recovery integration and corpus gates pass. */
+DLL_PUBLIC bool
+encode_parameter_json_v3_document (
+    const scr_to_img_parameters &geometry,
+    const scr_detect_parameters &detection,
+    const render_parameters &render,
+    const solver_parameters &solver,
+    const std::vector<point_t> &profile_spots,
+    std::string *output, std::string *error);
+
+/* Read a strict complete schema-3 document transactionally into native
+   state. Unknown fields, invalid capture IDs/metadata and incomplete
+   calibration leave every output argument unchanged. */
+DLL_PUBLIC bool
+decode_parameter_json_v3_document (
+    const std::string &input,
+    scr_to_img_parameters *geometry,
+    scr_detect_parameters *detection,
+    render_parameters *render,
+    solver_parameters *solver,
+    std::vector<point_t> *profile_spots,
+    std::string *error);
+
 /* Compose one complete native JSON schema-v2 document from the core and
    Qt profile-spot processing/calibration inputs. Every component is encoded
    directly from typed C++ state, without a legacy CSP mirror or ZIP wrapper.
