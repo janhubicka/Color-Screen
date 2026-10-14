@@ -178,7 +178,7 @@ bool loadParameterPayload(
     return false;
 
   const QByteArray encodedPath = path.toUtf8();
-  if (colorscreen::parameter_json_v2_signature_p(encodedPath.constData())) {
+  if (colorscreen::parameter_json_signature_p(encodedPath.constData())) {
     // Decode into a fresh document; a malformed or future JSON file must not
     // fall back to legacy CSP or publish even a subset of its parameters.
     ParameterState loadedState;
@@ -1587,7 +1587,7 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
                 // image itself opens successfully.
                 sidecarStaging->suggestedPath = sidecarFile;
                 sidecarStaging->suggestedJsonV3 =
-                    haveArchive && colorscreen::parameter_json_v2_signature_p(
+                    haveArchive && colorscreen::parameter_json_signature_p(
                                        sidecarFile.toUtf8().constData());
                 showParameterLoadFailure(this, loadError);
               } else {
@@ -1601,7 +1601,7 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
               // sidecar only as a format-aware Save-As suggestion.
               sidecarStaging->suggestedPath = sidecarFile;
               sidecarStaging->suggestedJsonV3 =
-                  haveArchive && colorscreen::parameter_json_v2_signature_p(
+                  haveArchive && colorscreen::parameter_json_signature_p(
                                      sidecarFile.toUtf8().constData());
             }
 
