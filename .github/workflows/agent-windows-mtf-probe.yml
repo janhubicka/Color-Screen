@@ -1,0 +1,45 @@
+name: Agent Windows MTF path probe
+on:
+  push:
+    branches: [agent/json-migration-build-transport]
+    paths: [.github/workflows/agent-windows-mtf-probe.yml]
+permissions:
+  contents: read
+jobs:
+  windows-path:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 805b527c9320ac9805717ce5185b9f78dda7b242
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Probe Windows ntpath invariants with no C++ build
+        shell: pwsh
+        run: |
+          @'
+          import sys, os, ntpath, posixpath, importlib.util
+          from pathlib import Path
+          source = Path('testsuite/parameter-json-v3-reference.py').resolve()
+          spec = importlib.util.spec_from_file_location('parameter_v3_reference', source)
+          mod = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(mod)
+          old = r"C:\archive\session\params.cspar"
+          new = r"C:\archive\exports\params.cspar"
+          root = {'calibration': {'capture': {'mtf': {'measurements': [
+              {'source': {'path': {'value': r'C:\samples\calibration\img.tif', 'base': 'absolute'}}},
+              {'source': {'path': {'value': '../relative/edge.tif', 'base': 'parameter_file'}}},
+          ]}}}}
+          print('python', sys.version, 'os.path', os.path, 'ntpath', ntpath.__file__)
+          print('before', repr(root))
+          moved = mod.rebase_v3_source_paths(root, old, new)
+          src = moved['calibration']['capture']['mtf']['measurements'][1]['source']['path']
+          resolved = ntpath.normpath(ntpath.join(ntpath.dirname(new), src['value']))
+          expected = ntpath.normpath(r"C:\archive\relative\edge.tif")
+          print('after', repr(src), 'resolved', repr(resolved), 'expected', repr(expected))
+          print('exact_equal', resolved == expected, 'case_equal', ntpath.normcase(resolved) == ntpath.normcase(expected))
+          print('normcase', repr(ntpath.normcase(resolved)),repr(ntpath.normcase(expected)))
+          assert resolved == expected, (resolved,expected)
+          '@ | Set-Content -Path mtf-path-probe.py -Encoding utf8
+          python mtf-path-probe.py
