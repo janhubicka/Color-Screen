@@ -1,7 +1,9 @@
 # Parameter JSON schema 3 — reference design and migration evidence
 
-**Status: reference mapping and tests only.** Nothing in this document is a
-promise that Color-Screen already saves schema 3. The only supported `*.cspar`
+**Status: Python reference mapping tested; an isolated native C++ MTF
+component codec is now under review.** Neither component constitutes a
+complete schema-3 document. Nothing in this document is a promise that
+Color-Screen already saves schema 3. The only supported `*.cspar`
 writer continues to emit native JSON **schema 2**, and only `.par` and native
 JSON files can be imported. The abandoned ZIP-v1 parameter format is removed;
 ZIP-based `.csprj` stitching projects remain unrelated and supported.
@@ -103,3 +105,21 @@ Save As and import; (4) authoritative JSON Schema and representative full
 fixtures; (5) round-trip tests across every persistent nested C++ member;
 (6) failure-atomic CLI/Qt/recovery upgrades, platform sanitizers, and operator
 field testing. All schema-2 readers remain read-compatible after switching.
+
+
+## Native component implementation checkpoint (15 October 2026)
+
+The C++ implementation exposes two *nonshipping* library functions:
+\`encode_parameter_json_v3_mtf\` and \`decode_parameter_json_v3_mtf\`.
+They use the same strict bounded JSON parser and native numeric types as the
+current file codec, and operate on exactly the
+\`calibration.capture.mtf\` subtree. Unlike the reversible Python reference,
+the native representation omits \`legacy_first_same_capture\`; a first-record
+legacy flag of \`true\` is rejected rather than silently discarded, pending
+an explicit migration policy. The production JSON-v2 save path is unchanged.
+
+Until \`same_capture\` is retired from the numerical fitting path, native
+schema-3 component decoding also rejects noncontiguous capture groups instead
+of silently evaluating the wrong fitted focus coordinates. This restriction
+is narrower than the final schema-3 design; group-aware fitter/editor changes
+are required before the full document codec can ship.
