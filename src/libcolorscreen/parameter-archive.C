@@ -5414,4 +5414,82 @@ decode_parameter_json_v3_document (
   return true;
 }
 
+
+/* Read the first supported .cspar version through the same bounded UTF-8
+   stream policy as legacy internal components. Schema 2 cannot pass the
+   strict full-document decoder, even if its filename ends in .cspar. */
+bool
+read_parameter_json_v3_file (
+    const char *name, scr_to_img_parameters *geometry,
+    scr_detect_parameters *detection, render_parameters *render,
+    solver_parameters *solver, std::vector<point_t> *profile_spots,
+    std::string *error)
+{
+  if (error)
+    error->clear ();
+  if (!name || !geometry || !detection || !render || !solver
+      || !profile_spots)
+    return archive_fail (error, "invalid schema-3 document arguments");
+  FILE *file = open_utf8_binary_read (name);
+  if (!file)
+    return archive_fail (error, "cannot open schema-3 parameter file");
+
+  std::string contents;
+  char buffer[64 * 1024];
+  bool ok = true;
+  while (true)
+    {
+      const size_t count = fread (buffer, 1, sizeof (buffer), file);
+      if (count)
+        {
+          if (contents.size () > v2_max_document_bytes
+              || count > v2_max_document_bytes - contents.size ())
+            {
+              archive_fail (error, "schema-3 document size limit exceeded");
+              ok = false;
+              break;
+            }
+          contents.append (buffer, count);
+        }
+      if (count < sizeof (buffer))
+        {
+          if (ferror (file))
+            {
+              archive_fail (error, "could not read schema-3 parameter file");
+              ok = false;
+            }
+          break;
+        }
+    }
+  if (fclose (file) != 0)
+    {
+      archive_fail (error, "could not close schema-3 parameter file");
+      ok = false;
+    }
+  return ok && decode_parameter_json_v3_document (
+      contents, geometry, detection, render, solver, profile_spots, error);
+}
+
+/* A complete source and all derived JSON text must validate before touching
+   a destination. Existing files are replaced only by the atomic text writer. */
+bool
+write_parameter_json_v3_file (
+    const char *name, const scr_to_img_parameters &geometry,
+    const scr_detect_parameters &detection,
+    const render_parameters &render, const solver_parameters &solver,
+    const std::vector<point_t> &profile_spots, std::string *error)
+{
+  if (error)
+    error->clear ();
+  if (!name)
+    return archive_fail (error, "missing schema-3 target filename");
+  std::string payload;
+  if (!encode_parameter_json_v3_document (
+          geometry, detection, render, solver,
+          profile_spots, &payload, error))
+    return false;
+  return write_parameter_text_file (name, payload, error);
+}
+
+
 }
