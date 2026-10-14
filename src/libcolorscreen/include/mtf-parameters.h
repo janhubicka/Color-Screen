@@ -306,6 +306,11 @@ struct mtf_parameters
      consumers still reading .par. INDEX=0 cannot join a predecessor. */
   DLL_PUBLIC bool set_measurement_same_capture (size_t index, bool same);
 
+  /* Delete record INDEX without selecting a different curve by accident.
+     Clear selection if the deleted curve was active, shift later indices,
+     and keep surviving capture group identities and old adjacency hints. */
+  DLL_PUBLIC bool erase_measurement (size_t index);
+
   /* Move record FROM to TO while preserving selected-curve identity and
      explicit capture groups even when records become nonadjacent. A legacy
      in-memory .par collection without IDs still disallows moves that would
