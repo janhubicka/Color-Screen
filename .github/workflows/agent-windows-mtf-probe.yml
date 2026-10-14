@@ -43,3 +43,12 @@ jobs:
           assert resolved == expected, (resolved,expected)
           '@ | Set-Content -Path mtf-path-probe.py -Encoding utf8
           python mtf-path-probe.py
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: CLANG64
+          install: mingw-w64-clang-x86_64-python
+          update: false
+      - name: Recheck under MSYS2 Clang64 Python used by Windows CI
+        shell: msys2 {0}
+        run: |
+          /clang64/bin/python mtf-path-probe.py
