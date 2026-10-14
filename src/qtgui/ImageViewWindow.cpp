@@ -1237,9 +1237,18 @@ void ImageViewWindow::startReferenceMtfMeasurement(
       return;
     }
     ParameterState updated = document->documentStateSnapshot();
-    auto &measurements = updated.rparams.sharpen.scanner_mtf.measurements;
+    auto &mtf = updated.rparams.sharpen.scanner_mtf;
+    const bool named = !mtf.measurements.empty()
+                       && !mtf.measurements.front().id.empty();
+    auto &measurements = mtf.measurements;
     measurements.insert(measurements.end(), result->measurements.begin(),
                         result->measurements.end());
+    if (named && !mtf.assign_missing_measurement_ids()) {
+      view->statusBar()->showMessage(
+          tr("Could not assign stable capture IDs; measurements unchanged"),
+          5000);
+      return;
+    }
     document->applySharedDocumentState(
         updated, tr("Measure MTF from slanted-edge reference"));
     view->statusBar()->showMessage(tr("Reference MTF measurements added"), 3000);
