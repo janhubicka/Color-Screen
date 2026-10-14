@@ -4389,6 +4389,11 @@ decode_parameter_json_v3_mtf (const std::string &input,
                         "expected null or record ID");
   const std::string selected_id
       = selection->type == json_value::kind::string ? selection->text : "";
+  /* Schema 3 uses null for no selection. An empty string would silently
+     round-trip as null and must be treated as malformed, not normalized. */
+  if (selection->type == json_value::kind::string && selected_id.empty ())
+    return v3_mtf_fail (error, root_path + ".selected_measurement_id",
+                        "use null, not an empty record ID");
 
   const json_value *measurements = v3_mtf_required (
       *body, "measurements", json_value::kind::array, root_path, error);
