@@ -4549,4 +4549,409 @@ decode_parameter_json_v3_mtf (const std::string &input,
   return true;
 }
 
+
+/* Canonical schema-3 document mapping.
+   Temporary native-v2 component structures are reused *inside* the library,
+   not admitted as an external input format. The first released .cspar reader
+   recognises only schema 3. Once all components have native semantic encoders
+   the internal bridge can be removed without changing any on-disk contract. */
+namespace
+{
+
+json_value
+v3_node (json_value::kind type)
+{
+  json_value value;
+  value.type = type;
+  return value;
+}
+
+json_value
+v3_string (const std::string &text)
+{
+  json_value value = v3_node (json_value::kind::string);
+  value.text = text;
+  return value;
+}
+
+json_value
+v3_number (const std::string &text)
+{
+  json_value value = v3_node (json_value::kind::number);
+  value.text = text;
+  return value;
+}
+
+json_value
+v3_boolean (bool b)
+{
+  json_value value = v3_node (json_value::kind::boolean);
+  value.boolean_value = b;
+  return value;
+}
+
+json_value
+v3_object (std::initializer_list<std::pair<const std::string, json_value>> fields)
+{
+  json_value value = v3_node (json_value::kind::object);
+  for (const auto &field : fields)
+    value.object_value.emplace (field.first, field.second);
+  return value;
+}
+
+json_value
+v3_array (std::initializer_list<json_value> elements)
+{
+  json_value value = v3_node (json_value::kind::array);
+  value.array_value.insert (value.array_value.end (),
+                            elements.begin (), elements.end ());
+  return value;
+}
+
+/* Only use this accessor after the exact-field validator, or on tree nodes
+   constructed by our own typed writer. */
+const json_value &
+v3_at (const json_value &parent, const char *name)
+{
+  return parent.object_value.at (name);
+}
+
+/* Stable canonical serialization of a validated JSON tree; std::map sorts
+   object keys. Number tokens are reused without binary32/64 reformatting. */
+void
+v3_json_text (const json_value &node, std::string *out)
+{
+  switch (node.type)
+    {
+    case json_value::kind::null_value:
+      *out += "null";
+      break;
+    case json_value::kind::boolean:
+      *out += node.boolean_value ? "true" : "false";
+      break;
+    case json_value::kind::number:
+      *out += node.text;
+      break;
+    case json_value::kind::string:
+      *out += "\"" + json_escape (node.text) + "\"";
+      break;
+    case json_value::kind::array:
+      {
+        *out += "[";
+        for (size_t i = 0; i < node.array_value.size (); ++i)
+          {
+            if (i)
+              *out += ",";
+            v3_json_text (node.array_value[i], out);
+          }
+        *out += "]";
+        break;
+      }
+    case json_value::kind::object:
+      {
+        *out += "{";
+        bool first = true;
+        for (const auto &field : node.object_value)
+          {
+            if (!first)
+              *out += ",";
+            first = false;
+            *out += "\"" + json_escape (field.first) + "\":";
+            v3_json_text (field.second, out);
+          }
+        *out += "}";
+        break;
+      }
+    }
+}
+
+/* The old internal capture bounds stored a boolean plus four integer
+   coordinates; an unset region becomes JSON null in the first public format.
+   Do not silently discard noncanonical nonzero disabled rectangles. */
+bool
+v3_rectangle_from_internal (const json_value &area, json_value *out,
+                            const std::string &path, std::string *error)
+{
+  const json_value *enabled
+      = v3_mtf_required (area, "enabled", json_value::kind::boolean,
+                         path, error);
+  const json_value *rect
+      = v3_mtf_required (area, "rect", json_value::kind::array,
+                         path, error);
+  if (!enabled || !rect || rect->array_value.size () != 4)
+    return v3_mtf_fail (error, path, "invalid rectangle");
+  int x[4];
+  for (int i = 0; i < 4; ++i)
+    if (!v2_json_int (rect->array_value[i], &x[i]))
+      return v3_mtf_fail (error, path, "rectangle needs integer pixels");
+  if (!enabled->boolean_value)
+    {
+      for (int number : x)
+        if (number)
+          return v3_mtf_fail (
+              error, path, "disabled region has nonzero legacy coordinates");
+      *out = v3_node (json_value::kind::null_value);
+      return true;
+    }
+  if (x[2] <= 0 || x[3] <= 0)
+    return v3_mtf_fail (error, path, "selected region has no area");
+  *out = v3_object (
+      {{"x_px", v3_number (std::to_string (x[0]))},
+       {"y_px", v3_number (std::to_string (x[1]))},
+       {"width_px", v3_number (std::to_string (x[2]))},
+       {"height_px", v3_number (std::to_string (x[3]))}});
+  return true;
+}
+
+/* Explicit automatic-versus-fraction strip widths, keeping zero a genuine
+   legacy sentinel only at the .par import boundary. */
+json_value
+v3_width_from_internal (const json_value &number)
+{
+  double value = 0;
+  if (!v2_real (number, &value))
+    return v3_node (json_value::kind::null_value);
+  if (value == 0)
+    return v3_object ({{"mode", v3_string ("automatic")}});
+  return v3_object ({{"mode", v3_string ("fraction")},
+                     {"value", number}});
+}
+
+/* Construct a semantically arranged schema-3 syntax tree from the *typed*
+   model's existing component encoders. No alpha JSON file is read or
+   downgraded, and the complete native MTF codec is authoritative. */
+bool
+v3_restructure_typed_document (const json_value &source,
+                               const json_value &native_mtf,
+                               json_value *out, std::string *error)
+{
+  const json_value &cap = v3_at (source, "capture");
+  const json_value &proc = v3_at (source, "process");
+  const json_value &geom = v3_at (source, "geometry");
+  const json_value &detect = v3_at (source, "detection");
+  const json_value &reg = v3_at (source, "registration");
+  const json_value &profile = v3_at (source, "profile");
+  const json_value &rec = v3_at (source, "reconstruction");
+  const json_value &sharp = v3_at (source, "sharpness");
+  const json_value &color = v3_at (source, "color");
+  const json_value &grids = v3_at (source, "correction_grids");
+
+  json_value object_crop, picture_crop;
+  if (!v3_rectangle_from_internal (v3_at (cap, "scan_crop"),
+                                   &object_crop, "capture.bounds.object_crop",
+                                   error)
+      || !v3_rectangle_from_internal (v3_at (cap, "image_area"),
+                                      &picture_crop,
+                                      "capture.bounds.photograph", error))
+    return false;
+  double gamma = 0;
+  if (!v2_real (v3_at (cap, "gamma"), &gamma))
+    return v3_mtf_fail (error, "capture.linearization", "invalid input gamma");
+
+  const json_value &strips = v3_at (proc, "strip_widths");
+  json_value red_width
+      = v3_width_from_internal (v3_at (strips, "red"));
+  json_value green_width
+      = v3_width_from_internal (v3_at (strips, "green"));
+  if (red_width.type == json_value::kind::null_value
+      || green_width.type == json_value::kind::null_value)
+    return v3_mtf_fail (error, "process.screen.strip_widths",
+                        "invalid historical strip width");
+
+  const json_value &internal_mtf = v3_at (sharp, "mtf");
+  (void)internal_mtf; // Replaced by the native ID-aware MTF subtree below.
+  *out = v3_object (
+    {{"format", v3_string ("org.colorscreen.parameters")},
+     {"schema_version", v3_number ("3")},
+     {"capture", v3_object ({
+       {"type", v3_at (cap, "capture_type")},
+       {"raw", v3_object ({{"demosaic", v3_at (cap, "demosaic")}})},
+       {"linearization", gamma == -1
+           ? v3_object ({{"mode", v3_string ("srgb")}})
+           : v3_object ({{"mode", v3_string ("power")},
+                          {"exponent", v3_at (cap, "gamma")}})},
+       {"orientation", v3_object ({
+         {"quarter_turns", v3_at (cap, "scan_rotation_quarter_turns")},
+         {"mirror", v3_at (cap, "scan_mirror")}})},
+       {"bounds", v3_object ({
+         {"object_crop", std::move (object_crop)},
+         {"photograph", std::move (picture_crop)}})},
+       {"levels", v3_object ({
+         {"gain", v3_at (cap, "scan_exposure")},
+         {"black_offset", v3_at (cap, "dark_point")}})}
+       })},
+     {"process", v3_object ({
+       {"screen", v3_object ({
+         {"type", v3_at (geom, "screen_type")},
+         {"strip_widths", v3_object ({
+           {"red", std::move (red_width)},
+           {"green", std::move (green_width)}})}})},
+       {"color_model", v3_at (proc, "color_model")},
+       {"dyes", v3_object ({
+         {"aging_fraction", v3_at (proc, "age")},
+         {"density", v3_at (proc, "dye_density")}})},
+       {"contact_copy", v3_at (proc, "contact_copy")}})},
+     {"geometry", v3_object ({
+       {"imaging_model", v3_at (geom, "scanner_type")},
+       {"mapping", v3_object ({
+         {"center", v3_at (geom, "center")},
+         {"axis_x", v3_at (geom, "axis_x")},
+         {"axis_y", v3_at (geom, "axis_y")},
+         {"projection_distance", v3_at (geom, "projection_distance")},
+         {"tilt", v3_at (geom, "tilt")}})},
+       {"final_frame", v3_object ({
+         {"rotation", v3_at (geom, "final_rotation")},
+         {"mirror", v3_at (geom, "final_mirror")},
+         {"angle_deg", v3_at (geom, "final_angle")},
+         {"axis_length_ratio", v3_at (geom, "final_ratio")}})},
+       {"lens", v3_at (geom, "lens")},
+       {"mesh", v3_at (geom, "mesh")}})},
+     {"registration", v3_object ({
+       {"detection", detect},
+       {"fit", v3_object ({
+         {"optimize_lens", v3_at (reg, "optimize_lens")},
+         {"lens_center_distance", v3_at (reg, "lens_center_distance")},
+         {"optimize_tilt", v3_at (reg, "optimize_tilt")}})},
+       {"points", v3_at (reg, "points")}})},
+     {"calibration", v3_object ({
+       {"capture", v3_object ({
+         {"mtf", native_mtf},
+         {"scanner_primaries_xyz", v3_at (color, "scanner_primaries")}})},
+       {"process_color", v3_object ({
+         {"profile_rgb", v3_at (color, "process_profile")},
+         {"spots", v3_at (profile, "spots")}})},
+       {"flat_field", v3_object ({
+         {"black_correction", v3_at (cap, "backlight_correction_black")},
+         {"grid", v3_at (grids, "backlight")}})},
+       {"spatial_blur", v3_at (grids, "scanner_blur")},
+       {"tiles", v3_at (grids, "tiles")}})},
+     {"reconstruction", v3_object ({
+       {"image_layer", v3_object ({
+         {"ignore_infrared", v3_at (rec, "ignore_infrared")},
+         {"rgb_mixer", v3_object ({
+           {"weights", v3_at (rec, "mix_weights")},
+           {"black_offsets", v3_at (rec, "mix_dark")}})}})},
+       {"collection", v3_object ({
+         {"quality", v3_at (rec, "collection_quality")},
+         {"threshold", v3_at (rec, "collection_threshold")}})},
+       {"color_field", v3_object ({
+         {"screen_demosaic", v3_at (rec, "screen_demosaic")},
+         {"resampling", v3_at (rec, "demosaiced_scaling")},
+         {"screen_blur_radius", v3_at (rec, "screen_blur_radius")}})},
+       {"denoise", v3_object ({
+         {"before_reconstruction", v3_at (rec, "screen_denoise")},
+         {"after_reconstruction", v3_at (rec, "demosaiced_denoise")}})},
+       {"sharpening", v3_object ({
+         {"mode", v3_at (sharp, "mode")},
+         {"unsharp", v3_object ({
+           {"radius", v3_at (sharp, "unsharp_radius")},
+           {"amount", v3_at (sharp, "unsharp_amount")}})},
+         {"scanner", v3_object ({
+           {"snr", v3_at (sharp, "scanner_snr")},
+           {"mtf_scale", v3_at (sharp, "scanner_mtf_scale")}})},
+         {"richardson_lucy", v3_object ({
+           {"iterations", v3_at (sharp, "richardson_lucy_iterations")},
+           {"sigma", v3_at (sharp, "richardson_lucy_sigma")}})},
+         {"deconvolution_supersample",
+          v3_at (sharp, "deconvolution_supersample")},
+         {"resampling_kernel", v3_at (sharp, "resampling_kernel")}})}
+       })},
+     {"color", v3_object ({
+       {"illuminants", v3_object ({
+         {"photograph_temperature_k", v3_at (color, "temperature")},
+         {"backlight_temperature_k",
+          v3_at (color, "backlight_temperature")}})},
+       {"viewing", v3_object ({
+         {"whitepoint_xy", v3_at (color, "observer_whitepoint")}})},
+       {"adjustments", v3_object ({
+         {"white_balance", v3_at (color, "white_balance")},
+         {"presaturation", v3_at (color, "presaturation")},
+         {"dye_balance", v3_at (color, "dye_balance")},
+         {"saturation", v3_at (color, "saturation")},
+         {"brightness", v3_at (color, "brightness")},
+         {"tone_curve", v3_at (color, "tone_curve")}})} })}
+    });
+  return true;
+}
+
+} // anonymous namespace
+
+/* Canonical schema 3 from native C++ state; the only old-format dependency
+   here is an internal typed component bridge, not a JSON-v2 input reader. */
+bool
+encode_parameter_json_v3_document (
+    const scr_to_img_parameters &geometry,
+    const scr_detect_parameters &detection,
+    const render_parameters &render,
+    const solver_parameters &solver,
+    const std::vector<point_t> &profile_spots,
+    std::string *output, std::string *error)
+{
+  if (error)
+    error->clear ();
+  if (!output)
+    return archive_fail (error, "missing schema-3 document destination");
+
+  mtf_parameters mtf = render.sharpen.scanner_mtf;
+  bool any_ids = false;
+  for (const mtf_measurement &record : mtf.measurements)
+    any_ids |= !record.id.empty () || !record.capture_group_id.empty ();
+  if (any_ids)
+    {
+      if (!mtf.measurement_ids_valid_p ())
+        return archive_fail (error,
+                             "incomplete canonical MTF measurement identities");
+    }
+  else if (!mtf.assign_missing_measurement_ids ())
+    return archive_fail (error, "could not migrate legacy .par MTF identities");
+
+  std::string mtf_component;
+  if (!encode_parameter_json_v3_mtf (mtf, &mtf_component, error))
+    return false;
+  json_parser mtf_parser (mtf_component.data (),
+                          mtf_component.data () + mtf_component.size (),
+                          v2_max_sharpness_nodes);
+  json_value mtf_root;
+  if (!mtf_parser.parse (&mtf_root))
+    return archive_fail (error, "internal native MTF JSON parse failed");
+
+  /* The temporary component backend is run against a private copy with ID
+     fields stripped; none of its obsolete metadata enters the new format. */
+  render_parameters bridge_render = render;
+  for (mtf_measurement &record
+       : bridge_render.sharpen.scanner_mtf.measurements)
+    {
+      record.id.clear ();
+      record.capture_group_id.clear ();
+    }
+  std::string intermediate;
+  if (!encode_parameter_json_v2_document (
+          geometry, detection, bridge_render, solver,
+          profile_spots, &intermediate, error))
+    return false;
+  json_parser parser (intermediate.data (),
+                      intermediate.data () + intermediate.size (),
+                      v2_max_document_nodes);
+  json_value legacy_tree;
+  if (!parser.parse (&legacy_tree))
+    return archive_fail (error, "internal typed component parse failed");
+
+  json_value document;
+  if (!v3_restructure_typed_document (
+        legacy_tree,
+        v3_at (v3_at (v3_at (mtf_root, "calibration"), "capture"), "mtf"),
+        &document, error))
+    return false;
+
+  std::string serialized;
+  v3_json_text (document, &serialized);
+  serialized.push_back ('\n');
+  if (serialized.size () > v2_max_document_bytes
+      || !valid_utf8 (serialized)
+      || !parameter_json_resources_fit (serialized, parameter_json_max_nodes))
+    return archive_fail (error, "schema-3 document exceeds size/depth budget");
+  *output = std::move (serialized);
+  return true;
+}
+
 }
