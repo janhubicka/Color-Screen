@@ -15,6 +15,7 @@ import json
 import os
 from pathlib import Path
 import ntpath
+import posixpath
 from typing import Any
 
 FORMAT = "org.colorscreen.parameters"
@@ -38,7 +39,7 @@ def _take(value: dict[str, Any], fields: str, path: str) -> dict[str, Any]:
     return {n: deepcopy(value[n]) for n in names}
 
 
-def _rect_from_old(value: Any, path: str, *, nullable: bool = True) -> Any:
+def _rect_from_old(value: Any, path: str) -> Any:
     area = _take(value, "enabled rect", path)
     dims = area["rect"]
     if not isinstance(area["enabled"], bool) or not isinstance(dims, list) or len(dims) != 4 or any(type(v) is not int for v in dims):
@@ -54,6 +55,8 @@ def _rect_to_old(value: Any, path: str) -> dict[str, Any]:
     if value is None:
         return {"enabled": False, "rect": [0, 0, 0, 0]}
     val = _take(value, "x_px y_px width_px height_px", path)
+    if any(type(x) is not int for x in val.values()) or val["width_px"] <= 0 or val["height_px"] <= 0:
+        raise ValueError(f"{path}: expected integer bounds with positive dimensions")
     return {"enabled": True, "rect": [val[k] for k in ("x_px", "y_px", "width_px", "height_px")]}
 
 
@@ -80,12 +83,26 @@ def _optional_rect_to_old(value: Any, names: tuple[str, ...], path: str) -> list
         raise ValueError(f"{path}: unsupported metadata availability")
     if not isinstance(output, list) or len(output) != len(names) or any(type(x) is not int for x in output):
         raise ValueError(f"{path}: invalid coordinates")
+    # Reject contradictory availability instead of silently changing its
+    # interpretation if the record is imported again after a Save As.
+    available = all(x > 0 for x in output[-2:])
+    if available != (val["status"] == "available"):
+        raise ValueError(f"{path}: declared availability contradicts dimensions")
     return deepcopy(output)
 
 
-def _source_path(value: str) -> dict[str, str]:
+def _source_path(value: str) -> dict[str, str] | None:
     if not isinstance(value, str):
         raise ValueError("measurement.source_filename: expected text")
+    if not value:
+        return None  # Missing source, not a relative empty filename.
+    # A drive-relative Windows path (C:folder\\image.tif) depends on the
+    # process's current directory *on that drive*. Likewise \\folder\\image.tif
+    # is volume-rooted but lacks a drive. Neither is an absolute or reliably
+    # parameter-file-relative reference; reject instead of guessing on Save As.
+    drive, _ = ntpath.splitdrive(value)
+    if (drive and not ntpath.isabs(value)) or (value.startswith("\\") and not value.startswith("\\\\")):
+        raise ValueError("measurement.source_filename: ambiguous Windows-rooted source path")
     # ntpath handles Windows drive and UNC paths even on Linux. Do not assume
     # the host platform is the one on which the calibration was created.
     absolute = os.path.isabs(value) or ntpath.isabs(value)
@@ -93,15 +110,88 @@ def _source_path(value: str) -> dict[str, str]:
 
 
 def _source_to_old(value: Any) -> str:
+    if value is None:
+        return ""
     path = _take(value, "value base", "measurement.source.path")
-    if path["base"] not in ("absolute", "parameter_file") or not isinstance(path["value"], str):
-        raise ValueError("measurement.source.path: unsupported spelling/base")
+    if not isinstance(path["value"], str) or not path["value"]:
+        raise ValueError("measurement.source.path: use null for absent filenames")
+    # Reject an incompatible path base rather than discarding it.  A Windows
+    # absolute filename must never silently become parameter-relative.
+    if _source_path(path["value"])["base"] != path["base"]:
+        raise ValueError("measurement.source.path: base contradicts filename")
     return path["value"]
+
+
+def rebase_v3_source_paths(v3: dict[str, Any], old_document: str,
+                           new_document: str) -> dict[str, Any]:
+    """Reference-only Save As path rebasing without filesystem I/O.
+
+    A relative measurement source should continue referring to the same
+    absolute image after the parameter document moves. The original v3 object
+    remains unchanged if any path cannot be interpreted unambiguously.
+    This adapter does not implement the Qt/C++ document transaction.
+    """
+    if not isinstance(old_document, str) or not isinstance(new_document, str):
+        raise ValueError("source and destination document paths must be text")
+
+    def windows_path(value: str) -> bool:
+        return bool(ntpath.splitdrive(value)[0]) or "\\" in value
+
+    old_windows = windows_path(old_document)
+    if old_windows != windows_path(new_document):
+        raise ValueError("cannot rebase between Windows and POSIX document paths")
+    lib = ntpath if old_windows else posixpath
+    if not lib.isabs(old_document) or not lib.isabs(new_document):
+        raise ValueError("Save As requires absolute old and new document paths")
+
+    changed = deepcopy(v3)
+    try:
+        measurements = changed["calibration"]["capture"]["mtf"]["measurements"]
+    except (TypeError, KeyError) as exc:
+        raise ValueError("calibration.capture.mtf.measurements: missing") from exc
+    if not isinstance(measurements, list):
+        raise ValueError("calibration.capture.mtf.measurements: expected array")
+    original_dir = lib.dirname(lib.normpath(old_document))
+    destination_dir = lib.dirname(lib.normpath(new_document))
+    for i, measurement in enumerate(measurements):
+        location = f"calibration.capture.mtf.measurements[{i}].source.path"
+        try:
+            path = measurement["source"]["path"]
+        except (TypeError, KeyError) as exc:
+            raise ValueError(f"{location}: missing") from exc
+        _source_to_old(path)  # Validate missing/absolute/relative spelling.
+        if path is None or path["base"] == "absolute":
+            continue
+        spelling = path["value"]
+        if (old_windows and not lib.isabs(spelling)
+                and ntpath.splitdrive(spelling)[0]):
+            raise ValueError(f"{location}: drive-relative Windows path is ambiguous")
+        if not old_windows and "\\" in spelling:
+            raise ValueError(f"{location}: Windows separators in a POSIX-relative path")
+        resolved = lib.normpath(lib.join(original_dir, spelling))
+        if (old_windows and ntpath.normcase(ntpath.splitdrive(resolved)[0])
+                != ntpath.normcase(ntpath.splitdrive(destination_dir)[0])):
+            # Do not rely on ntpath.relpath raising for different drives.
+            # Some Windows/Python environments return a syntactically relative
+            # spelling that cannot designate the original image on the new
+            # volume. The target must be a real absolute path instead.
+            path.update({"value": resolved, "base": "absolute"})
+            continue
+        try:
+            relative = lib.relpath(resolved, destination_dir)
+        except ValueError:
+            # Defensive fallback (e.g. inconsistent UNC/mount spelling).
+            path.update({"value": resolved, "base": "absolute"})
+        else:
+            path["value"] = relative
+    return changed
 
 
 def _mtf_measurement_upgrade(m: dict[str, Any], index: int, group_id: str) -> dict[str, Any]:
     path = f"sharpness.mtf.measurements[{index}]"
     _keys(m, set("channel image_layer wavelength_nm same_capture name source_filename source_dimensions roi edge edge_quality samples".split()), path)
+    if type(m["same_capture"]) is not bool:
+        raise ValueError(f"{path}.same_capture: expected boolean")
     quality = m["edge_quality"]
     if not isinstance(quality, list) or len(quality) != 5:
         raise ValueError(f"{path}.edge_quality: expected five fields")
@@ -335,6 +425,8 @@ def downgrade_v3(v3: dict[str, Any]) -> dict[str, Any]:
     measurements = mtf["measurements"]
     if not isinstance(measurements, list):
         raise ValueError("calibration.capture.mtf.measurements: expected array")
+    if type(mtf["legacy_first_same_capture"]) is not bool or (not measurements and mtf["legacy_first_same_capture"]):
+        raise ValueError("calibration.capture.mtf.legacy_first_same_capture: invalid migration-only flag")
     ids = set()
     seen_groups = set()
     last_group = None
@@ -351,7 +443,7 @@ def downgrade_v3(v3: dict[str, Any]) -> dict[str, Any]:
             if group in seen_groups:
                 raise ValueError("cannot downgrade discontiguous capture groups to v2")
             seen_groups.add(group)
-        same_capture = (bool(mtf["legacy_first_same_capture"]) if i == 0 else group == last_group)
+        same_capture = mtf["legacy_first_same_capture"] if i == 0 else group == last_group
         old_measurements.append(_mtf_measurement_downgrade(m, same_capture))
         if ident == mtf["selected_measurement_id"]:
             selected_index = i
@@ -400,6 +492,11 @@ def downgrade_v3(v3: dict[str, Any]) -> dict[str, Any]:
     }
     if "required_features" in v3:
         old["required_features"] = deepcopy(v3["required_features"])
+    # Moving an opaque calibration/denoiser subtree must not circumvent the
+    # strict vocabulary check that was already required on v2 import. In
+    # particular, a future nested v3 field must not be silently carried into
+    # an old version or ignored by callers before the native C++ decoder runs.
+    _validate_v2_nested_vocabulary(old)
     return deepcopy(old)
 
 

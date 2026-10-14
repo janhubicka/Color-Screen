@@ -151,6 +151,125 @@ def main() -> int:
     invalid["color"]["viewing"]["display_profile"] = "sRGB"
     check_raises(lambda: module.downgrade_v3(invalid), "display profile silently persisted")
     print("# Unknown-field traps passed")
+
+    # Empty source filenames mean missing provenance, not a relative path
+    # naming the current parameter-file directory.
+    no_source = deepcopy(rich)
+    no_source["sharpness"]["mtf"]["measurements"][1]["source_filename"] = ""
+    upgraded_no_source = module.upgrade_v2(no_source)
+    assert upgraded_no_source["calibration"]["capture"]["mtf"]["measurements"][1]["source"]["path"] is None
+    assert module.downgrade_v3(upgraded_no_source) == no_source
+
+    def malformed_v3(mutator):
+        candidate = module.upgrade_v2(rich)
+        mutator(candidate)
+        check_raises(lambda: module.downgrade_v3(candidate),
+                     "malformed v3 provenance/status accepted")
+
+    def wrong_base(doc):
+        # The first source is Windows-absolute even when validated on Unix.
+        doc["calibration"]["capture"]["mtf"]["measurements"][0]["source"]["path"]["base"] = "parameter_file"
+    malformed_v3(wrong_base)
+
+    def empty_path(doc):
+        doc["calibration"]["capture"]["mtf"]["measurements"][0]["source"]["path"]["value"] = ""
+    malformed_v3(empty_path)
+
+    def wrong_status(doc):
+        doc["calibration"]["capture"]["mtf"]["measurements"][0]["source"]["roi"]["width_px"] = 0
+    malformed_v3(wrong_status)
+
+    def wrong_legacy_flag(doc):
+        doc["calibration"]["capture"]["mtf"]["legacy_first_same_capture"] = "false"
+    malformed_v3(wrong_legacy_flag)
+
+    def bad_crop(doc):
+        doc["capture"]["bounds"]["photograph"]["width_px"] = 0
+    malformed_v3(bad_crop)
+
+    corrupt = deepcopy(rich)
+    corrupt["sharpness"]["mtf"]["measurements"][0]["same_capture"] = "false"
+    check_raises(lambda: module.upgrade_v2(corrupt),
+                 "nonboolean MTF same_capture accepted")
+    # Missing source and absolute UNC paths must survive import unchanged,
+    # but drive-relative and volume-rooted paths depend on a Windows process
+    # working directory, not on the parameter document's location.
+    ambiguous = deepcopy(rich)
+    ambiguous["sharpness"]["mtf"]["measurements"][1]["source_filename"] = r"C:images\edge.tif"
+    check_raises(lambda: module.upgrade_v2(ambiguous),
+                 "ambiguous Windows drive-relative MTF path accepted")
+    ambiguous["sharpness"]["mtf"]["measurements"][1]["source_filename"] = r"\images\edge.tif"
+    check_raises(lambda: module.upgrade_v2(ambiguous),
+                 "ambiguous volume-rooted MTF path accepted")
+    unc = deepcopy(rich)
+    unc["sharpness"]["mtf"]["measurements"][1]["source_filename"] = r"\\server\share\edge.tif"
+    unc_upgrade = module.upgrade_v2(unc)
+    assert unc_upgrade["calibration"]["capture"]["mtf"]["measurements"][1]["source"]["path"]["base"] == "absolute"
+    assert module.downgrade_v3(unc_upgrade) == unc
+
+    # The reference importer checks unknown nested fields. A v3 editor must
+    # not bypass that invariant merely by moving a subtree between sections.
+    unknown_nested = module.upgrade_v2(rich)
+    unknown_nested["process"]["contact_copy"]["future_spectral_setting"] = 1
+    check_raises(lambda: module.downgrade_v3(unknown_nested),
+                 "unknown v3 contact-copy field accepted during downgrade")
+    unknown_nested = module.upgrade_v2(rich)
+    unknown_nested["reconstruction"]["denoise"]["before_reconstruction"]["future_filter"] = 2
+    check_raises(lambda: module.downgrade_v3(unknown_nested),
+                 "unknown v3 denoiser field accepted during downgrade")
+    print("# Ambiguous/UNC Windows provenance and nested-v3 field rejection passed")
+
+    print("# Source-path, availability, crop, and migration-flag integrity passed")
+
+    # Saving the parameter document in another directory must not change
+    # which image each relative measurement path refers to.
+    original = module.upgrade_v2(rich)
+    rebased = module.rebase_v3_source_paths(
+        original, "/srv/photos/session/state.cspar", "/srv/exports/new.cspar")
+    srcs = original["calibration"]["capture"]["mtf"]["measurements"]
+    moved = rebased["calibration"]["capture"]["mtf"]["measurements"]
+    assert moved[0]["source"]["path"] == srcs[0]["source"]["path"]
+    assert moved[1]["source"]["path"] == {
+        "base": "parameter_file", "value": "../photos/relative/edge.tif"}
+    assert original["calibration"]["capture"]["mtf"]["measurements"] == srcs
+
+    import ntpath
+    windows_old = r"C:\archive\session\params.cspar"
+    windows_new = r"C:\archive\exports\params.cspar"
+    moved_windows = module.rebase_v3_source_paths(original, windows_old, windows_new)
+    win_path = moved_windows["calibration"]["capture"]["mtf"]["measurements"][1]["source"]["path"]
+    windows_resolved = ntpath.normpath(
+        ntpath.join(ntpath.dirname(windows_new), win_path["value"]))
+    windows_expected = ntpath.normpath(r"C:\archive\relative\edge.tif")
+    assert windows_resolved == windows_expected, (
+        f"Windows same-drive Save As changed source: "
+        f"old={windows_old!r}, new={windows_new!r}, path={win_path!r}, "
+        f"resolved={windows_resolved!r}, expected={windows_expected!r}")
+    assert win_path["base"] == "parameter_file", win_path
+    across_volumes = module.rebase_v3_source_paths(
+        original, windows_old, r"D:\archive\params.cspar")
+    different = across_volumes["calibration"]["capture"]["mtf"]["measurements"][1]["source"]["path"]
+    # Cross-volume Save As must refer to the same absolute file.  Windows
+    # Python implementations may choose different spellings (separators,
+    # case, redundant components), which are not changes of file identity.
+    assert different["base"] == "absolute" and ntpath.isabs(different["value"]), (
+        f"Cross-volume Save As left a nonabsolute source: {different!r}")
+    assert ntpath.normcase(ntpath.normpath(different["value"])) == ntpath.normcase(windows_expected), (
+        f"Cross-volume Save As changed referenced image: path={different!r}, "
+        f"expected={windows_expected!r}")
+    assert module.rebase_v3_source_paths(upgraded_no_source,
+        "/srv/photos/session/state.cspar", "/srv/exports/new.cspar")[
+            "calibration"]["capture"]["mtf"]["measurements"][1]["source"]["path"] is None
+
+    check_raises(lambda: module.rebase_v3_source_paths(original,
+                 "session/state.cspar", "/srv/exports/new.cspar"),
+                 "relative document path accepted for Save As")
+    invalid_rebase = deepcopy(original)
+    invalid_rebase["calibration"]["capture"]["mtf"]["measurements"][1]["source"]["path"]["base"] = "absolute"
+    check_raises(lambda: module.rebase_v3_source_paths(invalid_rebase,
+                 "/srv/photos/session/state.cspar", "/srv/exports/new.cspar"),
+                 "contradictory path base accepted for Save As")
+    print("# Reference-only POSIX/Windows Save As path rebasing passed")
     return 0
 
 
@@ -158,5 +277,10 @@ if __name__ == "__main__":
     try:
         raise SystemExit(main())
     except (AssertionError, OSError, ValueError, subprocess.TimeoutExpired) as exc:
+        # Preserve the failing line and actual platform path operation.
+        # An unlabelled assert has an empty message on Windows, which
+        # otherwise makes a regression impossible to diagnose from CI logs.
+        import traceback
+        traceback.print_exc(file=sys.stderr)
         print(f"# JSON v3 reference validation failure: {exc}", file=sys.stderr)
         raise SystemExit(1)

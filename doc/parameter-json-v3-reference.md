@@ -58,14 +58,26 @@ policies, temporary-worker state and derived plots remain **excluded**.
   `contrast_fraction`, `snr` and `phase_coverage_fraction`. Samples remain
   compact triples; `sample_columns` fixes their units to cycles/pixel,
   contrast percent and uncertainty percentage points.
-* Source provenance distinguishes absolute from parameter-file-relative path
-  spellings, and records unavailability with explicit `status` (retaining
-  old sentinel values for lossless migration). The reference adapter does
-  **not** yet implement Save As rebasing or the GUI lifecycle. Those must be
-  addressed before shipping v3.
+* Source provenance distinguishes absolute from parameter-file-relative
+  path spellings. A missing source filename becomes `null`, not a relative
+  empty filename. The downgrade rejects contradictory path bases rather than
+  silently discarding them. Drive-relative Windows paths and root-only Windows
+  paths with no volume are rejected as ambiguous; qualified UNC paths remain
+  supported. Source dimensions and ROI use explicit `status`;
+  historical sentinel values are retained for lossless migration, but
+  changing a status without changing the dimensions is rejected.
+  The reference adapter includes an in-memory
+  `rebase_v3_source_paths()` experiment for POSIX and Windows Save As, keeping
+  absolute references and missing-source records unchanged and falling back
+  to absolute paths for cross-volume Windows moves. It neither writes files
+  nor implements the native C++/Qt Save As transaction; that integration and
+  any real source-file path resolution remain prerequisites for shipping v3.
 * Downgrading a v3 document whose capture group is noncontiguous in the
   measurement order fails rather than silently changing group membership.
   An unknown measurement ID, duplicate ID or unknown field also fails.
+  Reverse conversion revalidates the strict nested v2 field vocabulary,
+  preventing unknown settings in moved contact-copy/denoiser/calibration
+  subtrees from being accepted accidentally.
 
 ## Validation and outstanding risks
 
@@ -74,8 +86,10 @@ checked-in `.par` source, then checks Python v2→v3→v2 **exact parsed-tree
 identity**. Independent synthetic nondefault tests cover crop, orientation,
 gamma, widths, final-frame geometry, inactive sharpening controls, Unicode
 MTF source labels, scanner channel vs image-layer provenance, unavailable
-source/ROI metadata, capture-group reordering, ID validity, and nested unknown
-fields. It does not replace the existing v2 corpus test, which separately
+source/ROI metadata, capture-group reordering, ID validity, source path-base agreement,
+missing-source semantics, available/unavailable status consistency,
+POSIX/Windows Save As rebasing without touching the original document, and
+nested unknown fields. It does not replace the existing v2 corpus test, which separately
 checks canonical `.par` output byte-for-byte after a real C++ v2 decode.
 
 Local Debian 13/GCC 14, checking-enabled, native core/CLI build: **128/128
