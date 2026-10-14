@@ -15,6 +15,7 @@
 #include <complex>
 #include <limits>
 #include <memory>
+#include <unordered_map>
 #include <unordered_set>
 namespace colorscreen
 {
@@ -128,9 +129,49 @@ mtf_parameters::select_measurement_id (const std::string &id)
   return true;
 }
 
-/* Reorder without silently changing the relationship encoded by legacy
-   SAME_CAPTURE flags. Future schema-3 edits can handle arbitrary order using
-   capture_group_id, but must not pass a discontiguous capture to a v2 writer. */
+/* Return a group index for each curve. Explicit capture IDs are independent
+   of storage order; only old unupgraded .par data relies on adjacent flags.
+   An incomplete collection fails without publishing partial results. */
+bool
+mtf_parameters::capture_group_indices (std::vector<size_t> *out) const
+{
+  if (!out)
+    return false;
+  bool explicit_groups = false;
+  for (const mtf_measurement &record : measurements)
+    explicit_groups |= !record.capture_group_id.empty ();
+
+  std::vector<size_t> indices;
+  indices.reserve (measurements.size ());
+  if (explicit_groups)
+    {
+      std::unordered_map<std::string, size_t> groups;
+      for (const mtf_measurement &record : measurements)
+        {
+          if (record.capture_group_id.empty ())
+            return false;
+          const size_t next = groups.size ();
+          const auto pair = groups.emplace (record.capture_group_id, next);
+          indices.push_back (pair.first->second);
+        }
+    }
+  else
+    {
+      size_t group = 0;
+      for (size_t i = 0; i < measurements.size (); ++i)
+        {
+          if (i && !measurements[i].same_capture)
+            ++group;
+          indices.push_back (group);
+        }
+    }
+  *out = std::move (indices);
+  return true;
+}
+
+/* Reorder records without changing the selected curve or explicit group.
+   Only legacy in-memory records lack stable IDs and remain subject to
+   adjacency constraints until their one-time .par migration. */
 bool
 mtf_parameters::move_measurement (int from, int to)
 {
@@ -179,11 +220,16 @@ mtf_parameters::move_measurement (int from, int to)
     std::rotate (order.begin () + to, order.begin () + from,
                  order.begin () + from + 1);
 
-  std::unordered_set<std::string> visited_groups;
-  for (size_t i = 0; i < count; ++i)
-    if (!i || groups[order[i]] != groups[order[i - 1]])
-      if (!visited_groups.insert (groups[order[i]]).second)
-        return false;
+  /* The old adjacency representation cannot express a split capture. Once
+     records carry stable group IDs, however, any order is lossless. */
+  if (!complete_ids)
+    {
+      std::unordered_set<std::string> visited_groups;
+      for (size_t i = 0; i < count; ++i)
+        if (!i || groups[order[i]] != groups[order[i - 1]])
+          if (!visited_groups.insert (groups[order[i]]).second)
+            return false;
+    }
 
   const int original_selection = measured_mtf_idx;
   if (from < to)
