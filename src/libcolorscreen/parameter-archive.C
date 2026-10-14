@@ -3912,7 +3912,7 @@ validate_parameter_document_file (const char *name, std::string *error)
   render_parameters render;
   solver_parameters solver;
   std::vector<point_t> spots;
-  return read_parameter_json_v2_file (
+  return read_parameter_json_v3_file (
       name, &geometry, &detection, &render, &solver, &spots, error);
 }
 
