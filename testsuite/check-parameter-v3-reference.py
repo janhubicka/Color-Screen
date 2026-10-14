@@ -191,6 +191,34 @@ def main() -> int:
     corrupt["sharpness"]["mtf"]["measurements"][0]["same_capture"] = "false"
     check_raises(lambda: module.upgrade_v2(corrupt),
                  "nonboolean MTF same_capture accepted")
+    # Missing source and absolute UNC paths must survive import unchanged,
+    # but drive-relative and volume-rooted paths depend on a Windows process
+    # working directory, not on the parameter document's location.
+    ambiguous = deepcopy(rich)
+    ambiguous["sharpness"]["mtf"]["measurements"][1]["source_filename"] = r"C:images\edge.tif"
+    check_raises(lambda: module.upgrade_v2(ambiguous),
+                 "ambiguous Windows drive-relative MTF path accepted")
+    ambiguous["sharpness"]["mtf"]["measurements"][1]["source_filename"] = r"\images\edge.tif"
+    check_raises(lambda: module.upgrade_v2(ambiguous),
+                 "ambiguous volume-rooted MTF path accepted")
+    unc = deepcopy(rich)
+    unc["sharpness"]["mtf"]["measurements"][1]["source_filename"] = r"\\server\share\edge.tif"
+    unc_upgrade = module.upgrade_v2(unc)
+    assert unc_upgrade["calibration"]["capture"]["mtf"]["measurements"][1]["source"]["path"]["base"] == "absolute"
+    assert module.downgrade_v3(unc_upgrade) == unc
+
+    # The reference importer checks unknown nested fields. A v3 editor must
+    # not bypass that invariant merely by moving a subtree between sections.
+    unknown_nested = module.upgrade_v2(rich)
+    unknown_nested["process"]["contact_copy"]["future_spectral_setting"] = 1
+    check_raises(lambda: module.downgrade_v3(unknown_nested),
+                 "unknown v3 contact-copy field accepted during downgrade")
+    unknown_nested = module.upgrade_v2(rich)
+    unknown_nested["reconstruction"]["denoise"]["before_reconstruction"]["future_filter"] = 2
+    check_raises(lambda: module.downgrade_v3(unknown_nested),
+                 "unknown v3 denoiser field accepted during downgrade")
+    print("# Ambiguous/UNC Windows provenance and nested-v3 field rejection passed")
+
     print("# Source-path, availability, crop, and migration-flag integrity passed")
 
     # Saving the parameter document in another directory must not change
