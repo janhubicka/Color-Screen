@@ -5492,4 +5492,252 @@ write_parameter_json_v3_file (
 }
 
 
+
+/* Cross-platform lexical source-path resolution for Save As. Do not use the
+   host filesystem's Windows-path rules: a .cspar may move between operating
+   systems while still containing drive/UNC references. */
+namespace
+{
+struct v3_absolute_path
+{
+  bool windows = false;
+  std::string root;
+  std::string root_key;
+  std::vector<std::string> parts;
+};
+
+bool
+v3_separator (char c, bool windows)
+{
+  return c == '/' || (windows && c == '\\');
+}
+
+std::string
+v3_ascii_lower (std::string str)
+{
+  for (char &c : str)
+    if (c >= 'A' && c <= 'Z')
+      c = (char)(c + ('a' - 'A'));
+  return str;
+}
+
+/* Parse an absolute POSIX, drive or UNC pathname with no filesystem access.
+   '.' and '..' are normalized, rejecting traversal above the known root. */
+bool
+v3_parse_absolute_path (const std::string &path, v3_absolute_path *out)
+{
+  if (!out || path.empty () || path.find ('\0') != std::string::npos
+      || !valid_utf8 (path))
+    return false;
+
+  v3_absolute_path parsed;
+  size_t start = 0;
+  if (path.size () >= 3
+      && ((path[0] >= 'A' && path[0] <= 'Z')
+          || (path[0] >= 'a' && path[0] <= 'z'))
+      && path[1] == ':' && (path[2] == '\\' || path[2] == '/'))
+    {
+      parsed.windows = true;
+      parsed.root = path.substr (0, 2) + "\\";
+      parsed.root_key = v3_ascii_lower (path.substr (0, 2));
+      start = 3;
+    }
+  else if (path.size () >= 5 && path[0] == '\\' && path[1] == '\\')
+    {
+      parsed.windows = true;
+      size_t server_end = path.find_first_of ("\\/", 2);
+      if (server_end == std::string::npos || server_end == 2)
+        return false;
+      const size_t share_start = server_end + 1;
+      if (share_start == path.size ()
+          || v3_separator (path[share_start], true))
+        return false;
+      size_t share_end = path.find_first_of ("\\/", share_start);
+      const std::string server = path.substr (2, server_end - 2);
+      const std::string share
+          = path.substr (share_start, share_end - share_start);
+      if (server == "." || server == ".." || share == "." || share == ".."
+          || server == "?" || server == "!")
+        return false;
+      parsed.root = "\\\\" + server + "\\" + share + "\\";
+      parsed.root_key = v3_ascii_lower (server + "\\" + share);
+      start = share_end == std::string::npos ? path.size () : share_end + 1;
+    }
+  else if (path[0] == '/')
+    {
+      parsed.root = "/";
+      parsed.root_key = "/";
+      start = 1;
+    }
+  else
+    return false;
+
+  while (start < path.size ())
+    {
+      while (start < path.size ()
+             && v3_separator (path[start], parsed.windows))
+        ++start;
+      if (start == path.size ())
+        break;
+      size_t end = start;
+      while (end < path.size ()
+             && !v3_separator (path[end], parsed.windows))
+        ++end;
+      const std::string component = path.substr (start, end - start);
+      if (component == "..")
+        {
+          if (parsed.parts.empty ())
+            return false;
+          parsed.parts.pop_back ();
+        }
+      else if (component != ".")
+        parsed.parts.push_back (component);
+      start = end;
+    }
+  if (parsed.parts.empty ())
+    return false; // A document path must include a filename, not only root.
+  *out = std::move (parsed);
+  return true;
+}
+
+/* Resolve SOURCE under an absolute directory, rejecting '..' above its
+   physical volume root. Windows separators are allowed only for Windows
+   documents, never silently interpreted on POSIX. */
+bool
+v3_resolve_relative (const std::string &source, bool windows,
+                     std::vector<std::string> *absolute)
+{
+  if (!absolute || source.empty () || source.find ('\0') != std::string::npos
+      || (!windows && source.find ('\\') != std::string::npos)
+      || !valid_utf8 (source))
+    return false;
+  size_t start = 0;
+  while (start < source.size ())
+    {
+      while (start < source.size ()
+             && v3_separator (source[start], windows))
+        ++start;
+      const size_t begin = start;
+      while (start < source.size ()
+             && !v3_separator (source[start], windows))
+        ++start;
+      if (start == begin)
+        break;
+      const std::string component = source.substr (begin, start - begin);
+      if (component == "..")
+        {
+          if (absolute->empty ())
+            return false;
+          absolute->pop_back ();
+        }
+      else if (component != ".")
+        absolute->push_back (component);
+    }
+  return true;
+}
+
+std::string
+v3_join_components (const std::vector<std::string> &parts, bool windows)
+{
+  std::string joined;
+  const char separator = windows ? '\\' : '/';
+  for (const std::string &part : parts)
+    {
+      if (!joined.empty ())
+        joined.push_back (separator);
+      joined += part;
+    }
+  return joined;
+}
+
+/* Rebase a single spelling, leaving absolute paths and absent references
+   untouched. For cross-volume Windows moves retain the original absolute
+   image location instead of producing an unusable relative path. */
+bool
+v3_rebase_one_path (const std::string &source,
+                    const v3_absolute_path &from,
+                    const v3_absolute_path &to,
+                    std::string *result)
+{
+  if (source.empty ())
+    {
+      *result = source;
+      return true;
+    }
+  std::string declared_base;
+  if (!v3_mtf_path_base (source, &declared_base))
+    return false;
+  if (declared_base == "absolute")
+    {
+      *result = source;
+      return true;
+    }
+  if (!from.windows && source.find ('\\') != std::string::npos)
+    return false;
+
+  std::vector<std::string> absolute (from.parts.begin (),
+                                     from.parts.end () - 1);
+  if (!v3_resolve_relative (source, from.windows, &absolute))
+    return false;
+  if (from.windows && from.root_key != to.root_key)
+    {
+      *result = from.root + v3_join_components (absolute, true);
+      return true;
+    }
+  const size_t destination_dirs = to.parts.size () - 1;
+  size_t common = 0;
+  while (common < destination_dirs && common < absolute.size ())
+    {
+      const std::string &left = absolute[common];
+      const std::string &right = to.parts[common];
+      if (from.windows ? v3_ascii_lower (left) != v3_ascii_lower (right)
+                       : left != right)
+        break;
+      ++common;
+    }
+  std::vector<std::string> relative;
+  for (size_t i = common; i < destination_dirs; ++i)
+    relative.push_back ("..");
+  for (size_t i = common; i < absolute.size (); ++i)
+    relative.push_back (absolute[i]);
+  *result = relative.empty () ? "." : v3_join_components (relative, to.windows);
+  return true;
+}
+} // anonymous namespace
+
+/* The operation is all-or-nothing even if a later measurement uses malformed
+   source provenance. No location is resolved against process CWD. */
+bool
+rebase_parameter_mtf_source_paths (
+    mtf_parameters *mtf, const std::string &old_parameter_file,
+    const std::string &new_parameter_file, std::string *error)
+{
+  if (error)
+    error->clear ();
+  if (!mtf)
+    return archive_fail (error, "missing MTF source-rebase destination");
+  v3_absolute_path old_path, new_path;
+  if (!v3_parse_absolute_path (old_parameter_file, &old_path)
+      || !v3_parse_absolute_path (new_parameter_file, &new_path)
+      || old_path.windows != new_path.windows)
+    return archive_fail (error,
+                         "MTF Save As requires absolute paths on one platform");
+
+  mtf_parameters staged = *mtf;
+  for (size_t i = 0; i < staged.measurements.size (); ++i)
+    {
+      mtf_measurement &record = staged.measurements[i];
+      std::string rewritten;
+      if (!v3_rebase_one_path (record.source_filename, old_path, new_path,
+                               &rewritten))
+        return archive_fail (
+            error, "cannot rebase MTF source filename at measurement "
+                       + std::to_string (i));
+      record.source_filename = std::move (rewritten);
+    }
+  *mtf = std::move (staged);
+  return true;
+}
+
+
 }
