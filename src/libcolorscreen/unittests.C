@@ -3670,6 +3670,19 @@ test_native_json_v3_mtf ()
   check (!encode_parameter_json_v3_mtf (invalid, &untouched, &error)
          && untouched == "existing",
          "missing identity silently regenerated during output");
+  invalid = original;
+  invalid.measurements[2].source_filename
+    = "\\\\archive-server\\plates\\edge.tif";
+  std::string unc_json;
+  mtf_parameters unc_loaded;
+  check (encode_parameter_json_v3_mtf (invalid, &unc_json, &error)
+         && decode_parameter_json_v3_mtf (unc_json, &unc_loaded, &error)
+         && unc_loaded.equal_p (invalid),
+         "Windows UNC absolute provenance was not preserved");
+  invalid.measurements[2].source_filename = "\\volume-rooted\\edge.tif";
+  check (!encode_parameter_json_v3_mtf (invalid, &untouched, &error)
+         && untouched == "existing",
+         "unqualified Windows volume-rooted source was accepted");
 
   mtf_parameters empty;
   std::string empty_json;
