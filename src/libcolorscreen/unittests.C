@@ -3499,8 +3499,9 @@ test_mtf_record_identity ()
          && collision.measurements[1].capture_group_id == "capture-000001",
          "legacy migration overwrote a reserved identifier");
 
-  /* Schema-v2 and .par must reject explicitly upgraded identities before
-     writing any bytes: silently dropping them would corrupt a v3 document. */
+  /* Internal JSON-v2 helpers must never discard stable IDs. Real .par
+     export instead remains supported for groups whose physical membership
+     is expressible by the old adjacency flags. */
   render_parameters render_with_ids;
   render_with_ids.sharpen.scanner_mtf = records;
   std::string untouched = "existing destination";
@@ -3509,15 +3510,33 @@ test_mtf_record_identity ()
                                                &untouched, &error)
          && untouched == "existing destination"
          && error.find ("identities") != std::string::npos,
-         "v2 component writer silently lost stable MTF identities");
+         "old internal codec silently lost stable MTF identities");
   FILE *legacy_file = tmpfile ();
-  check (legacy_file != nullptr, "cannot allocate legacy guard fixture");
+  check (legacy_file != nullptr, "cannot allocate legacy export fixture");
   if (legacy_file)
+    {
+      check (render_with_ids.sharpen.scanner_mtf
+                 .legacy_capture_groups_representable_p ()
+             && save_csp (legacy_file, nullptr, nullptr, &render_with_ids,
+                          nullptr)
+             && ftell (legacy_file) > 0,
+             "contiguous canonical captures could not export to .par");
+      fclose (legacy_file);
+    }
+  mtf_parameters split_groups = records;
+  check (split_groups.move_measurement (2, 1)
+         && !split_groups.legacy_capture_groups_representable_p (),
+         "nonadjacent canonical capture unexpectedly representable in .par");
+  render_with_ids.sharpen.scanner_mtf = split_groups;
+  legacy_file = tmpfile ();
+  if (!legacy_file)
+    check (false, "cannot allocate nonadjacent legacy export fixture");
+  else
     {
       check (!save_csp (legacy_file, nullptr, nullptr, &render_with_ids,
                         nullptr)
              && ftell (legacy_file) == 0,
-             "legacy .par writer emitted a partial or lossy file");
+             "nonadjacent capture was lost or partially written to .par");
       fclose (legacy_file);
     }
 
