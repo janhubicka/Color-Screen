@@ -475,7 +475,7 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
             MainWindow::ParameterFileState::Format::JsonV3 ||
         !colorscreen::parameter_json_signature_p(
             defaultJsonParams.toUtf8().constData())) {
-      qCritical() << "New .cspar target did not default to plain JSON v2";
+      qCritical() << "New .cspar target did not default to plain JSON v3";
       app.exit(documentLifecycleFailure);
       return;
     }
@@ -547,10 +547,10 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
     // preserve the complete native state and use the same physical encoding.
     const QString jsonParams = state->temporaryDirectory->filePath(
         QStringLiteral("explicit-native-json-v3.cspar"));
-    const ParameterState originalV2State = first->documentStateSnapshot();
+    const ParameterState originalV3State = first->documentStateSnapshot();
     if (!first->saveParametersToFile(
             jsonParams, MainWindow::ParameterSaveFormat::JsonV3)) {
-      qCritical() << "Document lifecycle smoke could not export native v2 JSON";
+      qCritical() << "Document lifecycle smoke could not export native v3 JSON";
       app.exit(documentLifecycleFailure);
       return;
     }
@@ -565,17 +565,17 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
         first->m_parameterFile.format !=
             MainWindow::ParameterFileState::Format::JsonV3 ||
         first->documentStateSnapshot().scrToImg.final_angle !=
-            originalV2State.scrToImg.final_angle ||
+            originalV3State.scrToImg.final_angle ||
         first->documentStateSnapshot().rparams.gamma !=
-            originalV2State.rparams.gamma ||
+            originalV3State.rparams.gamma ||
         !first->saveParametersToFile(jsonParams) ||
         readFile(jsonParams) != nativeBefore) {
-      qCritical() << "Native v2 explicit Save As/Open/ordinary Save failed";
+      qCritical() << "Native v3 explicit Save As/Open/ordinary Save failed";
       app.exit(documentLifecycleFailure);
       return;
     }
 
-    // A malformed v2 file is rejected transactionally. Do not accept it as
+    // A malformed v3 file is rejected transactionally. Do not accept it as
     // legacy CSP, overwrite the live document, or change its loaded target.
     const QString invalidJsonParams =
         state->temporaryDirectory->filePath(
@@ -586,7 +586,7 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
     if (!malformed.open(QIODevice::WriteOnly | QIODevice::Truncate) ||
         malformed.write(truncatedNative) != truncatedNative.size() ||
         !malformed.flush()) {
-      qCritical() << "Native v2 smoke could not create truncated fixture";
+      qCritical() << "Native v3 smoke could not create truncated fixture";
       app.exit(documentLifecycleFailure);
       return;
     }
@@ -597,7 +597,7 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
             MainWindow::ParameterFileState::Format::JsonV3 ||
         first->m_parameterFile.path != QFileInfo(jsonParams).absoluteFilePath() ||
         first->documentStateSnapshot() != acceptedBeforeFailure) {
-      qCritical() << "Invalid native v2 JSON partially changed Qt document";
+      qCritical() << "Invalid native v3 JSON partially changed Qt document";
       app.exit(documentLifecycleFailure);
       return;
     }
@@ -612,7 +612,7 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
             MainWindow::ParameterSaveFormat::JsonV3) ||
         first->m_parameterFile.format !=
             MainWindow::ParameterFileState::Format::JsonV3) {
-      qCritical() << "Native v2 smoke could not restore JSON target";
+      qCritical() << "Native v3 smoke could not restore JSON target";
       app.exit(documentLifecycleFailure);
       return;
     }
@@ -809,7 +809,7 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
         if (!colorscreen::parameter_json_signature_p(
                 validParams.toUtf8().constData())) {
           fail(QStringLiteral(
-              "Recovery writer did not emit native JSON v2 parameters"));
+              "Recovery writer did not emit native JSON v3 parameters"));
           return;
         }
 
