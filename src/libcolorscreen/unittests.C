@@ -11073,6 +11073,214 @@ test_legacy_csp_representability ()
   return true;
 }
 
+
+/* Exercise the complete first-shipping semantic JSON layout directly from
+   typed state. The old v2 component helpers remain an internal implementation
+   detail; v2 JSON is not an accepted file-format compatibility contract. */
+static bool
+test_native_json_v3_document ()
+{
+  scr_to_img_parameters geometry;
+  geometry.type = Dufay;
+  geometry.center = {77.125, 22.375};
+  geometry.coordinate1 = {3.25, 0.125};
+  geometry.coordinate2 = {-0.25, 4.75};
+  geometry.final_angle = 47.5;
+  geometry.final_ratio = 1.375;
+  scr_detect_parameters detection;
+  detection.min_ratio = 1.25f;
+  solver_parameters solver;
+  solver.optimize_tilt = false;
+  solver.lens_center_distance = 1.5;
+  solver.points.push_back ({{1, 2}, {3, 4},
+                            solver_parameters::point_color (0)});
+  const std::vector<point_t> spots {{12.25, 13.75}};
+
+  render_parameters render;
+  render.capture_type = render_parameters::capture_transparency_with_screen;
+  render.gamma = -1;
+  render.scan_crop = int_image_area (1, 2, 500, 400);
+  render.image_area = int_image_area (10, 11, 450, 350);
+  render.scan_exposure = 1.25f;
+  render.ignore_infrared = true;
+  render.demosaiced_scaling = render_parameters::lanczos3_scaling;
+  render.output_tone_curve = tone_curve::tone_curve_custom;
+  render.output_tone_curve_control_points
+      = {{0, 0}, {0.25, 0.2}, {0.75, 0.8}, {1, 1}};
+  render.sharpen.mode = sharpen_parameters::wiener_deconvolution;
+  mtf_parameters &mtf = render.sharpen.scanner_mtf;
+  mtf.model = mtf_model::physical_diffraction;
+  mtf.sigma = 0.625;
+  mtf.scan_dpi = 2400;
+  mtf.wavelengths = {600, 540, 460, 780};
+  mtf.measurements.resize (3);
+  for (int i = 0; i < 3; ++i)
+    {
+      mtf.measurements[i].name = std::string ("edge-") + std::to_string (i);
+      mtf.measurements[i].channel = i % 3;
+      mtf.measurements[i].wavelength = 540;
+      mtf.measurements[i].add_value (0, 100, 0);
+      mtf.measurements[i].add_value (0.25, 60 - i, 0.5);
+      mtf.measurements[i].add_value (0.5, 12 + i, 1.25);
+    }
+  mtf.measured_mtf_idx = 2;
+  if (!mtf.assign_missing_measurement_ids ())
+    return false;
+  /* The first and last records are from the same physical capture, with
+     an unrelated capture deliberately between them. */
+  mtf.measurements[2].capture_group_id
+      = mtf.measurements[0].capture_group_id;
+  mtf.measurements[2].same_capture = false;
+  mtf.measurements[0].source_filename = "C:\\scans\\plate.tif";
+  mtf.measurements[0].source_width = 1600;
+  mtf.measurements[0].source_height = 1200;
+  mtf.measurements[0].roi = {4, 5, 80, 40};
+
+  std::string json, error;
+  if (!encode_parameter_json_v3_document (
+          geometry, detection, render, solver, spots, &json, &error))
+    {
+      fprintf (stderr, "Native schema-3 document encode: %s\n",
+               error.c_str ());
+      return false;
+    }
+  if (json.find ("\"schema_version\":3") == std::string::npos
+      || json.find ("\"calibration\"") == std::string::npos
+      || json.find ("\"capture_group_id\"") == std::string::npos
+      || json.find ("\"legacy_first_same_capture\"") != std::string::npos
+      || json.find ("\"linearization\":{\"mode\":\"srgb\"}")
+            == std::string::npos
+      || json.find ("\"object_crop\"") == std::string::npos
+      || json.find ("\"scanner_primaries_xyz\"") == std::string::npos)
+    {
+      fprintf (stderr, "Native schema-3 document structure is incomplete\n");
+      return false;
+    }
+
+  scr_to_img_parameters parsed_geometry;
+  scr_detect_parameters parsed_detection;
+  render_parameters parsed_render;
+  solver_parameters parsed_solver;
+  std::vector<point_t> parsed_spots;
+  if (!decode_parameter_json_v3_document (
+          json, &parsed_geometry, &parsed_detection, &parsed_render,
+          &parsed_solver, &parsed_spots, &error))
+    {
+      fprintf (stderr, "Native schema-3 document decode: %s\n",
+               error.c_str ());
+      return false;
+    }
+  if (!(parsed_geometry == geometry)
+      || !(parsed_detection == detection)
+      || parsed_solver.points != solver.points
+      || parsed_spots != spots
+      || parsed_render.gamma != render.gamma
+      || !(parsed_render.image_area == render.image_area)
+      || !parsed_render.sharpen.equal_p (render.sharpen)
+      || parsed_render.output_tone_curve_control_points
+             != render.output_tone_curve_control_points
+      || parsed_render.sharpen.scanner_mtf.selected_measurement_id ()
+             != mtf.selected_measurement_id ())
+    {
+      fprintf (stderr, "Native schema-3 typed parameter equality failed\n");
+      return false;
+    }
+  std::vector<size_t> groups;
+  if (!parsed_render.sharpen.scanner_mtf.capture_group_indices (&groups)
+      || groups.size () != 3 || groups[0] != groups[2]
+      || groups[0] == groups[1])
+    {
+      fprintf (stderr, "Native schema-3 capture membership changed\n");
+      return false;
+    }
+
+  std::string rewritten;
+  if (!encode_parameter_json_v3_document (
+          parsed_geometry, parsed_detection, parsed_render,
+          parsed_solver, parsed_spots, &rewritten, &error)
+      || rewritten != json)
+    {
+      fprintf (stderr, "Native schema-3 rewrite was not canonical: %s\n",
+               error.c_str ());
+      return false;
+    }
+
+  auto invalid = [&] (const std::string &source,
+                      const char *failure) -> bool
+    {
+      scr_to_img_parameters target_g = parsed_geometry;
+      scr_detect_parameters target_d = parsed_detection;
+      render_parameters target_r = parsed_render;
+      solver_parameters target_s = parsed_solver;
+      std::vector<point_t> target_spots = parsed_spots;
+      std::string problem;
+      if (decode_parameter_json_v3_document (
+            source, &target_g, &target_d, &target_r,
+            &target_s, &target_spots, &problem)
+          || problem.empty ()
+          || !(target_g == parsed_geometry)
+          || !(target_d == parsed_detection)
+          || !target_r.sharpen.equal_p (parsed_render.sharpen)
+          || target_s.points != parsed_solver.points
+          || target_spots != parsed_spots)
+        {
+          fprintf (stderr, "Native schema-3 accepted or mutated %s: %s\n",
+                   failure, problem.c_str ());
+          return false;
+        }
+      return true;
+    };
+  auto replace_once = [] (const std::string &source,
+                          const std::string &from,
+                          const std::string &to) -> std::string
+    {
+      std::string edited = source;
+      const size_t pos = edited.find (from);
+      if (pos == std::string::npos)
+        return {};
+      edited.replace (pos, from.size (), to);
+      return edited;
+    };
+  if (!invalid (replace_once (json, "\"schema_version\":3",
+                              "\"schema_version\":2"), "old JSON-v2 version")
+      || !invalid (replace_once (
+          json, "\"selected_measurement_id\":\"measurement-000003\"",
+          "\"selected_measurement_id\":\"unknown\""),
+          "dangling selected MTF ID")
+      || !invalid (replace_once (json, "\"capture\":{",
+                                  "\"capture\":{\"unknown\":1,"),
+                   "unknown capture field")
+      || !invalid (replace_once (
+          json, "\"linearization\":{\"mode\":\"srgb\"}",
+          "\"linearization\":{\"mode\":\"srgb\",\"exponent\":2.2}"),
+          "invalid sRGB transfer fields")
+      || !invalid (replace_once (json, "\"schema_version\":3",
+                                  "\"schema_version\":999"),
+                   "future schema version")
+      || !invalid ("{}", "empty schema-3 document"))
+    return false;
+
+  /* Even a legacy .par-based state without initialized MTF record IDs can
+     produce a complete canonical JSON document without mutating its source. */
+  render_parameters legacy_render = render;
+  for (mtf_measurement &m : legacy_render.sharpen.scanner_mtf.measurements)
+    {
+      m.id.clear ();
+      m.capture_group_id.clear ();
+    }
+  const render_parameters before = legacy_render;
+  std::string upgraded;
+  if (!encode_parameter_json_v3_document (
+          geometry, detection, legacy_render, solver,
+          spots, &upgraded, &error)
+      || !legacy_render.sharpen.equal_p (before.sharpen))
+    {
+      fprintf (stderr, "Legacy .par schema-3 conversion changed source\n");
+      return false;
+    }
+  return true;
+}
+
 /* Compose and reload one COMPLETE native JSON v2 document using one parse,
    then reject missing sections and corrupted nested content transactionally. */
 static bool
@@ -12989,6 +13197,8 @@ main (int argc, char **argv)
     { "image_area", "image area tests", [] () { return test_image_area (); } },
     { "legacy_csp_representability", "reject lossy saves to historical .par",
       [] () { return test_legacy_csp_representability (); } },
+    { "json_v3_document", "complete canonical schema-3 JSON document roundtrip",
+      [] () { return test_native_json_v3_document (); } },
     { "json_v2_document", "complete native schema-v2 JSON document roundtrip",
       [] () { return test_native_json_v2_document (); } },
     { "json_v2_correction_grids", "native JSON schema-v2 spatial correction grid codec",
