@@ -1,0 +1,17 @@
+## -*- sh -*-
+## Strict structural schema-3 *reference*, not a product-format test.
+
+if test -z "$srcdir"; then
+    srcdir=$(echo "$0" | sed 's,[^/]*$,,')
+    test "$srcdir" = "$0" && srcdir=.
+    test -z "$srcdir" && srcdir=.
+fi
+. "$srcdir/defs.sh"
+echo 1..1
+
+if python3 -X utf8 "$srcdir/check-parameter-v3-schema.py" "$srcdir/.."; then
+    echo 'ok 1 - reference schema 3 is closed and validates rich and default fixtures'
+else
+    echo 'not ok 1 - reference schema 3 is missing, permissive or invalid'
+    exit 1
+fi

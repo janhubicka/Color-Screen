@@ -98,3 +98,26 @@ Save As and import; (4) authoritative JSON Schema and representative full
 fixtures; (5) round-trip tests across every persistent nested C++ member;
 (6) failure-atomic CLI/Qt/recovery upgrades, platform sanitizers, and operator
 field testing. All schema-2 readers remain read-compatible after switching.
+
+## Draft 2020-12 structural schema and examples
+
+A strict **reference-only** vocabulary is maintained at
+`doc/parameter-json-v3-reference.schema.json` with checked-in default and
+rich examples (`parameter-json-v3-{default,rich}-example.json`). The schema
+requires known object members, tagged input-transfer and strip-width modes,
+measurement and capture-group identifiers, typed grid/sample arrays, and
+explicit nullable source and crop records. It excludes ephemeral rendering,
+GUI, cache and display-profile state. No production reader accepts schema 3.
+
+`testsuite/parameter-v3-schema.test` checks the schema's local references,
+closed objects, both reversible examples and malformed/missing/unknown-field
+cases without requiring external Python packages. If `jsonschema` is installed,
+it additionally checks compliance with JSON Schema draft 2020-12.
+
+**Semantic validation remains separate.** JSON Schema cannot express unique
+measurement IDs by key, selected-ID existence, contiguous legacy capture
+groups, the product of grid dimensions versus stored sample count, or a
+portable path's declared base versus Windows/POSIX spelling. The reference
+translator and future native C++ codec must enforce those constraints. The
+current `legacy_first_same_capture` member exists only for lossless migration
+back to v2 and must not become part of the final native schema-3 format.

@@ -1,0 +1,591 @@
+{
+  "calibration": {
+    "capture": {
+      "mtf": {
+        "blur_diameter_px": 0,
+        "defocus_mm": 0,
+        "f_stop": 0,
+        "halo_fraction": 0,
+        "halo_sigma_px": 0,
+        "legacy_first_same_capture": false,
+        "measurements": [
+          {
+            "capture_group_id": "capture-000001",
+            "channel": "red",
+            "edge_quality": {
+              "angle_deg": 4.2,
+              "contrast_fraction": 0.7,
+              "fit_rms_px": 0.08,
+              "phase_coverage_fraction": 0.93,
+              "snr": 35.0
+            },
+            "id": "measurement-000001",
+            "image_layer": false,
+            "label": "focus Ångström 0",
+            "samples": [
+              [
+                0.05,
+                92.0,
+                0.5
+              ],
+              [
+                0.2,
+                41.0,
+                2.0
+              ]
+            ],
+            "source": {
+              "dimensions": {
+                "height_px": 7200,
+                "status": "available",
+                "width_px": 10000
+              },
+              "edge_points_px": [
+                [
+                  1.2,
+                  2.3
+                ],
+                [
+                  8.5,
+                  9.7
+                ]
+              ],
+              "path": {
+                "base": "absolute",
+                "value": "C:\\\\samples\\\\calibration\\\\img.tif"
+              },
+              "roi": {
+                "height_px": 250,
+                "status": "available",
+                "width_px": 300,
+                "x_px": 100,
+                "y_px": 150
+              }
+            },
+            "wavelength_nm": 450
+          },
+          {
+            "capture_group_id": "capture-000001",
+            "channel": "green",
+            "edge_quality": {
+              "angle_deg": 4.2,
+              "contrast_fraction": 0.7,
+              "fit_rms_px": 0.08,
+              "phase_coverage_fraction": 0.93,
+              "snr": 35.0
+            },
+            "id": "measurement-000002",
+            "image_layer": true,
+            "label": "focus Ångström 1",
+            "samples": [
+              [
+                0.05,
+                92.0,
+                0.5
+              ],
+              [
+                0.2,
+                41.0,
+                2.0
+              ]
+            ],
+            "source": {
+              "dimensions": {
+                "height_px": 7200,
+                "status": "available",
+                "width_px": 10000
+              },
+              "edge_points_px": [
+                [
+                  1.2,
+                  2.3
+                ],
+                [
+                  8.5,
+                  9.7
+                ]
+              ],
+              "path": {
+                "base": "parameter_file",
+                "value": "../relative/edge.tif"
+              },
+              "roi": {
+                "height_px": 250,
+                "status": "available",
+                "width_px": 300,
+                "x_px": 100,
+                "y_px": 150
+              }
+            },
+            "wavelength_nm": 485
+          },
+          {
+            "capture_group_id": "capture-000001",
+            "channel": "blue",
+            "edge_quality": {
+              "angle_deg": 4.2,
+              "contrast_fraction": 0.7,
+              "fit_rms_px": 0.08,
+              "phase_coverage_fraction": 0.93,
+              "snr": 35.0
+            },
+            "id": "measurement-000003",
+            "image_layer": false,
+            "label": "focus Ångström 2",
+            "samples": [
+              [
+                0.05,
+                92.0,
+                0.5
+              ],
+              [
+                0.2,
+                41.0,
+                2.0
+              ]
+            ],
+            "source": {
+              "dimensions": {
+                "height_px": 7200,
+                "status": "available",
+                "width_px": 10000
+              },
+              "edge_points_px": [
+                [
+                  1.2,
+                  2.3
+                ],
+                [
+                  8.5,
+                  9.7
+                ]
+              ],
+              "path": {
+                "base": "absolute",
+                "value": "C:\\\\samples\\\\calibration\\\\img.tif"
+              },
+              "roi": {
+                "height_px": 250,
+                "status": "available",
+                "width_px": 300,
+                "x_px": 100,
+                "y_px": 150
+              }
+            },
+            "wavelength_nm": 520
+          },
+          {
+            "capture_group_id": "capture-000002",
+            "channel": "none",
+            "edge_quality": {
+              "angle_deg": 4.2,
+              "contrast_fraction": 0.7,
+              "fit_rms_px": 0.08,
+              "phase_coverage_fraction": 0.93,
+              "snr": 35.0
+            },
+            "id": "measurement-000004",
+            "image_layer": true,
+            "label": "focus Ångström 3",
+            "samples": [
+              [
+                0.05,
+                92.0,
+                0.5
+              ],
+              [
+                0.2,
+                41.0,
+                2.0
+              ]
+            ],
+            "source": {
+              "dimensions": {
+                "legacy_values": [
+                  -1,
+                  0
+                ],
+                "status": "unavailable"
+              },
+              "edge_points_px": [
+                [
+                  1.2,
+                  2.3
+                ],
+                [
+                  8.5,
+                  9.7
+                ]
+              ],
+              "path": {
+                "base": "parameter_file",
+                "value": "../relative/edge.tif"
+              },
+              "roi": {
+                "legacy_values": [
+                  99,
+                  3,
+                  -1,
+                  -1
+                ],
+                "status": "unavailable"
+              }
+            },
+            "wavelength_nm": 555
+          }
+        ],
+        "model": "automatic",
+        "pixel_pitch_um": 0,
+        "sample_columns": [
+          "frequency_cycles_per_pixel",
+          "contrast_percent",
+          "uncertainty_percentage_points"
+        ],
+        "scan_dpi": 0,
+        "selected_measurement_id": "measurement-000003",
+        "sensor_fill_factor": 1,
+        "sigma_px": 0,
+        "wavelengths_nm": [
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "scanner_primaries_xyz": {
+        "blue": [
+          0,
+          0,
+          0
+        ],
+        "green": [
+          0,
+          0,
+          0
+        ],
+        "red": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    "flat_field": {
+      "black_correction": 0,
+      "grid": null
+    },
+    "process_color": {
+      "profile_rgb": {
+        "blue": [
+          0,
+          0,
+          1
+        ],
+        "dark": [
+          0,
+          0,
+          0
+        ],
+        "green": [
+          0,
+          1,
+          0
+        ],
+        "red": [
+          1,
+          0,
+          0
+        ]
+      },
+      "spots": [
+        [
+          10.23,
+          21.41
+        ],
+        [
+          98.12,
+          7.5
+        ]
+      ]
+    },
+    "spatial_blur": null,
+    "tiles": {
+      "adjustments": [],
+      "dimensions": [
+        0,
+        0
+      ]
+    }
+  },
+  "capture": {
+    "bounds": {
+      "object_crop": {
+        "height_px": 12000,
+        "width_px": 16000,
+        "x_px": -20,
+        "y_px": 4
+      },
+      "photograph": {
+        "height_px": 10200,
+        "width_px": 14300,
+        "x_px": 120,
+        "y_px": 85
+      }
+    },
+    "levels": {
+      "black_offset": 0.042,
+      "gain": 1.4
+    },
+    "linearization": {
+      "exponent": 2.4,
+      "mode": "power"
+    },
+    "orientation": {
+      "mirror": true,
+      "quarter_turns": 3
+    },
+    "raw": {
+      "demosaic": "default"
+    },
+    "type": "unknown"
+  },
+  "color": {
+    "adjustments": {
+      "brightness": 1,
+      "dye_balance": "bradford",
+      "presaturation": 1,
+      "saturation": 1,
+      "tone_curve": {
+        "control_points": [
+          [
+            0,
+            0
+          ],
+          [
+            0.04737,
+            0.07149
+          ],
+          [
+            0.21764,
+            0.46303
+          ],
+          [
+            0.53114,
+            0.82709
+          ],
+          [
+            1,
+            1
+          ]
+        ],
+        "type": "linear"
+      },
+      "white_balance": [
+        1,
+        1,
+        1
+      ]
+    },
+    "illuminants": {
+      "backlight_temperature_k": 5000,
+      "photograph_temperature_k": 5000
+    },
+    "viewing": {
+      "whitepoint_xy": [
+        0.3456781506538391,
+        0.35851287841796875
+      ]
+    }
+  },
+  "format": "org.colorscreen.parameters",
+  "geometry": {
+    "final_frame": {
+      "angle_deg": 108.375,
+      "axis_length_ratio": 0.803158,
+      "mirror": false,
+      "rotation": 0
+    },
+    "imaging_model": "fixed-lens",
+    "lens": {
+      "center": [
+        0.5,
+        0.5
+      ],
+      "radial": [
+        1,
+        0,
+        0,
+        0
+      ]
+    },
+    "mapping": {
+      "axis_x": [
+        0,
+        0
+      ],
+      "axis_y": [
+        0,
+        0
+      ],
+      "center": [
+        0,
+        0
+      ],
+      "projection_distance": 1,
+      "tilt": [
+        0,
+        0
+      ]
+    },
+    "mesh": null
+  },
+  "process": {
+    "color_model": "Wratten_25_58_47_spectra",
+    "contact_copy": {
+      "boost": 1,
+      "emulsion_curve": {
+        "linear1": [
+          -5,
+          5
+        ],
+        "linear2": [
+          5,
+          -5
+        ],
+        "max": [
+          6,
+          -5.5
+        ],
+        "min": [
+          -6,
+          5.5
+        ]
+      },
+      "exposure": 1,
+      "preflash": 0,
+      "simulate": false
+    },
+    "dyes": {
+      "aging_fraction": [
+        1,
+        1,
+        1
+      ],
+      "density": [
+        1,
+        1,
+        1
+      ]
+    },
+    "screen": {
+      "strip_widths": {
+        "green": {
+          "mode": "fraction",
+          "value": 0.37
+        },
+        "red": {
+          "mode": "automatic"
+        }
+      },
+      "type": "None"
+    }
+  },
+  "reconstruction": {
+    "collection": {
+      "quality": "simple-screen",
+      "threshold": 0.20000000298023224
+    },
+    "color_field": {
+      "resampling": "default",
+      "screen_blur_radius": 0.5,
+      "screen_demosaic": "default"
+    },
+    "denoise": {
+      "after_reconstruction": {
+        "bilateral_sigma_r": 0.10000000149011612,
+        "bilateral_sigma_s": 2,
+        "mode": "none",
+        "noise_variance_floor": 0,
+        "noise_variance_slope": 0,
+        "patch_radius": 1,
+        "search_radius": 6,
+        "strength": 0.10000000149011612
+      },
+      "before_reconstruction": {
+        "bilateral_sigma_r": 0.10000000149011612,
+        "bilateral_sigma_s": 2,
+        "mode": "none",
+        "noise_variance_floor": 0,
+        "noise_variance_slope": 0,
+        "patch_radius": 1,
+        "search_radius": 6,
+        "strength": 0.10000000149011612
+      }
+    },
+    "image_layer": {
+      "ignore_infrared": false,
+      "rgb_mixer": {
+        "black_offsets": [
+          0,
+          0,
+          0
+        ],
+        "weights": [
+          0.30000001192092896,
+          0.10000000149011612,
+          1
+        ]
+      }
+    },
+    "sharpening": {
+      "deconvolution_supersample": 2,
+      "mode": "none",
+      "resampling_kernel": "lanczos8",
+      "richardson_lucy": {
+        "iterations": 0,
+        "sigma": 2.72
+      },
+      "scanner": {
+        "mtf_scale": 1,
+        "snr": 2000
+      },
+      "unsharp": {
+        "amount": 0,
+        "radius": 3.21
+      }
+    }
+  },
+  "registration": {
+    "detection": {
+      "black": [
+        0,
+        0,
+        0
+      ],
+      "blue": [
+        0,
+        0,
+        1
+      ],
+      "green": [
+        0,
+        1,
+        0
+      ],
+      "min_luminosity": 0,
+      "min_ratio": 1,
+      "red": [
+        1,
+        0,
+        0
+      ]
+    },
+    "fit": {
+      "lens_center_distance": 0,
+      "optimize_lens": true,
+      "optimize_tilt": true
+    },
+    "points": []
+  },
+  "schema_version": 3
+}

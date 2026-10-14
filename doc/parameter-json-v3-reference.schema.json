@@ -1,0 +1,1420 @@
+{
+  "$defs": {
+    "backlightGrid": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "black_correction": {
+              "type": "boolean"
+            },
+            "channels": {
+              "items": {
+                "type": "boolean"
+              },
+              "maxItems": 4,
+              "minItems": 4,
+              "type": "array"
+            },
+            "dimensions": {
+              "items": {
+                "type": "integer"
+              },
+              "maxItems": 2,
+              "minItems": 2,
+              "type": "array"
+            },
+            "luminosities": {
+              "items": {
+                "items": {
+                  "type": "number"
+                },
+                "maxItems": 4,
+                "minItems": 4,
+                "type": "array"
+              },
+              "type": "array"
+            },
+            "subtractions": {
+              "items": {
+                "items": {
+                  "type": "number"
+                },
+                "maxItems": 4,
+                "minItems": 4,
+                "type": "array"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "black_correction",
+            "channels",
+            "dimensions",
+            "luminosities",
+            "subtractions"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "blurGrid": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "dimensions": {
+              "items": {
+                "type": "integer"
+              },
+              "maxItems": 2,
+              "minItems": 2,
+              "type": "array"
+            },
+            "mode": {
+              "type": "string"
+            },
+            "values": {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "dimensions",
+            "mode",
+            "values"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "curve": {
+      "additionalProperties": false,
+      "properties": {
+        "control_points": {
+          "items": {
+            "$ref": "#/$defs/point"
+          },
+          "type": "array"
+        },
+        "type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "control_points",
+        "type"
+      ],
+      "type": "object"
+    },
+    "denoiser": {
+      "additionalProperties": false,
+      "properties": {
+        "bilateral_sigma_r": {
+          "type": "number"
+        },
+        "bilateral_sigma_s": {
+          "type": "number"
+        },
+        "mode": {
+          "type": "string"
+        },
+        "noise_variance_floor": {
+          "type": "number"
+        },
+        "noise_variance_slope": {
+          "type": "number"
+        },
+        "patch_radius": {
+          "type": "integer"
+        },
+        "search_radius": {
+          "type": "integer"
+        },
+        "strength": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "bilateral_sigma_r",
+        "bilateral_sigma_s",
+        "mode",
+        "noise_variance_floor",
+        "noise_variance_slope",
+        "patch_radius",
+        "search_radius",
+        "strength"
+      ],
+      "type": "object"
+    },
+    "extent2": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "height_px": {
+              "minimum": 1,
+              "type": "integer"
+            },
+            "status": {
+              "const": "available"
+            },
+            "width_px": {
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "height_px",
+            "status",
+            "width_px"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "legacy_values": {
+              "items": {
+                "type": "integer"
+              },
+              "maxItems": 2,
+              "minItems": 2,
+              "type": "array"
+            },
+            "status": {
+              "const": "unavailable"
+            }
+          },
+          "required": [
+            "legacy_values",
+            "status"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "extent4": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "height_px": {
+              "minimum": 1,
+              "type": "integer"
+            },
+            "status": {
+              "const": "available"
+            },
+            "width_px": {
+              "minimum": 1,
+              "type": "integer"
+            },
+            "x_px": {
+              "type": "integer"
+            },
+            "y_px": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "height_px",
+            "status",
+            "width_px",
+            "x_px",
+            "y_px"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "legacy_values": {
+              "items": {
+                "type": "integer"
+              },
+              "maxItems": 4,
+              "minItems": 4,
+              "type": "array"
+            },
+            "status": {
+              "const": "unavailable"
+            }
+          },
+          "required": [
+            "legacy_values",
+            "status"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "measurement": {
+      "additionalProperties": false,
+      "properties": {
+        "capture_group_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "channel": {
+          "type": "string"
+        },
+        "edge_quality": {
+          "additionalProperties": false,
+          "properties": {
+            "angle_deg": {
+              "type": "number"
+            },
+            "contrast_fraction": {
+              "type": "number"
+            },
+            "fit_rms_px": {
+              "type": "number"
+            },
+            "phase_coverage_fraction": {
+              "type": "number"
+            },
+            "snr": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "angle_deg",
+            "contrast_fraction",
+            "fit_rms_px",
+            "phase_coverage_fraction",
+            "snr"
+          ],
+          "type": "object"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "image_layer": {
+          "type": "boolean"
+        },
+        "label": {
+          "type": "string"
+        },
+        "samples": {
+          "items": {
+            "items": {
+              "type": "number"
+            },
+            "maxItems": 3,
+            "minItems": 3,
+            "type": "array"
+          },
+          "type": "array"
+        },
+        "source": {
+          "additionalProperties": false,
+          "properties": {
+            "dimensions": {
+              "$ref": "#/$defs/extent2"
+            },
+            "edge_points_px": {
+              "items": {
+                "$ref": "#/$defs/point"
+              },
+              "maxItems": 2,
+              "minItems": 2,
+              "type": "array"
+            },
+            "path": {
+              "$ref": "#/$defs/sourcePath"
+            },
+            "roi": {
+              "$ref": "#/$defs/extent4"
+            }
+          },
+          "required": [
+            "dimensions",
+            "edge_points_px",
+            "path",
+            "roi"
+          ],
+          "type": "object"
+        },
+        "wavelength_nm": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "capture_group_id",
+        "channel",
+        "edge_quality",
+        "id",
+        "image_layer",
+        "label",
+        "samples",
+        "source",
+        "wavelength_nm"
+      ],
+      "type": "object"
+    },
+    "mesh": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "dimensions": {
+              "items": {
+                "type": "integer"
+              },
+              "maxItems": 2,
+              "minItems": 2,
+              "type": "array"
+            },
+            "direction": {
+              "enum": [
+                "image-to-screen",
+                "screen-to-image"
+              ]
+            },
+            "points": {
+              "items": {
+                "$ref": "#/$defs/point"
+              },
+              "type": "array"
+            },
+            "shift": {
+              "$ref": "#/$defs/point"
+            },
+            "step": {
+              "$ref": "#/$defs/point"
+            }
+          },
+          "required": [
+            "dimensions",
+            "direction",
+            "points",
+            "shift",
+            "step"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "point": {
+      "items": {
+        "type": "number"
+      },
+      "maxItems": 2,
+      "minItems": 2,
+      "type": "array"
+    },
+    "rectangle": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "height_px": {
+              "minimum": 1,
+              "type": "integer"
+            },
+            "width_px": {
+              "minimum": 1,
+              "type": "integer"
+            },
+            "x_px": {
+              "type": "integer"
+            },
+            "y_px": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "height_px",
+            "width_px",
+            "x_px",
+            "y_px"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "rgb": {
+      "items": {
+        "type": "number"
+      },
+      "maxItems": 3,
+      "minItems": 3,
+      "type": "array"
+    },
+    "sourcePath": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "base": {
+              "enum": [
+                "absolute",
+                "parameter_file"
+              ]
+            },
+            "value": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "base",
+            "value"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "stripWidth": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "mode": {
+              "const": "automatic"
+            }
+          },
+          "required": [
+            "mode"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "mode": {
+              "const": "fraction"
+            },
+            "value": {
+              "exclusiveMinimum": 0,
+              "maximum": 1,
+              "type": "number"
+            }
+          },
+          "required": [
+            "mode",
+            "value"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "tileGrid": {
+      "additionalProperties": false,
+      "properties": {
+        "adjustments": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "dark_point": {
+                "type": "number"
+              },
+              "exposure": {
+                "type": "number"
+              },
+              "scanner_blur": {
+                "$ref": "#/$defs/blurGrid"
+              }
+            },
+            "required": [
+              "dark_point",
+              "exposure",
+              "scanner_blur"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "dimensions": {
+          "items": {
+            "type": "integer"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": "array"
+        }
+      },
+      "required": [
+        "adjustments",
+        "dimensions"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "urn:colorscreen:parameters:schema-3-reference",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Strict structural vocabulary only. Cross-field constraints and path rebasing require the authoritative C++ codec; current application writes schema 2.",
+  "properties": {
+    "calibration": {
+      "additionalProperties": false,
+      "properties": {
+        "capture": {
+          "additionalProperties": false,
+          "properties": {
+            "mtf": {
+              "additionalProperties": false,
+              "properties": {
+                "blur_diameter_px": {
+                  "type": "number"
+                },
+                "defocus_mm": {
+                  "type": "number"
+                },
+                "f_stop": {
+                  "type": "number"
+                },
+                "halo_fraction": {
+                  "type": "number"
+                },
+                "halo_sigma_px": {
+                  "type": "number"
+                },
+                "legacy_first_same_capture": {
+                  "type": "boolean"
+                },
+                "measurements": {
+                  "items": {
+                    "$ref": "#/$defs/measurement"
+                  },
+                  "type": "array"
+                },
+                "model": {
+                  "type": "string"
+                },
+                "pixel_pitch_um": {
+                  "type": "number"
+                },
+                "sample_columns": {
+                  "const": [
+                    "frequency_cycles_per_pixel",
+                    "contrast_percent",
+                    "uncertainty_percentage_points"
+                  ]
+                },
+                "scan_dpi": {
+                  "type": "number"
+                },
+                "selected_measurement_id": {
+                  "oneOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  ]
+                },
+                "sensor_fill_factor": {
+                  "type": "number"
+                },
+                "sigma_px": {
+                  "type": "number"
+                },
+                "wavelengths_nm": {
+                  "items": {
+                    "type": "number"
+                  },
+                  "maxItems": 4,
+                  "minItems": 4,
+                  "type": "array"
+                }
+              },
+              "required": [
+                "blur_diameter_px",
+                "defocus_mm",
+                "f_stop",
+                "halo_fraction",
+                "halo_sigma_px",
+                "legacy_first_same_capture",
+                "measurements",
+                "model",
+                "pixel_pitch_um",
+                "sample_columns",
+                "scan_dpi",
+                "selected_measurement_id",
+                "sensor_fill_factor",
+                "sigma_px",
+                "wavelengths_nm"
+              ],
+              "type": "object"
+            },
+            "scanner_primaries_xyz": {
+              "additionalProperties": false,
+              "properties": {
+                "blue": {
+                  "$ref": "#/$defs/rgb"
+                },
+                "green": {
+                  "$ref": "#/$defs/rgb"
+                },
+                "red": {
+                  "$ref": "#/$defs/rgb"
+                }
+              },
+              "required": [
+                "blue",
+                "green",
+                "red"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "mtf",
+            "scanner_primaries_xyz"
+          ],
+          "type": "object"
+        },
+        "flat_field": {
+          "additionalProperties": false,
+          "properties": {
+            "black_correction": {
+              "type": "number"
+            },
+            "grid": {
+              "$ref": "#/$defs/backlightGrid"
+            }
+          },
+          "required": [
+            "black_correction",
+            "grid"
+          ],
+          "type": "object"
+        },
+        "process_color": {
+          "additionalProperties": false,
+          "properties": {
+            "profile_rgb": {
+              "additionalProperties": false,
+              "properties": {
+                "blue": {
+                  "$ref": "#/$defs/rgb"
+                },
+                "dark": {
+                  "$ref": "#/$defs/rgb"
+                },
+                "green": {
+                  "$ref": "#/$defs/rgb"
+                },
+                "red": {
+                  "$ref": "#/$defs/rgb"
+                }
+              },
+              "required": [
+                "blue",
+                "dark",
+                "green",
+                "red"
+              ],
+              "type": "object"
+            },
+            "spots": {
+              "items": {
+                "$ref": "#/$defs/point"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "profile_rgb",
+            "spots"
+          ],
+          "type": "object"
+        },
+        "spatial_blur": {
+          "$ref": "#/$defs/blurGrid"
+        },
+        "tiles": {
+          "$ref": "#/$defs/tileGrid"
+        }
+      },
+      "required": [
+        "capture",
+        "flat_field",
+        "process_color",
+        "spatial_blur",
+        "tiles"
+      ],
+      "type": "object"
+    },
+    "capture": {
+      "additionalProperties": false,
+      "properties": {
+        "bounds": {
+          "additionalProperties": false,
+          "properties": {
+            "object_crop": {
+              "$ref": "#/$defs/rectangle"
+            },
+            "photograph": {
+              "$ref": "#/$defs/rectangle"
+            }
+          },
+          "required": [
+            "object_crop",
+            "photograph"
+          ],
+          "type": "object"
+        },
+        "levels": {
+          "additionalProperties": false,
+          "properties": {
+            "black_offset": {
+              "type": "number"
+            },
+            "gain": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "black_offset",
+            "gain"
+          ],
+          "type": "object"
+        },
+        "linearization": {
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "mode": {
+                  "const": "srgb"
+                }
+              },
+              "required": [
+                "mode"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "exponent": {
+                  "type": "number"
+                },
+                "mode": {
+                  "const": "power"
+                }
+              },
+              "required": [
+                "exponent",
+                "mode"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "orientation": {
+          "additionalProperties": false,
+          "properties": {
+            "mirror": {
+              "type": "boolean"
+            },
+            "quarter_turns": {
+              "maximum": 3,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "mirror",
+            "quarter_turns"
+          ],
+          "type": "object"
+        },
+        "raw": {
+          "additionalProperties": false,
+          "properties": {
+            "demosaic": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "demosaic"
+          ],
+          "type": "object"
+        },
+        "type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "bounds",
+        "levels",
+        "linearization",
+        "orientation",
+        "raw",
+        "type"
+      ],
+      "type": "object"
+    },
+    "color": {
+      "additionalProperties": false,
+      "properties": {
+        "adjustments": {
+          "additionalProperties": false,
+          "properties": {
+            "brightness": {
+              "type": "number"
+            },
+            "dye_balance": {
+              "type": "string"
+            },
+            "presaturation": {
+              "type": "number"
+            },
+            "saturation": {
+              "type": "number"
+            },
+            "tone_curve": {
+              "$ref": "#/$defs/curve"
+            },
+            "white_balance": {
+              "$ref": "#/$defs/rgb"
+            }
+          },
+          "required": [
+            "brightness",
+            "dye_balance",
+            "presaturation",
+            "saturation",
+            "tone_curve",
+            "white_balance"
+          ],
+          "type": "object"
+        },
+        "illuminants": {
+          "additionalProperties": false,
+          "properties": {
+            "backlight_temperature_k": {
+              "type": "number"
+            },
+            "photograph_temperature_k": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "backlight_temperature_k",
+            "photograph_temperature_k"
+          ],
+          "type": "object"
+        },
+        "viewing": {
+          "additionalProperties": false,
+          "properties": {
+            "whitepoint_xy": {
+              "$ref": "#/$defs/point"
+            }
+          },
+          "required": [
+            "whitepoint_xy"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "adjustments",
+        "illuminants",
+        "viewing"
+      ],
+      "type": "object"
+    },
+    "format": {
+      "const": "org.colorscreen.parameters"
+    },
+    "geometry": {
+      "additionalProperties": false,
+      "properties": {
+        "final_frame": {
+          "additionalProperties": false,
+          "properties": {
+            "angle_deg": {
+              "type": "number"
+            },
+            "axis_length_ratio": {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            "mirror": {
+              "type": "boolean"
+            },
+            "rotation": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "angle_deg",
+            "axis_length_ratio",
+            "mirror",
+            "rotation"
+          ],
+          "type": "object"
+        },
+        "imaging_model": {
+          "type": "string"
+        },
+        "lens": {
+          "additionalProperties": false,
+          "properties": {
+            "center": {
+              "$ref": "#/$defs/point"
+            },
+            "radial": {
+              "items": {
+                "type": "number"
+              },
+              "maxItems": 4,
+              "minItems": 4,
+              "type": "array"
+            }
+          },
+          "required": [
+            "center",
+            "radial"
+          ],
+          "type": "object"
+        },
+        "mapping": {
+          "additionalProperties": false,
+          "properties": {
+            "axis_x": {
+              "$ref": "#/$defs/point"
+            },
+            "axis_y": {
+              "$ref": "#/$defs/point"
+            },
+            "center": {
+              "$ref": "#/$defs/point"
+            },
+            "projection_distance": {
+              "type": "number"
+            },
+            "tilt": {
+              "$ref": "#/$defs/point"
+            }
+          },
+          "required": [
+            "axis_x",
+            "axis_y",
+            "center",
+            "projection_distance",
+            "tilt"
+          ],
+          "type": "object"
+        },
+        "mesh": {
+          "$ref": "#/$defs/mesh"
+        }
+      },
+      "required": [
+        "final_frame",
+        "imaging_model",
+        "lens",
+        "mapping",
+        "mesh"
+      ],
+      "type": "object"
+    },
+    "process": {
+      "additionalProperties": false,
+      "properties": {
+        "color_model": {
+          "type": "string"
+        },
+        "contact_copy": {
+          "additionalProperties": false,
+          "properties": {
+            "boost": {
+              "type": "number"
+            },
+            "emulsion_curve": {
+              "additionalProperties": false,
+              "properties": {
+                "linear1": {
+                  "$ref": "#/$defs/point"
+                },
+                "linear2": {
+                  "$ref": "#/$defs/point"
+                },
+                "max": {
+                  "$ref": "#/$defs/point"
+                },
+                "min": {
+                  "$ref": "#/$defs/point"
+                }
+              },
+              "required": [
+                "linear1",
+                "linear2",
+                "max",
+                "min"
+              ],
+              "type": "object"
+            },
+            "exposure": {
+              "type": "number"
+            },
+            "preflash": {
+              "type": "number"
+            },
+            "simulate": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "boost",
+            "emulsion_curve",
+            "exposure",
+            "preflash",
+            "simulate"
+          ],
+          "type": "object"
+        },
+        "dyes": {
+          "additionalProperties": false,
+          "properties": {
+            "aging_fraction": {
+              "$ref": "#/$defs/rgb"
+            },
+            "density": {
+              "$ref": "#/$defs/rgb"
+            }
+          },
+          "required": [
+            "aging_fraction",
+            "density"
+          ],
+          "type": "object"
+        },
+        "screen": {
+          "additionalProperties": false,
+          "properties": {
+            "strip_widths": {
+              "additionalProperties": false,
+              "properties": {
+                "green": {
+                  "$ref": "#/$defs/stripWidth"
+                },
+                "red": {
+                  "$ref": "#/$defs/stripWidth"
+                }
+              },
+              "required": [
+                "green",
+                "red"
+              ],
+              "type": "object"
+            },
+            "type": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "strip_widths",
+            "type"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "color_model",
+        "contact_copy",
+        "dyes",
+        "screen"
+      ],
+      "type": "object"
+    },
+    "reconstruction": {
+      "additionalProperties": false,
+      "properties": {
+        "collection": {
+          "additionalProperties": false,
+          "properties": {
+            "quality": {
+              "type": "string"
+            },
+            "threshold": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "quality",
+            "threshold"
+          ],
+          "type": "object"
+        },
+        "color_field": {
+          "additionalProperties": false,
+          "properties": {
+            "resampling": {
+              "type": "string"
+            },
+            "screen_blur_radius": {
+              "type": "number"
+            },
+            "screen_demosaic": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "resampling",
+            "screen_blur_radius",
+            "screen_demosaic"
+          ],
+          "type": "object"
+        },
+        "denoise": {
+          "additionalProperties": false,
+          "properties": {
+            "after_reconstruction": {
+              "$ref": "#/$defs/denoiser"
+            },
+            "before_reconstruction": {
+              "$ref": "#/$defs/denoiser"
+            }
+          },
+          "required": [
+            "after_reconstruction",
+            "before_reconstruction"
+          ],
+          "type": "object"
+        },
+        "image_layer": {
+          "additionalProperties": false,
+          "properties": {
+            "ignore_infrared": {
+              "type": "boolean"
+            },
+            "rgb_mixer": {
+              "additionalProperties": false,
+              "properties": {
+                "black_offsets": {
+                  "$ref": "#/$defs/rgb"
+                },
+                "weights": {
+                  "$ref": "#/$defs/rgb"
+                }
+              },
+              "required": [
+                "black_offsets",
+                "weights"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "ignore_infrared",
+            "rgb_mixer"
+          ],
+          "type": "object"
+        },
+        "sharpening": {
+          "additionalProperties": false,
+          "properties": {
+            "deconvolution_supersample": {
+              "type": "integer"
+            },
+            "mode": {
+              "type": "string"
+            },
+            "resampling_kernel": {
+              "type": "string"
+            },
+            "richardson_lucy": {
+              "additionalProperties": false,
+              "properties": {
+                "iterations": {
+                  "type": "integer"
+                },
+                "sigma": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "iterations",
+                "sigma"
+              ],
+              "type": "object"
+            },
+            "scanner": {
+              "additionalProperties": false,
+              "properties": {
+                "mtf_scale": {
+                  "type": "number"
+                },
+                "snr": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "mtf_scale",
+                "snr"
+              ],
+              "type": "object"
+            },
+            "unsharp": {
+              "additionalProperties": false,
+              "properties": {
+                "amount": {
+                  "type": "number"
+                },
+                "radius": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "amount",
+                "radius"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "deconvolution_supersample",
+            "mode",
+            "resampling_kernel",
+            "richardson_lucy",
+            "scanner",
+            "unsharp"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "collection",
+        "color_field",
+        "denoise",
+        "image_layer",
+        "sharpening"
+      ],
+      "type": "object"
+    },
+    "registration": {
+      "additionalProperties": false,
+      "properties": {
+        "detection": {
+          "additionalProperties": false,
+          "properties": {
+            "black": {
+              "$ref": "#/$defs/rgb"
+            },
+            "blue": {
+              "$ref": "#/$defs/rgb"
+            },
+            "green": {
+              "$ref": "#/$defs/rgb"
+            },
+            "min_luminosity": {
+              "type": "number"
+            },
+            "min_ratio": {
+              "type": "number"
+            },
+            "red": {
+              "$ref": "#/$defs/rgb"
+            }
+          },
+          "required": [
+            "black",
+            "blue",
+            "green",
+            "min_luminosity",
+            "min_ratio",
+            "red"
+          ],
+          "type": "object"
+        },
+        "fit": {
+          "additionalProperties": false,
+          "properties": {
+            "lens_center_distance": {
+              "type": "number"
+            },
+            "optimize_lens": {
+              "type": "boolean"
+            },
+            "optimize_tilt": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "lens_center_distance",
+            "optimize_lens",
+            "optimize_tilt"
+          ],
+          "type": "object"
+        },
+        "points": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "color": {
+                "type": "string"
+              },
+              "image": {
+                "$ref": "#/$defs/point"
+              },
+              "screen": {
+                "$ref": "#/$defs/point"
+              }
+            },
+            "required": [
+              "color",
+              "image",
+              "screen"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "detection",
+        "fit",
+        "points"
+      ],
+      "type": "object"
+    },
+    "required_features": {
+      "maxItems": 0,
+      "type": "array"
+    },
+    "schema_version": {
+      "const": 3
+    }
+  },
+  "required": [
+    "calibration",
+    "capture",
+    "color",
+    "format",
+    "geometry",
+    "process",
+    "reconstruction",
+    "registration",
+    "schema_version"
+  ],
+  "title": "Color-Screen parameters — schema 3 reference (not yet a supported format)",
+  "type": "object"
+}

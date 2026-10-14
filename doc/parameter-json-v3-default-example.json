@@ -1,0 +1,345 @@
+{
+  "calibration": {
+    "capture": {
+      "mtf": {
+        "blur_diameter_px": 0,
+        "defocus_mm": 0,
+        "f_stop": 0,
+        "halo_fraction": 0,
+        "halo_sigma_px": 0,
+        "legacy_first_same_capture": false,
+        "measurements": [],
+        "model": "automatic",
+        "pixel_pitch_um": 0,
+        "sample_columns": [
+          "frequency_cycles_per_pixel",
+          "contrast_percent",
+          "uncertainty_percentage_points"
+        ],
+        "scan_dpi": 0,
+        "selected_measurement_id": null,
+        "sensor_fill_factor": 1,
+        "sigma_px": 0,
+        "wavelengths_nm": [
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "scanner_primaries_xyz": {
+        "blue": [
+          0,
+          0,
+          0
+        ],
+        "green": [
+          0,
+          0,
+          0
+        ],
+        "red": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    "flat_field": {
+      "black_correction": 0,
+      "grid": null
+    },
+    "process_color": {
+      "profile_rgb": {
+        "blue": [
+          0,
+          0,
+          1
+        ],
+        "dark": [
+          0,
+          0,
+          0
+        ],
+        "green": [
+          0,
+          1,
+          0
+        ],
+        "red": [
+          1,
+          0,
+          0
+        ]
+      },
+      "spots": []
+    },
+    "spatial_blur": null,
+    "tiles": {
+      "adjustments": [],
+      "dimensions": [
+        0,
+        0
+      ]
+    }
+  },
+  "capture": {
+    "bounds": {
+      "object_crop": null,
+      "photograph": null
+    },
+    "levels": {
+      "black_offset": 0,
+      "gain": 1
+    },
+    "linearization": {
+      "mode": "srgb"
+    },
+    "orientation": {
+      "mirror": false,
+      "quarter_turns": 0
+    },
+    "raw": {
+      "demosaic": "default"
+    },
+    "type": "unknown"
+  },
+  "color": {
+    "adjustments": {
+      "brightness": 1,
+      "dye_balance": "bradford",
+      "presaturation": 1,
+      "saturation": 1,
+      "tone_curve": {
+        "control_points": [
+          [
+            0,
+            0
+          ],
+          [
+            0.04737,
+            0.07149
+          ],
+          [
+            0.21764,
+            0.46303
+          ],
+          [
+            0.53114,
+            0.82709
+          ],
+          [
+            1,
+            1
+          ]
+        ],
+        "type": "linear"
+      },
+      "white_balance": [
+        1,
+        1,
+        1
+      ]
+    },
+    "illuminants": {
+      "backlight_temperature_k": 5000,
+      "photograph_temperature_k": 5000
+    },
+    "viewing": {
+      "whitepoint_xy": [
+        0.3456781506538391,
+        0.35851287841796875
+      ]
+    }
+  },
+  "format": "org.colorscreen.parameters",
+  "geometry": {
+    "final_frame": {
+      "angle_deg": 90,
+      "axis_length_ratio": 1,
+      "mirror": false,
+      "rotation": 0
+    },
+    "imaging_model": "fixed-lens",
+    "lens": {
+      "center": [
+        0.5,
+        0.5
+      ],
+      "radial": [
+        1,
+        0,
+        0,
+        0
+      ]
+    },
+    "mapping": {
+      "axis_x": [
+        0,
+        0
+      ],
+      "axis_y": [
+        0,
+        0
+      ],
+      "center": [
+        0,
+        0
+      ],
+      "projection_distance": 1,
+      "tilt": [
+        0,
+        0
+      ]
+    },
+    "mesh": null
+  },
+  "process": {
+    "color_model": "Wratten_25_58_47_spectra",
+    "contact_copy": {
+      "boost": 1,
+      "emulsion_curve": {
+        "linear1": [
+          -5,
+          5
+        ],
+        "linear2": [
+          5,
+          -5
+        ],
+        "max": [
+          6,
+          -5.5
+        ],
+        "min": [
+          -6,
+          5.5
+        ]
+      },
+      "exposure": 1,
+      "preflash": 0,
+      "simulate": false
+    },
+    "dyes": {
+      "aging_fraction": [
+        1,
+        1,
+        1
+      ],
+      "density": [
+        1,
+        1,
+        1
+      ]
+    },
+    "screen": {
+      "strip_widths": {
+        "green": {
+          "mode": "automatic"
+        },
+        "red": {
+          "mode": "automatic"
+        }
+      },
+      "type": "None"
+    }
+  },
+  "reconstruction": {
+    "collection": {
+      "quality": "simple-screen",
+      "threshold": 0.20000000298023224
+    },
+    "color_field": {
+      "resampling": "default",
+      "screen_blur_radius": 0.5,
+      "screen_demosaic": "default"
+    },
+    "denoise": {
+      "after_reconstruction": {
+        "bilateral_sigma_r": 0.10000000149011612,
+        "bilateral_sigma_s": 2,
+        "mode": "none",
+        "noise_variance_floor": 0,
+        "noise_variance_slope": 0,
+        "patch_radius": 1,
+        "search_radius": 6,
+        "strength": 0.10000000149011612
+      },
+      "before_reconstruction": {
+        "bilateral_sigma_r": 0.10000000149011612,
+        "bilateral_sigma_s": 2,
+        "mode": "none",
+        "noise_variance_floor": 0,
+        "noise_variance_slope": 0,
+        "patch_radius": 1,
+        "search_radius": 6,
+        "strength": 0.10000000149011612
+      }
+    },
+    "image_layer": {
+      "ignore_infrared": false,
+      "rgb_mixer": {
+        "black_offsets": [
+          0,
+          0,
+          0
+        ],
+        "weights": [
+          0.30000001192092896,
+          0.10000000149011612,
+          1
+        ]
+      }
+    },
+    "sharpening": {
+      "deconvolution_supersample": 2,
+      "mode": "none",
+      "resampling_kernel": "lanczos8",
+      "richardson_lucy": {
+        "iterations": 0,
+        "sigma": 0
+      },
+      "scanner": {
+        "mtf_scale": 1,
+        "snr": 2000
+      },
+      "unsharp": {
+        "amount": 0,
+        "radius": 0
+      }
+    }
+  },
+  "registration": {
+    "detection": {
+      "black": [
+        0,
+        0,
+        0
+      ],
+      "blue": [
+        0,
+        0,
+        1
+      ],
+      "green": [
+        0,
+        1,
+        0
+      ],
+      "min_luminosity": 0,
+      "min_ratio": 1,
+      "red": [
+        1,
+        0,
+        0
+      ]
+    },
+    "fit": {
+      "lens_center_distance": 0,
+      "optimize_lens": true,
+      "optimize_tilt": true
+    },
+    "points": []
+  },
+  "schema_version": 3
+}
