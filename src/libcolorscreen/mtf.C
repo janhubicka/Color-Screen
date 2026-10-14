@@ -485,7 +485,7 @@ public:
               progress_info *progress, bool verbose,
               bool legacy_channel_wavelengths, double request_wavelength_nm)
       : m_measurements (measured), m_params (params), m_options (options),
-        m_request_wavelength_nm (request_wavelength_nm),
+        m_group_indices (), m_request_wavelength_nm (request_wavelength_nm),
         m_progress (progress), be_verbose (verbose), start_vec (),
         fit_weights (), start (nullptr), diffraction (false),
         m_legacy_channel_wavelengths (legacy_channel_wavelengths), nvalues (0),
@@ -494,6 +494,10 @@ public:
         f_stop_index (-1), halo_fraction_index (-1), halo_sigma_index (-1)
   {
     channel_wavelength_index.fill (-1);
+    /* Estimation entry points verify that group metadata is complete.
+       A group ID identifies the same capture even when curves are reordered. */
+    const bool valid_groups = params.capture_group_indices (&m_group_indices);
+    assert (valid_groups);
     m_params.measured_mtf_idx = -1;
     m_params.clear_data ();
     mtf_model requested_model = options.model == mtf_model::automatic_legacy
@@ -531,26 +535,25 @@ public:
             f_stop_index = nvalues++;
           }
 
-        int current_defocus_index = -1;
+        std::vector<int> defocus_by_group (m_measurements.size (), -1);
         for (size_t measurement = 0; measurement < m_measurements.size ();
              measurement++)
           {
-            if (!m_measurements[measurement].same_capture)
-              current_defocus_index = -1;
             if (!m_options.include_measurement_p (measurement))
               continue;
 
             if (options.optimize_defocus)
               {
-                if (current_defocus_index < 0)
+                int &group_index = defocus_by_group[m_group_indices[measurement]];
+                if (group_index < 0)
                   {
                     start_vec.push_back (my_isfinite (m_params.defocus)
                                              && m_params.defocus >= 0
                                          ? m_params.defocus
                                          : 0.0);
-                    current_defocus_index = nvalues++;
+                    group_index = nvalues++;
                   }
-                blur_index[measurement] = current_defocus_index;
+                blur_index[measurement] = group_index;
               }
 
             if (options.optimize_measurement_wavelength_p (measurement))
@@ -616,25 +619,24 @@ public:
       }
     else
       {
-        int current_blur_index = -1;
+        std::vector<int> blur_by_group (m_measurements.size (), -1);
         for (size_t measurement = 0; measurement < m_measurements.size ();
              measurement++)
           {
-            if (!m_measurements[measurement].same_capture)
-              current_blur_index = -1;
             if (!m_options.include_measurement_p (measurement))
               continue;
             if (options.optimize_blur_diameter)
               {
-                if (current_blur_index < 0)
+                int &group_index = blur_by_group[m_group_indices[measurement]];
+                if (group_index < 0)
                   {
                     start_vec.push_back (my_isfinite (m_params.blur_diameter)
                                              && m_params.blur_diameter >= 0
                                          ? m_params.blur_diameter
                                          : 0.0);
-                    current_blur_index = nvalues++;
+                    group_index = nvalues++;
                   }
-                blur_index[measurement] = current_blur_index;
+                blur_index[measurement] = group_index;
               }
           }
       }
@@ -1111,6 +1113,9 @@ public:
   const std::vector <mtf_measurement> &m_measurements;
   mtf_parameters m_params;
   mtf_estimation_options m_options;
+  /* Group indices are stable under arbitrary record ordering in schema 3.
+     Legacy .par measurements retain their adjacent-group interpretation. */
+  std::vector<size_t> m_group_indices;
   double m_request_wavelength_nm;
   progress_info *m_progress;
   bool be_verbose;
