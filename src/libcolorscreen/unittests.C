@@ -3392,9 +3392,19 @@ test_mtf_record_identity ()
          && records.measured_mtf_idx == 2,
          "selected ID did not restore expected curve");
 
-  check (!records.move_measurement (2, 1)
-         && records.equal_p (upgraded),
-         "splitting a capture silently changed schema-v2 grouping");
+  mtf_parameters nonadjacent = records;
+  std::vector<size_t> captures;
+  check (nonadjacent.move_measurement (2, 1)
+         && nonadjacent.capture_group_indices (&captures)
+         && captures.size () == 4
+         && captures[0] == captures[2]
+         && captures[1] == captures[3]
+         && captures[0] != captures[1]
+         && nonadjacent.selected_measurement_id () == "measurement-000003"
+         && nonadjacent.measured_mtf_idx == 1,
+         "stable IDs did not survive splitting a capture into distant curves");
+  check (records.equal_p (upgraded),
+         "independent nonadjacent reorder mutated original MTF state");
   check (records.move_measurement (0, 1)
          && records.measurements[0].id == "measurement-000002"
          && records.measurements[1].id == "measurement-000001"
@@ -3434,8 +3444,12 @@ test_mtf_record_identity ()
   bad = records;
   bad.measurements[0].capture_group_id.clear ();
   const mtf_parameters partial = bad;
-  check (!bad.move_measurement (0, 1) && bad.equal_p (partial),
-         "partially upgraded identity model must not be reordered");
+  std::vector<size_t> untouched_capture_indices = {22};
+  check (!bad.move_measurement (0, 1)
+         && !bad.capture_group_indices (&untouched_capture_indices)
+         && untouched_capture_indices == std::vector<size_t>{22}
+         && bad.equal_p (partial),
+         "partially upgraded identity model must not be reordered or indexed");
 
   mtf_parameters collision;
   collision.measurements.resize (2);
@@ -3653,17 +3667,41 @@ test_native_json_v3_mtf ()
   mtf_parameters invalid = original;
   invalid.measurements[0].same_capture = true;
   std::string untouched = "existing";
-  check (!encode_parameter_json_v3_mtf (invalid, &untouched, &error)
-         && untouched == "existing",
-         "first-record legacy adjacency flag was silently discarded");
+  std::string first_flag_json;
+  mtf_parameters first_flag_import;
+  check (encode_parameter_json_v3_mtf (invalid, &first_flag_json, &error)
+         && decode_parameter_json_v3_mtf (first_flag_json,
+                                          &first_flag_import, &error)
+         && !first_flag_import.measurements[0].same_capture
+         && first_flag_import.measurements[0].capture_group_id
+              == invalid.measurements[0].capture_group_id,
+         "meaningless first-record legacy flag leaked into schema 3");
   invalid = original;
-  invalid.measurements[1].capture_group_id = "capture-000003";
+  invalid.measurements[1].capture_group_id = "capture-000002";
   invalid.measurements[1].same_capture = false;
   invalid.measurements[2].capture_group_id = "capture-000001";
   invalid.measurements[2].same_capture = false;
-  check (!encode_parameter_json_v3_mtf (invalid, &untouched, &error)
-         && untouched == "existing",
-         "discontiguous group accepted while fitter remains adjacency-based");
+  invalid.measurements[2].channel = 1;
+  invalid.measurements[2].image_layer = false;
+  invalid.measured_mtf_idx = 0;
+  std::string nonadjacent_json;
+  mtf_parameters parsed_groups;
+  std::vector<size_t> group_indices;
+  check (encode_parameter_json_v3_mtf (invalid, &nonadjacent_json, &error)
+         && decode_parameter_json_v3_mtf (nonadjacent_json,
+                                          &parsed_groups, &error)
+         && parsed_groups.capture_group_indices (&group_indices)
+         && group_indices.size () == 3
+         && group_indices[0] == group_indices[2]
+         && group_indices[0] != group_indices[1]
+         && parsed_groups.selected_measurement_id ()
+              == "measurement-000001",
+         "nonadjacent capture group or selection failed native v3 roundtrip");
+  render_parameters grouped_render;
+  grouped_render.sharpen.scanner_mtf = parsed_groups;
+  check (grouped_render.get_sharpen_parameters_for_channel (1, true)
+              .scanner_mtf.measured_mtf_idx == 2,
+         "per-channel sharpen selection used another capture's record");
   invalid = original;
   invalid.measurements[0].source_filename = "C:relative\\bad.tif";
   check (!encode_parameter_json_v3_mtf (invalid, &untouched, &error)
