@@ -282,7 +282,7 @@ void startWorkspaceChurnSmoke(ColorScreenApplication &app,
         if (!parameterFileProbe.path.isEmpty() ||
             parameterFileProbe.suggested ||
             parameterFileProbe.format !=
-                MainWindow::ParameterFileState::Format::JsonV2) {
+                MainWindow::ParameterFileState::Format::JsonV3) {
           fail(QStringLiteral(
               "Fresh parameter-file target did not default to native JSON v2"));
           return;
@@ -298,11 +298,11 @@ void startWorkspaceChurnSmoke(ColorScreenApplication &app,
         }
         parameterFileProbe.setLoaded(
             QStringLiteral("/tmp/loaded.cspar"),
-            MainWindow::ParameterFileState::Format::JsonV2);
+            MainWindow::ParameterFileState::Format::JsonV3);
         if (parameterFileProbe.path != QStringLiteral("/tmp/loaded.cspar") ||
             parameterFileProbe.suggested ||
             parameterFileProbe.format !=
-                MainWindow::ParameterFileState::Format::JsonV2) {
+                MainWindow::ParameterFileState::Format::JsonV3) {
           fail(QStringLiteral(
               "Loaded parameter-file target lost its explicit archive format"));
           return;
@@ -3237,10 +3237,10 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
             archiveState, QStringLiteral("Archive persistence smoke edit"));
         if (!second->isDocumentModified() ||
             !second->saveParametersToFile(
-                archiveFile, MainWindow::ParameterSaveFormat::JsonV2) ||
+                archiveFile, MainWindow::ParameterSaveFormat::JsonV3) ||
             second->isDocumentModified() ||
             second->m_parameterFile.format !=
-                MainWindow::ParameterFileState::Format::JsonV2) {
+                MainWindow::ParameterFileState::Format::JsonV3) {
           fail(QStringLiteral(
               "Workspace churn archive save did not establish a clean archive target"));
           return;
@@ -3292,7 +3292,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         if (!second->loadParameterFile(archiveFile) ||
             second->documentStateSnapshot() != archiveState ||
             second->m_parameterFile.format !=
-                MainWindow::ParameterFileState::Format::JsonV2 ||
+                MainWindow::ParameterFileState::Format::JsonV3 ||
             second->isDocumentModified()) {
           fail(QStringLiteral(
               "Workspace churn archive load did not restore/adopt the complete clean archive state"));
@@ -3307,7 +3307,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
             !second->saveParametersToFile(second->m_parameterFile.path) ||
             second->documentStateSnapshot() != archiveResaveState ||
             second->m_parameterFile.format !=
-                MainWindow::ParameterFileState::Format::JsonV2 ||
+                MainWindow::ParameterFileState::Format::JsonV3 ||
             second->isDocumentModified() ||
             !parameterHasJsonSignature(archiveFile)) {
           fail(QStringLiteral(
