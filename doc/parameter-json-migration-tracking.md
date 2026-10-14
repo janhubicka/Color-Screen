@@ -231,7 +231,9 @@ renderer ownership or changing numerical algorithms.
   collision avoidance, selection, reordering, invalid IDs, and rejection without
   mutation. These are core API tests, not claims of complete v3 persistence.
 - The MTF fitter and production GUI editors still use legacy
-  `same_capture`/vector-index semantics until the format switch. **Do not
-  call the explicit migration in the live JSON-v2 save path**: schema 2 cannot
-  persist these identities. Next: native v3 codec plus transaction-safe
+  `same_capture`/vector-index semantics until the format switch. The JSON-v2
+  encoder and legacy .par stream writer explicitly refuse any record with
+  upgraded IDs; neither can silently discard them. **Do not call the explicit
+  migration in the live JSON-v2 save path**: schema 2 cannot persist these
+  identities. Next: native v3 codec plus transaction-safe
   loading/saving, selection/GUI editing by IDs, and source path rebasing.
