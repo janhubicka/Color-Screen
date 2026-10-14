@@ -98,7 +98,10 @@ struct mtf_measurement
   fit_equal_p (const mtf_measurement &o) const
   {
     return channel == o.channel && image_layer == o.image_layer
-           && wavelength == o.wavelength && same_capture == o.same_capture
+           && wavelength == o.wavelength
+           && (capture_group_id.empty () || o.capture_group_id.empty ()
+                 ? same_capture == o.same_capture
+                 : capture_group_id == o.capture_group_id)
            && m_data == o.m_data;
   }
 
@@ -291,10 +294,16 @@ struct mtf_parameters
      duplicated ID fails without changing the current selection.  */
   DLL_PUBLIC bool select_measurement_id (const std::string &id);
 
+  /* Compute a compact group index for each measured curve in OUT. Explicit
+     capture-group IDs may occur noncontiguously; old .par records without IDs
+     instead use SAME_CAPTURE adjacency. Return false on partial group IDs and
+     leave OUT unchanged. Index values are assigned in first-occurrence order. */
+  DLL_PUBLIC bool capture_group_indices (std::vector<size_t> *out) const;
+
   /* Move record FROM to TO while preserving selected-curve identity and
-     legacy capture membership. Reject a move that would split a capture group
-     into discontiguous records, since current JSON-v2 cannot represent that
-     grouping without changing its meaning.  */
+     explicit capture groups even when records become nonadjacent. A legacy
+     in-memory .par collection without IDs still disallows moves that would
+     split one capture before conversion to the canonical JSON format. */
   DLL_PUBLIC bool move_measurement (int from, int to);
 
   /* Return true when at least one non-empty measurement is available.  */
