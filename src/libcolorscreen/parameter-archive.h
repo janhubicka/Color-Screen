@@ -138,7 +138,7 @@ decode_parameter_json_v2_document (
 /* True if the first non-whitespace byte of UTF-8 path NAME begins a
    native JSON document. This is signature-based dispatch only; the typed
    schema-v2 reader must still validate the format marker and version. */
-DLL_PUBLIC bool parameter_json_v2_signature_p (const char *name);
+DLL_PUBLIC bool parameter_json_signature_p (const char *name);
 
 /* Read a complete plain JSON v2 parameter file from a UTF-8 host pathname.
    Every persistent core/Qt-spot input is parsed as typed JSON; no CSP
