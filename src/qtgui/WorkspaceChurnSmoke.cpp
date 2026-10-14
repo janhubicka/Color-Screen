@@ -284,7 +284,7 @@ void startWorkspaceChurnSmoke(ColorScreenApplication &app,
             parameterFileProbe.format !=
                 MainWindow::ParameterFileState::Format::JsonV3) {
           fail(QStringLiteral(
-              "Fresh parameter-file target did not default to native JSON v2"));
+              "Fresh parameter-file target did not default to native JSON v3"));
           return;
         }
         parameterFileProbe.setSuggested(QStringLiteral("/tmp/suggested.par"));
