@@ -144,20 +144,19 @@ render_parameters::get_sharpen_parameters_for_channel (int channel,
         measurement_index = selected;
       else
         {
-          int first = selected;
-          while (first > 0 && mtf.measurements[first].same_capture)
-            --first;
-          int last = first + 1;
-          while (last < (int)mtf.measurements.size ()
-                 && mtf.measurements[last].same_capture)
-            ++last;
-          for (int i = first; i < last; ++i)
-            if (mtf.measurements[i].channel == channel
-                && mtf.measurements[i].size () > 2)
-              {
-                measurement_index = i;
-                break;
-              }
+          /* A native capture can have nonadjacent curve records in schema
+             3; search by stable group membership rather than a contiguous
+             SAME_CAPTURE run. Legacy .par records still map to runs. */
+          std::vector<size_t> groups;
+          if (mtf.capture_group_indices (&groups))
+            for (int i = 0; i < (int)mtf.measurements.size (); ++i)
+              if (groups[i] == groups[selected]
+                  && mtf.measurements[i].channel == channel
+                  && mtf.measurements[i].size () > 2)
+                {
+                  measurement_index = i;
+                  break;
+                }
         }
 
       /* Explicit image-layer measurements never apply to native channels.
