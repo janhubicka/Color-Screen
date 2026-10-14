@@ -169,6 +169,56 @@ mtf_parameters::capture_group_indices (std::vector<size_t> *out) const
   return true;
 }
 
+/* Make or break the selected record's link with its predecessor. With
+   explicit IDs this edits only that record's physical-capture membership,
+   not its neighbours' identity, even for nonadjacent group members. */
+bool
+mtf_parameters::set_measurement_same_capture (size_t index, bool same)
+{
+  if (index >= measurements.size () || (index == 0 && same))
+    return false;
+
+  bool explicit_ids = false;
+  for (const mtf_measurement &record : measurements)
+    explicit_ids |= !record.id.empty () || !record.capture_group_id.empty ();
+
+  if (!explicit_ids)
+    {
+      measurements[index].same_capture = same;
+      return true;
+    }
+  if (!measurement_ids_valid_p ())
+    return false;
+
+  if (index == 0)
+    {
+      measurements[0].same_capture = false;
+      return true;
+    }
+
+  const std::string &previous = measurements[index - 1].capture_group_id;
+  mtf_measurement &current = measurements[index];
+  if (same)
+    current.capture_group_id = previous;
+  else if (current.capture_group_id == previous)
+    {
+      std::unordered_set<std::string> groups;
+      for (const mtf_measurement &record : measurements)
+        groups.insert (record.capture_group_id);
+      size_t next_group = 1;
+      current.capture_group_id
+          = next_mtf_identifier ("capture-", groups, next_group);
+    }
+
+  /* Derived adjacency hints are retained solely for old in-memory/legacy
+     callers. Group-ID-aware operations never infer capture identity from them. */
+  for (size_t i = 0; i < measurements.size (); ++i)
+    measurements[i].same_capture
+        = i && measurements[i].capture_group_id
+                      == measurements[i - 1].capture_group_id;
+  return true;
+}
+
 /* Reorder records without changing the selected curve or explicit group.
    Only legacy in-memory records lack stable IDs and remain subject to
    adjacency constraints until their one-time .par migration. */
