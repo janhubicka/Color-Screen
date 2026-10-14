@@ -459,7 +459,7 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
     // failed JSON replacement are covered by the remaining lifecycle tests.
     if (!first->saveParametersToFile(
             state->firstParameters,
-            MainWindow::ParameterSaveFormat::JsonV2) ||
+            MainWindow::ParameterSaveFormat::JsonV3) ||
         !second->saveParametersToFile(state->secondParameters)) {
       qCritical() << "Document lifecycle smoke could not establish clean parameter files";
       app.exit(documentLifecycleFailure);
@@ -467,12 +467,12 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
     }
     // Both fresh .cspar targets and subsequent ordinary Saves use native JSON.
     const QString defaultJsonParams = state->temporaryDirectory->filePath(
-        QStringLiteral("default-native-json-v2.cspar"));
+        QStringLiteral("default-native-json-v3.cspar"));
     if (first->m_parameterFile.format !=
-            MainWindow::ParameterFileState::Format::JsonV2 ||
+            MainWindow::ParameterFileState::Format::JsonV3 ||
         !first->saveParametersToFile(defaultJsonParams) ||
         first->m_parameterFile.format !=
-            MainWindow::ParameterFileState::Format::JsonV2 ||
+            MainWindow::ParameterFileState::Format::JsonV3 ||
         !colorscreen::parameter_json_v2_signature_p(
             defaultJsonParams.toUtf8().constData())) {
       qCritical() << "New .cspar target did not default to plain JSON v2";
@@ -485,7 +485,7 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
         readFile(defaultJsonParams) != initialDefaultJson ||
         !first->saveParametersToFile(state->firstParameters) ||
         first->m_parameterFile.format !=
-            MainWindow::ParameterFileState::Format::JsonV2) {
+            MainWindow::ParameterFileState::Format::JsonV3) {
       qCritical() << "Ordinary Save did not preserve native JSON targets";
       app.exit(documentLifecycleFailure);
       return;
@@ -536,7 +536,7 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
       warning->close();
     }
     // An explicit Save As selection still authorizes deliberate replacement.
-    if (!first->saveParametersToFile(unknownParams, MainWindow::ParameterSaveFormat::JsonV2) ||
+    if (!first->saveParametersToFile(unknownParams, MainWindow::ParameterSaveFormat::JsonV3) ||
         !first->saveParametersToFile(state->firstParameters)) {
       qCritical() << "Explicit JSON replacement of an invalid destination failed";
       app.exit(documentLifecycleFailure);
@@ -546,10 +546,10 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
     // Explicit JSON Save As is also supported; Open and ordinary Save must
     // preserve the complete native state and use the same physical encoding.
     const QString jsonParams = state->temporaryDirectory->filePath(
-        QStringLiteral("explicit-native-json-v2.cspar"));
+        QStringLiteral("explicit-native-json-v3.cspar"));
     const ParameterState originalV2State = first->documentStateSnapshot();
     if (!first->saveParametersToFile(
-            jsonParams, MainWindow::ParameterSaveFormat::JsonV2)) {
+            jsonParams, MainWindow::ParameterSaveFormat::JsonV3)) {
       qCritical() << "Document lifecycle smoke could not export native v2 JSON";
       app.exit(documentLifecycleFailure);
       return;
@@ -560,10 +560,10 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
         !colorscreen::parameter_json_v2_signature_p(
             jsonParams.toUtf8().constData()) ||
         first->m_parameterFile.format !=
-            MainWindow::ParameterFileState::Format::JsonV2 ||
+            MainWindow::ParameterFileState::Format::JsonV3 ||
         !first->loadParameterFile(jsonParams) ||
         first->m_parameterFile.format !=
-            MainWindow::ParameterFileState::Format::JsonV2 ||
+            MainWindow::ParameterFileState::Format::JsonV3 ||
         first->documentStateSnapshot().scrToImg.final_angle !=
             originalV2State.scrToImg.final_angle ||
         first->documentStateSnapshot().rparams.gamma !=
@@ -579,7 +579,7 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
     // legacy CSP, overwrite the live document, or change its loaded target.
     const QString invalidJsonParams =
         state->temporaryDirectory->filePath(
-            QStringLiteral("invalid-native-json-v2.cspar"));
+            QStringLiteral("invalid-native-json-v3.cspar"));
     QByteArray truncatedNative = nativeBefore;
     truncatedNative.truncate(truncatedNative.size() / 2);
     QFile malformed(invalidJsonParams);
@@ -594,7 +594,7 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
     const ParameterState acceptedBeforeFailure = first->documentStateSnapshot();
     if (first->loadParameterFile(invalidJsonParams) ||
         first->m_parameterFile.format !=
-            MainWindow::ParameterFileState::Format::JsonV2 ||
+            MainWindow::ParameterFileState::Format::JsonV3 ||
         first->m_parameterFile.path != QFileInfo(jsonParams).absoluteFilePath() ||
         first->documentStateSnapshot() != acceptedBeforeFailure) {
       qCritical() << "Invalid native v2 JSON partially changed Qt document";
@@ -609,9 +609,9 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
     // Restore the primary JSON target for the remaining lifecycle checks.
     if (!first->saveParametersToFile(
             state->firstParameters,
-            MainWindow::ParameterSaveFormat::JsonV2) ||
+            MainWindow::ParameterSaveFormat::JsonV3) ||
         first->m_parameterFile.format !=
-            MainWindow::ParameterFileState::Format::JsonV2) {
+            MainWindow::ParameterFileState::Format::JsonV3) {
       qCritical() << "Native v2 smoke could not restore JSON target";
       app.exit(documentLifecycleFailure);
       return;
@@ -869,7 +869,7 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
             QDir(legacyDirectory)
                 .filePath(QStringLiteral("recovery_params_meta.txt"));
         const QByteArray legacyMeta =
-            QByteArray("legacy-target.cspar\n0\n0\njson-v2\n");
+            QByteArray("legacy-target.cspar\n0\n0\njson-v3\n");
         QFile legacyMetaFile(legacyMetaPath);
         if (!legacyMetaFile.open(QIODevice::WriteOnly | QIODevice::Truncate) ||
             legacyMetaFile.write(legacyMeta) != legacyMeta.size() ||
@@ -887,7 +887,7 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
         if (!legacyRestored || legacyState.rparams.gamma != 2.0 ||
             legacyState.profileSpots != state->recoveryExpectedState.profileSpots ||
             legacyProbe->m_parameterFile.format !=
-                MainWindow::ParameterFileState::Format::JsonV2 ||
+                MainWindow::ParameterFileState::Format::JsonV3 ||
             !legacyProbe->isDocumentModified()) {
           delete legacyProbe;
           fail(QStringLiteral(
@@ -1018,7 +1018,7 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
             loadProbe->m_parameterFile.suggested;
         state->failedOpenParameterJson =
             loadProbe->m_parameterFile.format ==
-            MainWindow::ParameterFileState::Format::JsonV2;
+            MainWindow::ParameterFileState::Format::JsonV3;
         state->failedOpenRecoveryDirty = loadProbe->m_recoveryDirty;
         state->failedOpenImagePath = loadProbe->m_currentImageFile;
 
@@ -1100,7 +1100,7 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
             probe->m_parameterFile.suggested !=
                 state->failedOpenParameterSuggested ||
             (probe->m_parameterFile.format ==
-             MainWindow::ParameterFileState::Format::JsonV2) !=
+             MainWindow::ParameterFileState::Format::JsonV3) !=
                 state->failedOpenParameterJson ||
             probe->findChild<QMessageBox *>(
                 QStringLiteral("ParameterLoadFailureDialog")) ||
