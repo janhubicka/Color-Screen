@@ -46,7 +46,7 @@ validation from CI. No beta/final release is authorized by this work.
 | JSON-005 | Versioned semantic organization and naming | Reversible reference prototype; C++ codec planned | Complete v2-to-v3 field map below, native codec and single-current-writer dispatch; no persistent field left unmapped. |
 | JSON-006 | Explicit sentinels, units and coordinate conventions | Reference prototype tested; native codec planned | Tagged input transfer; null absent bounds; inactive settings retained; audit pixel/screen/physical coordinate domains. |
 | JSON-007 | Stable MTF record identity and explicit capture groups | Reference prototype plus Qt-free in-memory identity/reorder foundations; persistence still planned | Core generates collision-free document-local IDs without replacing existing ones, maps selection to an ID, and refuses legacy reorder that splits a capture. Native schema-3 codec and GUI edit/Save/Save As preservation remain necessary. |
-| JSON-008 | Named heterogeneous measurement metadata | Reference prototype tested; native codec planned | Named edge quality and source/ROI, compact homogeneous samples with explicit unit convention. |
+| JSON-008 | Named heterogeneous measurement metadata | Native isolated C++ MTF codec implemented, under review; full document integration planned | Codec directly writes/reads named edge quality, sample units, source/ROI status, path bases, selected record ID and group IDs without a v2 or Python intermediate. Unknown nested fields reject; full schema-3 document switch remains separate. |
 | JSON-009 | Portable reference provenance | Reference audit and tests; native implementation planned | V3 prototype models absent sources with null, validates absolute versus parameter-relative path bases, rejects contradictory availability flags, and tests an in-memory POSIX/Windows Save As path rebase. Native C++ Save As and GUI lifecycle remain unimplemented. |
 | JSON-010 | Shared field descriptions and clear subsystem boundaries | Planned | Split legacy import, JSON codecs and atomic I/O; avoid three independent field vocabularies. |
 | JSON-011 | Authoritative schema and complete examples | Planned | Checked-in JSON Schema, valid default and rich fixtures; schema/core agreement and unknown-key tests. |
@@ -237,3 +237,29 @@ renderer ownership or changing numerical algorithms.
   migration in the live JSON-v2 save path**: schema 2 cannot persist these
   identities. Next: native v3 codec plus transaction-safe
   loading/saving, selection/GUI editing by IDs, and source path rebasing.
+
+## 15 October 2026: native schema-3 MTF codec (stacked review)
+
+- Implement explicit \`encode_parameter_json_v3_mtf()\` and
+  \`decode_parameter_json_v3_mtf()\` in Qt-independent C++, operating directly
+  on typed \`mtf_parameters\` with no JSON-v2 mirror and no Python runtime.
+  The component-shaped root is \`calibration.capture.mtf\`. This is
+  **not** a complete .cspar schema-3 writer, reader, or GUI migration.
+- The codec saves named optical/model values, measured samples and declared
+  units, stable record/capture IDs, selection by ID, channel/image-layer
+  provenance, source paths (absolute versus parameter-relative, or null),
+  available rectangle/dimension values and exact unavailable sentinels.
+- Reader rejects duplicate/dangling/empty IDs, mismatched base/filename,
+  malformed source availability, unknown nested fields, missing scalars,
+  unexpected compatibility-only first-capture flags, invalid sample units
+  and excessive resource use before mutating state.
+- **Temporary numerical safety restriction:** capture groups must remain
+  contiguous and their legacy adjacency flags must agree. The existing MTF
+  fitter still uses \`same_capture\`; we must migrate the fitter, channel
+  specialization, Qt inspector and measurement editor to stable group IDs
+  before allowing discontiguous schema-3 groups. The active schema-2
+  document loader/writer continues unchanged.
+- New focused \`unittests json_v3_mtf\` verifies typed-state and canonical
+  roundtrips, empty measured curves, path/sentinel cases and nonmutation
+  on malicious or inconsistent metadata. The full-platform CI for this
+  stacked review is tracked separately from PR #552 and prior merged work.
