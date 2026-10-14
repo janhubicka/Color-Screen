@@ -4542,8 +4542,30 @@ do_adjust_par (int argc, char **argv)
       printf ("Saving color screen parameters: %s\n", outcspname);
     }
   std::string save_error;
+  /* Relative MTF reference images belong to the old parameter directory.
+     Rebase on a private snapshot when adjust-par moves the document; a failed
+     conversion must not alter the original calibration or target file. */
+  render_parameters outgoing = rparam;
+  if (strcmp (cspname, outcspname))
+    {
+      std::error_code old_ec, new_ec;
+      const std::filesystem::path old_absolute = std::filesystem::absolute (
+          std::filesystem::u8path (cspname), old_ec);
+      const std::filesystem::path new_absolute = std::filesystem::absolute (
+          std::filesystem::u8path (outcspname), new_ec);
+      if (old_ec || new_ec
+          || !rebase_parameter_mtf_source_paths (
+              &outgoing.sharpen.scanner_mtf, old_absolute.u8string (),
+              new_absolute.u8string (), &save_error))
+        {
+          fprintf (stderr, "Cannot preserve measured-MTF source paths: %s\n",
+                   save_error.empty () ? "invalid parameter path"
+                                      : save_error.c_str ());
+          return 1;
+        }
+    }
   if (!save_parameter_filename (outcspname, output_json_v3, &param, &dparam,
-                                &rparam, &solver_param, output_trailing,
+                                &outgoing, &solver_param, output_trailing,
                                 &save_error, &profile_spots, force_json_v3))
     {
       fprintf (stderr, "Cannot save %s: %s\n", outcspname,
