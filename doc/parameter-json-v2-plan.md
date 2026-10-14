@@ -1,10 +1,12 @@
 # Native JSON parameter format v2: pre-beta migration
 
-> Historical rollout record. The October 12 decision retires ZIP-v1 output
-> and supersedes the format-preserving ZIP/compatibility-export rules below.
-> Current behavior and remaining schema redesign are tracked in
+> **Obsolete internal development history — not a supported file-format
+> contract.** The operator confirmed on 15 October 2026 that no JSON parameter
+> files exist outside development; only historical `.par` files must be
+> imported. Neither ZIP-v1 nor JSON-v2 requires a compatibility reader or
+> downgrade path. The current plan is tracked in
 > [parameter-json-migration-tracking.md](parameter-json-migration-tracking.md).
-> Version 2 remains the current complete JSON layout until schema 3 is ready.
+> The historical details below describe an alpha prototype, not release policy.
 
 ## Decision
 
