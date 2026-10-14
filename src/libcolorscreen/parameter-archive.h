@@ -97,6 +97,16 @@ write_parameter_json_v3_file (
     const render_parameters &render, const solver_parameters &solver,
     const std::vector<point_t> &profile_spots, std::string *error);
 
+/* Rebase relative measured-MTF source paths when a canonical parameter
+   document is saved under a different absolute pathname. Source references
+   must continue designating the same image. Handles POSIX, Windows drives
+   and UNC paths independent of the host OS; cross-volume Windows moves use
+   absolute paths. Fails without modifying MTF on invalid/ambiguous paths. */
+DLL_PUBLIC bool
+rebase_parameter_mtf_source_paths (
+    mtf_parameters *mtf, const std::string &old_parameter_file,
+    const std::string &new_parameter_file, std::string *error);
+
 /* Compose one complete native JSON schema-v2 document from the core and
    Qt profile-spot processing/calibration inputs. Every component is encoded
    directly from typed C++ state, without a legacy CSP mirror or ZIP wrapper.
