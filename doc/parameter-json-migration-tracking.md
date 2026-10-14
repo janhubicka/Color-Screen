@@ -45,7 +45,7 @@ validation from CI. No beta/final release is authorized by this work.
 | JSON-004 | Writer/reader aggregate resource-budget agreement | Implemented, locally tested | Every component and full writer preflights the shared node/depth budget before publishing. Boundary/escaped-string/combined-collection tests plus an independent 10,000-tree value-count probe pass. Large real-project memory testing is still required. |
 | JSON-005 | Versioned semantic organization and naming | Reversible reference prototype; C++ codec planned | Complete v2-to-v3 field map below, native codec and single-current-writer dispatch; no persistent field left unmapped. |
 | JSON-006 | Explicit sentinels, units and coordinate conventions | Reference prototype tested; native codec planned | Tagged input transfer; null absent bounds; inactive settings retained; audit pixel/screen/physical coordinate domains. |
-| JSON-007 | Stable MTF record identity and explicit capture groups | Reference prototype tested; C++/Qt lifetime model planned | IDs survive load/edit/save; reordering and insertion cannot change selection or group relationships; v2 adjacency importer. |
+| JSON-007 | Stable MTF record identity and explicit capture groups | Reference prototype plus Qt-free in-memory identity/reorder foundations; persistence still planned | Core generates collision-free document-local IDs without replacing existing ones, maps selection to an ID, and refuses legacy reorder that splits a capture. Native schema-3 codec and GUI edit/Save/Save As preservation remain necessary. |
 | JSON-008 | Named heterogeneous measurement metadata | Reference prototype tested; native codec planned | Named edge quality and source/ROI, compact homogeneous samples with explicit unit convention. |
 | JSON-009 | Portable reference provenance | Reference audit and tests; native implementation planned | V3 prototype models absent sources with null, validates absolute versus parameter-relative path bases, rejects contradictory availability flags, and tests an in-memory POSIX/Windows Save As path rebase. Native C++ Save As and GUI lifecycle remain unimplemented. |
 | JSON-010 | Shared field descriptions and clear subsystem boundaries | Planned | Split legacy import, JSON codecs and atomic I/O; avoid three independent field vocabularies. |
@@ -213,3 +213,25 @@ renderer ownership or changing numerical algorithms.
   identity from each record's current array index during a save.
 
 - PR #550 merged to `main` at `f75a906e70c4a46fddc7153819e474a5f94a4f66` after Ubuntu, macOS, Windows GCC/Clang and sanitizer CI passed. The reference-only follow-up PR #551 was retargeted to `main` and requests full CI. Schema v2 remains the sole native JSON reader and shipping writer.
+
+## 15 October 2026: native MTF identity foundation
+
+- Qt-free `mtf_measurement` now has optional document-local `id` and
+  `capture_group_id`. Both are empty in existing .par/JSON-v2 records, and
+  the production readers/writers remain schema 2. Explicit migration
+  `assign_missing_measurement_ids()` assigns collision-free
+  `measurement-000001` / `capture-000001` tokens matching the reference
+  import order, retaining any already-assigned IDs.
+- Selection by ID is an independent library operation. A core reorder keeps
+  selected-curve identity and refuses moves that would split a capture into
+  nonadjacent pieces not representable by legacy `same_capture` flags.
+  Sharpness's drag control now uses this safe operation and explains rejected
+  moves instead of silently changing fitted focus-group membership.
+- `mtf_record_identity` tests legacy grouping, idempotent migration, insertion,
+  collision avoidance, selection, reordering, invalid IDs, and rejection without
+  mutation. These are core API tests, not claims of complete v3 persistence.
+- The MTF fitter and production GUI editors still use legacy
+  `same_capture`/vector-index semantics until the format switch. **Do not
+  call the explicit migration in the live JSON-v2 save path**: schema 2 cannot
+  persist these identities. Next: native v3 codec plus transaction-safe
+  loading/saving, selection/GUI editing by IDs, and source path rebasing.
