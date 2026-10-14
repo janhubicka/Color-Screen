@@ -153,7 +153,7 @@ public:
   enum class ParameterSaveFormat {
     PreserveOrInfer,
     LegacyCsp,
-    JsonV2
+    JsonV3
   };
 
   /** Save FILENAME atomically as JSON or compatible legacy .par.
@@ -1029,11 +1029,11 @@ private:
       A suggested path is only a Save-As default and must never be overwritten
       without confirmation as though it had already been loaded/saved. */
   struct ParameterFileState {
-    enum class Format { LegacyCsp, JsonV2 };
+    enum class Format { LegacyCsp, JsonV3 };
 
     QString path;
     bool suggested = false;
-    Format format = Format::JsonV2;
+    Format format = Format::JsonV3;
 
     void setLoaded(const QString &fileName,
                    Format fileFormat = Format::LegacyCsp) {
