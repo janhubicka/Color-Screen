@@ -237,6 +237,14 @@ bool loadParameterPayload(
     return false;
   }
 
+  /* The real compatibility path is legacy .par: upgrade its adjacency-only
+     capture evidence once, before any GUI editor/Undo state can use it. */
+  if (!loadedState.rparams.sharpen.scanner_mtf.assign_missing_measurement_ids()) {
+    if (error)
+      *error = QCoreApplication::translate(
+          "MainWindow", "Invalid measured MTF selection or capture metadata.");
+    return false;
+  }
   *state = std::move(loadedState);
   if (spotResults)
     *spotResults = std::move(loadedSpotResults);
