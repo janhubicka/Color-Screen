@@ -4960,6 +4960,8 @@ encode_parameter_json_v3_document (
 }
 
 
+namespace
+{
 /* Exact semantic subtree contracts for schema 3. The opaque subtrees moved
    from native components are subsequently checked by the existing strict
    per-component validators; these wrappers may not hide unknown fields. */
