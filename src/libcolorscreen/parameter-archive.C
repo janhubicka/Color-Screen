@@ -4017,7 +4017,9 @@ v3_mtf_bool (const json_value &object, const char *key, bool *target,
 bool
 v3_mtf_path_base (const std::string &name, std::string *base)
 {
-  if (name.empty ())
+  /* A NUL survives JSON unescaping but would truncate a filename in legacy
+     C APIs and make source-location comparison unsafe. */
+  if (name.empty () || name.find ('\0') != std::string::npos)
     return false;
   auto separator = [] (char c) { return c == '\\' || c == '/'; };
   const bool drive = name.size () >= 2
