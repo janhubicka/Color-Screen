@@ -27,7 +27,7 @@ PY
 )
 legacy=out-parameter-legacy-normal.par
 legacy_metadata=out-parameter-profile.par
-native=out-parameter-native-v2.cspar
+native=out-parameter-native-v3.cspar
 legacy_image=out-parameter-legacy.tif
 native_image=out-parameter-native.tif
 out=out-parameter-output.cspar
@@ -46,7 +46,7 @@ python3 - "$native" <<'PY' || exit 1
 import json, pathlib, sys
 path=pathlib.Path(sys.argv[1])
 doc=json.loads(path.read_text(encoding='utf-8'))
-assert doc['format']=='org.colorscreen.parameters' and doc['schema_version']==2
+assert doc['format']=='org.colorscreen.parameters' and doc['schema_version']==3
 assert 'state' not in doc and 'legacy_csp' not in doc
 PY
 echo 'ok 2 - .par to native JSON has complete schema identity'
@@ -62,7 +62,7 @@ pexec $RUNCOLORSCREEN adjust-par "$native" || exit 1
 cmp "$native" "$out" || exit 1
 echo 'ok 4 - canonical native JSON is stable on ordinary rewriting'
 
-pexec $RUNCOLORSCREEN adjust-par --json-v2 --out "$unicode" "$legacy" || exit 1
+pexec $RUNCOLORSCREEN adjust-par --json-v3 --out "$unicode" "$legacy" || exit 1
 cmp "$native" "$unicode" || exit 1
 echo 'ok 5 - explicit conversion is canonical with Unicode output names'
 
@@ -73,7 +73,7 @@ pexec $RUNCOLORSCREEN adjust-par --out "$out" "$legacy_metadata" || exit 1
 python3 - "$out" <<'PY' || exit 1
 import json,pathlib,sys
 state=json.loads(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))
-assert state['profile']['spots']==[[0.25,0.5]]
+assert state['calibration']['process_color']['spots']==[[0.25,0.5]]
 PY
 echo 'ok 6 - legacy Qt profile spots convert to native JSON'
 
@@ -82,7 +82,7 @@ pexec $RUNCOLORSCREEN adjust-par --out out-parameter-profile-restored.cspar out-
 cmp "$out" out-parameter-profile-restored.cspar || exit 1
 echo 'ok 7 - Qt profile spots survive JSON to .par to JSON'
 
-if $RUNCOLORSCREEN adjust-par --json-v2 --out out-parameter-invalid-json.par "$native" \
+if $RUNCOLORSCREEN adjust-par --json-v3 --out out-parameter-invalid-json.par "$native" \
     >out-parameter-format-refusal.log 2>&1; then
   echo 'explicit JSON save accepted .par suffix' >&2
   exit 1
@@ -94,8 +94,8 @@ echo 'ok 8 - explicit JSON requests require .cspar extension'
 python3 - "$native" "$out" <<'PY' || exit 1
 import json,pathlib,sys
 s=json.loads(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))
-s['geometry']['final_angle']=108.375
-s['geometry']['final_ratio']=0.803158
+s['geometry']['final_frame']['angle_deg']=108.375
+s['geometry']['final_frame']['axis_length_ratio']=0.803158
 pathlib.Path(sys.argv[2]).write_text(json.dumps(s,ensure_ascii=False)+'\n',encoding='utf-8')
 PY
 if $RUNCOLORSCREEN adjust-par --out out-parameter-loss.par "$out" \
@@ -141,13 +141,13 @@ path=Path(sys.argv[1]);kind=sys.argv[2]
 raw={
   'text':b'unknown format\n', 'empty':b'{}', 'malformed':b'{broken',
   'future':b'{"format":"org.colorscreen.parameters","schema_version":999}',
-  'incomplete':b'{"format":"org.colorscreen.parameters","schema_version":2}',
+  'incomplete':b'{"format":"org.colorscreen.parameters","schema_version":3}',
   'binary':b'PK\x03\x04unsupported format'
 }
 if kind in ('unknown_field','bad_type'):
   doc=json.loads(Path(sys.argv[3]).read_text(encoding='utf-8'))
   if kind=='unknown_field':doc['capture']['future_key']=True
-  else:doc['capture']['gamma']='invalid'
+  else:doc['capture']['linearization']='invalid'
   raw=json.dumps(doc).encode('utf-8')
 else:raw=raw[kind]
 path.write_bytes(raw)
@@ -162,7 +162,7 @@ PY
 done
 echo 'ok 13 - implicit saves preserve malformed, future and unsupported files'
 
-pexec $RUNCOLORSCREEN adjust-par --json-v2 --out "$unknown" "$native" || exit 1
+pexec $RUNCOLORSCREEN adjust-par --json-v3 --out "$unknown" "$native" || exit 1
 cmp "$unknown" "$native" || exit 1
 echo 'ok 14 - explicit JSON conversion may replace an invalid destination'
 
