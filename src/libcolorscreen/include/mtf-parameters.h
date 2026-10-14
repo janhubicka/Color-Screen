@@ -287,6 +287,11 @@ struct mtf_parameters
      records may belong to the same capture in the future schema-3 format.  */
   DLL_PUBLIC bool measurement_ids_valid_p () const;
 
+  /* True if the current capture-group relationships can be expressed by
+     historical .par adjacency flags without changing the physical fit.
+     Identity tokens themselves are deliberately omitted on .par export. */
+  DLL_PUBLIC bool legacy_capture_groups_representable_p () const;
+
   /* Resolve the selected curve to its ID, or return empty for no selection.  */
   DLL_PUBLIC std::string selected_measurement_id () const;
 
