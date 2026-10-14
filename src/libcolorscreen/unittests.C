@@ -3486,6 +3486,197 @@ test_mtf_record_identity ()
   return ok;
 }
 
+
+/* Exercise native C++ schema-3 MTF serialization in isolation. The .cspar
+   dispatcher still writes v2; these tests establish the strict future codec
+   contract without prematurely changing saved project files.  */
+static bool
+test_native_json_v3_mtf ()
+{
+  bool ok = true;
+  const auto check = [&ok] (bool condition, const char *description)
+    {
+      if (!condition)
+        {
+          fprintf (stderr, "native v3 MTF: %s\n", description);
+          ok = false;
+        }
+    };
+
+  mtf_parameters original;
+  original.model = mtf_model::physical_diffraction;
+  original.sigma = 0.25;
+  original.halo_fraction = 0.15;
+  original.halo_sigma = 2.5;
+  original.blur_diameter = 1.75;
+  original.defocus = 0.02;
+  original.f_stop = 8;
+  original.pixel_pitch = 3.76;
+  original.sensor_fill_factor = 0.8;
+  original.scan_dpi = 2400;
+  original.wavelengths = {600, 540, 460, 780};
+  original.measured_mtf_idx = 1;
+  original.measurements.resize (3);
+  for (int i = 0; i < 3; ++i)
+    {
+      mtf_measurement &m = original.measurements[i];
+      m.name = std::string ("calibrated edge ") + std::to_string (i);
+      m.channel = i == 2 ? 3 : i;
+      m.image_layer = i == 2;
+      m.wavelength = 500.0 + i * 75.0;
+      m.same_capture = i == 1;
+      m.edge_p1 = {(double)(i + 1), (double)(i + 2)};
+      m.edge_p2 = {(double)(i + 5), (double)(i + 6)};
+      m.edge_angle = 4.5 + i;
+      m.edge_fit_rms = 0.12 + i * 0.01;
+      m.edge_contrast = 0.6;
+      m.edge_snr = 24 + i;
+      m.phase_coverage = 0.9;
+      m.add_value (0, 100, 0);
+      m.add_value (0.25, 65.0 - i, 0.5);
+      m.add_value (0.5, 20.0 + i, 1.1);
+    }
+  /* Both completely unavailable and selected source locations must survive.
+     The third curve deliberately has a missing filename but known geometry. */
+  original.measurements[0].source_filename = "../captures/archival scan.tif";
+  original.measurements[0].source_width = -3;
+  original.measurements[0].source_height = 0;
+  original.measurements[0].roi = int_image_area (11, -2, -1, 0);
+  original.measurements[1].source_filename = "C:\\scans\\mtf edge.tif";
+  original.measurements[1].source_width = 1200;
+  original.measurements[1].source_height = 800;
+  original.measurements[1].roi = int_image_area (12, 24, 140, 80);
+  original.measurements[2].source_filename.clear ();
+  original.measurements[2].source_width = 600;
+  original.measurements[2].source_height = 400;
+  original.measurements[2].roi = int_image_area (0, 0, 80, 100);
+  check (original.assign_missing_measurement_ids (),
+         "could not upgrade legacy capture groups");
+
+  std::string json = "unmodified";
+  std::string error;
+  check (encode_parameter_json_v3_mtf (original, &json, &error),
+         "could not serialize native v3 MTF");
+  check (json.find ("\"capture_group_id\"") != std::string::npos
+         && json.find ("\"selected_measurement_id\": \"measurement-000002\"")
+              != std::string::npos
+         && json.find ("\"legacy_first_same_capture\"") == std::string::npos
+         && json.find ("\"sample_columns\"") != std::string::npos
+         && json.find ("\"base\": \"absolute\"") != std::string::npos
+         && json.find ("\"base\": \"parameter_file\"") != std::string::npos
+         && json.find ("\"path\": null") != std::string::npos,
+         "missing schema-3 fields or unexpected compatibility-only field");
+
+  mtf_parameters accepted;
+  check (decode_parameter_json_v3_mtf (json, &accepted, &error)
+         && accepted.equal_p (original),
+         "native v3 MTF typed-state roundtrip changed a field");
+  std::string canonical;
+  check (encode_parameter_json_v3_mtf (accepted, &canonical, &error)
+         && canonical == json,
+         "native v3 MTF rewrite is not canonical");
+
+  auto replace_once = [] (const std::string &input,
+                          const std::string &from,
+                          const std::string &to) -> std::string
+    {
+      std::string changed = input;
+      const size_t start = changed.find (from);
+      if (start == std::string::npos)
+        return {};
+      changed.replace (start, from.size (), to);
+      return changed;
+    };
+
+  /* Failure is fully transactional; even successful syntax parsing does not
+     publish half the collection before a later record validation fails. */
+  auto rejected = [&] (const std::string &input, const char *what)
+    {
+      if (input.empty ())
+        {
+          check (false, "a malformed-case replacement anchor was absent");
+          return;
+        }
+      mtf_parameters current = accepted;
+      const mtf_parameters before = current;
+      std::string diagnostic;
+      check (!decode_parameter_json_v3_mtf (input, &current, &diagnostic)
+             && !diagnostic.empty ()
+             && current.equal_p (before), what);
+    };
+  rejected (replace_once (
+      json, "\"id\": \"measurement-000002\"",
+      "\"id\": \"measurement-000001\""),
+      "duplicate measurement IDs accepted");
+  rejected (replace_once (
+      json, "\"selected_measurement_id\": \"measurement-000002\"",
+      "\"selected_measurement_id\": \"missing-id\""),
+      "dangling selected record accepted");
+  rejected (replace_once (
+      json, "\"base\": \"parameter_file\"", "\"base\": \"absolute\""),
+      "source path-base disagreement accepted");
+  rejected (replace_once (
+      json, "\"status\": \"unavailable\"", "\"status\": \"available\""),
+      "contradictory geometry availability accepted");
+  rejected (replace_once (
+      json, "\"contrast_percent\"", "\"contrast_fraction\""),
+      "unknown sample units accepted");
+  rejected (replace_once (
+      json, "\"angle_deg\":", "\"unknown_quality\": 1, \"angle_deg\":"),
+      "unknown nested MTF metadata accepted");
+  rejected (replace_once (
+      json, "\"selected_measurement_id\":",
+      "\"legacy_first_same_capture\": false, \"selected_measurement_id\":"),
+      "legacy compatibility wart accepted in production-v3 component");
+  rejected (replace_once (
+      json, "\"selected_measurement_id\": \"measurement-000002\"",
+      "\"selected_measurement_id\": 1"),
+      "array-index selection accepted in schema 3");
+  rejected (replace_once (
+      json, "\"capture_group_id\": \"capture-000001\"",
+      "\"capture_group_id\": \"\""),
+      "empty capture-group ID accepted");
+  rejected (replace_once (
+      json, "\"source\":", "\"unexpected\": 1, \"source\":"),
+      "unknown record metadata accepted");
+  rejected ("{\"calibration\":{}}", "missing nested MTF subtree accepted");
+
+  /* Writer checks the same invariants before changing OUTPUT. */
+  mtf_parameters invalid = original;
+  invalid.measurements[0].same_capture = true;
+  std::string untouched = "existing";
+  check (!encode_parameter_json_v3_mtf (invalid, &untouched, &error)
+         && untouched == "existing",
+         "first-record legacy adjacency flag was silently discarded");
+  invalid = original;
+  invalid.measurements[1].capture_group_id = "capture-000003";
+  invalid.measurements[1].same_capture = false;
+  invalid.measurements[2].capture_group_id = "capture-000001";
+  invalid.measurements[2].same_capture = false;
+  check (!encode_parameter_json_v3_mtf (invalid, &untouched, &error)
+         && untouched == "existing",
+         "discontiguous group accepted while fitter remains adjacency-based");
+  invalid = original;
+  invalid.measurements[0].source_filename = "C:relative\\bad.tif";
+  check (!encode_parameter_json_v3_mtf (invalid, &untouched, &error)
+         && untouched == "existing",
+         "ambiguous Windows drive-relative source was accepted");
+  invalid = original;
+  invalid.measurements[0].id.clear ();
+  check (!encode_parameter_json_v3_mtf (invalid, &untouched, &error)
+         && untouched == "existing",
+         "missing identity silently regenerated during output");
+
+  mtf_parameters empty;
+  std::string empty_json;
+  mtf_parameters empty_loaded;
+  check (encode_parameter_json_v3_mtf (empty, &empty_json, &error)
+         && decode_parameter_json_v3_mtf (empty_json, &empty_loaded, &error)
+         && empty_loaded.equal_p (empty),
+         "no-measurement schema-3 MTF roundtrip failed");
+  return ok;
+}
+
 /* Verify the QuickMTF append/result contract used by GUI batch import.  A
    rejected file must not append a partial measurement because callers can
    safely keep already accepted files while skipping malformed ones.  */
@@ -12594,6 +12785,8 @@ main (int argc, char **argv)
       [] () { return test_screen_simulation (); } },
     { "mtf_record_identity", "stable MTF IDs and v2-safe capture reordering",
       [] () { return test_mtf_record_identity (); } },
+    { "json_v3_mtf", "native schema-3 MTF typed component and validation",
+      [] () { return test_native_json_v3_mtf (); } },
     { "mtf_quickmtf_load", "QuickMTF import contract tests",
       [] () { return test_quickmtf_load_contract (); } },
     { "mtf_model", "physical MTF model tests",
