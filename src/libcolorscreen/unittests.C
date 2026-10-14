@@ -3479,6 +3479,15 @@ test_mtf_record_identity ()
          && bad.equal_p (partial),
          "partially upgraded identity model must not be reordered or indexed");
 
+  bad = records;
+  for (mtf_measurement &record : bad.measurements)
+    record.capture_group_id.clear ();
+  const mtf_parameters no_groups = bad;
+  check (!bad.capture_group_indices (&untouched_capture_indices)
+         && untouched_capture_indices == std::vector<size_t>{22}
+         && bad.equal_p (no_groups),
+         "measurement IDs with no capture groups fell back to legacy grouping");
+
   mtf_parameters collision;
   collision.measurements.resize (2);
   collision.measurements[1].id = "measurement-000001";
