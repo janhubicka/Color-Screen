@@ -237,5 +237,10 @@ if __name__ == "__main__":
     try:
         raise SystemExit(main())
     except (AssertionError, OSError, ValueError, subprocess.TimeoutExpired) as exc:
+        # Preserve the failing line and actual platform path operation.
+        # An unlabelled assert has an empty message on Windows, which
+        # otherwise makes a regression impossible to diagnose from CI logs.
+        import traceback
+        traceback.print_exc(file=sys.stderr)
         print(f"# JSON v3 reference validation failure: {exc}", file=sys.stderr)
         raise SystemExit(1)
