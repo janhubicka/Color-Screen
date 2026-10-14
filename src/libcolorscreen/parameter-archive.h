@@ -79,6 +79,24 @@ decode_parameter_json_v3_document (
     std::vector<point_t> *profile_spots,
     std::string *error);
 
+/* Read or write canonical schema-3 .cspar at UTF-8 filesystem path NAME.
+   Readers stage all persistent state until validation succeeds; writers
+   complete the document before atomic same-directory replacement. No
+   unreleased JSON-v1/v2 is recognized by these APIs. */
+DLL_PUBLIC bool
+read_parameter_json_v3_file (
+    const char *name, scr_to_img_parameters *geometry,
+    scr_detect_parameters *detection, render_parameters *render,
+    solver_parameters *solver, std::vector<point_t> *profile_spots,
+    std::string *error);
+
+DLL_PUBLIC bool
+write_parameter_json_v3_file (
+    const char *name, const scr_to_img_parameters &geometry,
+    const scr_detect_parameters &detection,
+    const render_parameters &render, const solver_parameters &solver,
+    const std::vector<point_t> &profile_spots, std::string *error);
+
 /* Compose one complete native JSON schema-v2 document from the core and
    Qt profile-spot processing/calibration inputs. Every component is encoded
    directly from typed C++ state, without a legacy CSP mirror or ZIP wrapper.
