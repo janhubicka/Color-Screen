@@ -6747,10 +6747,14 @@ void MainWindow::onMeasureMtfRequested(bool checked) {
 
             /* Commit the set only after every requested native channel passed
                qualification.  This prevents partial RGB measurement groups.  */
+            auto &mtf = s.rparams.sharpen.scanner_mtf;
+            const bool named = !mtf.measurements.empty()
+                               && !mtf.measurements.front().id.empty();
             for (auto &result : *results)
-              s.rparams.sharpen.scanner_mtf.measurements.push_back(
-                  std::move(result.measurement));
-            return true;
+              mtf.measurements.push_back(std::move(result.measurement));
+            /* Canonical documents assign stable IDs before publication;
+               legacy .par state is upgraded in the eventual load step. */
+            return !named || mtf.assign_missing_measurement_ids();
           },
           false);
     });
