@@ -211,3 +211,5 @@ renderer ownership or changing numerical algorithms.
   Qt-free core and preserve them through edits and Save/Save As, including
   source path rebasing and migration-failure atomicity. Never infer stable
   identity from each record's current array index during a save.
+
+- PR #550 merged to `main` at `f75a906e70c4a46fddc7153819e474a5f94a4f66` after Ubuntu, macOS, Windows GCC/Clang and sanitizer CI passed. The reference-only follow-up PR #551 was retargeted to `main` and requests full CI. Schema v2 remains the sole native JSON reader and shipping writer.
