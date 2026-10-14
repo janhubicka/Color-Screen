@@ -3865,6 +3865,11 @@ legacy_csp_can_represent_parameters (const scr_to_img_parameters *geometry,
      a legacy Save. Give it priority over other non-representable settings,
      including a nondefault final frame, so the GUI can explain the user's
      intended crop without obscuring it behind another warning. */
+  if (render
+      && !render->sharpen.scanner_mtf.legacy_capture_groups_representable_p ())
+    return archive_fail (
+        error, "Legacy .par cannot represent noncontiguous or invalid "
+               "MTF capture groups; save as .cspar instead");
   if (render && render->image_area.set)
     return archive_fail (
         error, "Legacy .par cannot preserve the photographic image area; "
