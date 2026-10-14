@@ -96,6 +96,13 @@ def _source_path(value: str) -> dict[str, str] | None:
         raise ValueError("measurement.source_filename: expected text")
     if not value:
         return None  # Missing source, not a relative empty filename.
+    # A drive-relative Windows path (C:folder\\image.tif) depends on the
+    # process's current directory *on that drive*. Likewise \\folder\\image.tif
+    # is volume-rooted but lacks a drive. Neither is an absolute or reliably
+    # parameter-file-relative reference; reject instead of guessing on Save As.
+    drive, _ = ntpath.splitdrive(value)
+    if (drive and not ntpath.isabs(value)) or (value.startswith("\\\\") and not value.startswith("\\\\\\\\")):
+        raise ValueError("measurement.source_filename: ambiguous Windows-rooted source path")
     # ntpath handles Windows drive and UNC paths even on Linux. Do not assume
     # the host platform is the one on which the calibration was created.
     absolute = os.path.isabs(value) or ntpath.isabs(value)
@@ -485,6 +492,11 @@ def downgrade_v3(v3: dict[str, Any]) -> dict[str, Any]:
     }
     if "required_features" in v3:
         old["required_features"] = deepcopy(v3["required_features"])
+    # Moving an opaque calibration/denoiser subtree must not circumvent the
+    # strict vocabulary check that was already required on v2 import. In
+    # particular, a future nested v3 field must not be silently carried into
+    # an old version or ignored by callers before the native C++ decoder runs.
+    _validate_v2_nested_vocabulary(old)
     return deepcopy(old)
 
 
