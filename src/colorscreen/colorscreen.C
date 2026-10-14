@@ -217,6 +217,16 @@ load_parameter_filename (const char *filename, scr_to_img_parameters *param,
       == std::string::npos)
     trailing.clear ();
 
+  /* The sole historical import path is .par. Allocate stable MTF IDs before
+     any CLI edit, merge or native JSON export, without relying on record
+     indices remaining fixed after later operations. */
+  if (rparam
+      && !rparam->sharpen.scanner_mtf.assign_missing_measurement_ids ())
+    {
+      if (error)
+        *error = "invalid legacy MTF selection or capture-group metadata";
+      return false;
+    }
   if (is_json_v3)
     *is_json_v3 = false;
   if (profile_spots)
