@@ -2864,7 +2864,32 @@ mtf_parameters::load_csv (FILE *in, std::string name, const char **error)
       loaded.push_back (std::move (measurement));
     }
 
-  measurements.insert (measurements.end (), loaded.begin (), loaded.end ());
+  /* Existing canonical JSON documents keep their stable IDs when a
+     QuickMTF import appends fresh measurements. Legacy .par collections
+     without IDs remain unupgraded until the load-time conversion stage.
+     Prepare on a copy so even an invalid partial ID model cannot mutate
+     the accepted measured curves. */
+  const bool already_named
+      = std::any_of (measurements.begin (), measurements.end (),
+                     [] (const mtf_measurement &m)
+                     {
+                       return !m.id.empty () || !m.capture_group_id.empty ();
+                     });
+  if (already_named)
+    {
+      mtf_parameters staged = *this;
+      staged.measurements.insert (staged.measurements.end (),
+                                  loaded.begin (), loaded.end ());
+      if (!staged.assign_missing_measurement_ids ())
+        {
+          if (error)
+            *error = "MTF capture IDs are invalid; imported curves not added";
+          return -1;
+        }
+      *this = std::move (staged);
+    }
+  else
+    measurements.insert (measurements.end (), loaded.begin (), loaded.end ());
   return rgb ? 3 : 1;
 }
 
