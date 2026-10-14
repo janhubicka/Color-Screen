@@ -3669,6 +3669,11 @@ test_native_json_v3_mtf ()
   check (!encode_parameter_json_v3_mtf (invalid, &untouched, &error)
          && untouched == "existing",
          "ambiguous Windows drive-relative source was accepted");
+  invalid.measurements[0].source_filename
+    = std::string ("valid", 5) + '\0' + "hidden.tif";
+  check (!encode_parameter_json_v3_mtf (invalid, &untouched, &error)
+         && untouched == "existing",
+         "embedded NUL in source path was accepted");
   invalid = original;
   invalid.measurements[0].id.clear ();
   check (!encode_parameter_json_v3_mtf (invalid, &untouched, &error)
