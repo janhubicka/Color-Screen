@@ -114,7 +114,7 @@ serialize_cli_profile_spot_postamble (const std::vector<point_t> &spots)
 {
   /* A legacy parameter file without Qt profiling points has no mandatory
      GUI postamble. Omitting the empty marker gives byte-identical normalized
-     legacy round trips through native JSON v2, without inventing metadata. */
+     legacy round trips through native JSON v3, without inventing metadata. */
   if (spots.empty ())
     return {};
   std::ostringstream output;
@@ -134,7 +134,7 @@ load_parameter_filename (const char *filename, scr_to_img_parameters *param,
                          render_parameters *rparam,
                          solver_parameters *sparam, std::string *error,
                          std::string *trailing_payload = nullptr,
-                         bool *is_json_v2 = nullptr,
+                         bool *is_json_v3 = nullptr,
                          std::vector<point_t> *profile_spots = nullptr)
 {
   // Dispatch JSON by signature, then validate the complete typed document.
@@ -145,7 +145,7 @@ load_parameter_filename (const char *filename, scr_to_img_parameters *param,
       render_parameters r;
       solver_parameters solver;
       std::vector<point_t> spots;
-      if (!read_parameter_json_v2_file (
+      if (!read_parameter_json_v3_file (
               filename, &g, &d, &r, &solver, &spots, error))
         return false;
       if (param)
@@ -158,8 +158,8 @@ load_parameter_filename (const char *filename, scr_to_img_parameters *param,
         *sparam = std::move (solver);
       if (profile_spots)
         *profile_spots = std::move (spots);
-      if (is_json_v2)
-        *is_json_v2 = true;
+      if (is_json_v3)
+        *is_json_v3 = true;
       if (trailing_payload)
         *trailing_payload = profile_spots
             ? std::string () : serialize_cli_profile_spot_postamble (spots);
@@ -210,15 +210,15 @@ load_parameter_filename (const char *filename, scr_to_img_parameters *param,
   /* The CSP parser accepts either CR or LF as a line terminator. On
      Windows its final screen_alignment_end CRLF can therefore leave a
      solitary LF in TRAILING. Do not accidentally transfer that whitespace
-     to a rewritten .par while JSON v2, which has no opaque CSP mirror,
+     to a rewritten .par while JSON v3, which has no opaque CSP mirror,
      correctly omits it. Keep any actual trailing extension bytes verbatim,
      even if preceded by whitespace. */
   if (trailing.find_first_not_of (" \t\r\n\f\v")
       == std::string::npos)
     trailing.clear ();
 
-  if (is_json_v2)
-    *is_json_v2 = false;
+  if (is_json_v3)
+    *is_json_v3 = false;
   if (profile_spots)
     profile_spots->clear ();
   if (trailing_payload)
@@ -344,11 +344,11 @@ save_parameter_filename (const char *filename, bool json,
               if (error)
                 *error = "Refusing to replace unrecognized existing .cspar: "
                          + std::string (filename) + "; choose another path or use "
-                         "adjust-par --json-v2 for explicit conversion. " + (ec ? ec.message () : *error);
+                         "adjust-par --json-v3 for explicit conversion. " + (ec ? ec.message () : *error);
               return false;
             }
         }
-      return write_parameter_json_v2_file (
+      return write_parameter_json_v3_file (
           filename, *param, *dparam, *rparam, *sparam,
           profile_spots ? *profile_spots : parsed_spots, error);
     }
@@ -4434,13 +4434,13 @@ do_adjust_par (int argc, char **argv)
 {
   const char *cspname = NULL, *error = NULL, *outcspname = NULL;
   std::vector<const char *> csps;
-  bool force_json_v2 = false;
+  bool force_json_v3 = false;
   for (int i = 0; i < argc; i++)
     {
       if (parse_common_flags (argc, argv, &i))
         ;
-      else if (!strcmp (argv[i], "--json-v2"))
-        force_json_v2 = true;
+      else if (!strcmp (argv[i], "--json-v3"))
+        force_json_v3 = true;
       else if (!strcmp (argv[i], "--zip-v1"))
         {
           fprintf (stderr, "ZIP-v1 output was retired; .cspar files use JSON.\n");
@@ -4467,7 +4467,7 @@ do_adjust_par (int argc, char **argv)
   render_parameters rparam;
   scr_detect_parameters dparam;
   struct solver_parameters solver_param;
-  bool input_json_v2 = false;
+  bool input_json_v3 = false;
   std::string input_trailing;
   std::string parameter_error;
   std::vector<point_t> profile_spots;
@@ -4480,7 +4480,7 @@ do_adjust_par (int argc, char **argv)
       if (!load_parameter_filename (cspname, &param, &dparam, &rparam,
                                     &solver_param, &parameter_error,
                                     &input_trailing,
-                                    &input_json_v2, &profile_spots))
+                                    &input_json_v3, &profile_spots))
 	{
 	  fprintf (stderr, "Can not load %s: %s\n", cspname,
                    parameter_error.c_str ());
@@ -4506,17 +4506,17 @@ do_adjust_par (int argc, char **argv)
   if (!outcspname)
     outcspname = cspname;
   const bool cspar_suffix = parameter_archive_suffix_p (outcspname);
-  if (force_json_v2 && !cspar_suffix)
+  if (force_json_v3 && !cspar_suffix)
     {
       fprintf (stderr, "JSON output requires a .cspar target; use --out\n");
       return 1;
     }
   /* New and existing .cspar files use only JSON; explicit .par remains legacy. */
-  const bool output_json_v2 = force_json_v2 || cspar_suffix;
+  const bool output_json_v3 = force_json_v3 || cspar_suffix;
 
   // Conversion from legacy .par must account for the GUI's profile-spot
   // postamble. Unknown metadata is never discarded just to create JSON.
-  if (output_json_v2 && !input_json_v2
+  if (output_json_v3 && !input_json_v3
       && !parse_parameter_profile_spots (
           input_trailing, &profile_spots, &parameter_error))
     {
@@ -4525,16 +4525,16 @@ do_adjust_par (int argc, char **argv)
       return 1;
     }
   std::string output_trailing = input_trailing;
-  if (!output_json_v2 && input_json_v2)
+  if (!output_json_v3 && input_json_v3)
     output_trailing = serialize_cli_profile_spot_postamble (profile_spots);
   if (verbose)
     {
       printf ("Saving color screen parameters: %s\n", outcspname);
     }
   std::string save_error;
-  if (!save_parameter_filename (outcspname, output_json_v2, &param, &dparam,
+  if (!save_parameter_filename (outcspname, output_json_v3, &param, &dparam,
                                 &rparam, &solver_param, output_trailing,
-                                &save_error, &profile_spots, force_json_v2))
+                                &save_error, &profile_spots, force_json_v3))
     {
       fprintf (stderr, "Cannot save %s: %s\n", outcspname,
                save_error.c_str ());
