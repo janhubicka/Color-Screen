@@ -219,6 +219,34 @@ mtf_parameters::set_measurement_same_capture (size_t index, bool same)
   return true;
 }
 
+/* Delete a measured curve without transferring its selection or capture
+   relationship to a different vector position. */
+bool
+mtf_parameters::erase_measurement (size_t index)
+{
+  if (index >= measurements.size ()
+      || measured_mtf_idx < -1
+      || (measured_mtf_idx >= 0
+          && (size_t)measured_mtf_idx >= measurements.size ()))
+    return false;
+  std::vector<size_t> groups;
+  if (!capture_group_indices (&groups))
+    return false;
+
+  measurements.erase (measurements.begin () + index);
+  groups.erase (groups.begin () + index);
+  if (measured_mtf_idx == (int)index)
+    measured_mtf_idx = -1;
+  else if (measured_mtf_idx > (int)index)
+    --measured_mtf_idx;
+
+  /* Legacy adjacency flags are a derived view of the group assignment,
+     never a reason to change the physical capture of surviving records. */
+  for (size_t i = 0; i < measurements.size (); ++i)
+    measurements[i].same_capture = i && groups[i] == groups[i - 1];
+  return true;
+}
+
 /* Reorder records without changing the selected curve or explicit group.
    Only legacy in-memory records lack stable IDs and remain subject to
    adjacency constraints until their one-time .par migration. */
