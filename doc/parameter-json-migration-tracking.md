@@ -1,9 +1,10 @@
 # Parameter JSON redesign: decisions, implementation and validation
 
-Status: **ZIP-v1 removed and merged; schema-3 reference audited, native codec pending**,
+Status: **schema-3-first JSON format under active implementation**,
 Color-Screen **2.0alpha**. Baseline: `31298ba4`.
-Decision updated: 13 October 2026 (all ZIP parameter support removed). This is the current implementation tracker;
-`parameter-json-v2-plan.md` is the historical v2 rollout record.
+Decision updated: **15 October 2026**. Only legacy `.par` parameter files exist
+outside development. JSON-v1 and JSON-v2 are unreleased development artefacts,
+not compatibility contracts. `parameter-json-v2-plan.md` is obsolete history.
 
 ## Scope and non-negotiable invariants
 
@@ -20,10 +21,15 @@ refuse conversion, retain the old file, and explain the unsupported metadata.
 The retired `--zip-v1` command-line flag reports an error without writing;
 there is no ZIP parameter-file encoding or decoding path.
 
-The semantic redesign will use **schema version 3**, not redefine schema 2.
-Until its complete codec, import mapping and tests are ready, the sole JSON
-writer continues to write the existing, complete version 2. A partly implemented
-v3 document must never be exposed by Save, CLI conversion or recovery.
+**Compatibility boundary: .par only.** The shipping JSON contract will be
+the semantically organized schema 3. We may replace/remove unreleased JSON-v2
+encoders, readers, flags and migration adapters rather than preserve their
+output or input. In the current alpha checkout, the GUI/CLI still temporarily
+use JSON-v2 until the complete schema-3 reader, writer, Save As, and recovery
+paths are wired and tested together. Do not expose partly written schema 3.
+Tests must assert that legacy .par imports are lossless in their meaningful
+stored inputs and that new schema-3 files can be reopened and rewritten
+canonically; **no JSON-v2 or ZIP compatibility tests are required for release**.
 
 Keep all codecs, validation and atomic file I/O in Qt-independent
 `libcolorscreen`. Keep output/display profiles, output transfer gamma, gamut
@@ -108,19 +114,28 @@ renderer ownership or changing numerical algorithms.
 | `color` balance, saturation, brightness, curve | `color.adjustments` | Appearance settings are persistent, output monitor profile/transfer is not. |
 | `correction_grids.scanner_blur`, `tiles` | `calibration.spatial_blur`, `tiles` | Retain dimensions/row order and physical blur units; no transient diagnostics or view visibility. |
 
-## Compatibility and rollout sequence
+## Canonical format and rollout sequence
 
-1. Remove *all* ZIP-v1 parameter handling and fix implicit-overwrite
-   validation without changing v2 field names. Retain `.par` and JSON tests.
-2. Make aggregate writer budgets match the reader without allocating a second
-   large JSON tree just to count values. No ZIP manifest remains.
-3. Complete the member/units audit and schema-3 field map. Implement all domains
-   before switching the writer; current JSON-v2 remains a read-compatible import.
-4. Add IDs/groups and portable provenance with their editing/lifecycle support.
-   Do not claim stability from regenerating IDs from array indices on each Save.
-5. Add schema, complete fixtures and cross-version equivalence tests, then switch
-   GUI/CLI/recovery atomically to one current writer. Retain JSON-v2 and `.par` import tests.
-6. Full platform/sanitizer CI and operator field validation precede beta.
+1. The only historical parameter input is plain `.par`. Continue the
+   existing checked loader, supported export path and unknown-metadata
+   loss-prevention checks. Retired ZIP parameter files need no reader.
+2. Finish the native schema-3 encoder/decoder for every persistent domain
+   using semantic field names, explicit units, bounded arrays and
+   transactional publication. Neither JSON-v1 nor JSON-v2 is a reader target.
+3. Convert `.par` imports **once at load time** into complete native state:
+   stable MTF record/capture IDs, normalized obsolete sentinels and
+   document-relative provenance. Never regenerate existing IDs on Save.
+4. Change GUI Open/Save/Save As/sidecars/recovery and the CLI together to
+   use only canonical schema-3 `.cspar`, with atomic replacement and
+   clear rejection of unsupported input. Delete the unused v2 runtime
+   serializer, compatibility flags, older JSON-specific tests and adapter
+   code after switch.
+5. Check all 128 existing `.par` fixtures, synthetic full-state cases
+   (including inactive fields, correction grids, MTF metadata and Unicode
+   paths), schema-3 canonical rewrites, malformed-input nonmutation,
+   failure-atomic Save As and real rendering parity.
+6. Obtain full platform/sanitizer CI and operator testing on large real
+   projects before beta.
 
 ## Validation log
 
@@ -253,13 +268,31 @@ renderer ownership or changing numerical algorithms.
   malformed source availability, unknown nested fields, missing scalars,
   unexpected compatibility-only first-capture flags, invalid sample units
   and excessive resource use before mutating state.
-- **Temporary numerical safety restriction:** capture groups must remain
-  contiguous and their legacy adjacency flags must agree. The existing MTF
-  fitter still uses \`same_capture\`; we must migrate the fitter, channel
-  specialization, Qt inspector and measurement editor to stable group IDs
-  before allowing discontiguous schema-3 groups. The active schema-2
-  document loader/writer continues unchanged.
+- Native MTF fitting, per-channel specialization and capture-wide uncertainty
+  weighting now use stable group identity, including nonadjacent records.
+  The canonical schema-3 MTF codec does not persist or enforce legacy
+  adjacency flags. GUI editor identity lifecycle and full document integration
+  remain unfinished.
 - New focused \`unittests json_v3_mtf\` verifies typed-state and canonical
   roundtrips, empty measured curves, path/sentinel cases and nonmutation
   on malicious or inconsistent metadata. The full-platform CI for this
   stacked review is tracked separately from PR #552 and prior merged work.
+
+## 15 October 2026: explicit no-JSON-compatibility decision
+
+- The operator confirmed there are **no real JSON parameter files** and no
+  deployed ZIP-parameter files; the only existing parameter files are `.par`.
+  Unreleased JSON versions are not migration input formats.
+- Do not carry the Python reference translator's inverse v3→v2 adapter,
+  `legacy_first_same_capture`, ZIP-v1 compatibility branches or JSON-v2
+  reader/write-format preservation into 2.0. Retire their tests once native
+  schema-3 corpus and field-rich tests replace them.
+- Keep `.par` reading and supported legacy export, preserving meaningful
+  historical fields and refusing lossy export when new values lack a `.par`
+  representation. This is a different compatibility obligation from JSON.
+- The current internal schema-3 proposal uses `schema_version: 3`. The
+  final marker can be fixed before beta because no public JSON files exist.
+- Native schema-3 MTF now supports nonadjacent capture-group IDs in the
+  Qt-free numerical solver and per-channel sharpen selection. Remaining
+  work is GUI/editor identity lifecycle, complete parameter codec,
+  source-path rebasing, and replacement of temporary v2 GUI/CLI/recovery paths.
