@@ -3633,6 +3633,10 @@ test_native_json_v3_mtf ()
       "\"selected_measurement_id\": 1"),
       "array-index selection accepted in schema 3");
   rejected (replace_once (
+      json, "\"selected_measurement_id\": \"measurement-000002\"",
+      "\"selected_measurement_id\": \"\""),
+      "empty selected ID accepted instead of null");
+  rejected (replace_once (
       json, "\"capture_group_id\": \"capture-000001\"",
       "\"capture_group_id\": \"\""),
       "empty capture-group ID accepted");
