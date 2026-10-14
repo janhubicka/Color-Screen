@@ -97,7 +97,7 @@ jobs:
       run: |
         if ! make -j$(nproc) check; then
           echo '=== Failed Windows clang TAP tests ==='
-          for log in testsuite/parameter-v2-corpus.log \
+          for log in testsuite/parameter-v3-corpus.log \
                      testsuite/parameter-archive-cli.log \
                      testsuite/unittests.log \
                      testsuite/test-suite.log; do
