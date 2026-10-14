@@ -61,7 +61,9 @@ policies, temporary-worker state and derived plots remain **excluded**.
 * Source provenance distinguishes absolute from parameter-file-relative
   path spellings. A missing source filename becomes `null`, not a relative
   empty filename. The downgrade rejects contradictory path bases rather than
-  silently discarding them. Source dimensions and ROI use explicit `status`;
+  silently discarding them. Drive-relative Windows paths and root-only Windows
+  paths with no volume are rejected as ambiguous; qualified UNC paths remain
+  supported. Source dimensions and ROI use explicit `status`;
   historical sentinel values are retained for lossless migration, but
   changing a status without changing the dimensions is rejected.
   The reference adapter includes an in-memory
@@ -73,6 +75,9 @@ policies, temporary-worker state and derived plots remain **excluded**.
 * Downgrading a v3 document whose capture group is noncontiguous in the
   measurement order fails rather than silently changing group membership.
   An unknown measurement ID, duplicate ID or unknown field also fails.
+  Reverse conversion revalidates the strict nested v2 field vocabulary,
+  preventing unknown settings in moved contact-copy/denoiser/calibration
+  subtrees from being accepted accidentally.
 
 ## Validation and outstanding risks
 
