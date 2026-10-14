@@ -3448,6 +3448,28 @@ test_mtf_record_identity ()
          && collision.measurements[1].capture_group_id == "capture-000001",
          "legacy migration overwrote a reserved identifier");
 
+  /* Schema-v2 and .par must reject explicitly upgraded identities before
+     writing any bytes: silently dropping them would corrupt a v3 document. */
+  render_parameters render_with_ids;
+  render_with_ids.sharpen.scanner_mtf = records;
+  std::string untouched = "existing destination";
+  std::string error;
+  check (!encode_parameter_json_v2_sharpness (render_with_ids,
+                                               &untouched, &error)
+         && untouched == "existing destination"
+         && error.find ("identities") != std::string::npos,
+         "v2 component writer silently lost stable MTF identities");
+  FILE *legacy_file = tmpfile ();
+  check (legacy_file != nullptr, "cannot allocate legacy guard fixture");
+  if (legacy_file)
+    {
+      check (!save_csp (legacy_file, nullptr, nullptr, &render_with_ids,
+                        nullptr)
+             && ftell (legacy_file) == 0,
+             "legacy .par writer emitted a partial or lossy file");
+      fclose (legacy_file);
+    }
+
   mtf_parameters legacy_move = legacy;
   legacy_move.measurements.pop_back ();
   legacy_move.measured_mtf_idx = 2;
