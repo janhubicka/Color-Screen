@@ -3332,6 +3332,138 @@ load_quickmtf_text (mtf_parameters &parameters, const char *name,
   return result;
 }
 
+/* Verify the Qt-independent schema-3 record identity foundation and the
+   legacy format's adjacency-preserving reorder semantics.  Production JSON-v2
+   remains unchanged; this tests explicit in-memory upgrading only.  */
+static bool
+test_mtf_record_identity ()
+{
+  bool ok = true;
+  const auto check = [&ok] (bool condition, const char *what)
+    {
+      if (!condition)
+        {
+          fprintf (stderr, "MTF identity: %s\n", what);
+          ok = false;
+        }
+    };
+
+  mtf_parameters records;
+  for (int i = 0; i < 4; ++i)
+    {
+      mtf_measurement record;
+      record.name = std::string ("curve-") + std::to_string (i);
+      record.same_capture = i == 1 || i == 3;
+      records.measurements.push_back (record);
+    }
+  records.measured_mtf_idx = 2;
+  const mtf_parameters legacy = records;
+  check (!records.measurement_ids_valid_p (),
+         "unmigrated legacy records must not masquerade as schema 3");
+  check (records.assign_missing_measurement_ids (),
+         "legacy upgrade failed");
+  check (records.measurement_ids_valid_p (),
+         "upgraded record IDs were rejected");
+  for (int i = 0; i < 4; ++i)
+    check (records.measurements[i].id
+             == std::string ("measurement-00000") + std::to_string (i + 1),
+           "deterministic legacy identity differs from reference");
+  check (records.measurements[0].capture_group_id == "capture-000001"
+         && records.measurements[1].capture_group_id == "capture-000001"
+         && records.measurements[2].capture_group_id == "capture-000002"
+         && records.measurements[3].capture_group_id == "capture-000002",
+         "legacy capture boundary migration failed");
+  check (records.selected_measurement_id () == "measurement-000003",
+         "selected curve was not converted to stable identity");
+  check (records.fit_inputs_equal_p (legacy),
+         "identity-only upgrade invalidated numerical fit inputs");
+
+  const mtf_parameters upgraded = records;
+  check (records.assign_missing_measurement_ids ()
+         && records.equal_p (upgraded),
+         "upgrading twice regenerated stable IDs");
+  check (!records.select_measurement_id ("absent")
+         && records.measured_mtf_idx == 2,
+         "unknown selected ID changed the selection");
+  check (records.select_measurement_id ("measurement-000004")
+         && records.measured_mtf_idx == 3,
+         "selection by existing ID failed");
+  check (records.select_measurement_id ("measurement-000003")
+         && records.measured_mtf_idx == 2,
+         "selected ID did not restore expected curve");
+
+  check (!records.move_measurement (2, 1)
+         && records.equal_p (upgraded),
+         "splitting a capture silently changed schema-v2 grouping");
+  check (records.move_measurement (0, 1)
+         && records.measurements[0].id == "measurement-000002"
+         && records.measurements[1].id == "measurement-000001"
+         && records.selected_measurement_id () == "measurement-000003"
+         && records.measured_mtf_idx == 2,
+         "reorder did not preserve curve/group identity");
+  check (records.move_measurement (2, 3)
+         && records.selected_measurement_id () == "measurement-000003"
+         && records.measured_mtf_idx == 3
+         && records.measurements[2].capture_group_id == "capture-000002"
+         && records.measurements[3].capture_group_id == "capture-000002",
+         "selected curve moved to a different identity after reorder");
+  check (!records.move_measurement (-1, 0)
+         && !records.move_measurement (0, 8),
+         "out-of-bounds reorder unexpectedly succeeded");
+
+  records.measurements.push_back (mtf_measurement ());
+  records.measurements.back ().name = "new capture";
+  check (records.assign_missing_measurement_ids ()
+         && records.measurements.back ().id == "measurement-000005"
+         && records.measurements.back ().capture_group_id == "capture-000003",
+         "new measurement reused an ID or joined the wrong capture");
+  records.measurements.push_back (mtf_measurement ());
+  records.measurements.back ().same_capture = true;
+  check (records.assign_missing_measurement_ids ()
+         && records.measurements.back ().id == "measurement-000006"
+         && records.measurements.back ().capture_group_id == "capture-000003",
+         "append to existing capture produced a different group ID");
+
+  mtf_parameters bad = records;
+  bad.measurements.back ().id = bad.measurements[0].id;
+  const mtf_parameters before_rejection = bad;
+  check (!bad.measurement_ids_valid_p ()
+         && !bad.assign_missing_measurement_ids ()
+         && bad.equal_p (before_rejection),
+         "duplicate IDs must reject without mutation");
+  bad = records;
+  bad.measurements[0].capture_group_id.clear ();
+  const mtf_parameters partial = bad;
+  check (!bad.move_measurement (0, 1) && bad.equal_p (partial),
+         "partially upgraded identity model must not be reordered");
+
+  mtf_parameters collision;
+  collision.measurements.resize (2);
+  collision.measurements[1].id = "measurement-000001";
+  collision.measurements[1].capture_group_id = "capture-000001";
+  check (collision.assign_missing_measurement_ids ()
+         && collision.measurements[0].id == "measurement-000002"
+         && collision.measurements[0].capture_group_id == "capture-000002"
+         && collision.measurements[1].id == "measurement-000001"
+         && collision.measurements[1].capture_group_id == "capture-000001",
+         "legacy migration overwrote a reserved identifier");
+
+  mtf_parameters legacy_move = legacy;
+  legacy_move.measurements.pop_back ();
+  legacy_move.measured_mtf_idx = 2;
+  check (legacy_move.move_measurement (2, 0)
+         && legacy_move.measurements[0].name == "curve-2"
+         && legacy_move.measured_mtf_idx == 0
+         && legacy_move.measurements[0].same_capture == false
+         && legacy_move.measurements[1].same_capture == false
+         && legacy_move.measurements[2].same_capture == true,
+         "unmigrated v2 move changed capture membership or selected curve");
+  check (records.select_measurement_id ("")
+         && records.measured_mtf_idx == -1,
+         "clearing a selection by empty ID failed");
+  return ok;
+}
+
 /* Verify the QuickMTF append/result contract used by GUI batch import.  A
    rejected file must not append a partial measurement because callers can
    safely keep already accepted files while skipping malformed ones.  */
@@ -12438,6 +12570,8 @@ main (int argc, char **argv)
     { "sharpening", "screen sharpening tests", [] () { return test_screen_sharpening (); } },
     { "screen_simulation", "screen simulation tests",
       [] () { return test_screen_simulation (); } },
+    { "mtf_record_identity", "stable MTF IDs and v2-safe capture reordering",
+      [] () { return test_mtf_record_identity (); } },
     { "mtf_quickmtf_load", "QuickMTF import contract tests",
       [] () { return test_quickmtf_load_contract (); } },
     { "mtf_model", "physical MTF model tests",
