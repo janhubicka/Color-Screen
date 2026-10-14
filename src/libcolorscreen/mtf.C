@@ -138,8 +138,16 @@ mtf_parameters::capture_group_indices (std::vector<size_t> *out) const
   if (!out)
     return false;
   bool explicit_groups = false;
+  bool any_record_ids = false;
   for (const mtf_measurement &record : measurements)
-    explicit_groups |= !record.capture_group_id.empty ();
+    {
+      explicit_groups |= !record.capture_group_id.empty ();
+      any_record_ids |= !record.id.empty ();
+    }
+  /* A half-upgraded document must not accidentally fall back to .par's
+     adjacency semantics just because all capture IDs are missing. */
+  if (!explicit_groups && any_record_ids)
+    return false;
 
   std::vector<size_t> indices;
   indices.reserve (measurements.size ());
