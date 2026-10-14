@@ -710,25 +710,18 @@ public:
               }
           }
       }
-    /* SAME_CAPTURE marks a curve as belonging to the same physical capture as
-       the preceding curve.  When two or more included curves in such a group
-       all have usable uncertainty metadata, retain their raw inverse-sigma
-       ratio and apply one normalization to the whole capture.  In particular,
-       constant 0.25- and 5-percentage-point uncertainties keep a 20:1 residual
-       weight ratio instead of each curve being separately normalized back to
-       unit RMS weight.  The common normalization keeps sum(w^2) equal to the
-       number of included observations, so the capture's overall scale remains
-       comparable with the historical uniformly weighted objective.  */
-    for (size_t first = 0; first < m_measurements.size ();)
-      {
-        size_t last = first + 1;
-        while (last < m_measurements.size ()
-               && m_measurements[last].same_capture)
-          last++;
+    /* A capture's included uncertainty-aware curves share one normalization.
+       Explicit group IDs may be nonadjacent after GUI reorder; old .par data
+       without IDs still produces the same contiguous groups as before.  */
+    std::vector<std::vector<size_t>> group_members (m_measurements.size ());
+    for (size_t i = 0; i < m_measurements.size (); ++i)
+      group_members[m_group_indices[i]].push_back (i);
 
+    for (const std::vector<size_t> &members : group_members)
+      {
         size_t included_curves = 0;
         bool complete_uncertainty = true;
-        for (size_t measurement = first; measurement < last; measurement++)
+        for (size_t measurement : members)
           if (m_options.include_measurement_p (measurement))
             {
               included_curves++;
@@ -737,47 +730,45 @@ public:
                     && has_uncertainty_weights[measurement];
             }
 
-        if (included_curves >= 2 && complete_uncertainty)
+        if (included_curves < 2 || !complete_uncertainty)
+          continue;
+
+        long double sum_weights_squared = 0;
+        size_t weighted_points = 0;
+        for (size_t measurement : members)
+          if (m_options.include_measurement_p (measurement))
+            {
+              const mtf_measurement &curve = m_measurements[measurement];
+              for (size_t i = 0; i < curve.size (); i++)
+                if (curve.get_freq (i) <= 0.5)
+                  {
+                    double uncertainty = curve.get_uncertainty (i);
+                    if (!(my_isfinite (uncertainty) && uncertainty > 0))
+                      uncertainty = uncertainty_medians[measurement];
+                    const double weight
+                        = 1.0 / std::max (
+                                    uncertainty,
+                                    uncertainty_floors[measurement]);
+                    fit_weights[measurement][i] = weight;
+                    sum_weights_squared
+                        += (long double)weight * (long double)weight;
+                    weighted_points++;
+                  }
+            }
+        if (sum_weights_squared > 0 && weighted_points)
           {
-            long double sum_weights_squared = 0;
-            size_t weighted_points = 0;
-            for (size_t measurement = first; measurement < last; measurement++)
+            const double normalization
+                = my_sqrt ((double)((long double)weighted_points
+                                    / sum_weights_squared));
+            for (size_t measurement : members)
               if (m_options.include_measurement_p (measurement))
                 {
                   const mtf_measurement &curve = m_measurements[measurement];
                   for (size_t i = 0; i < curve.size (); i++)
                     if (curve.get_freq (i) <= 0.5)
-                      {
-                        double uncertainty = curve.get_uncertainty (i);
-                        if (!(my_isfinite (uncertainty) && uncertainty > 0))
-                          uncertainty = uncertainty_medians[measurement];
-                        const double weight
-                            = 1.0 / std::max (
-                                        uncertainty,
-                                        uncertainty_floors[measurement]);
-                        fit_weights[measurement][i] = weight;
-                        sum_weights_squared
-                            += (long double)weight * (long double)weight;
-                        weighted_points++;
-                      }
+                      fit_weights[measurement][i] *= normalization;
                 }
-            if (sum_weights_squared > 0 && weighted_points)
-              {
-                const double normalization
-                    = my_sqrt ((double)((long double)weighted_points
-                                        / sum_weights_squared));
-                for (size_t measurement = first; measurement < last;
-                     measurement++)
-                  if (m_options.include_measurement_p (measurement))
-                    {
-                      const mtf_measurement &curve = m_measurements[measurement];
-                      for (size_t i = 0; i < curve.size (); i++)
-                        if (curve.get_freq (i) <= 0.5)
-                          fit_weights[measurement][i] *= normalization;
-                    }
-              }
           }
-        first = last;
       }
 
     start = start_vec.data ();
@@ -2255,15 +2246,17 @@ mtf_parameters::validate_estimation_options (
   size_t fitted_wavelengths = 0;
   size_t fixed_wavelengths = 0;
   bool any_wavelength_fitted = false;
-  bool capture_has_variable = false;
+  std::vector<size_t> capture_groups;
+  if (!par.capture_group_indices (&capture_groups))
+    return fail ("MTF capture-group identifiers are incomplete");
+  std::vector<bool> capture_has_variable (par.measurements.size (), false);
   const bool physical = physical_estimation_model_p (par, options);
 
   for (size_t measurement = 0; measurement < par.measurements.size ();
        measurement++)
     {
       const mtf_measurement &value = par.measurements[measurement];
-      if (!value.same_capture)
-        capture_has_variable = false;
+      const size_t group = capture_groups[measurement];
       if (!options.include_measurement_p (measurement))
         continue;
 
@@ -2311,16 +2304,16 @@ mtf_parameters::validate_estimation_options (
             return fail ("every selected physical MTF measurement needs a "
                          "positive wavelength or wavelength optimization");
 
-          if (options.optimize_defocus && !capture_has_variable)
+          if (options.optimize_defocus && !capture_has_variable[group])
             {
               variables++;
-              capture_has_variable = true;
+              capture_has_variable[group] = true;
             }
         }
-      else if (options.optimize_blur_diameter && !capture_has_variable)
+      else if (options.optimize_blur_diameter && !capture_has_variable[group])
         {
           variables++;
-          capture_has_variable = true;
+          capture_has_variable[group] = true;
         }
     }
 
@@ -2519,6 +2512,17 @@ mtf_parameters::estimate_parameters_internal (
     {
       if (error)
         *error = "no measured MTF curve to fit";
+      return -1;
+    }
+
+  /* The legacy estimator bypasses modern option validation but must still
+     reject partially initialized capture IDs rather than access a malformed
+     group-index vector. */
+  std::vector<size_t> capture_groups;
+  if (!par.capture_group_indices (&capture_groups))
+    {
+      if (error)
+        *error = "MTF capture-group identifiers are incomplete";
       return -1;
     }
 
