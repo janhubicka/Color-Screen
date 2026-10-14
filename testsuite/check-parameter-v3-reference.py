@@ -221,7 +221,14 @@ def main() -> int:
     across_volumes = module.rebase_v3_source_paths(
         original, windows_old, r"D:\archive\params.cspar")
     different = across_volumes["calibration"]["capture"]["mtf"]["measurements"][1]["source"]["path"]
-    assert different == {"base": "absolute", "value": r"C:\archive\relative\edge.tif"}
+    # Cross-volume Save As must refer to the same absolute file.  Windows
+    # Python implementations may choose different spellings (separators,
+    # case, redundant components), which are not changes of file identity.
+    assert different["base"] == "absolute" and ntpath.isabs(different["value"]), (
+        f"Cross-volume Save As left a nonabsolute source: {different!r}")
+    assert ntpath.normcase(ntpath.normpath(different["value"])) == ntpath.normcase(windows_expected), (
+        f"Cross-volume Save As changed referenced image: path={different!r}, "
+        f"expected={windows_expected!r}")
     assert module.rebase_v3_source_paths(upgraded_no_source,
         "/srv/photos/session/state.cspar", "/srv/exports/new.cspar")[
             "calibration"]["capture"]["mtf"]["measurements"][1]["source"]["path"] is None
