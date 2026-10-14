@@ -473,7 +473,7 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
         !first->saveParametersToFile(defaultJsonParams) ||
         first->m_parameterFile.format !=
             MainWindow::ParameterFileState::Format::JsonV3 ||
-        !colorscreen::parameter_json_v2_signature_p(
+        !colorscreen::parameter_json_signature_p(
             defaultJsonParams.toUtf8().constData())) {
       qCritical() << "New .cspar target did not default to plain JSON v2";
       app.exit(documentLifecycleFailure);
@@ -557,7 +557,7 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
     const QByteArray nativeBefore = readFile(jsonParams);
     if (nativeBefore.isEmpty() || nativeBefore.at(0) != '{' ||
         nativeBefore.contains("screen_alignment_version:") ||
-        !colorscreen::parameter_json_v2_signature_p(
+        !colorscreen::parameter_json_signature_p(
             jsonParams.toUtf8().constData()) ||
         first->m_parameterFile.format !=
             MainWindow::ParameterFileState::Format::JsonV3 ||
@@ -806,7 +806,7 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
         const QString validParams =
             QDir(state->recoveryProbeDirectory)
                 .filePath(QStringLiteral("recovery_params.cspar"));
-        if (!colorscreen::parameter_json_v2_signature_p(
+        if (!colorscreen::parameter_json_signature_p(
                 validParams.toUtf8().constData())) {
           fail(QStringLiteral(
               "Recovery writer did not emit native JSON v2 parameters"));
