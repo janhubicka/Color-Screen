@@ -162,10 +162,18 @@ def rebase_v3_source_paths(v3: dict[str, Any], old_document: str,
         if not old_windows and "\\" in spelling:
             raise ValueError(f"{location}: Windows separators in a POSIX-relative path")
         resolved = lib.normpath(lib.join(original_dir, spelling))
+        if (old_windows and ntpath.normcase(ntpath.splitdrive(resolved)[0])
+                != ntpath.normcase(ntpath.splitdrive(destination_dir)[0])):
+            # Do not rely on ntpath.relpath raising for different drives.
+            # Some Windows/Python environments return a syntactically relative
+            # spelling that cannot designate the original image on the new
+            # volume. The target must be a real absolute path instead.
+            path.update({"value": resolved, "base": "absolute"})
+            continue
         try:
             relative = lib.relpath(resolved, destination_dir)
         except ValueError:
-            # ntpath.relpath cannot express paths across Windows volumes.
+            # Defensive fallback (e.g. inconsistent UNC/mount spelling).
             path.update({"value": resolved, "base": "absolute"})
         else:
             path["value"] = relative
