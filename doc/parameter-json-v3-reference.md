@@ -1,12 +1,12 @@
 # Parameter JSON schema 3 — reference design and migration evidence
 
-**Status: Python reference mapping tested; an isolated native C++ MTF
-component codec is now under review.** Neither component constitutes a
-complete schema-3 document. Nothing in this document is a promise that
-Color-Screen already saves schema 3. The only supported `*.cspar`
-writer continues to emit native JSON **schema 2**, and only `.par` and native
-JSON files can be imported. The abandoned ZIP-v1 parameter format is removed;
-ZIP-based `.csprj` stitching projects remain unrelated and supported.
+**Status: implementation/reference note for the first public JSON format.**
+The only pre-existing user parameter files are legacy `.par`. Early ZIP/JSON
+parameter formats were alpha experiments and **do not require compatibility**.
+Until the complete schema-3 document codec and its Qt/CLI/recovery integration
+are tested, the current development build still writes temporary JSON-v2;
+those readers and writers will be replaced, not carried into the release.
+ZIP-based `.csprj` stitching projects are unrelated and remain supported.
 
 The design follows `doc/parameter-json-migration-tracking.md` (requirements
 JSON-005 through JSON-013) and is prototyped by
@@ -50,12 +50,11 @@ policies, temporary-worker state and derived plots remain **excluded**.
   length ratio, including the values when GUI controls are inactive.
 * `calibration.capture.mtf`: measured MTF records have independent document-
   local `id` and `capture_group_id`. Selection uses ID, never an array index.
-  Import from v2 groups adjacent records when `same_capture` is true. The
-  first-record legacy flag is retained only in the **reference** adapter's
-  `legacy_first_same_capture`, an acknowledged compatibility wart that should
-  not become a production-v3 default. Editor actions must preserve IDs when
-  renaming, sorting, inserting or deleting records; generating IDs on each
-  Save is not a valid implementation.
+  Import from **legacy .par** groups adjacent records when `same_capture` is
+  true. The first record's flag has no semantic predecessor and is ignored.
+  The Python v2↔v3 reference adapter's `legacy_first_same_capture` field is
+  an obsolete alpha-test artifact, never part of canonical JSON. Editor
+  actions preserve IDs through rename/sort/insert/delete and Save.
 * Each measured edge's `edge_quality` has named `angle_deg`, `fit_rms_px`,
   `contrast_fraction`, `snr` and `phase_coverage_fraction`. Samples remain
   compact triples; `sample_columns` fixes their units to cycles/pixel,
@@ -74,12 +73,10 @@ policies, temporary-worker state and derived plots remain **excluded**.
   to absolute paths for cross-volume Windows moves. It neither writes files
   nor implements the native C++/Qt Save As transaction; that integration and
   any real source-file path resolution remain prerequisites for shipping v3.
-* Downgrading a v3 document whose capture group is noncontiguous in the
-  measurement order fails rather than silently changing group membership.
-  An unknown measurement ID, duplicate ID or unknown field also fails.
-  Reverse conversion revalidates the strict nested v2 field vocabulary,
-  preventing unknown settings in moved contact-copy/denoiser/calibration
-  subtrees from being accepted accidentally.
+* Schema 3 allows noncontiguous capture-group records. Native MTF fitting
+  and channel specialization use persistent capture IDs; legacy adjacency
+  is interpreted only when importing `.par`. Duplicate/dangling IDs and
+  unknown fields remain invalid. There is no v3→v2 downgrade obligation.
 
 ## Validation and outstanding risks
 
@@ -98,28 +95,28 @@ Local Debian 13/GCC 14, checking-enabled, native core/CLI build: **128/128
 fixtures plus nondefault/MTF rejection tests passed** (reference-only).
 Do not mistake this for shipping-v3 or for a fully audited native codec.
 
-To ship schema 3 we still need: (1) complete C++ typed codecs and detailed
-value/coordinate units; (2) a real lifetime-stable MTF ID/group model in the
-Qt-independent parameters and GUI edits; (3) portable path rebasing during
-Save As and import; (4) authoritative JSON Schema and representative full
-fixtures; (5) round-trip tests across every persistent nested C++ member;
-(6) failure-atomic CLI/Qt/recovery upgrades, platform sanitizers, and operator
-field testing. All schema-2 readers remain read-compatible after switching.
+To ship schema 3 we still need: (1) complete typed C++ document codecs
+with explicit units; (2) stable MTF IDs/groups through GUI editing, Undo
+and Save; (3) source-path rebasing on Save As; (4) authoritative JSON Schema
+and full fixtures; (5) tests covering every persistent C++ member from
+legacy `.par` import to canonical JSON; (6) failure-atomic GUI/CLI/recovery
+integration, platform sanitizers and operator testing. **JSON-v2 read
+compatibility is expressly out of scope.**
 
 
 ## Native component implementation checkpoint (15 October 2026)
 
 The C++ implementation exposes two *nonshipping* library functions:
-\`encode_parameter_json_v3_mtf\` and \`decode_parameter_json_v3_mtf\`.
+`encode_parameter_json_v3_mtf` and `decode_parameter_json_v3_mtf`.
 They use the same strict bounded JSON parser and native numeric types as the
 current file codec, and operate on exactly the
-\`calibration.capture.mtf\` subtree. Unlike the reversible Python reference,
-the native representation omits \`legacy_first_same_capture\`; a first-record
-legacy flag of \`true\` is rejected rather than silently discarded, pending
+`calibration.capture.mtf` subtree. Unlike the reversible Python reference,
+the native representation omits `legacy_first_same_capture`; a first-record
+legacy flag of `true` is rejected rather than silently discarded, pending
 an explicit migration policy. The production JSON-v2 save path is unchanged.
 
-Until \`same_capture\` is retired from the numerical fitting path, native
-schema-3 component decoding also rejects noncontiguous capture groups instead
-of silently evaluating the wrong fitted focus coordinates. This restriction
-is narrower than the final schema-3 design; group-aware fitter/editor changes
-are required before the full document codec can ship.
+The native numerical fitter, capture-wide uncertainty normalization and
+channel specialization now use explicit capture IDs, including noncontiguous
+records. Schema-3 parsing accepts such groups and ignores the obsolete
+`same_capture` field. Remaining work is editor/Undo identity lifecycle and
+the complete document codec.
