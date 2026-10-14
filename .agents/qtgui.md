@@ -2,6 +2,18 @@
 
 This document provides technical details for developing the Qt6-based graphical user interface for Color-Screen.
 
+**Parameter-format decision, 15 October 2026:** only old plain-text `.par`
+parameter files exist outside development. ZIP parameter archives and JSON-v2
+were temporary alpha experiments, not compatibility obligations. The first
+2.0 JSON `.cspar` format is the semantically grouped schema-3 design in
+[`doc/parameter-json-migration-tracking.md`](../doc/parameter-json-migration-tracking.md).
+The active development runtime still uses JSON-v2 until the complete native
+codec, GUI/CLI/recovery lifecycle and corpus tests are ready; then replace its
+old JSON paths instead of preserving their readers. Keep the `.par` reader and
+supported loss-checked export. MTF editors must use immutable record IDs and
+explicit group IDs once a document has been upgraded, never assume storage
+positions define measurement or capture identity.
+
 ## Architecture Overview
 
 The GUI is built using **Qt6** and follows a modular panel-based architecture.
