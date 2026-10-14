@@ -96,6 +96,34 @@ mtf_parameters::measurement_ids_valid_p () const
   return true;
 }
 
+/* Legacy .par stores only adjacency flags. Preserve physical grouping
+   when exporting canonical state by requiring each group to occupy one
+   contiguous run and the derived flags to agree with those runs. */
+bool
+mtf_parameters::legacy_capture_groups_representable_p () const
+{
+  bool any_identity = false;
+  for (const mtf_measurement &record : measurements)
+    any_identity |= !record.id.empty () || !record.capture_group_id.empty ();
+  if (!any_identity)
+    return true;
+  if (!measurement_ids_valid_p ())
+    return false;
+  std::vector<size_t> groups;
+  if (!capture_group_indices (&groups))
+    return false;
+  std::unordered_set<size_t> visited;
+  for (size_t i = 0; i < groups.size (); ++i)
+    {
+      const bool linked = i && groups[i] == groups[i - 1];
+      if (measurements[i].same_capture != linked)
+        return false;
+      if (!linked && !visited.insert (groups[i]).second)
+        return false;
+    }
+  return true;
+}
+
 /* Return the selected record's stable identity or empty when none is valid.  */
 std::string
 mtf_parameters::selected_measurement_id () const
