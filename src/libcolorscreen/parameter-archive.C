@@ -3774,7 +3774,7 @@ decode_parameter_json_v2_document (
    This does not claim full schema-v2 validity: use the complete reader for
    format-marker, version, required fields and hostile input validation. */
 bool
-parameter_json_v2_signature_p (const char *name)
+parameter_json_signature_p (const char *name)
 {
   FILE *file = open_utf8_binary_read (name);
   if (!file)
@@ -3905,7 +3905,7 @@ validate_parameter_document_file (const char *name, std::string *error)
 {
   if (error)
     error->clear ();
-  if (!name || !parameter_json_v2_signature_p (name))
+  if (!name || !parameter_json_signature_p (name))
     return archive_fail (error, "unrecognized parameter document format");
   scr_to_img_parameters geometry;
   scr_detect_parameters detection;
