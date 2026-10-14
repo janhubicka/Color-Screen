@@ -338,13 +338,18 @@ an uncertainty estimate is explicitly available.
 
 ## 7. Capture grouping and current storage limitation
 
-`same_capture` groups adjacent measurements. Curves in one group share a fitted
-defocus coordinate, while a new group receives an independent defocus
-coordinate. In the JSON-v2 GUI, moving a single curve is rejected if it would
-split its original capture into nonadjacent records; otherwise a move repairs
-the adjacency flags and follows the previously selected measured curve.
-The new Qt-free identity/group fields support future schema-3 documents but
-are not yet saved or consumed by the production MTF fitter.
+Legacy `.par` stores a `same_capture` adjacency hint; during canonical import
+this becomes an explicit document-local `capture_group_id`. Curves with one
+capture-group ID share fitted defocus (or fallback blur diameter) and joint
+uncertainty normalization **even when their records are nonadjacent**.
+The Qt-free fitter and per-channel sharpening now use the group IDs whenever
+present; legacy .par data without IDs keeps its historical grouping.
+
+The Sharpness GUI's 'Same capture' control now edits explicit group membership
+rather than just the adjacency bit, while reordering and deleting records
+preserve selected-curve identity. The first record has no predecessor and
+never saves a `same_capture` flag in canonical JSON. JSON-v1/v2 are unreleased
+alpha experiments and do not require compatibility.
 
 The current persistent analytical model still stores one scalar active
 `defocus` and one scalar active `wavelength`. After a multi-capture explicit fit,
