@@ -14,8 +14,7 @@ Changes planned for version 2.0 (development version 2.0alpha)
    - Official binaries are now built with link-time optimization, stripped from
      debug symbols (reducing package size to about half) and also automatically
      tested on MacOS to actually work as expected.
-   - MacOS binary has now fewer dependencies, so fewer permissions are needed to
-     start it.
+   - MacOS binary now needs only one permission to run
    - The public `render_tile` API can render either scan coordinates or the
      zero-based final-coordinate canvas used by screen-geometry file output.
    - More effective parallelism while rendering files.
