@@ -3403,6 +3403,34 @@ test_mtf_record_identity ()
          && nonadjacent.selected_measurement_id () == "measurement-000003"
          && nonadjacent.measured_mtf_idx == 1,
          "stable IDs did not survive splitting a capture into distant curves");
+  mtf_parameters capture_editor = records;
+  const std::string preserved_other_group
+      = capture_editor.measurements[3].capture_group_id;
+  check (capture_editor.set_measurement_same_capture (2, true)
+         && capture_editor.measurements[2].capture_group_id
+                == capture_editor.measurements[1].capture_group_id
+         && capture_editor.measurements[3].capture_group_id
+                == preserved_other_group,
+         "joining the preceding capture relabelled unrelated curves");
+  check (capture_editor.set_measurement_same_capture (2, false)
+         && capture_editor.measurements[2].capture_group_id
+                != capture_editor.measurements[1].capture_group_id
+         && capture_editor.measurements[2].capture_group_id
+                != preserved_other_group,
+         "splitting one curve did not create a distinct capture");
+  check (capture_editor.erase_measurement (0)
+         && capture_editor.selected_measurement_id ()
+                == "measurement-000003"
+         && capture_editor.measured_mtf_idx == 1
+         && capture_editor.measurements[0].same_capture == false,
+         "deleting an earlier record changed selected curve or group");
+  check (capture_editor.erase_measurement (1)
+         && capture_editor.measured_mtf_idx == -1
+         && capture_editor.measurements[1].capture_group_id
+                == preserved_other_group,
+         "deleting selected curve selected another or changed surviving group");
+  check (!capture_editor.erase_measurement (90),
+         "out-of-range deletion changed MTF state");
   check (records.equal_p (upgraded),
          "independent nonadjacent reorder mutated original MTF state");
   check (records.move_measurement (0, 1)
@@ -3782,6 +3810,29 @@ test_quickmtf_load_contract ()
     {
       fprintf (stderr, "QuickMTF RGB import contract failed%s%s\n",
                error ? ": " : "", error ? error : "");
+      ok = false;
+    }
+
+  /* Once .par input has been upgraded, later QuickMTF imports must keep
+     existing IDs and assign new ones without changing capture membership. */
+  mtf_parameters canonical_import = parameters;
+  if (!canonical_import.assign_missing_measurement_ids ())
+    {
+      fprintf (stderr, "QuickMTF identity upgrade failed\n");
+      ok = false;
+    }
+  const std::string earlier_id = canonical_import.measurements[0].id;
+  error = nullptr;
+  const int appended
+      = load_quickmtf_text (canonical_import, "later", monochrome, &error);
+  if (appended != 1 || canonical_import.measurements.size () != 5
+      || canonical_import.measurements[0].id != earlier_id
+      || canonical_import.measurements.back ().id.empty ()
+      || canonical_import.measurements.back ().capture_group_id
+             == canonical_import.measurements[3].capture_group_id
+      || !canonical_import.measurement_ids_valid_p ())
+    {
+      fprintf (stderr, "QuickMTF canonical identity append failed\n");
       ok = false;
     }
 
