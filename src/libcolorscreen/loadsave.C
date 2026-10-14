@@ -122,6 +122,14 @@ bool
 save_csp (FILE *f, const scr_to_img_parameters *param, const scr_detect_parameters *dparam,
           const render_parameters *rparam, const solver_parameters *sparam)
 {
+  /* A .par file has no persistent record/group IDs. Check before writing even
+     the header, so an upgraded schema-3 model cannot be silently downgraded
+     by a caller of this legacy stream interface.  */
+  if (rparam)
+    for (const mtf_measurement &record
+         : rparam->sharpen.scanner_mtf.measurements)
+      if (!record.id.empty () || !record.capture_group_id.empty ())
+        return false;
   if (fprintf (f, "%s\n", HEADER) < 0)
     return false;
   /* TODO: hack.  */
