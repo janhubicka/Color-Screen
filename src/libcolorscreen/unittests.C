@@ -4339,6 +4339,34 @@ test_mtf_physical_model ()
                capture_weighted_defocus);
       ok = false;
     }
+  /* Reorder the same two measurement curves into a discontiguous capture
+     while excluding an unrelated middle capture. Explicit group IDs must
+     preserve the shared focus variable and joint uncertainty weighting. */
+  std::vector<mtf_measurement> nonadjacent_capture
+      = {precise_capture_measurement,
+         uniform_conflicting_capture_measurement,
+         uncertain_capture_measurement};
+  nonadjacent_capture[0].id = "precise";
+  nonadjacent_capture[0].capture_group_id = "capture-A";
+  nonadjacent_capture[1].id = "unrelated";
+  nonadjacent_capture[1].capture_group_id = "capture-B";
+  nonadjacent_capture[1].same_capture = false;
+  nonadjacent_capture[2].id = "uncertain";
+  nonadjacent_capture[2].capture_group_id = "capture-A";
+  nonadjacent_capture[2].same_capture = false;
+  double nonadjacent_capture_defocus = 0;
+  if (!fit_shared_defocus (nonadjacent_capture, {true, false, true},
+                           &nonadjacent_capture_defocus)
+      || std::abs (nonadjacent_capture_defocus
+                   - capture_weighted_defocus) > 1e-5)
+    {
+      fprintf (stderr,
+               "Nonadjacent capture IDs changed shared focus fit: "
+               "%.12g versus %.12g\n",
+               nonadjacent_capture_defocus, capture_weighted_defocus);
+      ok = false;
+    }
+
   /* The metadata-free fallback remains a separate model and must not silently
      enable diffraction.  */
   mtf_parameters fallback;
