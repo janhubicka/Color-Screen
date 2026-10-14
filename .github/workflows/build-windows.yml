@@ -121,7 +121,15 @@ jobs:
       run: |
         cp LICENSE /c/Color-Screen-install/
         cp README.md /c/Color-Screen-install/
-        makensis -DSOURCE_DIR="C:\Color-Screen-install" -DOUTFILE="Color-Screen-Installer-${{matrix.sys}}${{matrix.suffix}}.exe" os/windows/installer.nsi
+        # Avoid NSIS 3.12's failure to find nsDialogs in MSYS2 toolchains.
+        # Its Unicode plugin DLLs live in the architecture-specific prefix.
+        plugin_dir="/${{matrix.sys}}/share/nsis/Plugins/unicode"
+        if [ ! -f "$plugin_dir/nsDialogs.dll" ]; then
+          echo "Missing NSIS nsDialogs plugin at $plugin_dir" >&2
+          exit 1
+        fi
+        plugin_win="$(cygpath -w "$plugin_dir")"
+        makensis -DCOLORSCREEN_NSIS_PLUGIN_DIR="$plugin_win" -DSOURCE_DIR="C:\Color-Screen-install" -DOUTFILE="Color-Screen-Installer-${{matrix.sys}}${{matrix.suffix}}.exe" os/windows/installer.nsi
     - name: Verify application
       shell: msys2 {0}
       if: matrix.suffix == ''
