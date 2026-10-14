@@ -2575,6 +2575,11 @@ v2_valid_mtf (const mtf_parameters &mtf, std::string *error)
   size_t total_samples = 0;
   for (const mtf_measurement &measurement : mtf.measurements)
     {
+      /* Schema 2 has no identity fields. Refuse a lossy rewrite of a
+         schema-3-upgraded in-memory record rather than silently forgetting
+         which measurement or capture group the ID denotes.  */
+      if (!measurement.id.empty () || !measurement.capture_group_id.empty ())
+        return archive_fail (error, "v2 cannot save MTF record/capture identities");
       if (measurement.channel < -1 || measurement.channel > 3
           || !my_isfinite (measurement.wavelength)
           || !my_isfinite (measurement.edge_angle)
