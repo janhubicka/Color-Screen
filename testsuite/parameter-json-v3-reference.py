@@ -101,7 +101,7 @@ def _source_path(value: str) -> dict[str, str] | None:
     # is volume-rooted but lacks a drive. Neither is an absolute or reliably
     # parameter-file-relative reference; reject instead of guessing on Save As.
     drive, _ = ntpath.splitdrive(value)
-    if (drive and not ntpath.isabs(value)) or (value.startswith("\\\\") and not value.startswith("\\\\\\\\")):
+    if (drive and not ntpath.isabs(value)) or (value.startswith("\\") and not value.startswith("\\\\")):
         raise ValueError("measurement.source_filename: ambiguous Windows-rooted source path")
     # ntpath handles Windows drive and UNC paths even on Linux. Do not assume
     # the host platform is the one on which the calibration was created.
