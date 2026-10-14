@@ -371,18 +371,35 @@ bool MainWindow::saveParametersToFile(
         : ParameterFileState::Format::JsonV3;
   else if (csparTarget)
     format = ParameterFileState::Format::JsonV3;
-  const bool jsonV2 = format == ParameterFileState::Format::JsonV3;
+  const bool jsonV3 = format == ParameterFileState::Format::JsonV3;
   const bool hasRgb = m_scan && m_scan->has_rgb();
   QString error;
   if (unrecognizedExistingTarget)
     error = tr("An existing .cspar file has an unrecognized format or invalid "
                "contents. Select an explicit format in Save As to replace it.\n%1")
                 .arg(QString::fromStdString(validationError));
-  if (unrecognizedExistingTarget ||
+  /* A relative measurement source belongs to the previous parameter-file
+     directory. Save As must preserve that source image, and must not mutate
+     the live document when serialization or file replacement fails. */
+  const bool movingParameterDocument =
+      !m_parameterFile.suggested && !m_parameterFile.path.isEmpty() &&
+      !preservingCurrentTarget;
+  colorscreen::render_parameters outgoingRender = m_rparams;
+  if (!unrecognizedExistingTarget && movingParameterDocument) {
+    std::string provenanceError;
+    if (!colorscreen::rebase_parameter_mtf_source_paths(
+            &outgoingRender.sharpen.scanner_mtf,
+            QFileInfo(m_parameterFile.path).absoluteFilePath()
+                .toUtf8().toStdString(),
+            absoluteFileName.toUtf8().toStdString(), &provenanceError))
+      error = tr("Could not preserve the measured-MTF source images on Save As: %1")
+                  .arg(QString::fromStdString(provenanceError));
+  }
+  if (unrecognizedExistingTarget || !error.isEmpty() ||
       !saveParameterPayloadAtomically(
-          absoluteFileName, jsonV2, m_scrToImgParams,
-          (hasRgb || jsonV2) ? &m_detectParams : nullptr,
-          m_rparams, m_solverParams, m_profileSpots, &error)) {
+          absoluteFileName, jsonV3, m_scrToImgParams,
+          (hasRgb || jsonV3) ? &m_detectParams : nullptr,
+          outgoingRender, m_solverParams, m_profileSpots, &error)) {
     // The write result is synchronous because closeEvent needs it immediately,
     // but its explanation must not enter a nested event loop while close/save
     // policy is still on the stack. Veto the close first and let Qt present the
@@ -405,6 +422,13 @@ bool MainWindow::saveParametersToFile(
     return false;
   }
 
+  if (movingParameterDocument) {
+    /* The file exists and owns the rebased path spellings now. Adopt them
+       only after successful atomic replacement, preserving the same source
+       identities and allowing the inspector to display their new spelling. */
+    m_rparams.sharpen.scanner_mtf =
+        std::move(outgoingRender.sharpen.scanner_mtf);
+  }
   m_parameterFile.setLoaded(absoluteFileName, format);
   m_recoveryDirty = false;
   rememberFileDialogDirectory(QStringLiteral("lastParameterDir"),
