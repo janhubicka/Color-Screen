@@ -9,13 +9,201 @@
 #include "nmsimplex.h"
 #include "gsl-solver.h"
 #include "include/colorscreen.h"
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <complex>
 #include <limits>
 #include <memory>
+#include <unordered_set>
 namespace colorscreen
 {
+
+/* Allocate the next unused document-local MTF identifier with PREFIX,
+   recording it in RESERVED.  Existing imported IDs reserve their spelling,
+   so appending a record cannot reuse a prior identity.  */
+static std::string
+next_mtf_identifier (const char *prefix,
+                     std::unordered_set<std::string> &reserved,
+                     size_t &candidate_number)
+{
+  for (;;)
+    {
+      std::string suffix = std::to_string (candidate_number++);
+      if (suffix.size () < 6)
+        suffix.insert (0, 6 - suffix.size (), '0');
+      std::string id = std::string (prefix) + suffix;
+      if (reserved.insert (id).second)
+        return id;
+    }
+}
+
+/* Upgrade an in-memory legacy MTF collection to named schema-3 identities.
+   Validate first, so duplicate imported IDs or an invalid selection do not
+   produce a partially upgraded state.  */
+bool
+mtf_parameters::assign_missing_measurement_ids ()
+{
+  if (measured_mtf_idx < -1
+      || (measured_mtf_idx >= 0
+          && (size_t)measured_mtf_idx >= measurements.size ()))
+    return false;
+
+  std::unordered_set<std::string> existing_ids;
+  std::unordered_set<std::string> existing_groups;
+  for (const mtf_measurement &record : measurements)
+    {
+      if (!record.id.empty () && !existing_ids.insert (record.id).second)
+        return false;
+      if (!record.capture_group_id.empty ())
+        existing_groups.insert (record.capture_group_id);
+    }
+
+  size_t next_measurement = 1;
+  size_t next_group = 1;
+  for (size_t i = 0; i < measurements.size (); ++i)
+    {
+      mtf_measurement &record = measurements[i];
+      if (record.id.empty ())
+        record.id = next_mtf_identifier ("measurement-", existing_ids,
+                                         next_measurement);
+      if (record.capture_group_id.empty ())
+        {
+          if (i && record.same_capture)
+            record.capture_group_id = measurements[i - 1].capture_group_id;
+          else
+            record.capture_group_id
+              = next_mtf_identifier ("capture-", existing_groups, next_group);
+        }
+    }
+  return measurement_ids_valid_p ();
+}
+
+/* Verify a complete explicit schema-3 identity model without modifying it.  */
+bool
+mtf_parameters::measurement_ids_valid_p () const
+{
+  if (measured_mtf_idx < -1
+      || (measured_mtf_idx >= 0
+          && (size_t)measured_mtf_idx >= measurements.size ()))
+    return false;
+  std::unordered_set<std::string> ids;
+  for (const mtf_measurement &record : measurements)
+    if (record.id.empty () || record.capture_group_id.empty ()
+        || !ids.insert (record.id).second)
+      return false;
+  return true;
+}
+
+/* Return the selected record's stable identity or empty when none is valid.  */
+std::string
+mtf_parameters::selected_measurement_id () const
+{
+  if (measured_mtf_idx < 0
+      || (size_t)measured_mtf_idx >= measurements.size ())
+    return {};
+  return measurements[measured_mtf_idx].id;
+}
+
+/* Find and select a unique MTF record ID rather than an array position.  */
+bool
+mtf_parameters::select_measurement_id (const std::string &id)
+{
+  if (id.empty ())
+    {
+      measured_mtf_idx = -1;
+      return true;
+    }
+  int found = -1;
+  for (size_t i = 0; i < measurements.size (); ++i)
+    if (measurements[i].id == id)
+      {
+        if (found >= 0)
+          return false;
+        found = (int)i;
+      }
+  if (found < 0)
+    return false;
+  measured_mtf_idx = found;
+  return true;
+}
+
+/* Reorder without silently changing the relationship encoded by legacy
+   SAME_CAPTURE flags. Future schema-3 edits can handle arbitrary order using
+   capture_group_id, but must not pass a discontiguous capture to a v2 writer. */
+bool
+mtf_parameters::move_measurement (int from, int to)
+{
+  const size_t count = measurements.size ();
+  if (from < 0 || to < 0 || (size_t)from >= count || (size_t)to >= count
+      || measured_mtf_idx < -1
+      || (measured_mtf_idx >= 0 && (size_t)measured_mtf_idx >= count))
+    return false;
+  if (from == to)
+    return true;
+
+  bool any_id = false;
+  bool complete_ids = true;
+  for (const mtf_measurement &record : measurements)
+    {
+      any_id |= !record.id.empty () || !record.capture_group_id.empty ();
+      complete_ids &= !record.id.empty () && !record.capture_group_id.empty ();
+    }
+  if (any_id && (!complete_ids || !measurement_ids_valid_p ()))
+    return false;
+
+  std::vector<std::string> groups;
+  groups.reserve (count);
+  if (complete_ids)
+    for (const mtf_measurement &record : measurements)
+      groups.push_back (record.capture_group_id);
+  else
+    {
+      size_t group = 0;
+      for (size_t i = 0; i < count; ++i)
+        {
+          if (i && !measurements[i].same_capture)
+            ++group;
+          groups.push_back (std::to_string (group));
+        }
+    }
+
+  std::vector<size_t> order;
+  order.reserve (count);
+  for (size_t i = 0; i < count; ++i)
+    order.push_back (i);
+  if (from < to)
+    std::rotate (order.begin () + from, order.begin () + from + 1,
+                 order.begin () + to + 1);
+  else
+    std::rotate (order.begin () + to, order.begin () + from,
+                 order.begin () + from + 1);
+
+  std::unordered_set<std::string> visited_groups;
+  for (size_t i = 0; i < count; ++i)
+    if (!i || groups[order[i]] != groups[order[i - 1]])
+      if (!visited_groups.insert (groups[order[i]]).second)
+        return false;
+
+  const int original_selection = measured_mtf_idx;
+  if (from < to)
+    std::rotate (measurements.begin () + from,
+                 measurements.begin () + from + 1,
+                 measurements.begin () + to + 1);
+  else
+    std::rotate (measurements.begin () + to,
+                 measurements.begin () + from,
+                 measurements.begin () + from + 1);
+
+  for (size_t i = 0; i < count; ++i)
+    {
+      measurements[i].same_capture
+        = i && groups[order[i]] == groups[order[i - 1]];
+      if (original_selection >= 0 && order[i] == (size_t)original_selection)
+        measured_mtf_idx = (int)i;
+    }
+  return true;
+}
 
 namespace
 {
