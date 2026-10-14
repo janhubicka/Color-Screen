@@ -4164,7 +4164,6 @@ v3_mtf_validate (const mtf_parameters &mtf, std::string *error)
             return v3_mtf_fail (error, path + ".source.path",
                                 "ambiguous source path");
         }
-      previous_group = m.capture_group_id;
     }
   return true;
 }
