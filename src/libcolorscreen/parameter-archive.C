@@ -2549,7 +2549,8 @@ v2_rectangle (const json_value &value, int_image_area *area)
 /* Preserve finite, individually editable sample/provenance data and bound
    cumulative complexity before producing an MTF JSON document. */
 bool
-v2_valid_mtf (const mtf_parameters &mtf, std::string *error)
+v2_valid_mtf (const mtf_parameters &mtf, std::string *error,
+              bool allow_schema3_ids = false)
 {
   const int mode = (int)mtf.model;
   if (mode < 0 || (size_t)mode >= v2_mtf_models ().size ())
@@ -2575,11 +2576,13 @@ v2_valid_mtf (const mtf_parameters &mtf, std::string *error)
   size_t total_samples = 0;
   for (const mtf_measurement &measurement : mtf.measurements)
     {
-      /* Schema 2 has no identity fields. Refuse a lossy rewrite of a
-         schema-3-upgraded in-memory record rather than silently forgetting
-         which measurement or capture group the ID denotes.  */
-      if (!measurement.id.empty () || !measurement.capture_group_id.empty ())
-        return archive_fail (error, "v2 cannot save MTF record/capture identities");
+      /* Only explicit future schema-3 codecs may preserve ID/group fields.
+         Both JSON-v2 and legacy outputs still reject them before writing.  */
+      if (!allow_schema3_ids
+          && (!measurement.id.empty ()
+              || !measurement.capture_group_id.empty ()))
+        return archive_fail (error,
+                             "v2 cannot save MTF record/capture identities");
       if (measurement.channel < -1 || measurement.channel > 3
           || !my_isfinite (measurement.wavelength)
           || !my_isfinite (measurement.edge_angle)
@@ -3928,6 +3931,629 @@ write_parameter_json_v2_file (
           &document, error))
     return false;
   return write_parameter_text_file (name, document, error);
+}
+
+
+/* Experimental native schema-3 MTF component. This is deliberately not
+   attached to the public .cspar file dispatcher: schema-3 document fields
+   outside MTF have not yet been migrated. Unlike the Python reference, this
+   codec reads/writes C++ MTF state directly and never serializes a v2 mirror. */
+namespace
+{
+
+/* Report a diagnostic with the complete structural PATH, not just the final
+   key (several nested objects use status and value independently).  */
+bool
+v3_mtf_fail (std::string *error, const std::string &path,
+             const std::string &reason)
+{
+  return archive_fail (error, path + ": " + reason);
+}
+
+/* Reject both unknown and missing keys in OBJECT. Existing production JSON-v2
+   remains unaffected; schema 3 is intentionally strict from the start. */
+bool
+v3_mtf_exact_keys (const json_value &object,
+                   std::initializer_list<const char *> names,
+                   const std::string &path, std::string *error)
+{
+  if (object.type != json_value::kind::object)
+    return v3_mtf_fail (error, path, "expected object");
+  std::set<std::string> remaining;
+  for (const char *name : names)
+    remaining.insert (name);
+  for (const auto &entry : object.object_value)
+    if (!remaining.erase (entry.first))
+      return v3_mtf_fail (error, path + "." + entry.first, "unknown field");
+  if (!remaining.empty ())
+    return v3_mtf_fail (error, path + "." + *remaining.begin (),
+                         "missing required field");
+  return true;
+}
+
+/* Require an exact JSON node type at PATH.KEY. */
+const json_value *
+v3_mtf_required (const json_value &object, const char *key,
+                 json_value::kind type, const std::string &path,
+                 std::string *error)
+{
+  const json_value *value = object_member (object, key);
+  if (!value || value->type != type)
+    {
+      v3_mtf_fail (error, path + "." + key, "missing or incorrect type");
+      return nullptr;
+    }
+  return value;
+}
+
+/* Decode a finite scalar, preserving the native destination's precision. */
+template <class T>
+bool
+v3_mtf_real (const json_value &object, const char *key, T *target,
+             const std::string &path, std::string *error)
+{
+  const json_value *value
+    = v3_mtf_required (object, key, json_value::kind::number, path, error);
+  return value
+         && (v2_real (*value, target)
+             || v3_mtf_fail (error, path + "." + key, "invalid finite number"));
+}
+
+/* Decode a boolean field with a fully qualified diagnostic. */
+bool
+v3_mtf_bool (const json_value &object, const char *key, bool *target,
+             const std::string &path, std::string *error)
+{
+  const json_value *value
+    = v3_mtf_required (object, key, json_value::kind::boolean, path, error);
+  if (!value)
+    return false;
+  *target = value->boolean_value;
+  return true;
+}
+
+/* Return the source path's explicit base; refuse ambiguous Windows drive-
+   relative and volume-rooted spellings on every host platform. */
+bool
+v3_mtf_path_base (const std::string &name, std::string *base)
+{
+  if (name.empty ())
+    return false;
+  auto separator = [] (char c) { return c == '\\' || c == '/'; };
+  const bool drive = name.size () >= 2
+                     && ((name[0] >= 'A' && name[0] <= 'Z')
+                         || (name[0] >= 'a' && name[0] <= 'z'))
+                     && name[1] == ':';
+  if (drive)
+    {
+      if (name.size () < 3 || !separator (name[2]))
+        return false;
+      *base = "absolute";
+      return true;
+    }
+  if (name[0] == '\\')
+    {
+      /* UNC must contain nonempty server and share names. Do not accept
+         Windows device paths, which cannot be rebased as ordinary files. */
+      if (name.size () < 5 || name[1] != '\\'
+          || ((name[2] == '?' || name[2] == '.') && separator (name[3])))
+        return false;
+      size_t server_end = name.find_first_of ("\\/", 2);
+      if (server_end == std::string::npos || server_end == 2
+          || server_end + 1 >= name.size ()
+          || separator (name[server_end + 1]))
+        return false;
+      *base = "absolute";
+      return true;
+    }
+  *base = name[0] == '/' ? "absolute" : "parameter_file";
+  return true;
+}
+
+/* Serialize one unavailable/available pair as status plus either explicit
+   positive dimensions or the precise historical sentinel spelling.  */
+std::string
+v3_mtf_dimensions_text (int width, int height)
+{
+  if (width > 0 && height > 0)
+    return "{\"status\": \"available\", \"width_px\": "
+           + std::to_string (width) + ", \"height_px\": "
+           + std::to_string (height) + "}";
+  return "{\"status\": \"unavailable\", \"legacy_values\": ["
+         + std::to_string (width) + ", " + std::to_string (height) + "]}";
+}
+
+/* Preserve the original origin/sentinel coordinates of an unavailable ROI. */
+std::string
+v3_mtf_roi_text (int_image_area area)
+{
+  if (area.width > 0 && area.height > 0)
+    return "{\"status\": \"available\", \"x_px\": "
+           + std::to_string (area.x) + ", \"y_px\": "
+           + std::to_string (area.y) + ", \"width_px\": "
+           + std::to_string (area.width) + ", \"height_px\": "
+           + std::to_string (area.height) + "}";
+  return "{\"status\": \"unavailable\", \"legacy_values\": "
+         + v2_rectangle_text (area) + "}";
+}
+
+/* Decode status-tagged integer metadata into NUMBERS. The last two fields
+   always denote width/height, whose positivity must agree with STATUS.
+   Sentinel values are kept verbatim for unavailable legacy measurements. */
+bool
+v3_mtf_metadata (const json_value &object, const std::string &path,
+                 const char *const *names, size_t count, int *numbers,
+                 std::string *error)
+{
+  const json_value *status
+    = v3_mtf_required (object, "status", json_value::kind::string, path,
+                       error);
+  if (!status)
+    return false;
+  if (status->text == "available")
+    {
+      if (count == 2
+          ? !v3_mtf_exact_keys (object, {"status", "width_px", "height_px"},
+                               path, error)
+          : !v3_mtf_exact_keys (object,
+                               {"status", "x_px", "y_px", "width_px",
+                                "height_px"}, path, error))
+        return false;
+      for (size_t i = 0; i < count; ++i)
+        {
+          const json_value *n = v3_mtf_required (
+              object, names[i], json_value::kind::number, path, error);
+          if (!n || !v2_json_int (*n, &numbers[i]))
+            return v3_mtf_fail (error, path + "." + names[i],
+                                "expected integer coordinate");
+        }
+    }
+  else if (status->text == "unavailable")
+    {
+      if (!v3_mtf_exact_keys (object, {"status", "legacy_values"},
+                              path, error))
+        return false;
+      const json_value *legacy = v3_mtf_required (
+          object, "legacy_values", json_value::kind::array, path, error);
+      if (!legacy || legacy->array_value.size () != count)
+        return v3_mtf_fail (error, path + ".legacy_values",
+                            "incorrect sentinel tuple length");
+      for (size_t i = 0; i < count; ++i)
+        if (!v2_json_int (legacy->array_value[i], &numbers[i]))
+          return v3_mtf_fail (error, path + ".legacy_values",
+                              "expected integer sentinel");
+    }
+  else
+    return v3_mtf_fail (error, path + ".status",
+                        "unsupported availability value");
+
+  const bool available = numbers[count - 2] > 0
+                         && numbers[count - 1] > 0;
+  return available == (status->text == "available")
+         || v3_mtf_fail (error, path + ".status",
+                         "contradicts saved dimensions");
+}
+
+/* Validate a typed schema-3 MTF collection before output publication.
+   Legacy adjacency is still used by the current fitter, so for now reject
+   non-contiguous groups instead of loading the wrong fitted focus model.
+   The group-aware numerical migration will remove this temporary restriction. */
+bool
+v3_mtf_validate (const mtf_parameters &mtf, std::string *error)
+{
+  if (!v2_valid_mtf (mtf, error, true)
+      || !mtf.measurement_ids_valid_p ())
+    return v3_mtf_fail (error, "calibration.capture.mtf",
+                        "invalid numeric values or record identities");
+
+  std::set<std::string> groups;
+  std::string previous_group;
+  for (size_t i = 0; i < mtf.measurements.size (); ++i)
+    {
+      const mtf_measurement &m = mtf.measurements[i];
+      const std::string path
+        = "calibration.capture.mtf.measurements["
+          + std::to_string (i) + "]";
+      if (m.capture_group_id != previous_group)
+        {
+          if (!groups.insert (m.capture_group_id).second)
+            return v3_mtf_fail (error, path + ".capture_group_id",
+                                "discontiguous capture group not yet supported");
+        }
+      if (m.same_capture != (i && m.capture_group_id == previous_group))
+        return v3_mtf_fail (error, path + ".capture_group_id",
+                            "legacy same_capture flags disagree with group IDs");
+      if (!valid_utf8 (m.id) || !valid_utf8 (m.capture_group_id))
+        return v3_mtf_fail (error, path, "invalid UTF-8 identifier");
+      if (!m.source_filename.empty ())
+        {
+          std::string base;
+          if (!v3_mtf_path_base (m.source_filename, &base))
+            return v3_mtf_fail (error, path + ".source.path",
+                                "ambiguous source path");
+        }
+      previous_group = m.capture_group_id;
+    }
+  return true;
+}
+
+} // anonymous namespace
+
+/* Encode a native schema-3 MTF component directly from C++ state, without
+   a JSON-v2 intermediate. No shipping file writer calls this yet.  */
+bool
+encode_parameter_json_v3_mtf (const mtf_parameters &mtf,
+                              std::string *output, std::string *error)
+{
+  if (error)
+    error->clear ();
+  if (!output)
+    return archive_fail (error, "missing v3 MTF output");
+  if (!v3_mtf_validate (mtf, error))
+    return false;
+
+  std::string text;
+  text.reserve (2048);
+  text += "{\n  \"calibration\": {\n    \"capture\": {\n";
+  text += "      \"mtf\": {\n        \"model\": \""
+          + json_escape (v2_mtf_models ()[(int)mtf.model]) + "\"";
+  text += ",\n        \"sigma_px\": " + json_number (mtf.sigma);
+  text += ",\n        \"halo_fraction\": " + json_number (mtf.halo_fraction);
+  text += ",\n        \"halo_sigma_px\": " + json_number (mtf.halo_sigma);
+  text += ",\n        \"blur_diameter_px\": " + json_number (mtf.blur_diameter);
+  text += ",\n        \"defocus_mm\": " + json_number (mtf.defocus);
+  text += ",\n        \"f_stop\": " + json_number (mtf.f_stop);
+  text += ",\n        \"pixel_pitch_um\": " + json_number (mtf.pixel_pitch);
+  text += ",\n        \"sensor_fill_factor\": "
+          + json_number (mtf.sensor_fill_factor);
+  text += ",\n        \"scan_dpi\": " + json_number (mtf.scan_dpi);
+  text += ",\n        \"wavelengths_nm\": [";
+  for (size_t i = 0; i < mtf.wavelengths.size (); ++i)
+    {
+      if (i)
+        text += ", ";
+      text += json_number (mtf.wavelengths[i]);
+    }
+  text += "]";
+  text += ",\n        \"selected_measurement_id\": ";
+  if (mtf.measured_mtf_idx < 0)
+    text += "null";
+  else
+    text += "\"" + json_escape (mtf.selected_measurement_id ()) + "\"";
+  text += ",\n        \"sample_columns\": ["
+          "\"frequency_cycles_per_pixel\", \"contrast_percent\", "
+          "\"uncertainty_percentage_points\"]";
+  text += ",\n        \"measurements\": [";
+
+  for (size_t j = 0; j < mtf.measurements.size (); ++j)
+    {
+      const mtf_measurement &m = mtf.measurements[j];
+      std::string base;
+      if (j)
+        text += ",";
+      text += "\n          {\n            \"id\": \""
+              + json_escape (m.id) + "\"";
+      text += ",\n            \"capture_group_id\": \""
+              + json_escape (m.capture_group_id) + "\"";
+      text += ",\n            \"channel\": \""
+              + json_escape (v2_mtf_channels ()[(size_t)(m.channel + 1)])
+              + "\"";
+      text += ",\n            \"image_layer\": ";
+      text += m.image_layer ? "true" : "false";
+      text += ",\n            \"wavelength_nm\": " + json_number (m.wavelength);
+      text += ",\n            \"label\": \"" + json_escape (m.name) + "\"";
+      text += ",\n            \"source\": {\n              \"path\": ";
+      if (m.source_filename.empty ())
+        text += "null";
+      else
+        {
+          /* Already checked by v3_mtf_validate. */
+          v3_mtf_path_base (m.source_filename, &base);
+          text += "{\"value\": \"" + json_escape (m.source_filename)
+                  + "\", \"base\": \"" + base + "\"}";
+        }
+      text += ",\n              \"dimensions\": "
+              + v3_mtf_dimensions_text (m.source_width, m.source_height);
+      text += ",\n              \"roi\": " + v3_mtf_roi_text (m.roi);
+      text += ",\n              \"edge_points_px\": ["
+              + v2_point_text (m.edge_p1) + ", "
+              + v2_point_text (m.edge_p2) + "]\n            }";
+      text += ",\n            \"edge_quality\": {\n";
+      text += "              \"angle_deg\": " + json_number (m.edge_angle);
+      text += ",\n              \"fit_rms_px\": " + json_number (m.edge_fit_rms);
+      text += ",\n              \"contrast_fraction\": "
+              + json_number (m.edge_contrast);
+      text += ",\n              \"snr\": " + json_number (m.edge_snr);
+      text += ",\n              \"phase_coverage_fraction\": "
+              + json_number (m.phase_coverage) + "\n            }";
+      text += ",\n            \"samples\": [";
+      for (size_t i = 0; i < m.size (); ++i)
+        {
+          if (i)
+            text += ", ";
+          text += "[" + json_number (m.get_freq ((int)i)) + ", "
+                  + json_number (m.get_contrast ((int)i)) + ", "
+                  + json_number (m.get_uncertainty ((int)i)) + "]";
+        }
+      text += "]\n          }";
+      if (text.size () > v2_max_sharpness_bytes)
+        return archive_fail (error, "v3 MTF JSON exceeds size limit");
+    }
+  text += "\n        ]\n      }\n    }\n  }\n}\n";
+  if (text.size () > v2_max_sharpness_bytes || !valid_utf8 (text))
+    return archive_fail (error, "v3 MTF JSON exceeds size/UTF-8 limit");
+  if (!parameter_json_resources_fit (text, parameter_json_max_nodes))
+    return archive_fail (error, "v3 MTF JSON exceeds value/depth limit");
+  *output = std::move (text);
+  return true;
+}
+
+/* Decode the native schema-3 calibration.capture.mtf subtree into private
+   C++ objects, committing only after all fields/record identities validate. */
+bool
+decode_parameter_json_v3_mtf (const std::string &input,
+                              mtf_parameters *mtf, std::string *error)
+{
+  if (error)
+    error->clear ();
+  if (!mtf)
+    return archive_fail (error, "missing v3 MTF destination");
+  if (input.size () > v2_max_sharpness_bytes || !valid_utf8 (input))
+    return archive_fail (error, "invalid v3 MTF UTF-8/size");
+
+  json_parser parser (input.data (), input.data () + input.size (),
+                      v2_max_sharpness_nodes);
+  json_value root;
+  if (!parser.parse (&root))
+    return archive_fail (error, "invalid v3 MTF JSON: " + parser.error ());
+  const json_value *calibration = v3_mtf_required (
+      root, "calibration", json_value::kind::object, "document", error);
+  if (!calibration
+      || !v3_mtf_exact_keys (root, {"calibration"}, "document", error))
+    return false;
+  const json_value *capture = v3_mtf_required (
+      *calibration, "capture", json_value::kind::object, "calibration", error);
+  if (!capture
+      || !v3_mtf_exact_keys (*calibration, {"capture"}, "calibration", error))
+    return false;
+  const json_value *body = v3_mtf_required (
+      *capture, "mtf", json_value::kind::object, "calibration.capture", error);
+  if (!body
+      || !v3_mtf_exact_keys (*capture, {"mtf"}, "calibration.capture", error))
+    return false;
+  const std::string root_path = "calibration.capture.mtf";
+  if (!v3_mtf_exact_keys (
+          *body, {"model", "sigma_px", "halo_fraction", "halo_sigma_px",
+                  "blur_diameter_px", "defocus_mm", "f_stop",
+                  "pixel_pitch_um", "sensor_fill_factor", "scan_dpi",
+                  "wavelengths_nm", "selected_measurement_id",
+                  "sample_columns", "measurements"}, root_path, error))
+    return false;
+
+  mtf_parameters parsed;
+  const json_value *model = v3_mtf_required (
+      *body, "model", json_value::kind::string, root_path, error);
+  if (!model)
+    return false;
+  bool found_model = false;
+  for (size_t i = 0; i < v2_mtf_models ().size (); ++i)
+    if (model->text == v2_mtf_models ()[i])
+      {
+        parsed.model = (mtf_model)i;
+        found_model = true;
+        break;
+      }
+  if (!found_model)
+    return v3_mtf_fail (error, root_path + ".model", "unknown MTF model");
+
+  if (!v3_mtf_real (*body, "sigma_px", &parsed.sigma, root_path, error)
+      || !v3_mtf_real (*body, "halo_fraction", &parsed.halo_fraction,
+                       root_path, error)
+      || !v3_mtf_real (*body, "halo_sigma_px", &parsed.halo_sigma,
+                       root_path, error)
+      || !v3_mtf_real (*body, "blur_diameter_px", &parsed.blur_diameter,
+                       root_path, error)
+      || !v3_mtf_real (*body, "defocus_mm", &parsed.defocus, root_path, error)
+      || !v3_mtf_real (*body, "f_stop", &parsed.f_stop, root_path, error)
+      || !v3_mtf_real (*body, "pixel_pitch_um", &parsed.pixel_pitch,
+                       root_path, error)
+      || !v3_mtf_real (*body, "sensor_fill_factor",
+                       &parsed.sensor_fill_factor, root_path, error)
+      || !v3_mtf_real (*body, "scan_dpi", &parsed.scan_dpi, root_path, error))
+    return false;
+
+  const json_value *wavelengths = v3_mtf_required (
+      *body, "wavelengths_nm", json_value::kind::array, root_path, error);
+  if (!wavelengths
+      || !v2_number_tuple (*wavelengths, 4, parsed.wavelengths.data ()))
+    return v3_mtf_fail (error, root_path + ".wavelengths_nm",
+                        "invalid channel-wavelength array");
+
+  const json_value *columns = v3_mtf_required (
+      *body, "sample_columns", json_value::kind::array, root_path, error);
+  if (!columns || columns->array_value.size () != 3
+      || columns->array_value[0].type != json_value::kind::string
+      || columns->array_value[1].type != json_value::kind::string
+      || columns->array_value[2].type != json_value::kind::string
+      || columns->array_value[0].text != "frequency_cycles_per_pixel"
+      || columns->array_value[1].text != "contrast_percent"
+      || columns->array_value[2].text != "uncertainty_percentage_points")
+    return v3_mtf_fail (error, root_path + ".sample_columns",
+                        "unsupported frequency/contrast sample layout");
+
+  const json_value *selection = object_member (*body, "selected_measurement_id");
+  if (!selection
+      || (selection->type != json_value::kind::null_value
+          && selection->type != json_value::kind::string))
+    return v3_mtf_fail (error, root_path + ".selected_measurement_id",
+                        "expected null or record ID");
+  const std::string selected_id
+      = selection->type == json_value::kind::string ? selection->text : "";
+
+  const json_value *measurements = v3_mtf_required (
+      *body, "measurements", json_value::kind::array, root_path, error);
+  if (!measurements
+      || measurements->array_value.size () > v2_max_mtf_measurements)
+    return v3_mtf_fail (error, root_path + ".measurements",
+                        "invalid record count");
+  parsed.measurements.reserve (measurements->array_value.size ());
+  size_t total_samples = 0;
+  std::set<std::string> groups;
+  std::string previous_group;
+  for (size_t i = 0; i < measurements->array_value.size (); ++i)
+    {
+      const json_value &value = measurements->array_value[i];
+      const std::string path = root_path + ".measurements["
+                               + std::to_string (i) + "]";
+      if (!v3_mtf_exact_keys (
+              value, {"id", "capture_group_id", "channel", "image_layer",
+                      "wavelength_nm", "label", "source", "edge_quality",
+                      "samples"}, path, error))
+        return false;
+      mtf_measurement m;
+      const json_value *id = v3_mtf_required (
+          value, "id", json_value::kind::string, path, error);
+      const json_value *group = v3_mtf_required (
+          value, "capture_group_id", json_value::kind::string, path, error);
+      const json_value *channel = v3_mtf_required (
+          value, "channel", json_value::kind::string, path, error);
+      const json_value *label = v3_mtf_required (
+          value, "label", json_value::kind::string, path, error);
+      if (!id || !group || !channel || !label
+          || !v3_mtf_bool (value, "image_layer", &m.image_layer, path, error)
+          || !v3_mtf_real (value, "wavelength_nm", &m.wavelength,
+                           path, error))
+        return false;
+      if (id->text.empty () || group->text.empty ())
+        return v3_mtf_fail (error, path + ".id",
+                            "empty measurement or capture group ID");
+      m.id = id->text;
+      m.capture_group_id = group->text;
+      m.name = label->text;
+      bool channel_found = false;
+      for (size_t c = 0; c < v2_mtf_channels ().size (); ++c)
+        if (channel->text == v2_mtf_channels ()[c])
+          {
+            m.channel = (int)c - 1;
+            channel_found = true;
+            break;
+          }
+      if (!channel_found)
+        return v3_mtf_fail (error, path + ".channel", "unknown channel");
+      if (m.capture_group_id != previous_group
+          && !groups.insert (m.capture_group_id).second)
+        return v3_mtf_fail (error, path + ".capture_group_id",
+                            "discontiguous capture group not yet supported");
+      m.same_capture = i && m.capture_group_id == previous_group;
+      previous_group = m.capture_group_id;
+
+      const json_value *source = v3_mtf_required (
+          value, "source", json_value::kind::object, path, error);
+      if (!source
+          || !v3_mtf_exact_keys (*source,
+                                 {"path", "dimensions", "roi", "edge_points_px"},
+                                 path + ".source", error))
+        return false;
+      const json_value *source_path = object_member (*source, "path");
+      if (!source_path)
+        return v3_mtf_fail (error, path + ".source.path", "missing");
+      if (source_path->type != json_value::kind::null_value)
+        {
+          const std::string location = path + ".source.path";
+          if (!v3_mtf_exact_keys (*source_path, {"value", "base"},
+                                  location, error))
+            return false;
+          const json_value *spelling = v3_mtf_required (
+              *source_path, "value", json_value::kind::string,
+              location, error);
+          const json_value *declared_base = v3_mtf_required (
+              *source_path, "base", json_value::kind::string,
+              location, error);
+          if (!spelling || !declared_base)
+            return false;
+          std::string expected_base;
+          if (!v3_mtf_path_base (spelling->text, &expected_base)
+              || declared_base->text != expected_base)
+            return v3_mtf_fail (error, location,
+                                "ambiguous path or inconsistent base");
+          m.source_filename = spelling->text;
+        }
+      const json_value *dimensions = v3_mtf_required (
+          *source, "dimensions", json_value::kind::object,
+          path + ".source", error);
+      const json_value *roi = v3_mtf_required (
+          *source, "roi", json_value::kind::object,
+          path + ".source", error);
+      const json_value *edge = v3_mtf_required (
+          *source, "edge_points_px", json_value::kind::array,
+          path + ".source", error);
+      if (!dimensions || !roi || !edge)
+        return false;
+      static const char *const dimensions_names[] = {
+        "width_px", "height_px"
+      };
+      static const char *const roi_names[] = {
+        "x_px", "y_px", "width_px", "height_px"
+      };
+      int sizes[2], rect[4];
+      if (!v3_mtf_metadata (*dimensions, path + ".source.dimensions",
+                            dimensions_names, 2, sizes, error)
+          || !v3_mtf_metadata (*roi, path + ".source.roi",
+                               roi_names, 4, rect, error))
+        return false;
+      m.source_width = sizes[0];
+      m.source_height = sizes[1];
+      m.roi = int_image_area (rect[0], rect[1], rect[2], rect[3]);
+      if (edge->array_value.size () != 2
+          || !v2_point (edge->array_value[0], &m.edge_p1)
+          || !v2_point (edge->array_value[1], &m.edge_p2))
+        return v3_mtf_fail (error, path + ".source.edge_points_px",
+                            "invalid edge coordinates");
+
+      const json_value *quality = v3_mtf_required (
+          value, "edge_quality", json_value::kind::object, path, error);
+      if (!quality
+          || !v3_mtf_exact_keys (
+              *quality, {"angle_deg", "fit_rms_px", "contrast_fraction",
+                         "snr", "phase_coverage_fraction"},
+              path + ".edge_quality", error)
+          || !v3_mtf_real (*quality, "angle_deg", &m.edge_angle,
+                           path + ".edge_quality", error)
+          || !v3_mtf_real (*quality, "fit_rms_px", &m.edge_fit_rms,
+                           path + ".edge_quality", error)
+          || !v3_mtf_real (*quality, "contrast_fraction", &m.edge_contrast,
+                           path + ".edge_quality", error)
+          || !v3_mtf_real (*quality, "snr", &m.edge_snr,
+                           path + ".edge_quality", error)
+          || !v3_mtf_real (*quality, "phase_coverage_fraction",
+                           &m.phase_coverage, path + ".edge_quality", error))
+        return false;
+
+      const json_value *samples = v3_mtf_required (
+          value, "samples", json_value::kind::array, path, error);
+      if (!samples
+          || samples->array_value.size () > v2_max_mtf_samples - total_samples)
+        return v3_mtf_fail (error, path + ".samples",
+                            "sample budget exceeded");
+      total_samples += samples->array_value.size ();
+      for (const json_value &sample : samples->array_value)
+        {
+          double triplet[3];
+          if (!v2_number_tuple (sample, 3, triplet))
+            return v3_mtf_fail (error, path + ".samples",
+                                "invalid frequency/contrast/uncertainty tuple");
+          m.add_value (triplet[0], triplet[1], triplet[2]);
+        }
+      parsed.measurements.push_back (std::move (m));
+    }
+
+  if (!selected_id.empty () && !parsed.select_measurement_id (selected_id))
+    return v3_mtf_fail (error, root_path + ".selected_measurement_id",
+                        "dangling or duplicate record identity");
+  if (!v3_mtf_validate (parsed, error))
+    return false;
+  *mtf = std::move (parsed);
+  return true;
 }
 
 }
