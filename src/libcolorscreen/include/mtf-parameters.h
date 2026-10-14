@@ -300,6 +300,12 @@ struct mtf_parameters
      leave OUT unchanged. Index values are assigned in first-occurrence order. */
   DLL_PUBLIC bool capture_group_indices (std::vector<size_t> *out) const;
 
+  /* Reassign record INDEX either to the preceding record's capture (SAME)
+     or to a fresh, distinct capture group. With stable IDs, no unrelated
+     record changes group membership; update the old adjacency hints only for
+     consumers still reading .par. INDEX=0 cannot join a predecessor. */
+  DLL_PUBLIC bool set_measurement_same_capture (size_t index, bool same);
+
   /* Move record FROM to TO while preserving selected-curve identity and
      explicit capture groups even when records become nonadjacent. A legacy
      in-memory .par collection without IDs still disallows moves that would
