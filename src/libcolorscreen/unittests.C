@@ -3616,6 +3616,10 @@ test_native_json_v3_mtf ()
       json, "\"base\": \"parameter_file\"", "\"base\": \"absolute\""),
       "source path-base disagreement accepted");
   rejected (replace_once (
+      json, "\"value\": \"../captures/archival scan.tif\"",
+      "\"value\": \"C:ambiguous\\\\image.tif\""),
+      "Windows drive-relative source was accepted during import");
+  rejected (replace_once (
       json, "\"status\": \"unavailable\"", "\"status\": \"available\""),
       "contradictory geometry availability accepted");
   rejected (replace_once (
