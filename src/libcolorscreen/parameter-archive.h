@@ -203,6 +203,23 @@ decode_parameter_json_v2_sharpness (
     const std::string &input, render_parameters *render,
     std::string *error);
 
+/* Experimental typed schema-3 capture-MTF component codec. The JSON root
+   contains calibration.capture.mtf, including stable measurement/capture IDs,
+   selected record ID, measured quality, sample units and source provenance.
+   It is not a complete .cspar document and is NOT used by production
+   JSON-v2 saving. Until the fitter supports arbitrary capture grouping,
+   discontiguous group IDs are rejected rather than misinterpreted. */
+DLL_PUBLIC bool
+encode_parameter_json_v3_mtf (const mtf_parameters &mtf,
+                              std::string *output, std::string *error);
+
+/* Parse a native schema-3 MTF component into privately validated C++ values.
+   On invalid metadata, inconsistent source paths, unknown fields, resource
+   limits or broken record IDs, MTF remains unchanged. */
+DLL_PUBLIC bool
+decode_parameter_json_v3_mtf (const std::string &input,
+                              mtf_parameters *mtf, std::string *error);
+
 /* Encode all persistent spatial calibration grids directly into JSON:
    backlight luminosity/subtraction samples, scanner blur correction cells,
    and the full stitched-tile exposure/dark-point/blur grid. Reduction
