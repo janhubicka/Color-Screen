@@ -1,3 +1,9 @@
+!ifdef COLORSCREEN_NSIS_PLUGIN_DIR
+  ; MSYS2 installs Unicode NSIS plugins beside its toolchain. The optional
+  ; override is passed by CI; developer installations use normal discovery.
+  !addplugindir /x86-unicode "${COLORSCREEN_NSIS_PLUGIN_DIR}"
+!endif
+
 !include "MUI2.nsh"
 !include "FileFunc.nsh"
 
