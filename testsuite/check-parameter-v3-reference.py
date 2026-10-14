@@ -210,9 +210,14 @@ def main() -> int:
     windows_new = r"C:\archive\exports\params.cspar"
     moved_windows = module.rebase_v3_source_paths(original, windows_old, windows_new)
     win_path = moved_windows["calibration"]["capture"]["mtf"]["measurements"][1]["source"]["path"]
-    assert ntpath.normpath(ntpath.join(ntpath.dirname(windows_new), win_path["value"])) == (
-        r"C:\archive\relative\edge.tif")
-    assert win_path["base"] == "parameter_file"
+    windows_resolved = ntpath.normpath(
+        ntpath.join(ntpath.dirname(windows_new), win_path["value"]))
+    windows_expected = ntpath.normpath(r"C:\archive\relative\edge.tif")
+    assert windows_resolved == windows_expected, (
+        f"Windows same-drive Save As changed source: "
+        f"old={windows_old!r}, new={windows_new!r}, path={win_path!r}, "
+        f"resolved={windows_resolved!r}, expected={windows_expected!r}")
+    assert win_path["base"] == "parameter_file", win_path
     across_volumes = module.rebase_v3_source_paths(
         original, windows_old, r"D:\archive\params.cspar")
     different = across_volumes["calibration"]["capture"]["mtf"]["measurements"][1]["source"]["path"]
