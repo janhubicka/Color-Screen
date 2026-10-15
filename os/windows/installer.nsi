@@ -3,7 +3,6 @@
 ; architecture registration on some runner/toolchain combinations. Built-in
 ; license/directory/progress pages need no external DLL and also work with
 ; both x86 and amd64 Unicode installer stubs.
-!include "FileFunc.nsh"
 
 Name "Color-Screen"
 !ifdef OUTFILE
@@ -53,6 +52,7 @@ Section "Install"
     !macroend
 
     !insertmacro RegisterExtension "par" "Color-Screen Parameter File"
+    !insertmacro RegisterExtension "cspar" "Color-Screen JSON Parameter File"
     !insertmacro RegisterExtension "tif" "TIFF Image"
     !insertmacro RegisterExtension "tiff" "TIFF Image"
     !insertmacro RegisterExtension "jpg" "JPEG Image"
@@ -68,7 +68,7 @@ Section "Install"
     !insertmacro RegisterExtension "arq" "Sony Pixel Shift Raw Image"
     !insertmacro RegisterExtension "csprj" "Color-Screen Project"
 
-    System::Call 'Shell32::SHChangeNotify(i 0x08000000, i 0, i 0, i 0)'
+    ; No System plug-in: file associations become visible at the next shell refresh.
 SectionEnd
 
 Section "Uninstall"
@@ -80,5 +80,5 @@ Section "Uninstall"
     DeleteRegKey HKCR "Color-Screen.File"
     # Note: Extension keys are usually left alone or we could clean them up if they point to us.
     
-    System::Call 'Shell32::SHChangeNotify(i 0x08000000, i 0, i 0, i 0)'
+    ; No System plug-in: file associations become visible at the next shell refresh.
 SectionEnd
