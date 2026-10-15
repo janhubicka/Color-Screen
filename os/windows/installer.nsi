@@ -43,12 +43,19 @@ Section "Install"
     WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Color-Screen" "UninstallString" "$INSTDIR\uninstall.exe"
     WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Color-Screen" "DisplayIcon" "$INSTDIR\colorscreen-qt.exe"
 
-    # File associations
+    # Register an Open With handler for all supported extensions, without
+    # replacing the operator's default JPEG/TIFF/RAW application. Each format
+    # needs its own ProgID so descriptions and uninstall stay independent.
     !macro RegisterExtension Ext Desc
-        WriteRegStr HKCR ".${Ext}" "" "Color-Screen.File"
-        WriteRegStr HKCR "Color-Screen.File\shell\open\command" "" '"$INSTDIR\colorscreen-qt.exe" "%1"'
-        WriteRegStr HKCR "Color-Screen.File" "" "${Desc}"
-        WriteRegStr HKCR "Color-Screen.File\DefaultIcon" "" "$INSTDIR\colorscreen-qt.exe,0"
+        # An old development installer overwrote shared defaults with one
+        # Color-Screen.File class; remove only that known obsolete default.
+        ReadRegStr $0 HKCR ".${Ext}" ""
+        StrCmp $0 "Color-Screen.File" 0 +2
+            DeleteRegValue HKCR ".${Ext}" ""
+        WriteRegStr HKCR ".${Ext}\OpenWithProgids" "Color-Screen.${Ext}" ""
+        WriteRegStr HKCR "Color-Screen.${Ext}" "" "${Desc}"
+        WriteRegStr HKCR "Color-Screen.${Ext}\shell\open\command" "" '"$INSTDIR\colorscreen-qt.exe" "%1"'
+        WriteRegStr HKCR "Color-Screen.${Ext}\DefaultIcon" "" "$INSTDIR\colorscreen-qt.exe,0"
     !macroend
 
     !insertmacro RegisterExtension "par" "Color-Screen Parameter File"
@@ -68,6 +75,12 @@ Section "Install"
     !insertmacro RegisterExtension "arq" "Sony Pixel Shift Raw Image"
     !insertmacro RegisterExtension "csprj" "Color-Screen Project"
 
+    # Own only Color-Screen-specific .cspar and .csprj defaults. A generic
+    # .par or image extension remains under the user's existing default app.
+    WriteRegStr HKCR ".cspar" "" "Color-Screen.cspar"
+    WriteRegStr HKCR ".csprj" "" "Color-Screen.csprj"
+    DeleteRegKey HKCR "Color-Screen.File"
+
     ; No System plug-in: file associations become visible at the next shell refresh.
 SectionEnd
 
@@ -77,8 +90,36 @@ Section "Uninstall"
     RMDir /r "$INSTDIR"
 
     DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Color-Screen"
+    # Remove only our Open With entries, and clear a file-type default only
+    # when it still refers to us. Never erase another application's choice.
+    !macro UnregisterExtension Ext
+        DeleteRegValue HKCR ".${Ext}\OpenWithProgids" "Color-Screen.${Ext}"
+        DeleteRegKey /ifempty HKCR ".${Ext}\OpenWithProgids"
+        ReadRegStr $0 HKCR ".${Ext}" ""
+        StrCmp $0 "Color-Screen.${Ext}" 0 +2
+            DeleteRegValue HKCR ".${Ext}" ""
+        DeleteRegKey /ifempty HKCR ".${Ext}"
+        DeleteRegKey HKCR "Color-Screen.${Ext}"
+    !macroend
+
+    !insertmacro UnregisterExtension "par"
+    !insertmacro UnregisterExtension "cspar"
+    !insertmacro UnregisterExtension "tif"
+    !insertmacro UnregisterExtension "tiff"
+    !insertmacro UnregisterExtension "jpg"
+    !insertmacro UnregisterExtension "jpeg"
+    !insertmacro UnregisterExtension "raw"
+    !insertmacro UnregisterExtension "dng"
+    !insertmacro UnregisterExtension "iiq"
+    !insertmacro UnregisterExtension "nef"
+    !insertmacro UnregisterExtension "cr2"
+    !insertmacro UnregisterExtension "eip"
+    !insertmacro UnregisterExtension "arw"
+    !insertmacro UnregisterExtension "raf"
+    !insertmacro UnregisterExtension "arq"
+    !insertmacro UnregisterExtension "csprj"
+
     DeleteRegKey HKCR "Color-Screen.File"
-    # Note: Extension keys are usually left alone or we could clean them up if they point to us.
-    
+
     ; No System plug-in: file associations become visible at the next shell refresh.
 SectionEnd
