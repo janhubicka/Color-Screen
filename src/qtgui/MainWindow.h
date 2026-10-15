@@ -5,6 +5,7 @@
 #include "../libcolorscreen/include/colorscreen.h"
 #include "../libcolorscreen/include/progress-info.h"
 #include "../libcolorscreen/include/render-parameters.h"
+#include "../libcolorscreen/parameter-archive.h"
 #include "../libcolorscreen/include/finetune.h"
 #include "../libcolorscreen/include/focus-analysis.h"
 #include "../libcolorscreen/include/render-type-parameters.h" // Added
@@ -135,7 +136,8 @@ public:
       an occupied window is never overwritten.  SUPPRESSPARAMPROMPT is reserved
       for crash recovery.  */
   void loadFile(const QString &fileName, bool suppressParamPrompt = false,
-                bool preferCachedRaw = false);
+                bool preferCachedRaw = false,
+                const QString &explicitParameterFile = QString());
 
   /** Return true when this untouched empty window may host a newly opened
       image instead of allocating another document window.  */
@@ -1028,6 +1030,11 @@ private:
 
   // Current image file path.
   QString m_currentImageFile;
+
+  /** Source scan association read from a .cspar, distinct from all physical
+      rendering parameters. A real loaded scan is authoritative for Save; this
+      retains an existing link if a parameter document is opened before its scan. */
+  colorscreen::parameter_source_image m_linkedSourceImage;
 
   /** Parameter-file target for this document.
       A suggested path is only a Save-As default and must never be overwritten
