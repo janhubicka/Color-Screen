@@ -11,6 +11,40 @@
     "schema_version": {
       "const": 3
     },
+    "source_image": {
+      "description": "Optional external scan or stitched project linked to this document. Null means reusable parameters; the original scan is not embedded.",
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "minLength": 1
+            },
+            "base": {
+              "enum": ["absolute", "parameter_file"]
+            },
+            "width_px": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "height_px": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "size_bytes": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": ["path", "base", "width_px", "height_px", "size_bytes"],
+          "additionalProperties": false
+        }
+      ]
+    },
     "capture": {
       "type": "object",
       "properties": {
