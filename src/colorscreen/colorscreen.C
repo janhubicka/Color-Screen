@@ -4581,7 +4581,8 @@ do_adjust_par (int argc, char **argv)
   if (!save_parameter_filename (outcspname, output_json_v3, &param, &dparam,
                                 &outgoing, &solver_param, output_trailing,
                                 &save_error, &profile_spots, force_json_v3,
-                                &outgoing_image))
+                                outgoing_image.path.empty()
+                                    ? nullptr : &outgoing_image))
     {
       fprintf (stderr, "Cannot save %s: %s\n", outcspname,
                save_error.c_str ());
