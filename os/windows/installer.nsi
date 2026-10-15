@@ -41,8 +41,11 @@ Section "Install"
     # Add/Remove Programs entry is per-user, matching the installation.
     # Registry keys for "Color-Screen" app
     WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\Color-Screen" "DisplayName" "Color-Screen"
-    WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\Color-Screen" "UninstallString" "$INSTDIR\uninstall.exe"
-    WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\Color-Screen" "DisplayIcon" "$INSTDIR\colorscreen-qt.exe"
+    # Programs and Features must handle user-profile paths containing spaces.
+    WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\Color-Screen" "UninstallString" '"$INSTDIR\uninstall.exe"'
+    WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\Color-Screen" "QuietUninstallString" '"$INSTDIR\uninstall.exe" /S'
+    WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\Color-Screen" "InstallLocation" "$INSTDIR"
+    WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\Color-Screen" "DisplayIcon" '"$INSTDIR\colorscreen-qt.exe"'
 
     # Register an Open With handler for all supported extensions, without
     # replacing the operator's default JPEG/TIFF/RAW application. Each format
