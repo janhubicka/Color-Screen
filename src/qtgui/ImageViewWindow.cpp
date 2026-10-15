@@ -1107,8 +1107,8 @@ void ImageViewWindow::updateMtfMeasurementOverlay(bool locate) {
     matches = measurement->source_width == m_scan->width &&
               measurement->source_height == m_scan->height;
   if (matches) {
-    const QFileInfo recorded(QString::fromUtf8(
-        measurement->source_filename.c_str()));
+    const QFileInfo recorded(
+        m_document->resolveMtfSourcePath(measurement->source_filename));
     const QFileInfo current(m_referenceFile);
     matches = recorded.absoluteFilePath() == current.absoluteFilePath() ||
               (recorded.fileName() == current.fileName() &&
