@@ -956,7 +956,8 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
       WorkspaceWindow *workspace = state->workspace.data();
 
       switch (phase) {
-      case -6: {
+      // Keep linked-source phases separate from recovery's -4..-1 phases.
+      case -106: {
         // Cancelling a missing-image chooser must not publish any image,
         // parameters, target path or empty document window.
         if (!state->missingPickerStarted) {
@@ -974,10 +975,10 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
           fail(QStringLiteral("Cancelled linked-source chooser created a document"));
           return;
         }
-        schedule(-5, 50, 120);
+        schedule(-105, 50, 120);
         return;
       }
-      case -5: {
+      case -105: {
         if (!state->missingPickerCancelled) {
           state->missingPickerCancelled = true;
           app.openFiles({state->missingLinkedParameters});
@@ -991,8 +992,9 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
           }
           state->missingPickerAccepted = true;
           chooser->selectFile(first->currentImageFile());
-          chooser->accept();
-          schedule(-5, 100, 120);
+          // QFileDialog narrows accept() to protected; use QDialog's public slot.
+          static_cast<QDialog *>(chooser)->accept();
+          schedule(-105, 100, 120);
           return;
         }
         const auto docs = app.documentWindows();
@@ -1009,10 +1011,10 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
           return;
         }
         probe->close();
-        schedule(-4, 50, 120);
+        schedule(-104, 50, 120);
         return;
       }
-      case -4: {
+      case -104: {
         if (app.documentWindows().size() != 2) {
           retryOrFail(QStringLiteral("Linked chooser probe did not close"));
           return;
@@ -1043,10 +1045,10 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
           return;
         }
         probe->close();
-        schedule(-3, 50, 120);
+        schedule(-103, 50, 120);
         return;
       }
-      case -3: {
+      case -103: {
         if (app.documentWindows().size() != 2) {
           retryOrFail(QStringLiteral("Moved linked document did not close"));
           return;
@@ -1075,10 +1077,10 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
           return;
         }
         probe->close();
-        schedule(-2, 50, 120);
+        schedule(-102, 50, 120);
         return;
       }
-      case -2: {
+      case -102: {
         if (app.documentWindows().size() != 2) {
           retryOrFail(QStringLiteral("Direct linked document did not close"));
           return;
@@ -1868,7 +1870,7 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
       }
     };
 
-    QTimer::singleShot(0, &app, [runPhase]() { (*runPhase)(-6, 120); });
+    QTimer::singleShot(0, &app, [runPhase]() { (*runPhase)(-106, 120); });
   };
 
   startTaskQueueAsyncPublicationSmoke(
