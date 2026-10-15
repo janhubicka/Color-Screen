@@ -7,6 +7,7 @@
 #include "include/scr-detect-parameters.h"
 #include "include/solver-parameters.h"
 
+#include <cstdint>
 #include <cstdio>
 #include <string>
 #include <vector>
@@ -51,6 +52,18 @@ write_parameter_text_file (const char *name, const std::string &payload,
                            std::string *error);
 
 
+/* Optional provenance of the scan or stitch project which the parameter
+   document was created for. This is *document linkage*, not an image-processing
+   parameter. An empty path means that the parameters are reusable without a
+   particular image. Relative paths are based on the .cspar directory. */
+struct parameter_source_image
+{
+  std::string path;
+  int width_px = 0;
+  int height_px = 0;
+  uint64_t size_bytes = 0;
+};
+
 /* Construct the first public native .cspar JSON document directly from
    typed processing state, using the canonical semantic schema-3 layout.
    Legacy .par records are upgraded to stable record/capture IDs on a private
@@ -64,7 +77,8 @@ encode_parameter_json_v3_document (
     const render_parameters &render,
     const solver_parameters &solver,
     const std::vector<point_t> &profile_spots,
-    std::string *output, std::string *error);
+    std::string *output, std::string *error,
+    const parameter_source_image *source_image = nullptr);
 
 /* Read a strict complete schema-3 document transactionally into native
    state. Unknown fields, invalid capture IDs/metadata and incomplete
@@ -77,7 +91,7 @@ decode_parameter_json_v3_document (
     render_parameters *render,
     solver_parameters *solver,
     std::vector<point_t> *profile_spots,
-    std::string *error);
+    std::string *error, parameter_source_image *source_image = nullptr);
 
 /* Read or write canonical schema-3 .cspar at UTF-8 filesystem path NAME.
    Readers stage all persistent state until validation succeeds; writers
@@ -88,14 +102,15 @@ read_parameter_json_v3_file (
     const char *name, scr_to_img_parameters *geometry,
     scr_detect_parameters *detection, render_parameters *render,
     solver_parameters *solver, std::vector<point_t> *profile_spots,
-    std::string *error);
+    std::string *error, parameter_source_image *source_image = nullptr);
 
 DLL_PUBLIC bool
 write_parameter_json_v3_file (
     const char *name, const scr_to_img_parameters &geometry,
     const scr_detect_parameters &detection,
     const render_parameters &render, const solver_parameters &solver,
-    const std::vector<point_t> &profile_spots, std::string *error);
+    const std::vector<point_t> &profile_spots, std::string *error,
+    const parameter_source_image *source_image = nullptr);
 
 /* Rebase relative measured-MTF source paths when a canonical parameter
    document is saved under a different absolute pathname. Source references
