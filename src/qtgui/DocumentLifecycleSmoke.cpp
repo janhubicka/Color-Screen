@@ -465,6 +465,36 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
       app.exit(documentLifecycleFailure);
       return;
     }
+    // The initial native .cspar identifies the actual scan, but retains no
+    // scanner pixels or expensive file hash. Its relative link must resolve
+    // against the .cspar directory rather than the current working directory.
+    {
+      colorscreen::scr_to_img_parameters geometry;
+      colorscreen::scr_detect_parameters detection;
+      colorscreen::render_parameters render;
+      colorscreen::solver_parameters solver;
+      std::vector<colorscreen::point_t> spots;
+      colorscreen::parameter_source_image linked;
+      std::string error;
+      const QFileInfo original(first->currentImageFile());
+      const QString linkBase = QFileInfo(state->firstParameters).absolutePath();
+      if (!colorscreen::read_parameter_json_v3_file(
+              state->firstParameters.toUtf8().constData(), &geometry, &detection,
+              &render, &solver, &spots, &error, &linked) ||
+          linked.path.empty() || !first->sharedImageData() ||
+          linked.width_px != first->sharedImageData()->width ||
+          linked.height_px != first->sharedImageData()->height ||
+          linked.file_size_bytes != static_cast<uint64_t>(original.size()) ||
+          QDir::cleanPath(QDir(linkBase).absoluteFilePath(
+              QString::fromUtf8(linked.path.c_str()))) !=
+              QDir::cleanPath(original.absoluteFilePath())) {
+        qCritical() << "Native .cspar did not retain its source image identity"
+                    << QString::fromStdString(error);
+        app.exit(documentLifecycleFailure);
+        return;
+      }
+    }
+
     // Both fresh .cspar targets and subsequent ordinary Saves use native JSON.
     const QString defaultJsonParams = state->temporaryDirectory->filePath(
         QStringLiteral("default-native-json-v3.cspar"));
@@ -480,6 +510,27 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
       return;
     }
     const QByteArray initialDefaultJson = readFile(defaultJsonParams);
+    // Save As to another directory must still resolve the exact same scan.
+    {
+      colorscreen::scr_to_img_parameters geometry;
+      colorscreen::scr_detect_parameters detection;
+      colorscreen::render_parameters render;
+      colorscreen::solver_parameters solver;
+      std::vector<colorscreen::point_t> spots;
+      colorscreen::parameter_source_image relocated;
+      std::string error;
+      if (!colorscreen::read_parameter_json_v3_file(
+              defaultJsonParams.toUtf8().constData(), &geometry, &detection,
+              &render, &solver, &spots, &error, &relocated) ||
+          QDir::cleanPath(QDir(QFileInfo(defaultJsonParams).absolutePath())
+              .absoluteFilePath(QString::fromUtf8(relocated.path.c_str()))) !=
+              QDir::cleanPath(QFileInfo(first->currentImageFile())
+                  .absoluteFilePath())) {
+        qCritical() << "Native .cspar Save As relinked its source scan";
+        app.exit(documentLifecycleFailure);
+        return;
+      }
+    }
     if (initialDefaultJson.isEmpty() || initialDefaultJson.at(0) != '{' ||
         !first->saveParametersToFile(defaultJsonParams) ||
         readFile(defaultJsonParams) != initialDefaultJson ||
