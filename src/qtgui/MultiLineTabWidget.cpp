@@ -21,6 +21,7 @@ MultiLineTabWidget::MultiLineTabWidget(QWidget *parent)
     mainLayout->addWidget(m_stageBarWidget);
 
     m_tabBarWidget = new QWidget();
+    m_tabBarWidget->setObjectName(QStringLiteral("DetailedPanelTabBar"));
     m_tabLayout = new FlowLayout(m_tabBarWidget, 2, 2, 2);
     mainLayout->addWidget(m_tabBarWidget);
 
@@ -38,47 +39,32 @@ MultiLineTabWidget::MultiLineTabWidget(QWidget *parent)
     connect(m_group, QOverload<int>::of(&QButtonGroup::idClicked), this,
             &MultiLineTabWidget::onTabClicked);
 
-    m_stageBarWidget->setStyleSheet(
-        "QPushButton {"
-        "  border: 1px solid #555;"
-        "  padding: 4px 10px;"
-        "  background: transparent;"
-        "  color: #bbb;"
-        "  font-weight: 600;"
-        "  border-radius: 3px;"
-        "}"
-        "QPushButton:hover {"
-        "  background: #2a2a2a;"
-        "  color: #fff;"
-        "}"
-        "QPushButton:checked {"
-        "  color: #fff;"
-        "  background: #3a3a3a;"
-        "  border-color: #3d8af7;"
-        "}"
-    );
-
-    // Styling for the detailed panel tabs.
-    m_tabBarWidget->setStyleSheet(
+    // Primary stages and secondary panel tabs are one navigation system.
+    // Use the same palette-aware underline style for both instead of a
+    // hard-coded dark pill bar over a differently styled detailed tab bar.
+    const QString tabButtonStyle = QStringLiteral(
         "QPushButton {"
         "  border: 1px solid transparent;"
-        "  border-bottom: 2px solid #333;"
-        "  padding: 6px 12px;"
+        "  border-bottom: 2px solid palette(mid);"
+        "  padding: 5px 10px;"
         "  background: transparent;"
-        "  color: #aaa;"
-        "  font-weight: 500;"
+        "  color: palette(window-text);"
+        "  font-weight: 600;"
         "  border-radius: 2px;"
         "}"
         "QPushButton:hover {"
-        "  background: #2a2a2a;"
-        "  color: #fff;"
+        "  background: palette(alternate-base);"
         "}"
         "QPushButton:checked {"
-        "  color: #fff;"
-        "  border-bottom: 2px solid #3d8af7;"
-        "  background: #333;"
+        "  background: palette(alternate-base);"
+        "  border-bottom: 2px solid palette(highlight);"
         "}"
-    );
+        "QPushButton:focus {"
+        "  border: 1px dotted palette(highlight);"
+        "  border-bottom: 2px solid palette(highlight);"
+        "}");
+    m_stageBarWidget->setStyleSheet(tabButtonStyle);
+    m_tabBarWidget->setStyleSheet(tabButtonStyle);
 }
 
 /** Add one presentation-only workflow stage. */
@@ -319,8 +305,14 @@ void MultiLineTabWidget::refreshNavigationVisibility()
 {
     if (m_stages.isEmpty()) {
         m_stageBarWidget->hide();
-        for (TabInfo &tab : m_tabs)
+        int visibleCount = 0;
+        for (TabInfo &tab : m_tabs) {
             tab.button->setVisible(tab.visible);
+            visibleCount += tab.visible ? 1 : 0;
+        }
+        // In particular, the single Sharpness panel in a slanted-edge
+        // reference view needs no second navigation row.
+        m_tabBarWidget->setVisible(visibleCount > 1);
         return;
     }
 
@@ -352,12 +344,20 @@ void MultiLineTabWidget::refreshNavigationVisibility()
     }
 
     const QString selectedStage = currentStageKey();
+    int visibleDetailCount = 0;
     for (TabInfo &tab : m_tabs) {
         const bool belongsToSelectedStage =
             tab.stageKey.isEmpty() || tab.stageKey == selectedStage;
-        tab.button->setVisible(tab.visible && belongsToSelectedStage);
+        const bool showDetail = tab.visible && belongsToSelectedStage;
+        tab.button->setVisible(showDetail);
+        visibleDetailCount += showDetail ? 1 : 0;
     }
 
+    // A stage with only one available panel already names that panel: hide
+    // the redundant second row, not its page or its stable tab identity.
+    // Count logical availability, never effective ancestor visibility during
+    // workspace inspector reparenting or detached-view transitions.
+    m_tabBarWidget->setVisible(visibleDetailCount > 1);
     m_stageBarWidget->setVisible(!m_stages.isEmpty());
 }
 
