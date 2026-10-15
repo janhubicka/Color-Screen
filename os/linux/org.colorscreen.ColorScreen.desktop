@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Color-Screen
+Comment=Reconstruct colors from historical additive color-screen photographs
+Exec=colorscreen-qt %f
+Icon=colorscreen
+Terminal=false
+StartupNotify=true
+Categories=Graphics;Photography;
+MimeType=application/x-colorscreen-parameters+json;
