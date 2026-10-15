@@ -11,6 +11,28 @@
     "schema_version": {
       "const": 3
     },
+    "source_image": {
+      "description": "Optional scan associated with this document. Null means reusable parameter template; the path is not a calibration parameter.",
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "properties": {
+            "path": { "type": "string", "minLength": 1 },
+            "base": { "enum": ["absolute", "parameter_file"] },
+            "width_px": { "type": ["integer", "null"], "minimum": 1, "maximum": 2147483647 },
+            "height_px": { "type": ["integer", "null"], "minimum": 1, "maximum": 2147483647 },
+            "file_size_bytes": { "type": ["integer", "null"], "minimum": 1 }
+          },
+          "required": ["path", "base", "width_px", "height_px", "file_size_bytes"],
+          "oneOf": [
+            { "properties": { "width_px": { "type": "null" }, "height_px": { "type": "null" } } },
+            { "properties": { "width_px": { "type": "integer" }, "height_px": { "type": "integer" } } }
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
     "capture": {
       "type": "object",
       "properties": {
