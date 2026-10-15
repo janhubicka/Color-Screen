@@ -54,14 +54,14 @@ validation from CI. No beta/final release is authorized by this work.
 | JSON-004 | Writer/reader aggregate resource-budget agreement | Implemented, locally tested | Every component and full writer preflights the shared node/depth budget before publishing. Boundary/escaped-string/combined-collection tests plus an independent 10,000-tree value-count probe pass. Large real-project memory testing is still required. |
 | JSON-005 | Versioned semantic organization and naming | Full native codec and Qt/CLI runtime integration under CI (draft #555/#556) | Seven named semantic domains, shared bounded parser/typed-state checks; no external JSON-v2 compatibility accepted. Audit nested members before beta. |
 | JSON-006 | Explicit sentinels, units and coordinate conventions | Native semantic codec implemented on review branch, not fully qualified | Input sRGB/power transfer, nullable named crop bounds, automatic/fraction strip widths, measured-MTF source status and sample units. Full field/units review remains. |
-| JSON-007 | Stable MTF record identity and explicit capture groups | Reference prototype plus Qt-free in-memory identity/reorder foundations; persistence still planned | Core generates collision-free document-local IDs without replacing existing ones, maps selection to an ID, and refuses legacy reorder that splits a capture. Native schema-3 codec and GUI edit/Save/Save As preservation remain necessary. |
-| JSON-008 | Named heterogeneous measurement metadata | Native isolated C++ MTF codec implemented, under review; full document integration planned | Codec directly writes/reads named edge quality, sample units, source/ROI status, path bases, selected record ID and group IDs without a v2 or Python intermediate. Unknown nested fields reject; full schema-3 document switch remains separate. |
+| JSON-007 | Stable MTF record identity and explicit capture groups | Core/GUI/runtime implemented in draft #553/#556; final CI pending | Imported `.par` records receive document-local identities once, selection and edits track IDs, numerical fitting and native-channel choice use explicit groups (including nonadjacent records), and schema-3 persistence retains them. |
+| JSON-008 | Named heterogeneous measurement metadata | Integrated native schema-3 subtree on draft #555/#556; final CI pending | Full document codec embeds the Qt-independent measured-MTF writer/reader, naming quality/sample units, ROI availability and source path bases. Unknown/dangling IDs and nested fields reject without publishing document state. |
 | JSON-009 | Portable reference provenance | Core rebase + GUI/CLI Save As and recovery snapshot implementation in draft #555/#556; CI pending | Lexical POSIX/Windows/UNC paths, cross-volume absolute fallback, validation before mutation, document-relative overlay lookup and absolute references in private recovery. |
 | JSON-010 | Shared field descriptions and clear subsystem boundaries | Planned | Split legacy import, JSON codecs and atomic I/O; avoid three independent field vocabularies. |
 | JSON-011 | Authoritative schema and complete examples | Planned | Checked-in JSON Schema, valid default and rich fixtures; schema/core agreement and unknown-key tests. |
 | JSON-012 | Nested member coverage and field-rich diagnostics | Planned | Nondefault and inactive settings; full object/array paths in failures; don't equate legacy corpus coverage with full C++ coverage. |
 | JSON-013 | Historical corpus and typed-state equivalence | Native schema-3 test/corpus registered on draft #555/#556; complete pass pending | `json_v3_document`, native MTF, CLI/Qt smoke and checked-in .par corpus now target first-supported v3; do not cite earlier reference-v2 roundtrips as final proof. |
-| JSON-014 | Platform, sanitizer and real-project validation | No-ZIP PR #549 full CI passed; v3 reference CI pending | GCC O2 checking core/CLI/Qt build; focused core, CLI, full document-lifecycle and workspace-churn smoke pass. Request [ci:all] on the review PR. Field testing remains a beta gate. |
+| JSON-014 | Platform, sanitizer and real-project validation | Draft #556 first full CI: core 73/73 passed; integration/distcheck required corrections; final head pending | First Ubuntu/macOS test jobs compiled and all 73 core unit groups passed. Test failures traced to stale checked-in generated Automake manifests referencing removed v2 corpus; repaired. NSIS plugin architecture mismatch also fixed. Final full CI, Qt Save As/Undo smoke, corpus and 150+ MP field testing remain beta gates. |
 
 ## Target semantic organization (schema 3)
 
@@ -326,3 +326,39 @@ renderer ownership or changing numerical algorithms.
   128 legacy fixtures and field-rich real projects, audit full nested state
   and units, publish authoritative JSON Schema/fixtures, then remove unused
   private v2 codecs once their typed implementations are replaced.
+
+## 15 October 2026: schema-3 runtime integration CI and Undo audit
+
+- Draft PR #556 now uses strict schema-3 JSON on GUI/CLI/sidecars/recovery
+  rather than preserving unreleased JSON-v2. The former Python v2↔v3 reference
+  migration harness is removed from the release suite; only historical `.par`
+  corpus conversion and direct canonical JSON tests are relevant.
+- The first complete CI run compiled the full code across its tested platforms
+  and passed **all 73 core unit-test groups** on normal Ubuntu and macOS.
+  The test stage and distcheck failed because the checked-in generated
+  `testsuite/Makefile.in` still referenced deleted
+  `parameter-v2-corpus.test`; both `.am` and `.in` now reference the
+  schema-3 corpus and no obsolete reference test. This is an infrastructure
+  repair, not a claim that the new corpus passed.
+- Windows installer logs show `makensis` uses the **amd64-unicode**
+  NSIS target. An earlier patch registered `nsDialogs` for `x86-unicode`,
+  which sporadically failed despite the DLL being installed. PR #554 and
+  the integration branch now register the plugin for `amd64-unicode`;
+  final target-architecture CI is still required.
+- Save As was also audited beyond the file writer: source filenames in
+  `ChangeParametersCommand` snapshots are staged for rebasing, and both
+  Undo and Redo are relocated after the atomic save succeeds. On any failed
+  Save, live parameters and Undo commands remain untouched; if an obsolete
+  Undo command cannot be relocated, successful Save As discards the unsafe
+  history with a visible explanation instead of allowing stale relative
+  source paths to be replayed. Qt document-lifecycle smoke now exercises
+  Save As across sibling directories and subsequent Undo/Redo.
+- The complete nested grammar (including an object-valued
+  `capture.linearization`) is checked before dereferencing fields.
+  Malformed scalars and missing transfer modes now receive an error without
+  partially changing a live document.
+- **Still unresolved:** final CI on the updated PR #556 head, full .par
+  fixture conversion and rich real-image testing, authoritative complete
+  JSON Schema and examples, structured prettier output, and removal of
+  obsolete private v2 component codecs when their native implementations are
+  no longer shared by the v3 encoder.
