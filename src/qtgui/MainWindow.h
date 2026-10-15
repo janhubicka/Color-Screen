@@ -38,6 +38,7 @@ class QLabel;
 class QProgressBar;
 class QDialog;
 class QMessageBox;
+class QFileDialog;
 class QPushButton;
 class QWidget;
 #include "ImageWidget.h"
@@ -1060,6 +1061,9 @@ private:
     }
   };
   ParameterFileState m_parameterFile;
+
+  /* Nonblocking source-file chooser for double-clicked .cspar documents. */
+  QPointer<QFileDialog> m_sourceLocateDialog;
 
   /** Presentation ownership for one non-blocking parameter-save failure.
       A newer save attempt supersedes an older warning; save success/failure
