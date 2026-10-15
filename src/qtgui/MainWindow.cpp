@@ -112,8 +112,9 @@ namespace {
     Only short colon-terminated captions are bold; the values remain normal
     weight, including inactive settings. Escape *before* inserting markup so
     image names and calibration metadata can never change the label's HTML.
-    The explicit proportional line height keeps wrapped Next guidance as
-    compact as the adjacent one-line status rows across font/DPI choices. */
+    Avoid block HTML for these single logical paragraphs: QLabel's rich-text
+    paragraph layout can add excessive leading when long Next guidance wraps.
+    Inline markup keeps the label's native font line spacing. */
 QString workflowParagraphHtml(const QString &plain) {
   if (plain.isEmpty())
     return QString();
@@ -130,8 +131,7 @@ QString workflowParagraphHtml(const QString &plain) {
       formatted.append(segment.toHtmlEscaped());
     }
   }
-  return QStringLiteral("<p style=\"margin:0; line-height:100%;\">%1</p>")
-      .arg(formatted.join(QStringLiteral(" &#8226; ")));
+  return formatted.join(QStringLiteral(" &#8226; "));
 }
 
 /** Return the application-level document manager when MainWindow is running
@@ -1130,10 +1130,11 @@ void MainWindow::setupUi() {
   m_configTabs->addTab(m_imageLayerPanel, tr("Image Layer"),
                        QStringLiteral("image_layer"),
                        QStringLiteral("process"));
+  // Choose the original physical screen before optional contact-copy work.
+  m_configTabs->addTab(m_screenPanel, tr("Screen"), QStringLiteral("screen"),
+                       QStringLiteral("process"));
   m_configTabs->addTab(m_contactCopyPanel, tr("Contact copy"),
                        QStringLiteral("contact_copy"),
-                       QStringLiteral("process"));
-  m_configTabs->addTab(m_screenPanel, tr("Screen"), QStringLiteral("screen"),
                        QStringLiteral("process"));
   m_configTabs->addTab(m_geometryPanel, tr("Geometry"),
                        QStringLiteral("geometry"),
@@ -1152,12 +1153,14 @@ void MainWindow::setupUi() {
                                  "algorithms and MTF models.");
   m_configTabs->setTabToolTip(3, "Process — choose or synthesize the analysis "
                                  "image layer, including infrared/dark mixing.");
-  m_configTabs->setTabToolTip(4, "Process — simulate photographic contact "
-                                 "printing on glass plate emulsions using the "
-                                 "H&D curve.");
-  m_configTabs->setTabToolTip(5, "Process/Register — select the physical color "
-                                 "screen type, detect it, and configure "
-                                 "reconstruction.");
+  m_configTabs->setTabToolTip(
+      m_configTabs->indexOfKey(QStringLiteral("screen")),
+      "Process/Register — select the physical color screen type, detect it, "
+      "and configure reconstruction.");
+  m_configTabs->setTabToolTip(
+      m_configTabs->indexOfKey(QStringLiteral("contact_copy")),
+      "Process — simulate photographic contact printing on glass plate "
+      "emulsions using the H&D curve.");
   m_configTabs->setTabToolTip(6,
                               "Register — align screen and image geometry, "
                               "including rotation, tilt, and lens correction.");
