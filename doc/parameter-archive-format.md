@@ -49,6 +49,50 @@ An illustrative *structure*, not a complete valid fixture:
 Every required object is populated according to the authoritative schema;
 the empty objects above are merely an overview, **not** valid input.
 
+## Linked source image
+
+A native `.cspar` may optionally record the scan or stitched-image project
+whose input pixels it calibrates. The `source_image` root member is **not** a
+`render_parameters` value; it is document linkage and is separate from the
+source files referenced by measured-MTF calibration evidence.
+
+```json
+"source_image": {
+  "path": "../scans/plate-42.tif",
+  "base": "parameter_file",
+  "width_px": 15000,
+  "height_px": 10000,
+  "size_bytes": 943718400
+}
+```
+
+Here the displayed fragment is embedded in the full schema-3 root (not a valid
+standalone document). The path may instead be absolute, with `base=absolute`.
+`source_image: null`, or an omitted member in unreleased development files,
+means reusable parameters without a particular source image. Image bytes,
+cached/demosaiced buffers and application preferences are never embedded.
+The on-disk dimensions describe the decoded original scan before cropping.
+
+On ordinary Save/Save As Qt writes the original scan path relative to the
+chosen `.cspar` directory, with an absolute fallback across Windows volumes.
+CLI `adjust-par` rebases that reference when moving a native document.
+Strict readers reject malformed paths, contradictory bases, invalid dimensions
+or unknown nested source metadata without partially changing a document.
+
+The image linked to a double-clicked `.cspar` is resolved relative to the
+document first. When missing, Color-Screen tries one unambiguous nearby scan
+and otherwise offers an asynchronous **Locate source image** file chooser.
+A changed recorded byte size requires operator acknowledgement; decoded
+dimension mismatches prevent saved crop/registration from being applied and
+offer another locate attempt. A relocated image is an unsaved document change
+until the revised path is saved. The existing `<scan>.cspar` automatic
+sidecar discovery when opening an image remains unchanged.
+
+Windows registers a per-user native `.cspar` ProgID, macOS exports the
+`org.colorscreen.parameters` document UTType, and Debian GUI packages
+include a Freedesktop MIME/desktop handler. Historical `.par` files remain
+importable in the GUI after opening a scan, not standalone documents.
+
 ## Persistent ownership
 
 | Section | Responsibility |
