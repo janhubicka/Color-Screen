@@ -4811,7 +4811,8 @@ encode_parameter_json_v3_document (
     const render_parameters &render,
     const solver_parameters &solver,
     const std::vector<point_t> &profile_spots,
-    std::string *output, std::string *error)
+    std::string *output, std::string *error,
+    const parameter_source_image *source_image)
 {
   if (error)
     error->clear ();
@@ -4869,6 +4870,35 @@ encode_parameter_json_v3_document (
         &document, error))
     return false;
 
+  /* Scan provenance is independent of the typed rendering state. An absent
+     reference is valid for reusable parameter documents, while a present
+     source must be unambiguous and match its explicit lexical base. */
+  if (source_image)
+    {
+      if (source_image->path.empty ())
+        {
+          if (source_image->width_px || source_image->height_px
+              || source_image->size_bytes)
+            return archive_fail (error, "unlinked scan has image metadata");
+          document.object_value["source_image"]
+              = v3_node (json_value::kind::null_value);
+        }
+      else
+        {
+          std::string base;
+          if (!valid_utf8 (source_image->path)
+              || !v3_mtf_path_base (source_image->path, &base)
+              || source_image->width_px <= 0 || source_image->height_px <= 0)
+            return archive_fail (error, "invalid source_image path/dimensions");
+          document.object_value["source_image"] = v3_object ({
+            {"path", v3_string (source_image->path)},
+            {"base", v3_string (base)},
+            {"width_px", v3_number (std::to_string (source_image->width_px))},
+            {"height_px", v3_number (std::to_string (source_image->height_px))},
+            {"size_bytes", v3_number (std::to_string (source_image->size_bytes))}});
+        }
+    }
+
   std::string serialized;
   v3_json_text (document, &serialized);
   serialized.push_back ('\n');
@@ -4899,13 +4929,79 @@ v3_named_object (const json_value &parent, const char *key,
   return child;
 }
 
+/* Parse optional scan association before any processing state is published.
+   A missing field is accepted for source-free .cspar documents already
+   produced during development; explicit null means a reusable document. */
+bool
+v3_parse_document_source_image (const json_value &root,
+                                parameter_source_image *out,
+                                std::string *error)
+{
+  const auto found = root.object_value.find ("source_image");
+  parameter_source_image parsed;
+  if (found == root.object_value.end ()
+      || found->second.type == json_value::kind::null_value)
+    {
+      if (out)
+        *out = parsed;
+      return true;
+    }
+  const json_value &node = found->second;
+  if (!v3_mtf_exact_keys (
+        node, {"path", "base", "width_px", "height_px", "size_bytes"},
+        "document.source_image", error))
+    return false;
+  const json_value *path = v3_mtf_required (
+      node, "path", json_value::kind::string,
+      "document.source_image", error);
+  const json_value *base = v3_mtf_required (
+      node, "base", json_value::kind::string,
+      "document.source_image", error);
+  const json_value *width = v3_mtf_required (
+      node, "width_px", json_value::kind::number,
+      "document.source_image", error);
+  const json_value *height = v3_mtf_required (
+      node, "height_px", json_value::kind::number,
+      "document.source_image", error);
+  const json_value *size = v3_mtf_required (
+      node, "size_bytes", json_value::kind::number,
+      "document.source_image", error);
+  std::string actual_base;
+  if (!path || !base || !width || !height || !size
+      || !valid_utf8 (path->text)
+      || !v3_mtf_path_base (path->text, &actual_base)
+      || base->text != actual_base
+      || !v2_json_int (*width, &parsed.width_px)
+      || !v2_json_int (*height, &parsed.height_px)
+      || parsed.width_px <= 0 || parsed.height_px <= 0
+      || !json_uint64 (*size, &parsed.size_bytes))
+    return v3_mtf_fail (error, "document.source_image",
+                        "invalid path, base, dimensions, or size");
+  parsed.path = path->text;
+  if (out)
+    *out = std::move (parsed);
+  return true;
+}
+
 bool
 v3_validate_document_tree (const json_value &root, std::string *error)
 {
-  if (!v3_mtf_exact_keys (
-      root, {"format", "schema_version", "capture", "process", "geometry",
-             "registration", "calibration", "reconstruction", "color"},
-      "document", error))
+  /* source_image is optional and does not belong in the typed process
+     component bridge. Do not loosen the other exact root keys. */
+  const bool has_source = root.type == json_value::kind::object
+      && root.object_value.count ("source_image") != 0;
+  if (!(has_source
+          ? v3_mtf_exact_keys (
+              root, {"format", "schema_version", "capture", "process",
+                     "geometry", "registration", "calibration",
+                     "reconstruction", "color", "source_image"},
+              "document", error)
+          : v3_mtf_exact_keys (
+              root, {"format", "schema_version", "capture", "process",
+                     "geometry", "registration", "calibration",
+                     "reconstruction", "color"},
+              "document", error))
+      || !v3_parse_document_source_image (root, nullptr, error))
     return false;
   const json_value *marker = v3_mtf_required (
       root, "format", json_value::kind::string, "document", error);
@@ -5287,7 +5383,7 @@ decode_parameter_json_v3_document (
     render_parameters *render,
     solver_parameters *solver,
     std::vector<point_t> *profile_spots,
-    std::string *error)
+    std::string *error, parameter_source_image *source_image)
 {
   if (error)
     error->clear ();
@@ -5302,6 +5398,9 @@ decode_parameter_json_v3_document (
   if (!parser.parse (&root))
     return archive_fail (error, "invalid schema-3 JSON: " + parser.error ());
   if (!v3_validate_document_tree (root, error))
+    return false;
+  parameter_source_image parsed_source;
+  if (!v3_parse_document_source_image (root, &parsed_source, error))
     return false;
 
   /* Decode native measured-MTF IDs/source metadata before publishing any
@@ -5344,6 +5443,8 @@ decode_parameter_json_v3_document (
   *render = std::move (parsed_render);
   *solver = std::move (parsed_solver);
   *profile_spots = std::move (parsed_spots);
+  if (source_image)
+    *source_image = std::move (parsed_source);
   return true;
 }
 
@@ -5356,7 +5457,7 @@ read_parameter_json_v3_file (
     const char *name, scr_to_img_parameters *geometry,
     scr_detect_parameters *detection, render_parameters *render,
     solver_parameters *solver, std::vector<point_t> *profile_spots,
-    std::string *error)
+    std::string *error, parameter_source_image *source_image)
 {
   if (error)
     error->clear ();
@@ -5400,7 +5501,8 @@ read_parameter_json_v3_file (
       ok = false;
     }
   return ok && decode_parameter_json_v3_document (
-      contents, geometry, detection, render, solver, profile_spots, error);
+      contents, geometry, detection, render, solver, profile_spots, error,
+      source_image);
 }
 
 /* A complete source and all derived JSON text must validate before touching
@@ -5410,7 +5512,8 @@ write_parameter_json_v3_file (
     const char *name, const scr_to_img_parameters &geometry,
     const scr_detect_parameters &detection,
     const render_parameters &render, const solver_parameters &solver,
-    const std::vector<point_t> &profile_spots, std::string *error)
+    const std::vector<point_t> &profile_spots, std::string *error,
+    const parameter_source_image *source_image)
 {
   if (error)
     error->clear ();
@@ -5419,7 +5522,7 @@ write_parameter_json_v3_file (
   std::string payload;
   if (!encode_parameter_json_v3_document (
           geometry, detection, render, solver,
-          profile_spots, &payload, error))
+          profile_spots, &payload, error, source_image))
     return false;
   return write_parameter_text_file (name, payload, error);
 }
