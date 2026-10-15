@@ -123,6 +123,11 @@ jobs:
         cp README.md /c/Color-Screen-install/
         # Plugin-free built-in NSIS pages work with the MSYS2 amd64 Unicode stub.
         makensis -DSOURCE_DIR="C:\Color-Screen-install" -DOUTFILE="Color-Screen-Installer-${{matrix.sys}}${{matrix.suffix}}.exe" os/windows/installer.nsi
+    - name: Smoke-test NSIS installer and uninstaller
+      if: matrix.suffix == ''
+      shell: pwsh
+      run: |
+        & "$env:GITHUB_WORKSPACE\os\windows\smoke-test-installer.ps1" -InstallerPath "$env:GITHUB_WORKSPACE\os\windows\Color-Screen-Installer-${{matrix.sys}}${{matrix.suffix}}.exe"
     - name: Verify application
       shell: msys2 {0}
       if: matrix.suffix == ''
