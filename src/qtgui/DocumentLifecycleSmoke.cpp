@@ -1910,7 +1910,8 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
           return;
         }
         chooser->selectFile(QFileInfo(state->firstImageFile).absoluteFilePath());
-        chooser->accept();
+        // QFileDialog::accept is protected; invoke the public virtual QDialog slot.
+        static_cast<QDialog *>(chooser)->accept();
         schedule(12, 140, 150);
         return;
       }
