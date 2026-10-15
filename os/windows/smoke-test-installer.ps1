@@ -100,6 +100,19 @@ foreach ($path in @($cli, $gui, $uninstaller,
     }
 }
 
+# Verify Add/Remove Programs registration belongs to this user and the
+# quoted command survives a user profile containing whitespace.
+$uninstallKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Color-Screen'
+if (-not (Test-Path -LiteralPath $uninstallKey)) {
+    throw "Installed package did not register a per-user uninstaller"
+}
+$uninstallRecord = Get-ItemProperty -LiteralPath $uninstallKey
+if ($uninstallRecord.InstallLocation -ne $installDir -or
+    $uninstallRecord.UninstallString -ne ('"{0}"' -f $uninstaller) -or
+    $uninstallRecord.QuietUninstallString -ne ('"{0}" /S' -f $uninstaller)) {
+    throw "Installed package exposed invalid Add/Remove Programs metadata"
+}
+
 # This must run from the copied NSIS payload, not the build/staging tree.
 & $cli --version
 if ($LASTEXITCODE -ne 0) {
@@ -140,6 +153,10 @@ for ($i = 0; $i -lt 30 -and (Test-Path -LiteralPath $installDir); $i++) {
 }
 if (Test-Path -LiteralPath $installDir) {
     throw "Uninstaller left files in $installDir"
+}
+
+if (Test-Path -LiteralPath $uninstallKey) {
+    throw "Silent uninstall left a per-user Add/Remove Programs entry"
 }
 
 foreach ($ext in @('cspar', 'csprj', 'par', 'jpg', 'tif')) {
