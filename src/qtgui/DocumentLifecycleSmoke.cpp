@@ -465,6 +465,37 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
       app.exit(documentLifecycleFailure);
       return;
     }
+    // The current scan is external provenance, not a render parameter.
+    // A fresh .cspar must be double-clickable even after Save As to another
+    // directory. Verify the absolute scan identity and decoded dimensions.
+    {
+      colorscreen::scr_to_img_parameters g;
+      colorscreen::scr_detect_parameters d;
+      colorscreen::render_parameters r;
+      colorscreen::solver_parameters sol;
+      std::vector<colorscreen::point_t> spots;
+      colorscreen::parameter_source_image source;
+      std::string error;
+      const QString expectedScan = QFileInfo(first->currentImageFile())
+                                       .absoluteFilePath();
+      if (!colorscreen::read_parameter_json_v3_file(
+              state->firstParameters.toUtf8().constData(), &g, &d,
+              &r, &sol, &spots, &error, &source) ||
+          source.path.empty() ||
+          source.width_px != first->m_scan->width ||
+          source.height_px != first->m_scan->height ||
+          QDir::cleanPath(
+              QDir(QFileInfo(state->firstParameters).absolutePath())
+                  .absoluteFilePath(
+                      QString::fromStdString(source.path))) !=
+              QDir::cleanPath(expectedScan)) {
+        qCritical() << "Native .cspar did not link its original scan"
+                    << QString::fromStdString(error);
+        app.exit(documentLifecycleFailure);
+        return;
+      }
+    }
+
     // Both fresh .cspar targets and subsequent ordinary Saves use native JSON.
     const QString defaultJsonParams = state->temporaryDirectory->filePath(
         QStringLiteral("default-native-json-v3.cspar"));
