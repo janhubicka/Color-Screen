@@ -1,7 +1,10 @@
 !ifdef COLORSCREEN_NSIS_PLUGIN_DIR
   ; MSYS2 installs Unicode NSIS plugins beside its toolchain. The optional
   ; override is passed by CI; developer installations use normal discovery.
-  !addplugindir /x86-unicode "${COLORSCREEN_NSIS_PLUGIN_DIR}"
+  ; The MSYS2/clang64 and ucrt64 makensis currently emit amd64-unicode
+  ; installers. Explicitly search the same target architecture for nsDialogs;
+  ; x86-unicode discovery is insufficient and fails intermittently.
+  !addplugindir /amd64-unicode "${COLORSCREEN_NSIS_PLUGIN_DIR}"
 !endif
 
 !include "MUI2.nsh"
