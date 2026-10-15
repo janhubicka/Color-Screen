@@ -93,6 +93,24 @@ Windows registers a per-user native `.cspar` ProgID, macOS exports the
 include a Freedesktop MIME/desktop handler. Historical `.par` files remain
 importable in the GUI after opening a scan, not standalone documents.
 
+## External scan association
+
+A native `.cspar` may contain the optional root member `source_image`.
+When present, this metadata identifies an external scan or stitched project
+without embedding its pixels: a path relative to the parameter document (or
+an unambiguous absolute path), decoded width/height, and original byte size.
+`null` means a reusable parameter document without a particular scan.
+The link is not a saved rendering or capture-control parameter.
+
+Opening the `.cspar` from the File → Open Image or Document chooser or a
+desktop file association first resolves the image; a missing image offers an
+asynchronous Locate image dialog. Matching decoded dimensions are required
+before applying calibration and registration; changed byte size is a warning,
+not proof of corruption. After manually locating a moved scan, Save records
+its updated source path and the original file is never silently rewritten.
+A historical `.par` is still imported through File → Open Parameters into
+an already loaded image.
+
 ## Persistent ownership
 
 | Section | Responsibility |
