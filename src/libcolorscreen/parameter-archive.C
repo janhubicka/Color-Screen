@@ -3794,62 +3794,6 @@ parameter_json_signature_p (const char *name)
   return first == '{';
 }
 
-/* Stream a whole native JSON document from UTF-8 PATH while enforcing the
-   codec's input limit before allocating untrusted arrays. No FILE* returned
-   to frontends is disguised as a legacy CSP parameter stream. */
-bool
-read_parameter_json_v2_file (
-    const char *name, scr_to_img_parameters *geometry,
-    scr_detect_parameters *detection, render_parameters *render,
-    solver_parameters *solver, std::vector<point_t> *profile_spots,
-    std::string *error)
-{
-  if (error)
-    error->clear ();
-  if (!name || !geometry || !detection || !render || !solver
-      || !profile_spots)
-    return archive_fail (error, "invalid v2 document file arguments");
-
-  FILE *file = open_utf8_binary_read (name);
-  if (!file)
-    return archive_fail (error, "could not open native JSON v2 file");
-  std::string contents;
-  char buffer[64 * 1024];
-  bool ok = true;
-  while (true)
-    {
-      const size_t count = fread (buffer, 1, sizeof (buffer), file);
-      if (count)
-        {
-          if (count > v2_max_document_bytes - contents.size ())
-            {
-              archive_fail (error, "v2 parameter file exceeds size limit");
-              ok = false;
-              break;
-            }
-          contents.append (buffer, count);
-        }
-      if (count < sizeof (buffer))
-        {
-          if (ferror (file))
-            {
-              archive_fail (error, "error reading native JSON v2 file");
-              ok = false;
-            }
-          break;
-        }
-    }
-  if (fclose (file) != 0)
-    {
-      archive_fail (error, "error closing native JSON v2 file");
-      ok = false;
-    }
-  if (!ok)
-    return false;
-  return decode_parameter_json_v2_document (
-      contents, geometry, detection, render, solver, profile_spots, error);
-}
-
 /* A legacy CSP file can still be edited and saved, but it cannot represent
    parameters introduced as authoritative v1/v2 structured sections. The
    preflight belongs in core so Qt, CLI and future batch writers agree on
@@ -3915,29 +3859,6 @@ validate_parameter_document_file (const char *name, std::string *error)
   return read_parameter_json_v3_file (
       name, &geometry, &detection, &render, &solver, &spots, error);
 }
-
-/* Write all persistent inputs to UTF-8 path NAME as one native JSON document.
-   The text writer stages and atomically replaces the destination. ERROR
-   reports failure without a ZIP wrapper or legacy CSP intermediary. */
-bool
-write_parameter_json_v2_file (
-    const char *name, const scr_to_img_parameters &geometry,
-    const scr_detect_parameters &detection,
-    const render_parameters &render, const solver_parameters &solver,
-    const std::vector<point_t> &profile_spots, std::string *error)
-{
-  if (error)
-    error->clear ();
-  if (!name)
-    return archive_fail (error, "missing native JSON v2 output pathname");
-  std::string document;
-  if (!encode_parameter_json_v2_document (
-          geometry, detection, render, solver, profile_spots,
-          &document, error))
-    return false;
-  return write_parameter_text_file (name, document, error);
-}
-
 
 /* Experimental native schema-3 MTF component. This is deliberately not
    attached to the public .cspar file dispatcher: schema-3 document fields
