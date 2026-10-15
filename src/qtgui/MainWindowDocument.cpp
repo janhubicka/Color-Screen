@@ -1193,7 +1193,8 @@ void MainWindow::maybeOfferInitialSetupGuide(
    completion, the scan is set on ImageWidget, stitch tile loading is launched
    in parallel for .csprj projects, and undo history is cleared.  */
 void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
-                          bool preferCachedRaw) {
+                          bool preferCachedRaw,
+                          const QString &explicitParameterFile) {
   if (fileName.isEmpty())
     return;
 
@@ -1223,6 +1224,7 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
     std::vector<colorscreen::color_match> spotResults;
     QString loadedPath;
     bool loadedJsonV3 = false;
+    colorscreen::parameter_source_image sourceImage;
     QString suggestedPath;
     bool suggestedJsonV3 = false;
     std::optional<ParameterState> baseline;
@@ -1230,6 +1232,22 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
   auto sidecarStaging = std::make_shared<SidecarLoadStaging>();
   if (!suppressParamPrompt)
     sidecarStaging->baseline = getCurrentState();
+  if (!explicitParameterFile.isEmpty()) {
+    // For an Explorer .cspar Open, stage the complete parameter document
+    // before touching the image, previous scan, Undo history or workers.
+    ParameterState staged;
+    QString loadError;
+    if (!loadParameterPayload(
+            explicitParameterFile, &staged, &sidecarStaging->spotResults,
+            &loadError, &sidecarStaging->loadedJsonV3,
+            &sidecarStaging->sourceImage)) {
+      showParameterLoadFailure(this, loadError);
+      return;
+    }
+    sidecarStaging->state = std::move(staged);
+    sidecarStaging->loadedPath =
+        QFileInfo(explicitParameterFile).absoluteFilePath();
+  }
 
   // A failed older load may still have a non-blocking warning open. Starting a
   // new image request supersedes that presentation just like it supersedes the
@@ -1356,6 +1374,11 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
               const ImageReadResult completed = watcher->result();
               const std::pair<bool, QString> &result = completed.status;
               const auto tempScan = completed.scan;
+              const auto &linked = sidecarStaging->sourceImage;
+              const bool mismatchedDimensions =
+                  result.first && tempScan && linked.width_px > 0 &&
+                  (linked.width_px != tempScan->width ||
+                   linked.height_px != tempScan->height);
               removeProgress(progress);
               watcher->deleteLater();
 
@@ -1375,7 +1398,7 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
               m_imageLoad.pending = false;
               m_imageLoad.pendingDemosaic.reset();
 
-              if (result.first) {
+              if (result.first && !mismatchedDimensions) {
                 const bool liveEditsWhileLoading =
                     !suppressParamPrompt && sidecarStaging->baseline &&
                     getCurrentState() != *sidecarStaging->baseline;
@@ -1399,6 +1422,7 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
                       m_profileSpots = std::move(sidecarState.profileSpots);
                       m_profileCalibration.spotResults =
                           std::move(sidecarStaging->spotResults);
+                      m_linkedSourceImage = sidecarStaging->sourceImage;
                       m_parameterFile.setLoaded(
                           sidecarStaging->loadedPath,
                           sidecarStaging->loadedJsonV3
@@ -1431,6 +1455,10 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
                 }
 
                 clearDetectedScreenDiagnostics();
+                if (!sameImageDemosaic && !suppressParamPrompt &&
+                    !sidecarStaging->state)
+                  m_linkedSourceImage = {};
+
                 // A new/reloaded image establishes new geometry and colour-sampling
                 // contexts. Persisted parameter values remain available, but accepted
                 // session provenance from the replaced scan cannot carry across the
@@ -1597,9 +1625,17 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
                 refreshImageAvailabilityPresentation();
                 updateWindowTitle();
                 if (!progress->cancelled()) {
-                  QString messageText =
-                      result.second.isEmpty() ? tr("Failed to load image.")
-                                              : result.second;
+                  QString messageText = mismatchedDimensions
+                      ? tr("The selected image dimensions (%1 × %2) do not "
+                           "match the scan linked by this .cspar (%3 × %4). "
+                           "No parameters were applied. Open the parameter "
+                           "file again and locate the correct scan.")
+                            .arg(tempScan->width)
+                            .arg(tempScan->height)
+                            .arg(linked.width_px)
+                            .arg(linked.height_px)
+                      : (result.second.isEmpty() ? tr("Failed to load image.")
+                                                 : result.second);
                   if (restoreOutgoingImage && outgoingScan && m_scan == outgoingScan)
                     messageText +=
                         tr("\n\nThe previous image remains open.");
@@ -1659,7 +1695,9 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
   // question is presentation state of this exact image-load generation: never
   // enter a nested event loop, and never let an obsolete prompt launch decoding
   // after a newer Open/Reload request has taken ownership.
-  if (!suppressParamPrompt) {
+  if (!explicitParameterFile.isEmpty()) {
+    startImageRead();
+  } else if (!suppressParamPrompt) {
     const QFileInfo fileInfo(requestedImageFile);
     const QString base =
         fileInfo.path() + "/" + fileInfo.completeBaseName();
@@ -1697,10 +1735,11 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
               ParameterState sidecarState;
               std::vector<colorscreen::color_match> sidecarSpotResults;
               bool sidecarJsonV3 = false;
+              colorscreen::parameter_source_image linkedSource;
               QString loadError;
               if (!loadParameterPayload(sidecarFile, &sidecarState,
                                         &sidecarSpotResults, &loadError,
-                                        &sidecarJsonV3)) {
+                                        &sidecarJsonV3, &linkedSource)) {
                 // Parsing failed, so the named sidecar is at most a later
                 // Save-As suggestion. Publish that suggestion only if the
                 // image itself opens successfully.
@@ -1712,6 +1751,7 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
               } else {
                 sidecarStaging->state = std::move(sidecarState);
                 sidecarStaging->spotResults = std::move(sidecarSpotResults);
+                sidecarStaging->sourceImage = std::move(linkedSource);
                 sidecarStaging->loadedPath = sidecarFile;
                 sidecarStaging->loadedJsonV3 = sidecarJsonV3;
               }
