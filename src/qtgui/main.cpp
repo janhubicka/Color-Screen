@@ -2575,13 +2575,21 @@ bool runBetaInvariantSmoke() {
 
   groupedTabs.setTabVisible(groupedCapture, true);
   groupedTabs.setCurrentIndex(groupedCapture);
-  if (groupedDetailBar->isHidden())
-    return fail("restored Capture panel did not reveal second tab row");
+  // Tiles remains explicitly hidden at this point; restoring *one* Capture
+  // panel must restore the stage but still suppress its redundant subtab.
+  if (!groupedDetailBar->isHidden())
+    return fail("restored single Capture panel exposed a redundant tab row");
   if (groupedTabs.currentIndex() != groupedCapture ||
       groupedTabs.currentStageKey() != QStringLiteral("capture") ||
       captureStageButton->isHidden() || groupedChanges != 5 ||
       groupedActivations != 1)
     return fail("restored workflow stage did not support programmatic navigation");
+
+  groupedTabs.setTabVisible(groupedTiles, true);
+  if (groupedDetailBar->isHidden() ||
+      groupedTabs.currentIndex() != groupedCapture ||
+      groupedChanges != 5 || groupedActivations != 1)
+    return fail("restoring the second Capture panel did not restore navigation");
 
   // Checkbox enabledCheck must match the rest of ParameterPanel: a missing
   // prerequisite disables a still-visible row. Logical disappearance is an
