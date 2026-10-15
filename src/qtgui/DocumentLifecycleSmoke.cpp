@@ -575,6 +575,74 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
       return;
     }
 
+    // The canonical parameter file owns relative MTF source paths. Moving
+    // it with Save As must not relink a measurement to the new directory,
+    // and both in-memory state and the reopened document must agree.
+    const QString mtfOldDir =
+        state->temporaryDirectory->filePath(QStringLiteral("mtf-old"));
+    const QString mtfNewDir =
+        state->temporaryDirectory->filePath(QStringLiteral("mtf-new"));
+    const QString mtfOldFile =
+        QDir(mtfOldDir).filePath(QStringLiteral("capture.cspar"));
+    const QString mtfNewFile =
+        QDir(mtfNewDir).filePath(QStringLiteral("capture.cspar"));
+    if (!QDir().mkpath(mtfOldDir) || !QDir().mkpath(mtfNewDir) ||
+        !first->saveParametersToFile(
+            mtfOldFile, MainWindow::ParameterSaveFormat::JsonV3)) {
+      qCritical() << "MTF Save As smoke could not establish an old document";
+      app.exit(documentLifecycleFailure);
+      return;
+    }
+    ParameterState withMtf = first->documentStateSnapshot();
+    auto &mtfSources = withMtf.rparams.sharpen.scanner_mtf;
+    mtfSources.measurements.clear();
+    mtfSources.measured_mtf_idx = -1;
+    colorscreen::mtf_measurement sourceRecord;
+    sourceRecord.name = "MTF Save As evidence";
+    sourceRecord.source_filename = "reference scan.tif";
+    sourceRecord.channel = 1;
+    sourceRecord.wavelength = 540;
+    sourceRecord.add_value(0, 100);
+    sourceRecord.add_value(0.25, 70);
+    sourceRecord.add_value(0.5, 25);
+    mtfSources.measurements.push_back(std::move(sourceRecord));
+    if (!mtfSources.assign_missing_measurement_ids()) {
+      qCritical() << "MTF Save As fixture could not assign document IDs";
+      app.exit(documentLifecycleFailure);
+      return;
+    }
+    const std::string expectedRecordId = mtfSources.measurements[0].id;
+    first->applySharedDocumentState(withMtf, QStringLiteral("MTF source reference"));
+    if (!first->saveParametersToFile(mtfOldFile) ||
+        !first->saveParametersToFile(
+            mtfNewFile, MainWindow::ParameterSaveFormat::JsonV3)) {
+      qCritical() << "MTF Save As smoke could not move the parameter file";
+      app.exit(documentLifecycleFailure);
+      return;
+    }
+    const ParameterState rebasedState = first->documentStateSnapshot();
+    const auto &rebasedMtf = rebasedState.rparams.sharpen.scanner_mtf;
+    if (rebasedMtf.measurements.size() != 1 ||
+        rebasedMtf.measurements[0].id != expectedRecordId ||
+        QString::fromStdString(rebasedMtf.measurements[0].source_filename)
+                .replace(QLatin1Char('\\'), QLatin1Char('/')) !=
+            QStringLiteral("../mtf-old/reference scan.tif") ||
+        !first->loadParameterFile(mtfNewFile) ||
+        first->documentStateSnapshot()
+                .rparams.sharpen.scanner_mtf.measurements[0].source_filename !=
+            rebasedMtf.measurements[0].source_filename) {
+      qCritical() << "MTF Save As changed record identity or source location";
+      app.exit(documentLifecycleFailure);
+      return;
+    }
+    // Leave subsequent malformed-load/recovery assertions on their original
+    // clean canonical state and target.
+    if (!first->loadParameterFile(jsonParams)) {
+      qCritical() << "MTF Save As test could not restore baseline document";
+      app.exit(documentLifecycleFailure);
+      return;
+    }
+
     // A malformed v3 file is rejected transactionally. Do not accept it as
     // legacy CSP, overwrite the live document, or change its loaded target.
     const QString invalidJsonParams =
