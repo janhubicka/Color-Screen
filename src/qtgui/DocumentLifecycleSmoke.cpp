@@ -1013,6 +1013,10 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
         return;
       }
       case -4: {
+        if (app.documentWindows().size() != 2) {
+          retryOrFail(QStringLiteral("Linked chooser probe did not close"));
+          return;
+        }
         // The recorded relative location is missing, but its basename beside
         // the moved .cspar identifies exactly one valid scan.
         if (!state->movedLinkedOpenStarted) {
