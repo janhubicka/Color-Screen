@@ -107,6 +107,15 @@ rebase_parameter_mtf_source_paths (
     mtf_parameters *mtf, const std::string &old_parameter_file,
     const std::string &new_parameter_file, std::string *error);
 
+/* Convert relative MTF image references to absolute spelling for private
+   crash-recovery snapshots. Unlike Save As, recovery has no user-visible
+   document location of its own; references must survive relocation of the
+   snapshot directory. Failure preserves the original MTF state. */
+DLL_PUBLIC bool
+absolutize_parameter_mtf_source_paths (
+    mtf_parameters *mtf, const std::string &parameter_file,
+    std::string *error);
+
 /* Compose one complete native JSON schema-v2 document from the core and
    Qt profile-spot processing/calibration inputs. Every component is encoded
    directly from typed C++ state, without a legacy CSP mirror or ZIP wrapper.
