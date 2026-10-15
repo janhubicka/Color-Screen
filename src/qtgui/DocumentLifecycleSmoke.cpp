@@ -1644,7 +1644,7 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
         return;
       }
 
-      case 6:
+      case 6: {
         QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
         if (state->second ||
             !app.documentWindows().isEmpty() || !app.viewWindows().isEmpty() ||
@@ -1684,6 +1684,7 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
         app.openFiles({missingDocument});
         schedule(7, 80, 100);
         return;
+      }
 
       case 7: {
         const auto docs = app.documentWindows();
