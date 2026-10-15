@@ -148,6 +148,10 @@ public:
   /** Return the absolute path of the image assigned to this document. */
   QString currentImageFile() const { return m_currentImageFile; }
 
+  /** Resolve an MTF source reference relative to the accepted parameter
+      document, never the process working directory or recovery directory. */
+  QString resolveMtfSourcePath(const std::string &sourceName) const;
+
   /** Output format for Save As. Automatic mode retains legacy .par targets;
       new .cspar files use native JSON. The old ZIP parameter format is unsupported. */
   enum class ParameterSaveFormat {
