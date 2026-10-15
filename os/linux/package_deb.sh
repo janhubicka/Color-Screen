@@ -29,6 +29,15 @@ fi
 sed -i "s/Architecture: .*/Architecture: $ARCH/" "$DESTDIR/DEBIAN/control"
 sed -i "s/Version: .*/Version: $VERSION/" "$DESTDIR/DEBIAN/control"
 
+# Register source-linked .cspar documents with Freedesktop file managers.
+# Packaging is intentionally independent of any system-wide default-app
+# choice; the desktop database advertises Color-Screen as a handler.
+if [ -f "$DESTDIR/usr/bin/colorscreen-qt" ]; then
+    mkdir -p "$DESTDIR/usr/share/applications" "$DESTDIR/usr/share/mime/packages"
+    cp os/linux/colorscreen.desktop "$DESTDIR/usr/share/applications/"
+    cp os/linux/colorscreen-parameters.xml "$DESTDIR/usr/share/mime/packages/"
+fi
+
 # Calculate Installed-Size
 INSTALLED_SIZE=$(du -s "$DESTDIR/usr" | cut -f1)
 echo "Installed-Size: $INSTALLED_SIZE" >> "$DESTDIR/DEBIAN/control"
