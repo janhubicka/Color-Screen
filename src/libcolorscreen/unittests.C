@@ -11530,7 +11530,7 @@ test_native_json_v2_document ()
   if (!write_parameter_json_v2_file (
           native_path.c_str (), geometry, detection, render,
           solver, spots, &error)
-      || !parameter_json_v2_signature_p (native_path.c_str ())
+      || !parameter_json_signature_p (native_path.c_str ())
 )
     {
       fprintf (stderr, "Native v2 Unicode-path file save failed: %s\n",
