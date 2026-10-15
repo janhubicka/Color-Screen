@@ -164,6 +164,7 @@ jobs:
           shot_*.png
 
     - uses: actions/upload-artifact@v4
+      if: always()
       with:
         name: windows-installer-${{matrix.sys}}${{matrix.suffix}}
         path: os/windows/Color-Screen-Installer-${{matrix.sys}}${{matrix.suffix}}.exe
