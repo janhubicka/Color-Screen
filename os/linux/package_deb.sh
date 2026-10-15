@@ -32,7 +32,8 @@ sed -i "s/Version: .*/Version: $VERSION/" "$DESTDIR/DEBIAN/control"
 # Register source-linked .cspar documents with Freedesktop file managers.
 # Packaging is intentionally independent of any system-wide default-app
 # choice; the desktop database advertises Color-Screen as a handler.
-if [ -f "$DESTDIR/usr/bin/colorscreen-qt" ]; then
+if [ -f "$DESTDIR/usr/bin/colorscreen-qt" ] ||
+   [ -f "$DESTDIR/usr/local/bin/colorscreen-qt" ]; then
     mkdir -p "$DESTDIR/usr/share/applications" "$DESTDIR/usr/share/mime/packages"
     cp os/linux/colorscreen.desktop "$DESTDIR/usr/share/applications/"
     cp os/linux/colorscreen-parameters.xml "$DESTDIR/usr/share/mime/packages/"
