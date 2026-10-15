@@ -137,7 +137,8 @@ public:
       for crash recovery.  */
   void loadFile(const QString &fileName, bool suppressParamPrompt = false,
                 bool preferCachedRaw = false,
-                const QString &linkedParameterFile = QString());
+                const QString &linkedParameterFile = QString(),
+                bool allowLinkedSizeMismatch = false);
 
   /** Open a native .cspar as a complete document. Validate its embedded
       source-image reference before starting any scan load. When the source
