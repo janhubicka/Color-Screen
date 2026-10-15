@@ -13,6 +13,7 @@ JSON document. ZIP `.csprj` stitching projects are independent and unchanged.
 
 | Root section | Authoritative persistent data |
 | --- | --- |
+| `source_image` (optional) | Linked scan file location and inexpensive image identity hints; independent of all rendering inputs |
 | `capture` | Capture type and RAW method; sRGB/power input linearization; input orientation, physical-object crop and inner photograph area; gain and black level |
 | `process` | Historical screen/process type, red/green strip fractions, dye colour model, density, age, contact-copy response and emulsion curve |
 | `geometry` | Scanner imaging model, mapping centre/axes/tilt/projection, lens model, accepted mesh and final rotation/angle/ratio |
