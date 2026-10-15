@@ -150,9 +150,39 @@ jobs:
             <string>10.13</string>
             <key>NSHighResolutionCapable</key>
             <true/>
+            <key>CFBundleDocumentTypes</key>
+            <array>
+                <dict>
+                    <key>CFBundleTypeName</key>
+                    <string>Color-Screen Parameters</string>
+                    <key>CFBundleTypeRole</key>
+                    <string>Editor</string>
+                    <key>LSHandlerRank</key>
+                    <string>Owner</string>
+                    <key>LSItemContentTypes</key>
+                    <array><string>org.colorscreen.parameters</string></array>
+                </dict>
+            </array>
+            <key>UTExportedTypeDeclarations</key>
+            <array>
+                <dict>
+                    <key>UTTypeIdentifier</key>
+                    <string>org.colorscreen.parameters</string>
+                    <key>UTTypeDescription</key>
+                    <string>Color-Screen Parameters</string>
+                    <key>UTTypeConformsTo</key>
+                    <array><string>public.json</string></array>
+                    <key>UTTypeTagSpecification</key>
+                    <dict>
+                        <key>public.filename-extension</key>
+                        <array><string>cspar</string></array>
+                    </dict>
+                </dict>
+            </array>
         </dict>
         </plist>
         EOF
+        plutil -lint Color-Screen.app/Contents/Info.plist
         
         # Generate Icon
         mkdir icon.iconset
