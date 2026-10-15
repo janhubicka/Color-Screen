@@ -2,8 +2,9 @@
 
 **Status: canonical pre-2.0 design, not yet the active writer.** This document
 replaces the historical ZIP-based alpha proposal, which was never used outside
-development. See [the current implementation tracker](parameter-json-migration-tracking.md)
-and the [schema-3 reference design](parameter-json-v3-reference.md).
+development. See [the current implementation tracker](parameter-json-migration-tracking.md),
+the [machine-readable schema](parameters-schema-v3.json), and the
+[schema-3 reference design](parameter-json-v3-reference.md).
 
 ## Compatibility boundary
 
@@ -22,8 +23,10 @@ embedded CSP text, or binary side payload is required. JSON is also valid
 YAML 1.2 syntax, without importing YAML aliases/tags into our input language.
 
 The current semantic design uses the `org.colorscreen.parameters` format
-identifier and an integer `schema_version` (internally version 3 while
-development revisions are being consolidated). The exact first-shipping
+identifier and integer `schema_version` 3. Structural required fields,
+mode-tagged values and nested types are defined by the checked-in draft-2020-12
+JSON Schema. The library's typed decoder additionally verifies capture-ID
+references, numeric domains, grid dimensions and resource limits. The exact first-shipping
 version marker should be finalized before beta; no alpha JSON files need
 migrating.
 
