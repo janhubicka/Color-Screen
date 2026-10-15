@@ -1,4 +1,5 @@
 #include "MainWindow.h"
+#include "ChangeParametersCommand.h"
 #include "AtomicFileSave.h"
 #include "../libcolorscreen/include/base.h"
 #include "../libcolorscreen/include/render-parameters.h"
@@ -414,6 +415,37 @@ bool MainWindow::saveParametersToFile(
       error = tr("Could not preserve the measured-MTF source images on Save As: %1")
                   .arg(QString::fromStdString(provenanceError));
   }
+  /* Undo commands own parameter snapshots, including MTF provenance from
+     before Save As. Prepare rebased spellings for every retained snapshot
+     before writing. If one obsolete command cannot be translated, preserve
+     the actual Save As but clear unsafe Undo history *after* success. */
+  struct UndoRebase {
+    ChangeParametersCommand *command;
+    ChangeParametersCommand::RebasedMtfPaths paths;
+  };
+  std::vector<UndoRebase> stagedUndo;
+  bool undoRebaseValid = true;
+  if (movingParameterDocument && !unrecognizedExistingTarget &&
+      error.isEmpty() && m_undoStack) {
+    const std::string oldDocument =
+        QFileInfo(m_parameterFile.path).absoluteFilePath()
+            .toUtf8().toStdString();
+    const std::string newDocument = absoluteFileName.toUtf8().toStdString();
+    stagedUndo.reserve(m_undoStack->count());
+    for (int i = 0; i < m_undoStack->count(); ++i) {
+      auto *command = const_cast<ChangeParametersCommand *>(
+          dynamic_cast<const ChangeParametersCommand *>(
+              m_undoStack->command(i)));
+      ChangeParametersCommand::RebasedMtfPaths paths;
+      if (!command || !command->prepareMtfPathRebase(
+                          oldDocument, newDocument, &paths)) {
+        undoRebaseValid = false;
+        stagedUndo.clear();
+        break;
+      }
+      stagedUndo.push_back({command, std::move(paths)});
+    }
+  }
   if (unrecognizedExistingTarget || !error.isEmpty() ||
       !saveParameterPayloadAtomically(
           absoluteFileName, jsonV3, m_scrToImgParams,
@@ -441,12 +473,26 @@ bool MainWindow::saveParametersToFile(
     return false;
   }
 
+  bool clearedUnsafeUndo = false;
   if (movingParameterDocument) {
     /* The file exists and owns the rebased path spellings now. Adopt them
-       only after successful atomic replacement, preserving the same source
-       identities and allowing the inspector to display their new spelling. */
+       only after successful atomic replacement, then rebase Undo snapshots
+       to the same document base before anything can replay an older edit. */
     m_rparams.sharpen.scanner_mtf =
         std::move(outgoingRender.sharpen.scanner_mtf);
+    if (m_undoStack) {
+      if (undoRebaseValid) {
+        for (const UndoRebase &item : stagedUndo)
+          if (!item.command->applyPreparedMtfPaths(item.paths)) {
+            undoRebaseValid = false;
+            break;
+          }
+      }
+      if (!undoRebaseValid) {
+        m_undoStack->clear();
+        clearedUnsafeUndo = true;
+      }
+    }
   }
   m_parameterFile.setLoaded(absoluteFileName, format);
   m_recoveryDirty = false;
@@ -459,7 +505,12 @@ bool MainWindow::saveParametersToFile(
   saveRecoveryState();
 
   statusBar()->showMessage(
-      QString("Parameters saved to %1").arg(absoluteFileName), 3000);
+      clearedUnsafeUndo
+          ? tr("Parameters saved to %1. Undo history was cleared because "
+               "older MTF source references could not be safely relocated.")
+                .arg(absoluteFileName)
+          : tr("Parameters saved to %1").arg(absoluteFileName),
+      clearedUnsafeUndo ? 8000 : 3000);
   return true;
 }
 
