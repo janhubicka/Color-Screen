@@ -5019,7 +5019,12 @@ v3_validate_document_tree (const json_value &root, std::string *error)
   if (!cap || !proc || !geom || !reg || !cal || !rec || !col)
     return false;
 
-  if (!v3_named_object (*cap, "raw", {"demosaic"}, "capture", error)
+  /* Access to LINEARIZATION below must never rely on map::at() for a
+     user-controlled malformed field. Type-check it before the semantic
+     restructuring reads mode/exponent. */
+  if (!v3_mtf_required (*cap, "linearization", json_value::kind::object,
+                         "capture", error)
+      || !v3_named_object (*cap, "raw", {"demosaic"}, "capture", error)
       || !v3_named_object (*cap, "orientation",
                            {"quarter_turns", "mirror"}, "capture", error)
       || !v3_named_object (*cap, "bounds",
