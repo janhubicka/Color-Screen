@@ -683,6 +683,69 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
       return;
     }
 
+    // First Save As is also a move of the MTF provenance base: before a
+    // parameter file is established, source references resolve from the image
+    // directory. Check both the saved document and an existing Undo gesture.
+    const QString firstSaveImage = first->currentImageFile();
+    const QString firstSaveDirectory =
+        state->temporaryDirectory->filePath(QStringLiteral("mtf-first-save"));
+    const QString firstSaveTarget =
+        QDir(firstSaveDirectory).filePath(QStringLiteral("new.cspar"));
+    if (firstSaveImage.isEmpty() || !QDir().mkpath(firstSaveDirectory)) {
+      qCritical() << "MTF first-save smoke has no source image/directory";
+      app.exit(documentLifecycleFailure);
+      return;
+    }
+    const QString originalMtfSource =
+        QDir(QFileInfo(firstSaveImage).absolutePath())
+            .absoluteFilePath(QStringLiteral("reference scan.tif"));
+    first->m_parameterFile.setSuggested(
+        QDir(QFileInfo(firstSaveImage).absolutePath())
+            .filePath(QStringLiteral("suggested.cspar")),
+        MainWindow::ParameterFileState::Format::JsonV3);
+    first->applySharedDocumentState(
+        withMtf, QStringLiteral("Unsaved MTF measurement"));
+    if (!first->m_undoStack || !first->m_undoStack->canUndo() ||
+        !first->saveParametersToFile(
+            firstSaveTarget, MainWindow::ParameterSaveFormat::JsonV3)) {
+      qCritical() << "MTF first-save smoke failed to write a new parameter file";
+      app.exit(documentLifecycleFailure);
+      return;
+    }
+    const auto firstSavedMtf =
+        first->documentStateSnapshot().rparams.sharpen.scanner_mtf;
+    if (firstSavedMtf.measurements.size() != 1 ||
+        firstSavedMtf.measurements[0].id != expectedRecordId ||
+        QDir::cleanPath(
+            QDir(QFileInfo(firstSaveTarget).absolutePath())
+                .absoluteFilePath(
+                    QString::fromStdString(
+                        firstSavedMtf.measurements[0].source_filename))) !=
+            QDir::cleanPath(originalMtfSource)) {
+      qCritical() << "First Save As silently changed MTF source identity";
+      app.exit(documentLifecycleFailure);
+      return;
+    }
+    first->m_undoStack->undo();
+    const auto firstSaveUndo =
+        first->documentStateSnapshot().rparams.sharpen.scanner_mtf;
+    first->m_undoStack->redo();
+    const auto firstSaveRedo =
+        first->documentStateSnapshot().rparams.sharpen.scanner_mtf;
+    if (!firstSaveUndo.measurements.empty() ||
+        firstSaveRedo.measurements.size() != 1 ||
+        firstSaveRedo.measurements[0].source_filename !=
+            firstSavedMtf.measurements[0].source_filename ||
+        !first->loadParameterFile(firstSaveTarget) ||
+        first->documentStateSnapshot()
+                .rparams.sharpen.scanner_mtf.measurements[0].source_filename !=
+            firstSavedMtf.measurements[0].source_filename ||
+        !first->loadParameterFile(jsonParams)) {
+      qCritical() << "First Save As MTF Undo/Redo/reopen lost its source base";
+      app.exit(documentLifecycleFailure);
+      return;
+    }
+
     // A malformed v3 file is rejected transactionally. Do not accept it as
     // legacy CSP, overwrite the live document, or change its loaded target.
     const QString invalidJsonParams =
