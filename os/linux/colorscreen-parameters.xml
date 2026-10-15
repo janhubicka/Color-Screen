@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="application/x-colorscreen-parameters+json">
+    <comment>Color-Screen parameter document</comment>
+    <glob pattern="*.cspar" weight="80"/>
+    <sub-class-of type="application/json"/>
+  </mime-type>
+</mime-info>
