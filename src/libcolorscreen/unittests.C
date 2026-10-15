@@ -11273,6 +11273,14 @@ test_native_json_v3_document ()
           json, "\"linearization\":{\"mode\":\"srgb\"}",
           "\"linearization\":{\"mode\":\"srgb\",\"exponent\":2.2}"),
           "invalid sRGB transfer fields")
+      || !invalid (replace_once (
+          json, "\"linearization\":{\"mode\":\"srgb\"}",
+          "\"linearization\":42"),
+          "non-object input linearization")
+      || !invalid (replace_once (
+          json, "\"linearization\":{\"mode\":\"srgb\"}",
+          "\"linearization\":{}"),
+          "missing input transfer mode")
       || !invalid (replace_once (json, "\"schema_version\":3",
                                   "\"schema_version\":999"),
                    "future schema version")
