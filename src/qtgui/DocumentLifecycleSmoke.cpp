@@ -1670,6 +1670,27 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
           fail(QStringLiteral("Missing-source probe cannot read its saved scan"));
           return;
         }
+        // Opening a new .cspar must revoke an earlier size-mismatch
+        // confirmation even if neither request has decoded an image yet.
+        // Otherwise a delayed click can replace an unrelated newer document.
+        colorscreen::parameter_source_image mismatched = missingSource;
+        const qint64 actualBytes =
+            QFileInfo(state->firstImageFile).size();
+        if (actualBytes <= 0) {
+          fail(QStringLiteral("Linked-source smoke input has no file size"));
+          return;
+        }
+        mismatched.size_bytes = static_cast<uint64_t>(actualBytes) + 1;
+        const QString mismatchDocument =
+            state->temporaryDirectory->filePath(
+                QStringLiteral("stale-source-confirmation.cspar"));
+        if (!colorscreen::write_parameter_json_v3_file(
+                mismatchDocument.toUtf8().constData(), g, d, rp, solver,
+                spots, &problem, &mismatched)) {
+          fail(QStringLiteral("Could not create linked-source mismatch fixture"));
+          return;
+        }
+
         missingSource.path = QStringLiteral("lost/missing-original-image.tif")
                                  .toStdString();
         const QString missingDocument =
@@ -1681,7 +1702,28 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
           fail(QStringLiteral("Could not create missing-source .cspar fixture"));
           return;
         }
-        app.openFiles({missingDocument});
+        app.openFiles({mismatchDocument});
+        const auto incompleteDocs = app.documentWindows();
+        if (incompleteDocs.size() != 1 || !incompleteDocs.constFirst()) {
+          fail(QStringLiteral("Mismatch probe failed to open a blank document"));
+          return;
+        }
+        MainWindow *pending = incompleteDocs.constFirst();
+        QPointer<QMessageBox> obsoleteWarning =
+            pending->m_sourceMismatchPrompt;
+        if (!obsoleteWarning) {
+          fail(QStringLiteral("Linked-source size mismatch did not warn"));
+          return;
+        }
+        pending->openParameterDocument(missingDocument);
+        if (pending->m_sourceMismatchPrompt ||
+            (obsoleteWarning && !obsoleteWarning->isHidden()) ||
+            !pending->m_sourceLocateDialog ||
+            pending->m_imageLoad.pending) {
+          fail(QStringLiteral(
+              "A newer .cspar did not revoke the stale mismatch confirmation"));
+          return;
+        }
         schedule(7, 80, 100);
         return;
       }
