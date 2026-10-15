@@ -14,6 +14,7 @@
 #include <QDebug>
 #include <QFile>
 #include <QFileInfo>
+#include <QFileDialog>
 #include <QMessageBox>
 #include <QMetaObject>
 #include <QObject>
@@ -1653,13 +1654,76 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
             return;
           return;
         }
-        // The same .cspar saved through Qt must open as a complete document
-        // from a desktop/CLI positional path, not as a bogus JSON image.
-        app.openFiles({state->firstParameters});
-        schedule(7, 100, 150);
+        // Opening a moved/missing source must present a nonblocking file
+        // chooser and must not decode JSON as if it contained image pixels.
+        colorscreen::scr_to_img_parameters g;
+        colorscreen::scr_detect_parameters d;
+        colorscreen::render_parameters rp;
+        colorscreen::solver_parameters solver;
+        std::vector<colorscreen::point_t> spots;
+        colorscreen::parameter_source_image missingSource;
+        std::string problem;
+        if (!colorscreen::read_parameter_json_v3_file(
+                state->firstParameters.toUtf8().constData(),
+                &g, &d, &rp, &solver, &spots, &problem, &missingSource) ||
+            missingSource.path.empty()) {
+          fail(QStringLiteral("Missing-source probe cannot read its saved scan"));
+          return;
+        }
+        missingSource.path = QStringLiteral("lost/missing-original-image.tif")
+                                 .toStdString();
+        const QString missingDocument =
+            state->temporaryDirectory->filePath(
+                QStringLiteral("missing-source.cspar"));
+        if (!colorscreen::write_parameter_json_v3_file(
+                missingDocument.toUtf8().constData(), g, d, rp, solver,
+                spots, &problem, &missingSource)) {
+          fail(QStringLiteral("Could not create missing-source .cspar fixture"));
+          return;
+        }
+        app.openFiles({missingDocument});
+        schedule(7, 80, 100);
         return;
 
       case 7: {
+        const auto docs = app.documentWindows();
+        if (docs.size() != 1 || !docs.constFirst()) {
+          if (retryOrFail(QStringLiteral("Missing-source document did not open")))
+            return;
+          return;
+        }
+        MainWindow *missing = docs.constFirst();
+        QFileDialog *chooser = missing->findChild<QFileDialog *>(
+            QStringLiteral("LinkedSourceImageDialog"));
+        if (!chooser || missing->m_imageLoad.pending ||
+            missing->sharedImageData() ||
+            !missing->m_parameterFile.path.isEmpty()) {
+          if (retryOrFail(QStringLiteral(
+                  "Missing-source .cspar did not offer clean Locate image")))
+            return;
+          return;
+        }
+        chooser->reject();
+        app.closeAllDocumentWindows();
+        schedule(8, 70, 100);
+        return;
+      }
+
+      case 8:
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+        if (!app.documentWindows().isEmpty() || app.tabCount() != 0) {
+          if (retryOrFail(QStringLiteral(
+                  "Canceling Locate image left an incomplete document open")))
+            return;
+          return;
+        }
+        // The original .cspar saved through Qt must open as a complete
+        // document from a desktop/CLI positional path, not as a JSON image.
+        app.openFiles({state->firstParameters});
+        schedule(9, 100, 150);
+        return;
+
+      case 9: {
         const auto docs = app.documentWindows();
         if (docs.size() != 1 || !docs.constFirst() ||
             docs.constFirst()->m_imageLoad.pending ||
@@ -1697,11 +1761,11 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
           return;
         }
         app.closeAllDocumentWindows();
-        schedule(8, 80, 120);
+        schedule(10, 80, 120);
         return;
       }
 
-      case 8:
+      case 10:
         QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
         if (!app.documentWindows().isEmpty() || app.tabCount() != 0) {
           if (retryOrFail(QStringLiteral(
