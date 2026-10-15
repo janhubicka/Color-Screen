@@ -11318,6 +11318,95 @@ test_native_json_v3_document ()
       edited.replace (pos, from.size (), to);
       return edited;
     };
+  /* Linked scan identity is a separate optional document-level field.
+     The strict decoder must reject misleading base/dimension changes
+     transactionally while old source-free .cspar documents still work. */
+  parameter_source_image source_image;
+  source_image.path = "../scans/plate 42.tif";
+  source_image.width_px = 15000;
+  source_image.height_px = 10000;
+  source_image.size_bytes = UINT64_C(943718400);
+  std::string linked_json;
+  if (!encode_parameter_json_v3_document (
+          geometry, detection, render, solver, spots, &linked_json,
+          &error, &source_image))
+    return false;
+  parameter_source_image parsed_source;
+  if (!decode_parameter_json_v3_document (
+          linked_json, &parsed_geometry, &parsed_detection, &parsed_render,
+          &parsed_solver, &parsed_spots, &error, &parsed_source)
+      || parsed_source.path != source_image.path
+      || parsed_source.width_px != source_image.width_px
+      || parsed_source.height_px != source_image.height_px
+      || parsed_source.size_bytes != source_image.size_bytes)
+    {
+      fprintf (stderr, "Native schema-3 lost linked scan identity: %s\\n",
+               error.c_str ());
+      return false;
+    }
+  std::string canonical_linked;
+  if (!encode_parameter_json_v3_document (
+          parsed_geometry, parsed_detection, parsed_render, parsed_solver,
+          parsed_spots, &canonical_linked, &error, &parsed_source)
+      || canonical_linked != linked_json)
+    return false;
+
+  /* A malformed linked source must preserve all existing destination data,
+     including the previously accepted source reference. */
+  auto bad_source = [&] (const std::string &edited) -> bool
+    {
+      parameter_source_image retained_source = parsed_source;
+      scr_to_img_parameters g = parsed_geometry;
+      scr_detect_parameters d = parsed_detection;
+      render_parameters r = parsed_render;
+      solver_parameters sp = parsed_solver;
+      std::vector<point_t> spots_copy = parsed_spots;
+      std::string problem;
+      return !decode_parameter_json_v3_document (
+                edited, &g, &d, &r, &sp, &spots_copy,
+                &problem, &retained_source)
+             && !problem.empty ()
+             && retained_source.path == parsed_source.path
+             && retained_source.size_bytes == parsed_source.size_bytes
+             && g == parsed_geometry && d == parsed_detection
+             && r == parsed_render && sp.points == parsed_solver.points
+             && spots_copy == parsed_spots;
+    };
+  if (!bad_source (replace_once (
+          linked_json, "\"base\":\"parameter_file\"",
+          "\"base\":\"absolute\""))
+      || !bad_source (replace_once (
+          linked_json, "\"width_px\":15000", "\"width_px\":0"))
+      || !bad_source (replace_once (
+          linked_json, "\"size_bytes\":943718400", "\"size_bytes\":-1"))
+      || !bad_source (replace_once (
+          linked_json, "\"path\":\"../scans/plate 42.tif\"",
+          "\"path\":\"C:relative.tif\""))
+      || !bad_source (replace_once (
+          linked_json, "\"size_bytes\":943718400",
+          "\"size_bytes\":943718400,\"extra\":1")))
+    {
+      fprintf (stderr, "Schema-3 accepted malformed linked source image\\n");
+      return false;
+    }
+  parameter_source_image detached;
+  std::string reusable_json;
+  if (!encode_parameter_json_v3_document (
+          geometry, detection, render, solver, spots, &reusable_json,
+          &error, &detached)
+      || reusable_json.find ("\"source_image\":null") == std::string::npos
+      || !decode_parameter_json_v3_document (
+          reusable_json, &parsed_geometry, &parsed_detection, &parsed_render,
+          &parsed_solver, &parsed_spots, &error, &parsed_source)
+      || !parsed_source.path.empty ())
+    return false;
+  parsed_source = source_image;
+  if (!decode_parameter_json_v3_document (
+          json, &parsed_geometry, &parsed_detection, &parsed_render,
+          &parsed_solver, &parsed_spots, &error, &parsed_source)
+      || !parsed_source.path.empty ())
+    return false;
+
   if (!invalid (replace_once (json, "\"schema_version\":3",
                               "\"schema_version\":2"), "old JSON-v2 version")
       || !invalid (replace_once (
