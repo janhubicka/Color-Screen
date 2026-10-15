@@ -131,7 +131,7 @@ Undo state, dirty state, filename and previously saved bytes.
 - Test real 150+ MP images and stitched projects under memory pressure before
   beta.
 
-The current 2.0alpha executable still uses the temporary JSON-v2 code.
-It must switch to the canonical format atomically across GUI, CLI and
-recovery; do not publish half-migrated JSON or freeze this document as the
-implemented specification until those tests pass.
+The schema-3 GUI/CLI/recovery switch is implemented on draft PR #556 but
+**not yet merged or release-qualified**. Full platform CI, canonical .par
+corpus, failure-atomic Save As/Undo and large real-image operator tests remain
+beta gates. The implementation deliberately rejects unreleased JSON-v2 files.
