@@ -135,7 +135,8 @@ load_parameter_filename (const char *filename, scr_to_img_parameters *param,
                          solver_parameters *sparam, std::string *error,
                          std::string *trailing_payload = nullptr,
                          bool *is_json_v3 = nullptr,
-                         std::vector<point_t> *profile_spots = nullptr)
+                         std::vector<point_t> *profile_spots = nullptr,
+                         parameter_source_image *source_image = nullptr)
 {
   // Dispatch JSON by signature, then validate the complete typed document.
   if (parameter_json_signature_p (filename))
@@ -145,8 +146,9 @@ load_parameter_filename (const char *filename, scr_to_img_parameters *param,
       render_parameters r;
       solver_parameters solver;
       std::vector<point_t> spots;
+      parameter_source_image linked;
       if (!read_parameter_json_v3_file (
-              filename, &g, &d, &r, &solver, &spots, error))
+              filename, &g, &d, &r, &solver, &spots, error, &linked))
         return false;
       if (param)
         *param = std::move (g);
@@ -158,6 +160,8 @@ load_parameter_filename (const char *filename, scr_to_img_parameters *param,
         *sparam = std::move (solver);
       if (profile_spots)
         *profile_spots = std::move (spots);
+      if (source_image)
+        *source_image = std::move (linked);
       if (is_json_v3)
         *is_json_v3 = true;
       if (trailing_payload)
@@ -229,6 +233,8 @@ load_parameter_filename (const char *filename, scr_to_img_parameters *param,
     }
   if (is_json_v3)
     *is_json_v3 = false;
+  if (source_image)
+    *source_image = {};
   if (profile_spots)
     profile_spots->clear ();
   if (trailing_payload)
@@ -331,7 +337,8 @@ save_parameter_filename (const char *filename, bool json,
                          const solver_parameters *sparam,
                          const std::string &trailing, std::string *error,
                          const std::vector<point_t> *profile_spots = nullptr,
-                         bool explicit_conversion = false)
+                         bool explicit_conversion = false,
+                         const parameter_source_image *source_image = nullptr)
 {
   if (json)
     {
@@ -360,7 +367,8 @@ save_parameter_filename (const char *filename, bool json,
         }
       return write_parameter_json_v3_file (
           filename, *param, *dparam, *rparam, *sparam,
-          profile_spots ? *profile_spots : parsed_spots, error);
+          profile_spots ? *profile_spots : parsed_spots, error,
+          source_image);
     }
   if (!legacy_csp_can_represent_parameters (param, rparam, error))
     return false;
@@ -4481,6 +4489,7 @@ do_adjust_par (int argc, char **argv)
   std::string input_trailing;
   std::string parameter_error;
   std::vector<point_t> profile_spots;
+  parameter_source_image linked_image;
   if (cspname)
     {
       if (verbose)
@@ -4490,7 +4499,8 @@ do_adjust_par (int argc, char **argv)
       if (!load_parameter_filename (cspname, &param, &dparam, &rparam,
                                     &solver_param, &parameter_error,
                                     &input_trailing,
-                                    &input_json_v3, &profile_spots))
+                                    &input_json_v3, &profile_spots,
+                                    &linked_image))
 	{
 	  fprintf (stderr, "Can not load %s: %s\n", cspname,
                    parameter_error.c_str ());
@@ -4546,6 +4556,7 @@ do_adjust_par (int argc, char **argv)
      Rebase on a private snapshot when adjust-par moves the document; a failed
      conversion must not alter the original calibration or target file. */
   render_parameters outgoing = rparam;
+  parameter_source_image outgoing_image = linked_image;
   if (strcmp (cspname, outcspname))
     {
       std::error_code old_ec, new_ec;
@@ -4556,9 +4567,12 @@ do_adjust_par (int argc, char **argv)
       if (old_ec || new_ec
           || !rebase_parameter_mtf_source_paths (
               &outgoing.sharpen.scanner_mtf, old_absolute.u8string (),
+              new_absolute.u8string (), &save_error)
+          || !rebase_parameter_source_image (
+              &outgoing_image, old_absolute.u8string (),
               new_absolute.u8string (), &save_error))
         {
-          fprintf (stderr, "Cannot preserve measured-MTF source paths: %s\n",
+          fprintf (stderr, "Cannot preserve source image/MTF paths: %s\n",
                    save_error.empty () ? "invalid parameter path"
                                       : save_error.c_str ());
           return 1;
@@ -4566,7 +4580,8 @@ do_adjust_par (int argc, char **argv)
     }
   if (!save_parameter_filename (outcspname, output_json_v3, &param, &dparam,
                                 &outgoing, &solver_param, output_trailing,
-                                &save_error, &profile_spots, force_json_v3))
+                                &save_error, &profile_spots, force_json_v3,
+                                &outgoing_image))
     {
       fprintf (stderr, "Cannot save %s: %s\n", outcspname,
                save_error.c_str ());
