@@ -1157,6 +1157,157 @@ void MainWindow::maybeOfferInitialSetupGuide(
   dialog->open();
 }
 
+/** Open a source-linked .cspar as a first-class document. Validate the
+    complete file before choosing or decoding any scan. The path is only a
+    reference: no image bytes or scanner-dependent caches are stored in JSON.
+    A moved scan can be located without changing the original saved file. */
+void MainWindow::openParameterDocument(const QString &fileName,
+                                       bool forceLocateImage) {
+  const QString documentFile = QFileInfo(fileName).absoluteFilePath();
+  ParameterState staged;
+  std::vector<colorscreen::color_match> spots;
+  colorscreen::parameter_source_image source;
+  bool isJson = false;
+  QString problem;
+  if (!loadParameterPayload(documentFile, &staged, &spots, &problem,
+                            &isJson, &source) || !isJson) {
+    showParameterLoadFailure(
+        this, problem.isEmpty()
+                  ? tr("Only complete schema-3 .cspar documents can be opened "
+                       "as image documents.")
+                  : problem);
+    return;
+  }
+
+  if (m_sourceLocateDialog) {
+    m_sourceLocateDialog->close();
+    m_sourceLocateDialog.clear();
+  }
+
+  const QString sourcePath = QString::fromUtf8(source.path.c_str());
+  const QString baseDir = QFileInfo(documentFile).absolutePath();
+  QString candidate;
+  if (!forceLocateImage && !sourcePath.isEmpty()) {
+    const QFileInfo recorded(sourcePath);
+    candidate = recorded.isAbsolute()
+                    ? recorded.absoluteFilePath()
+                    : QDir(baseDir).absoluteFilePath(sourcePath);
+    if (!QFileInfo(candidate).isFile()) {
+      // Moving a scan and its sidecar together, or just replacing its parent
+      // directory, should not require a recursive filesystem search.
+      const QString nearby =
+          QDir(baseDir).absoluteFilePath(recorded.fileName());
+      candidate = QFileInfo(nearby).isFile() ? nearby : QString();
+    }
+    if (candidate.isEmpty()) {
+      const QString stem = QFileInfo(documentFile).completeBaseName();
+      const QStringList extensions = {
+          QStringLiteral("tif"), QStringLiteral("tiff"),
+          QStringLiteral("jpg"), QStringLiteral("jpeg"),
+          QStringLiteral("png"), QStringLiteral("dng"),
+          QStringLiteral("raw"), QStringLiteral("nef"),
+          QStringLiteral("cr2"), QStringLiteral("arw"),
+          QStringLiteral("raf"), QStringLiteral("iiq"),
+          QStringLiteral("csprj")};
+      // Accept only a unique adjacent basename match. Guessing between
+      // multiple scans would risk applying image-specific crop/registration
+      // to the wrong source.
+      for (const QString &ext : extensions) {
+        const QString near = QDir(baseDir).filePath(stem + '.' + ext);
+        if (QFileInfo(near).isFile()) {
+          if (!candidate.isEmpty()) {
+            candidate.clear();
+            break;
+          }
+          candidate = near;
+        }
+      }
+    }
+  }
+
+  // The chooser remains asynchronous, just like existing image and sidecar
+  // selection. It is also used for intentional source-free parameter sets.
+  const auto locate = [this, documentFile, sourcePath, baseDir]() {
+    if (m_closeLifecycle.closing())
+      return;
+    if (m_sourceLocateDialog) {
+      m_sourceLocateDialog->close();
+      m_sourceLocateDialog.clear();
+    }
+    auto *dialog = new QFileDialog(
+        this, tr("Locate source image for %1").arg(
+                  QFileInfo(documentFile).fileName()),
+        sourcePath.isEmpty() ? baseDir
+                             : QDir(baseDir).filePath(
+                                   QFileInfo(sourcePath).fileName()),
+        tr("Images and projects (*.tif *.tiff *.jpg *.jpeg *.png *.jp2 "
+           "*.j2k *.jpc *.jpf *.jpx *.raw *.dng *.iiq *.nef *.cr2 "
+           "*.eip *.arw *.raf *.arq *.csprj);;All Files (*)"));
+    dialog->setObjectName(QStringLiteral("LinkedSourceImageDialog"));
+    dialog->setFileMode(QFileDialog::ExistingFile);
+    dialog->setAttribute(Qt::WA_DeleteOnClose);
+    m_sourceLocateDialog = dialog;
+    connect(dialog, &QFileDialog::accepted, this,
+            [this, documentFile, dialog]() {
+              if (m_sourceLocateDialog != dialog)
+                return;
+              const QStringList chosen = dialog->selectedFiles();
+              m_sourceLocateDialog.clear();
+              if (!chosen.isEmpty()) {
+                // The loader checks decoded dimensions before publishing
+                // schema-3 calibration even for manually relocated scans.
+                loadFile(chosen.constFirst(), false, false, documentFile);
+              }
+            });
+    connect(dialog, &QFileDialog::rejected, this, [this, dialog]() {
+      if (m_sourceLocateDialog == dialog)
+        m_sourceLocateDialog.clear();
+    });
+    dialog->open();
+  };
+  if (candidate.isEmpty()) {
+    locate();
+    return;
+  }
+
+  // A filename match alone is not identity. A changed file size prompts
+  // explicitly, but the decoder later verifies decoded dimensions as well.
+  const QFileInfo imageInfo(candidate);
+  if (source.size_bytes > 0
+      && static_cast<uint64_t>(std::max<qint64>(0, imageInfo.size()))
+             != source.size_bytes) {
+    auto *warning = new QMessageBox(
+        QMessageBox::Warning, tr("Source image may have changed"),
+        tr("The image %1 does not have the original file size recorded "
+           "in %2. Choose another scan or explicitly open this image; "
+           "pixel dimensions will also be checked before calibration "
+           "is applied.").arg(imageInfo.fileName(),
+                              QFileInfo(documentFile).fileName()),
+        QMessageBox::NoButton, this);
+    warning->setObjectName(QStringLiteral("LinkedSourceImageMismatchDialog"));
+    auto *locateButton = warning->addButton(tr("Locate another image"),
+                                            QMessageBox::AcceptRole);
+    auto *openButton = warning->addButton(tr("Open this image"),
+                                          QMessageBox::ActionRole);
+    warning->addButton(QMessageBox::Cancel);
+    warning->setDefaultButton(qobject_cast<QPushButton *>(locateButton));
+    warning->setAttribute(Qt::WA_DeleteOnClose);
+    connect(warning, &QMessageBox::finished, this,
+            [this, warning, locateButton, openButton,
+             candidate, documentFile, locate](int) {
+              if (m_closeLifecycle.closing())
+                return;
+              if (warning->clickedButton() == locateButton)
+                locate();
+              else if (warning->clickedButton() == openButton)
+                loadFile(candidate, false, false, documentFile, true);
+            });
+    warning->open();
+    return;
+  }
+  loadFile(candidate, false, false, documentFile);
+}
+
 /** Load an image file and optionally its associated parameter sidecar.
    If SUPPRESSPARAMPROMPT is false, the optional sidecar decision is presented
    asynchronously and owned by this image-load generation. An accepted sidecar
