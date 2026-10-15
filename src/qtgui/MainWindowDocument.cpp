@@ -1228,7 +1228,8 @@ void MainWindow::openParameterDocument(const QString &fileName,
 
   // The chooser remains asynchronous, just like existing image and sidecar
   // selection. It is also used for intentional source-free parameter sets.
-  const auto locate = [this, documentFile, sourcePath, baseDir]() {
+  const auto locate = [this, documentFile, sourcePath, baseDir,
+                       recordedBytes = source.size_bytes]() {
     if (m_closeLifecycle.closing())
       return;
     if (m_sourceLocateDialog) {
@@ -1249,16 +1250,45 @@ void MainWindow::openParameterDocument(const QString &fileName,
     dialog->setAttribute(Qt::WA_DeleteOnClose);
     m_sourceLocateDialog = dialog;
     connect(dialog, &QFileDialog::accepted, this,
-            [this, documentFile, dialog]() {
+            [this, documentFile, dialog, recordedBytes]() {
               if (m_sourceLocateDialog != dialog)
                 return;
               const QStringList chosen = dialog->selectedFiles();
               m_sourceLocateDialog.clear();
-              if (!chosen.isEmpty()) {
-                // The loader checks decoded dimensions before publishing
-                // schema-3 calibration even for manually relocated scans.
-                loadFile(chosen.constFirst(), false, false, documentFile);
+              if (chosen.isEmpty())
+                return;
+              const QString image = QFileInfo(chosen.constFirst())
+                                        .absoluteFilePath();
+              const bool changedBytes =
+                  recordedBytes &&
+                  static_cast<uint64_t>(std::max<qint64>(
+                      0, QFileInfo(image).size())) != recordedBytes;
+              if (!changedBytes) {
+                loadFile(image, false, false, documentFile);
+                return;
               }
+              // A user may deliberately relink a re-encoded image whose byte
+              // size changed; ask explicitly before retaining its calibration.
+              // Matching decoded dimensions remain mandatory in loadFile.
+              auto *warning = new QMessageBox(
+                  QMessageBox::Warning, tr("Source image may have changed"),
+                  tr("The chosen image differs in size from the scan recorded "
+                     "in this .cspar. Open it anyway? Its decoded dimensions "
+                     "will be checked before calibration is applied."),
+                  QMessageBox::NoButton, this);
+              warning->setObjectName(
+                  QStringLiteral("LinkedSourceImageMismatchDialog"));
+              auto *useButton = warning->addButton(
+                  tr("Open image"), QMessageBox::AcceptRole);
+              warning->addButton(QMessageBox::Cancel);
+              warning->setAttribute(Qt::WA_DeleteOnClose);
+              connect(warning, &QMessageBox::finished, this,
+                      [this, warning, useButton, image, documentFile](int) {
+                        if (!m_closeLifecycle.closing() &&
+                            warning->clickedButton() == useButton)
+                          loadFile(image, false, false, documentFile, true);
+                      });
+              warning->open();
             });
     connect(dialog, &QFileDialog::rejected, this, [this, dialog]() {
       if (m_sourceLocateDialog == dialog)
