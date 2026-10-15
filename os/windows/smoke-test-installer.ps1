@@ -7,10 +7,10 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-# Start-Process -Wait follows descendant processes on Windows. NSIS may
-# spawn a helper (including its elevated/uninstaller process), so that wait
-# can hang even when the original executable has exited. Wait on the actual
-# process handle and always bound the operation.
+# Launch via CreateProcess instead of PowerShell's ShellExecute path:
+# Windows may show SmartScreen/UAC shell UI without an interactive CI desktop.
+# Pass exact arguments (including /D=<path>) and wait on the actual process
+# handle, bounded in time. Report regularly if package extraction stalls.
 function Invoke-BoundedProcess {
     param(
         [Parameter(Mandatory = $true)] [string]$Path,
@@ -19,18 +19,45 @@ function Invoke-BoundedProcess {
         [int]$TimeoutSeconds = 120
     )
     Write-Host "Starting $Phase (timeout: $TimeoutSeconds seconds)"
-    $process = Start-Process -FilePath $Path -ArgumentList $Arguments -PassThru
+    $info = [System.Diagnostics.ProcessStartInfo]::new()
+    $info.FileName = $Path
+    $info.UseShellExecute = $false
+    $info.CreateNoWindow = $true
+    $info.WorkingDirectory = Split-Path -Parent $Path
+    foreach ($argument in $Arguments) {
+        [void]$info.ArgumentList.Add($argument)
+    }
+    $process = [System.Diagnostics.Process]::new()
+    $process.StartInfo = $info
     try {
-        if (-not $process.WaitForExit($TimeoutSeconds * 1000)) {
-            $processId = $process.Id
-            Stop-Process -Id $processId -Force -ErrorAction SilentlyContinue
-            throw "$Phase timed out after $TimeoutSeconds seconds (PID $processId)"
+        if (-not $process.Start()) {
+            throw "$Phase could not start"
         }
-        $exitCode = $process.ExitCode
-        if ($exitCode -ne 0) {
-            throw "$Phase failed with exit code $exitCode"
+        Write-Host "$Phase started as PID $($process.Id), args: $($Arguments -join ' ')"
+        $watch = [System.Diagnostics.Stopwatch]::StartNew()
+        $lastReport = 0
+        while (-not $process.WaitForExit(2000)) {
+            if ($watch.Elapsed.TotalSeconds - $lastReport -ge 15) {
+                $lastReport = $watch.Elapsed.TotalSeconds
+                $process.Refresh()
+                $files = 0
+                if (Test-Path -LiteralPath $installDir) {
+                    $files = @(Get-ChildItem -LiteralPath $installDir -File -Recurse -ErrorAction SilentlyContinue).Count
+                }
+                Write-Host ("$Phase pending: {0:n0}s elapsed, PID {1}, CPU {2:n1}s, {3} extracted files, window '{4}'" -f
+                    $watch.Elapsed.TotalSeconds, $process.Id, $process.TotalProcessorTime.TotalSeconds,
+                    $files, $process.MainWindowTitle)
+            }
+            if ($watch.Elapsed.TotalSeconds -ge $TimeoutSeconds) {
+                $processId = $process.Id
+                Stop-Process -Id $processId -Force -ErrorAction SilentlyContinue
+                throw "$Phase timed out after $TimeoutSeconds seconds (PID $processId)"
+            }
         }
-        Write-Host "$Phase completed successfully."
+        if ($process.ExitCode -ne 0) {
+            throw "$Phase failed with exit code $($process.ExitCode)"
+        }
+        Write-Host "$Phase completed successfully after $([int]$watch.Elapsed.TotalSeconds)s."
     }
     finally {
         $process.Dispose()
