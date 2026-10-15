@@ -2055,12 +2055,22 @@ void MainWindow::saveRecoveryState() {
                << QString::fromStdString(provenanceError);
     return;
   }
+  // Recovery owns a temporary directory, not the user's scan. Make this
+  // private document link absolute, just as for MTF source provenance; it
+  // remains meaningful even if the recovery directory is relocated.
+  colorscreen::parameter_source_image recoverySource = m_linkedSourceImage;
+  if (!m_currentImageFile.isEmpty()) {
+    recoverySource = linkedImageForSave(m_currentImageFile, paramsPath,
+                                       m_scan->width, m_scan->height);
+    recoverySource.path =
+        QFileInfo(m_currentImageFile).absoluteFilePath().toUtf8().toStdString();
+  }
   // A recovery snapshot must contain every persistent calibration input
   // even if the user's normal target remains .par. Keep it independent
   // of legacy CSP and the private snapshot directory's path.
   if (!saveParameterPayloadAtomically(
           paramsPath, true, m_scrToImgParams, &m_detectParams, recoveryRender,
-          m_solverParams, m_profileSpots, &paramsError)) {
+          m_solverParams, m_profileSpots, &paramsError, &recoverySource)) {
     // Preserve the previous usable recovery snapshot and its image/target
     // metadata rather than publishing metadata for a snapshot we did not save.
     qWarning() << "Could not atomically save recovery parameters to" << paramsPath
@@ -2140,9 +2150,11 @@ bool MainWindow::restoreRecoveryState() {
     // state before publication.
     ParameterState recoveredState;
     std::vector<colorscreen::color_match> recoveredSpotResults;
+    colorscreen::parameter_source_image recoveredSource;
     QString loadError;
     if (!loadParameterPayload(paramsPath, &recoveredState,
-                              &recoveredSpotResults, &loadError)) {
+                              &recoveredSpotResults, &loadError, nullptr,
+                              &recoveredSource)) {
       recoveryWarnings.push_back(
           loadError.isEmpty()
               ? tr("The recovered parameter payload is invalid. "
@@ -2157,6 +2169,7 @@ bool MainWindow::restoreRecoveryState() {
       m_solverParams = std::move(recoveredState.solver);
       m_profileSpots = std::move(recoveredState.profileSpots);
       m_profileCalibration.spotResults = std::move(recoveredSpotResults);
+      m_linkedSourceImage = std::move(recoveredSource);
       parametersRecovered = true;
     }
   }
