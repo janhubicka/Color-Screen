@@ -107,6 +107,25 @@ each document has independent:
   Suggested names are not overwrite authority, and failed Save/Open must
   preserve the target, dirty state, Undo and previous file bytes.
 
+**Linked-document opens:** The native `.cspar` is also a double-clickable image
+**document** when it records `source_image`. `ColorScreenApplication::openFiles()`
+dispatches `.cspar` paths (Windows Explorer, positional CLI, macOS Finder's
+`QFileOpenEvent` and Linux desktop open) to the complete v3 decoder, then
+resolves the source scan against the parameter directory. It may use one
+unambiguous same-folder basename fallback after a move; otherwise it presents
+an asynchronous **Locate source scan** chooser. Cancelling neither creates a
+replacement image document nor publishes any calibration. Cheap file-size
+mismatch is confirmed explicitly, and the decoded image's dimensions must
+agree before published registration, crop or calibration is accepted. An
+explicit linked open stages parameters for the image's chosen RAW decoder;
+new and moved file names are not saved into `.cspar` until a successful Save.
+Saving a loaded image writes a relative `source_image` link with decoded
+width/height and size (when known); no 150+ MP hash is computed. Source links
+are Qt-free format metadata, **not** `render_parameters`. Reusable templates
+can have `source_image: null`, while `.par` stays unassociated in Explorer.
+Source identity in private crash recovery is absolute to avoid accidental
+rebasing against temporary directories.
+
 **Parameter files and lifecycle:** Native `.cspar` is a single UTF-8 JSON
 schema-3 document written through `write_parameter_json_v3_file()`, whose
 Qt-free implementation validates the complete typed state and uses the shared
