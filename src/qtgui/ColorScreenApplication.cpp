@@ -3,6 +3,7 @@
 #include "MainWindow.h"
 #include "ImageWidget.h"
 #include "../libcolorscreen/include/cache-stats.h"
+#include "../libcolorscreen/parameter-archive.h"
 #include "ImageViewWindow.h"
 #include "WorkspaceWindow.h"
 
@@ -885,6 +886,161 @@ int ColorScreenApplication::restoreSlantedEdgeReferencesFromRecovery(
   return restored;
 }
 
+/** Verify the optional source-image reference and resolve a .cspar as a
+    complete document, not as an image file. No live document changes until
+    the source has been located and accepted by its asynchronous image load. */
+void ColorScreenApplication::openParameterDocument(
+    const QString &parameterFile, MainWindow *preferredWindow) {
+  const QString parameters = QFileInfo(parameterFile).absoluteFilePath();
+  colorscreen::scr_to_img_parameters geometry;
+  colorscreen::scr_detect_parameters detection;
+  colorscreen::render_parameters render;
+  colorscreen::solver_parameters solver;
+  std::vector<colorscreen::point_t> spots;
+  colorscreen::parameter_source_image linked;
+  std::string diagnostic;
+  if (!colorscreen::read_parameter_json_v3_file(
+          parameters.toUtf8().constData(), &geometry, &detection,
+          &render, &solver, &spots, &diagnostic, &linked)) {
+    auto *warning = new QMessageBox(
+        QMessageBox::Critical, tr("Cannot Open Color-Screen Document"),
+        tr("The parameter file is invalid or unsupported. Nothing was opened.\n\n%1")
+            .arg(QString::fromStdString(diagnostic)),
+        QMessageBox::Ok, workspaceWindow());
+    warning->setObjectName(QStringLiteral("LinkedParameterOpenFailure"));
+    warning->setAttribute(Qt::WA_DeleteOnClose);
+    warning->open();
+    return;
+  }
+
+  const QFileInfo paramInfo(parameters);
+  const QDir base(paramInfo.absolutePath());
+  const QString recorded = QString::fromUtf8(linked.path.c_str());
+  if (!recorded.isEmpty()) {
+    const QFileInfo source(recorded);
+    const QString resolved = source.isAbsolute()
+        ? source.absoluteFilePath() : base.absoluteFilePath(recorded);
+    if (QFileInfo(resolved).isFile()) {
+      openLinkedImage(parameters, resolved, preferredWindow, linked);
+      return;
+    }
+  }
+
+  // Common sidecars survive a folder move even if the embedded older absolute
+  // pathname no longer exists. Do not accidentally bind to an ambiguous scan.
+  QStringList candidates;
+  auto addCandidate = [&candidates](const QString &candidate) {
+    if (QFileInfo(candidate).isFile() && !candidates.contains(candidate))
+      candidates.append(candidate);
+  };
+  if (!recorded.isEmpty())
+    addCandidate(base.filePath(QFileInfo(recorded).fileName()));
+  for (const QString &suffix : {
+           QStringLiteral(".tif"), QStringLiteral(".tiff"),
+           QStringLiteral(".dng"), QStringLiteral(".jpg"),
+           QStringLiteral(".jpeg"), QStringLiteral(".png"),
+           QStringLiteral(".raw"), QStringLiteral(".csprj")})
+    addCandidate(base.filePath(paramInfo.completeBaseName() + suffix));
+  if (candidates.size() == 1) {
+    openLinkedImage(parameters, candidates.constFirst(), preferredWindow, linked);
+    return;
+  }
+
+  chooseSourceForParameters(
+      parameters,
+      recorded.isEmpty()
+          ? tr("This parameter document has no associated scan. Select an image.")
+          : tr("The recorded scan %1 could not be found. Locate its new path.")
+                .arg(recorded),
+      preferredWindow, linked);
+}
+
+/** Offer an asynchronous native image picker for a missing/moved scan.
+    Declining it cannot create a blank document or publish parameters. */
+void ColorScreenApplication::chooseSourceForParameters(
+    const QString &parameterFile, const QString &reason,
+    MainWindow *preferredWindow,
+    const colorscreen::parameter_source_image &reference) {
+  auto *dialog = new QFileDialog(
+      workspaceWindow(),
+      tr("Locate source scan for %1 — %2")
+          .arg(QFileInfo(parameterFile).fileName(), reason),
+      QFileInfo(parameterFile).absolutePath(),
+      tr("Images and projects (*.tif *.tiff *.jpg *.jpeg *.png *.jp2 "
+         "*.raw *.dng *.iiq *.nef *.cr2 *.eip *.arw *.raf *.arq "
+         "*.csprj);;All Files (*)"));
+  dialog->setObjectName(QStringLiteral("LocateLinkedSourceDialog"));
+  dialog->setFileMode(QFileDialog::ExistingFile);
+  dialog->setAcceptMode(QFileDialog::AcceptOpen);
+  dialog->setAttribute(Qt::WA_DeleteOnClose);
+  QPointer<MainWindow> preferred(preferredWindow);
+  connect(dialog, &QFileDialog::accepted, this,
+          [this, dialog, parameterFile, reference, preferred]() {
+    const QStringList selected = dialog->selectedFiles();
+    if (selected.isEmpty())
+      return;
+    const QString chosen = QFileInfo(selected.constFirst()).absoluteFilePath();
+    QTimer::singleShot(0, this,
+        [this, parameterFile, chosen, reference, preferred]() {
+      openLinkedImage(parameterFile, chosen, preferred.data(), reference);
+    });
+  });
+  dialog->open();
+}
+
+/** Confirm changes to inexpensive source identity metadata. Decoded pixel
+    dimensions are independently checked during MainWindow's image load. */
+void ColorScreenApplication::openLinkedImage(
+    const QString &parameterFile, const QString &sourceImage,
+    MainWindow *preferredWindow,
+    const colorscreen::parameter_source_image &reference) {
+  const QFileInfo candidate(sourceImage);
+  if (!candidate.isFile()) {
+    chooseSourceForParameters(parameterFile,
+                              tr("The selected scan is not a readable file."),
+                              preferredWindow, reference);
+    return;
+  }
+  const bool lengthChanged = reference.file_size_bytes > 0
+      && (candidate.size() <= 0 ||
+          static_cast<uint64_t>(candidate.size()) !=
+              reference.file_size_bytes);
+  if (lengthChanged) {
+    auto *question = new QMessageBox(
+        QMessageBox::Warning, tr("Verify Source Scan"),
+        tr("The selected image (%1) has a different file size from the scan "
+           "recorded in this parameter document.\n\n"
+           "Use it anyway? The image dimensions will also be checked before "
+           "any saved calibration is applied.")
+            .arg(candidate.fileName()),
+        QMessageBox::Yes | QMessageBox::No, workspaceWindow());
+    question->setObjectName(QStringLiteral("LinkedSourceMismatchPrompt"));
+    question->setDefaultButton(QMessageBox::No);
+    question->setAttribute(Qt::WA_DeleteOnClose);
+    QPointer<MainWindow> preferred(preferredWindow);
+    connect(question, &QMessageBox::finished, this,
+            [this, parameterFile, sourceImage, reference, preferred](int choice) {
+      if (choice == QMessageBox::Yes) {
+        MainWindow *target = reusableWindow(preferred.data());
+        if (!target)
+          target = createDocumentWindow();
+        target->loadFile(sourceImage, false, false, parameterFile);
+      } else if (choice == QMessageBox::No) {
+        chooseSourceForParameters(
+            parameterFile, tr("Locate the matching source image."),
+            preferred.data(), reference);
+      }
+    });
+    question->open();
+    return;
+  }
+
+  MainWindow *target = reusableWindow(preferredWindow);
+  if (!target)
+    target = createDocumentWindow();
+  target->loadFile(candidate.absoluteFilePath(), false, false, parameterFile);
+}
+
 /** Open a list of images, assigning one complete MainWindow to each image. */
 void ColorScreenApplication::openFiles(const QStringList &fileNames,
                                        MainWindow *preferredWindow,
@@ -895,6 +1051,12 @@ void ColorScreenApplication::openFiles(const QStringList &fileNames,
   for (const QString &fileName : fileNames) {
     if (fileName.trimmed().isEmpty())
       continue;
+    if (fileName.endsWith(QLatin1String(".cspar"), Qt::CaseInsensitive)) {
+      openParameterDocument(fileName, target);
+      openedAny = true;
+      target = nullptr;
+      continue;
+    }
 
     if (!target)
       target = createDocumentWindow();
