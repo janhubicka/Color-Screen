@@ -255,6 +255,25 @@ bool loadParameterPayload(
   return true;
 }
 
+/** Resolve a captured source reference against the accepted parameter
+    location, not Qt's process working directory. Recovery writes absolute
+    source paths so restored images need no private snapshot-dir base. */
+QString MainWindow::resolveMtfSourcePath(const std::string &sourceName) const {
+  const QString spelling = QString::fromUtf8(sourceName.c_str());
+  if (spelling.isEmpty())
+    return QString();
+  const QFileInfo source(spelling);
+  if (source.isAbsolute())
+    return source.absoluteFilePath();
+  const QString oldDocument = !m_parameterFile.path.isEmpty() &&
+                                      !m_parameterFile.suggested
+                                  ? m_parameterFile.path
+                                  : m_currentImageFile;
+  if (oldDocument.isEmpty())
+    return source.absoluteFilePath();
+  return QDir(QFileInfo(oldDocument).absolutePath()).absoluteFilePath(spelling);
+}
+
 /** Return the current text of a named provenance/status label. */
 QString reportStatusText(const QObject *root, const QString &objectName) {
   if (!root)
