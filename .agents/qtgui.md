@@ -126,9 +126,13 @@ lost. The physical-object `scan_crop` includes mounting tapes and borders;
 `image_area` separately marks the photograph itself and may determine the
 default output extent.
 
-On a new `.cspar` Save As, relative MTF reference paths are rebased from the
-old parameter-file directory to the new location while preserving the image
-they identify. That calculation runs on private copies of the live parameters
+On a new `.cspar` Save As, relative MTF reference paths are rebased
+from their **current source base** to the chosen target while preserving the
+image they identify. That base is the established parameter-file directory,
+or the image directory if no parameter file has yet been loaded/saved (even
+when a sidecar filename has merely been suggested). The first Save As to a
+different directory must preserve the same provenance as subsequent Save As
+operations. This calculation runs on private copies of the live parameters
 and the Undo history; only after successful atomic output may the GUI adopt
 the new spellings. If existing Undo state cannot be rebased without loss,
 discard unsafe history with a clear operator explanation rather than allowing
