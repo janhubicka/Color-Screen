@@ -166,6 +166,7 @@ jobs:
         makensis -DSOURCE_DIR="C:\Color-Screen-install" -DOUTFILE="Color-Screen-Installer-${{matrix.sys}}${{matrix.suffix}}.exe" os/windows/installer.nsi
     - name: Smoke-test NSIS installer and uninstaller
       if: matrix.suffix == ''
+      timeout-minutes: 8
       shell: pwsh
       run: |
         & "$env:GITHUB_WORKSPACE\os\windows\smoke-test-installer.ps1" -InstallerPath "$env:GITHUB_WORKSPACE\os\windows\Color-Screen-Installer-${{matrix.sys}}${{matrix.suffix}}.exe"
