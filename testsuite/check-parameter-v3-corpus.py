@@ -107,6 +107,64 @@ def compare_files(reference: Path, replay: Path) -> str | None:
     )
 
 
+def check_linked_source_relocation(
+    folder: Path, initial: dict, schema: dict, program: Path
+) -> str | None:
+    """Exercise the real adjust-par CLI's linked scan Save As contract.
+
+    A file need not be present just to preserve its portable reference.
+    Both input/output directories are temporary and never touch the corpus.
+    """
+    source_dir = folder / "linked-source"
+    moved_dir = folder / "moved" / "nested"
+    source_dir.mkdir(parents=True, exist_ok=True)
+    moved_dir.mkdir(parents=True, exist_ok=True)
+    original = source_dir / "original.cspar"
+    moved = moved_dir / "saved.cspar"
+    linked = copy.deepcopy(initial)
+    linked["source_image"] = {
+        "path": "../scans/plate-42.tif",
+        "base": "parameter_file",
+        "width_px": 15000,
+        "height_px": 10000,
+        "file_size_bytes": 330000000,
+    }
+    try:
+        validate_document(linked, schema)
+        original.write_text(
+            json.dumps(linked, ensure_ascii=False), encoding="utf-8"
+        )
+        error = adjust(program, original, moved)
+        if error:
+            return error
+        relocated = json.loads(moved.read_text(encoding="utf-8"))
+        validate_document(relocated, schema)
+        reference = relocated.get("source_image")
+        if not isinstance(reference, dict):
+            return "CLI Save As erased source_image metadata"
+        if (
+            reference.get("width_px") != 15000
+            or reference.get("height_px") != 10000
+            or reference.get("file_size_bytes") != 330000000
+        ):
+            return "CLI Save As changed linked scan identity hints"
+        old_absolute = (original.parent / linked["source_image"]["path"]).resolve()
+        new_absolute = (moved.parent / reference["path"]).resolve()
+        if old_absolute != new_absolute or reference["path"] == linked["source_image"]["path"]:
+            return "CLI Save As failed to rebase linked scan path"
+
+        # An invalid explicit path base must fail without replacing the target.
+        broken = copy.deepcopy(linked)
+        broken["source_image"]["base"] = "absolute"
+        original.write_text(json.dumps(broken), encoding="utf-8")
+        before = moved.read_bytes()
+        if adjust(program, original, moved) is None or moved.read_bytes() != before:
+            return "CLI accepted invalid linked scan or modified target on failure"
+    except (OSError, ValueError, TypeError, SchemaValidationError) as exc:
+        return f"Linked scan relocation contract failed: {exc}"
+    return None
+
+
 def main() -> int:
     if len(sys.argv) != 3:
         say("usage: check-parameter-v3-corpus.py SOURCE-ROOT COLORSCREEN-EXECUTABLE")
@@ -196,6 +254,9 @@ def main() -> int:
                 error = adjust(program, json_path, json_rewritten)
             if not error and json_path.read_bytes() != json_rewritten.read_bytes():
                 error = "native JSON v3 is not byte-stable after reloading"
+
+            if not error and i == 0:
+                error = check_linked_source_relocation(folder, parsed, schema, program)
 
             if error:
                 failures.append((title, error))
