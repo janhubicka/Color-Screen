@@ -5946,8 +5946,7 @@ const colorscreen::mtf_measurement *MainWindow::currentMtfMeasurementOverlay() c
        measurement->source_height != m_scan->height))
     return nullptr;
 
-  const QFileInfo recorded(
-      QString::fromUtf8(measurement->source_filename.c_str()));
+  const QFileInfo recorded(resolveMtfSourcePath(measurement->source_filename));
   const QFileInfo current(m_currentImageFile);
   if (recorded.absoluteFilePath() == current.absoluteFilePath() ||
       (recorded.fileName() == current.fileName() &&
