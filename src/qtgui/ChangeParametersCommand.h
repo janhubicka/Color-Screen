@@ -4,6 +4,7 @@
 #include "../libcolorscreen/parameter-archive.h"
 
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <QDateTime>
@@ -84,16 +85,17 @@ public:
     return true;
   }
 
-  void applyPreparedMtfPaths(const RebasedMtfPaths &paths) {
+  bool applyPreparedMtfPaths(const RebasedMtfPaths &paths) {
     auto &before = m_oldState.rparams.sharpen.scanner_mtf.measurements;
     auto &after = m_newState.rparams.sharpen.scanner_mtf.measurements;
     if (before.size() != paths.before.size() ||
         after.size() != paths.after.size())
-      return;
+      return false;
     for (size_t i = 0; i < before.size(); ++i)
       before[i].source_filename = paths.before[i];
     for (size_t i = 0; i < after.size(); ++i)
       after[i].source_filename = paths.after[i];
+    return true;
   }
 
   /** Restore the parameter snapshot from before this edit. */
