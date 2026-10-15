@@ -12,6 +12,7 @@ each other. A second JSON rewrite must also preserve canonical JSON bytes.
 
 from __future__ import annotations
 
+import copy
 import difflib
 import json
 import os
@@ -19,6 +20,10 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+
+from parameter_schema_validate import (
+    SchemaValidationError, check_schema, validate_document,
+)
 
 
 def say(message: str) -> None:
@@ -109,6 +114,14 @@ def main() -> int:
 
     root = Path(sys.argv[1]).resolve()
     program = Path(sys.argv[2]).resolve()
+    try:
+        with (root / "doc" / "parameters-schema-v3.json").open(
+                encoding="utf-8") as stream:
+            schema = json.load(stream)
+        check_schema(schema)
+    except (OSError, ValueError, SchemaValidationError) as exc:
+        say(f"Invalid or missing checked-in schema-3 contract: {exc}")
+        return 1
     sources = corpus_files(root)
     found_test = any((root / "testsuite") in p.parents for p in sources)
     found_example = any((root / "examples") in p.parents for p in sources)
@@ -148,6 +161,7 @@ def main() -> int:
                 try:
                     with json_path.open(encoding="utf-8") as stream:
                         parsed = json.load(stream)
+                    validate_document(parsed, schema)
                     if (
                         parsed.get("format") != "org.colorscreen.parameters"
                         or parsed.get("schema_version") != 3
@@ -155,8 +169,25 @@ def main() -> int:
                         or "state" in parsed
                     ):
                         error = "native JSON v3 identity is wrong or includes a legacy mirror"
-                except (OSError, UnicodeError, ValueError, AttributeError) as exc:
-                    error = f"native JSON v3 is unreadable: {exc}"
+                    # Check the independent validator actually enforces the
+                    # two most important schema promises: no unknown keys and
+                    # no unannounced extra or missing required fields.
+                    if i == 0:
+                        extra = copy.deepcopy(parsed)
+                        extra["capture"]["future_setting"] = True
+                        missing = copy.deepcopy(parsed)
+                        del missing["process"]["contact_copy"]
+                        for corrupt in (extra, missing):
+                            try:
+                                validate_document(corrupt, schema)
+                            except SchemaValidationError:
+                                pass
+                            else:
+                                error = "schema validator accepted an illegal document"
+                                break
+                except (OSError, UnicodeError, ValueError, AttributeError,
+                        SchemaValidationError) as exc:
+                    error = f"native JSON v3 is not schema-conformant: {exc}"
             if not error:
                 error = adjust(program, json_path, restored)
             if not error:
