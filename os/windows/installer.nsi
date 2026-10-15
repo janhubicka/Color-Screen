@@ -62,10 +62,11 @@ Section "Install"
         WriteRegStr HKCU "Software\Classes\Color-Screen.${Ext}\DefaultIcon" "" "$INSTDIR\colorscreen-qt.exe,0"
     !macroend
 
-    # A .par/.cspar is only calibration/parameter state, not an image.
-    # Explorer opens positional files as scans; advertising a direct Open
-    # verb for these sidecars would launch an unsupported image load.
-    # Operators open them from File -> Open Parameters after loading a scan.
+    # Native .cspar now opens a linked source scan (with Locate fallback)
+    # before applying parameters, so Explorer can launch it as a document.
+    # Legacy .par remains an image-less calibration preset and is deliberately
+    # imported through File -> Open Parameters instead.
+    !insertmacro RegisterExtension "cspar" "Color-Screen Document"
     !insertmacro RegisterExtension "tif" "TIFF Image"
     !insertmacro RegisterExtension "tiff" "TIFF Image"
     !insertmacro RegisterExtension "jpg" "JPEG Image"
@@ -81,8 +82,9 @@ Section "Install"
     !insertmacro RegisterExtension "arq" "Sony Pixel Shift Raw Image"
     !insertmacro RegisterExtension "csprj" "Color-Screen Project"
 
-    # Only actual image/project files are associated with the executable.
-    # Keep .par/.cspar sidecars independent of Explorer default handlers.
+    # Color-Screen native documents/projects are direct Explorer-open inputs.
+    # Keep .par (which has no source-image link) independent of shell defaults.
+    WriteRegStr HKCU "Software\Classes\.cspar" "" "Color-Screen.cspar"
     WriteRegStr HKCU "Software\Classes\.csprj" "" "Color-Screen.csprj"
     DeleteRegKey HKCU "Software\Classes\Color-Screen.File"
 
@@ -120,6 +122,7 @@ Section "Uninstall"
     !insertmacro UnregisterExtension "arw"
     !insertmacro UnregisterExtension "raf"
     !insertmacro UnregisterExtension "arq"
+    !insertmacro UnregisterExtension "cspar"
     !insertmacro UnregisterExtension "csprj"
 
     DeleteRegKey HKCU "Software\Classes\Color-Screen.File"
