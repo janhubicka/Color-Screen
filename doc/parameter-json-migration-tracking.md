@@ -24,9 +24,12 @@ there is no ZIP parameter-file encoding or decoding path.
 **Compatibility boundary: .par only.** The shipping JSON contract will be
 the semantically organized schema 3. We may replace/remove unreleased JSON-v2
 encoders, readers, flags and migration adapters rather than preserve their
-output or input. In the current alpha checkout, the GUI/CLI still temporarily
-use JSON-v2 until the complete schema-3 reader, writer, Save As, and recovery
-paths are wired and tested together. Do not expose partly written schema 3.
+output or input. The standalone codec in PR #555 and the application
+cutover in draft PR #556 now implement direct schema-3 read/write, Save As
+provenance handling and recovery. These changes are **on review branches,
+not yet merged or release-qualified**. The previous `main` build still uses
+temporary v2. Do not release until full tests establish that schema 3 is
+complete and failure-atomic.
 Tests must assert that legacy .par imports are lossless in their meaningful
 stored inputs and that new schema-3 files can be reopened and rewritten
 canonically; **no JSON-v2 or ZIP compatibility tests are required for release**.
@@ -49,15 +52,15 @@ validation from CI. No beta/final release is authorized by this work.
 | JSON-002 | Delete obsolete ZIP migration paths | Merged PR #549; platform CI passed | Only plain `.par` and JSON can be opened. Tests cover .par-to-JSON conversion, failed Save nonmutation and successful Save without ZIP format identity. |
 | JSON-003 | Validate implicitly overwritten destinations, not just signatures | Implemented, locally tested | Shared full validator rejects `{}`, malformed/future/incomplete/unknown-field/type-invalid JSON and unsupported binary content. Core/CLI/Qt tests preserve bytes and target/Undo; explicit replacement still works. |
 | JSON-004 | Writer/reader aggregate resource-budget agreement | Implemented, locally tested | Every component and full writer preflights the shared node/depth budget before publishing. Boundary/escaped-string/combined-collection tests plus an independent 10,000-tree value-count probe pass. Large real-project memory testing is still required. |
-| JSON-005 | Versioned semantic organization and naming | Reversible reference prototype; C++ codec planned | Complete v2-to-v3 field map below, native codec and single-current-writer dispatch; no persistent field left unmapped. |
-| JSON-006 | Explicit sentinels, units and coordinate conventions | Reference prototype tested; native codec planned | Tagged input transfer; null absent bounds; inactive settings retained; audit pixel/screen/physical coordinate domains. |
+| JSON-005 | Versioned semantic organization and naming | Full native codec and Qt/CLI runtime integration under CI (draft #555/#556) | Seven named semantic domains, shared bounded parser/typed-state checks; no external JSON-v2 compatibility accepted. Audit nested members before beta. |
+| JSON-006 | Explicit sentinels, units and coordinate conventions | Native semantic codec implemented on review branch, not fully qualified | Input sRGB/power transfer, nullable named crop bounds, automatic/fraction strip widths, measured-MTF source status and sample units. Full field/units review remains. |
 | JSON-007 | Stable MTF record identity and explicit capture groups | Reference prototype plus Qt-free in-memory identity/reorder foundations; persistence still planned | Core generates collision-free document-local IDs without replacing existing ones, maps selection to an ID, and refuses legacy reorder that splits a capture. Native schema-3 codec and GUI edit/Save/Save As preservation remain necessary. |
 | JSON-008 | Named heterogeneous measurement metadata | Native isolated C++ MTF codec implemented, under review; full document integration planned | Codec directly writes/reads named edge quality, sample units, source/ROI status, path bases, selected record ID and group IDs without a v2 or Python intermediate. Unknown nested fields reject; full schema-3 document switch remains separate. |
-| JSON-009 | Portable reference provenance | Reference audit and tests; native implementation planned | V3 prototype models absent sources with null, validates absolute versus parameter-relative path bases, rejects contradictory availability flags, and tests an in-memory POSIX/Windows Save As path rebase. Native C++ Save As and GUI lifecycle remain unimplemented. |
+| JSON-009 | Portable reference provenance | Core rebase + GUI/CLI Save As and recovery snapshot implementation in draft #555/#556; CI pending | Lexical POSIX/Windows/UNC paths, cross-volume absolute fallback, validation before mutation, document-relative overlay lookup and absolute references in private recovery. |
 | JSON-010 | Shared field descriptions and clear subsystem boundaries | Planned | Split legacy import, JSON codecs and atomic I/O; avoid three independent field vocabularies. |
 | JSON-011 | Authoritative schema and complete examples | Planned | Checked-in JSON Schema, valid default and rich fixtures; schema/core agreement and unknown-key tests. |
 | JSON-012 | Nested member coverage and field-rich diagnostics | Planned | Nondefault and inactive settings; full object/array paths in failures; don't equate legacy corpus coverage with full C++ coverage. |
-| JSON-013 | Historical corpus and typed-state equivalence | v2/legacy tested; v3 reference 128/128 tested; native v3 planned | All 128 `.par` fixtures round-trip byte-exactly with canonical JSON rewrites on the previous tested revision. Current no-ZIP change must pass the same corpus and typed-state checks; no schema-3 equivalence claim yet. |
+| JSON-013 | Historical corpus and typed-state equivalence | Native schema-3 test/corpus registered on draft #555/#556; complete pass pending | `json_v3_document`, native MTF, CLI/Qt smoke and checked-in .par corpus now target first-supported v3; do not cite earlier reference-v2 roundtrips as final proof. |
 | JSON-014 | Platform, sanitizer and real-project validation | No-ZIP PR #549 full CI passed; v3 reference CI pending | GCC O2 checking core/CLI/Qt build; focused core, CLI, full document-lifecycle and workspace-churn smoke pass. Request [ci:all] on the review PR. Field testing remains a beta gate. |
 
 ## Target semantic organization (schema 3)
@@ -296,3 +299,30 @@ renderer ownership or changing numerical algorithms.
   Qt-free numerical solver and per-channel sharpen selection. Remaining
   work is GUI/editor identity lifecycle, complete parameter codec,
   source-path rebasing, and replacement of temporary v2 GUI/CLI/recovery paths.
+
+## 15 October 2026: canonical document cutover under review
+
+- Draft PR #555 adds complete in-memory/file schema-3 encoder and strict
+  failure-atomic decoder. The implementation temporarily reuses the stable
+  internal C++ component validators for non-MTF fields; this is **not** a
+  JSON-v2 file reader. A later cleanup can remove those private helpers.
+- Draft PR #556 routes GUI/CLI/sidecars/recovery to the schema-3 APIs,
+  updates document-format identities and explicit `--json-v3` conversion,
+  and rejects unreleased old JSON on load. Historical `.par` import assigns
+  MTF IDs once and supported legacy export checks physical grouping.
+- Native MTF source-path relocation is implemented in the core and used
+  on GUI Save As, CLI `adjust-par` and private recovery (absolute snapshot
+  references). Relative source display comparisons resolve against the
+  accepted parameter path.
+- The old Python JSON-v2↔v3 translation test has been removed from the
+  release test matrix. New .par→v3→.par corpus, canonical v3 rewrite, hostile
+  input and Qt lifecycle tests are registered. This is **not yet a pass**.
+- First CI failures caught: #553 macOS unused-group variable (fixed),
+  #555 macOS namespace mismatch (fixed), #556 Ubuntu core test referring
+  to the retired signature function (fixed). The new .test wrapper needed
+  executable mode 100755 (fixed). Platform/sanitizer and corpus results on
+  the final head remain pending.
+- Remaining before beta: pass all platform/distcheck/Qt tests, validate
+  128 legacy fixtures and field-rich real projects, audit full nested state
+  and units, publish authoritative JSON Schema/fixtures, then remove unused
+  private v2 codecs once their typed implementations are replaced.
