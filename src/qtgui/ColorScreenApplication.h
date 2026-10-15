@@ -1,6 +1,8 @@
 #pragma once
 
 #include <QApplication>
+
+namespace colorscreen { struct parameter_source_image; }
 #include <QHash>
 #include <QList>
 #include <QPointer>
@@ -112,6 +114,11 @@ public:
                  MainWindow *preferredWindow = nullptr,
                  bool suppressParamPrompt = false);
 
+  /** Open a .cspar as a complete image document. Resolve its stored scan
+      before creating or replacing any document; ask for a moved scan. */
+  void openParameterDocument(const QString &parameterFile,
+                             MainWindow *preferredWindow = nullptr);
+
   /** Restore all documents left by an unclean shutdown.
 
       The user is prompted once for the whole recovered session.  Returns true
@@ -161,6 +168,19 @@ protected:
   bool event(QEvent *event) override;
 
 private:
+  /** Prompt for a missing linked scan, keeping all existing documents intact
+      when the user cancels the chooser. */
+  void chooseSourceForParameters(
+      const QString &parameterFile, const QString &reason,
+      MainWindow *preferredWindow,
+      const colorscreen::parameter_source_image &reference);
+
+  /** Verify lightweight scan identity hints and load the linked image with
+      the exact prevalidated parameter document, preserving atomic loading. */
+  void openLinkedImage(const QString &parameterFile,
+                       const QString &sourceImage, MainWindow *preferredWindow,
+                       const colorscreen::parameter_source_image &reference);
+
   /** Remove deleted QPointer entries from m_documentWindows. */
   void pruneDocumentWindows();
 
