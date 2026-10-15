@@ -393,3 +393,26 @@ renderer ownership or changing numerical algorithms.
   compatibility boundary; do not add v1/v2 JSON or unused ZIP migration code
   back to unblock beta. Keep the final-release-only PR #510 draft.
 
+## 16 October 2026: standalone source-linked .cspar documents (draft #556)
+
+- The optional top-level `source_image` root member records a source scan or
+  stitched project path, a lexical base, decoded dimensions and original file
+  byte count. `null`/omission means reusable settings. No binary scan is
+  embedded and `render_parameters` remains image-source-free.
+- Native C++ schema-3 reader/writer and the JSON Schema validate this
+  metadata transactionally. Qt saves a relative link on first Save/Save As,
+  and CLI `adjust-par` retains/rebases links using the established
+  host-independent path logic.
+- Opening a .cspar from Explorer/Finder/positional arguments now routes
+  through a prevalidated linked-document open. An original or unique
+  nearby scan is loaded asynchronously, otherwise a Locate image file chooser
+  is shown. File-size changes require acknowledgement and decoded dimension
+  mismatches do not publish calibration. Moved-file linkage is marked dirty.
+- Windows per-user .cspar association, macOS exported UTI and Linux
+  MIME/desktop declarations are staged. Added native core canonical/invalid
+  source tests and Qt lifecycle smoke for Save As and direct .cspar open.
+- **Validation pending:** exact-head Ubuntu/macOS/Windows GCC+Clang,
+  sanitizer, distcheck and manual GUI smoke on the installers. This does
+  not authorize beta release or merge; do not treat earlier CI passes
+  from before the source-link additions as evidence for these revisions.
+
