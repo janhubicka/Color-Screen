@@ -1878,12 +1878,29 @@ void MainWindow::saveRecoveryState() {
   const QString paramsPath =
       directory.filePath(QStringLiteral("recovery_params.cspar"));
   QString paramsError;
-  // A recovery snapshot must contain every persistent input even if the
-  // user's normal target remains .par. The complete native JSON v2
-  // codec and existing atomic staging preserve that invariant without a
-  // second, lossy CSP representation.
+  // Recovery has its own temporary directory, which must never become the
+  // base for relative measured-MTF source paths. Preserve source identity
+  // by writing absolute references to the *private* snapshot only.
+  colorscreen::render_parameters recoveryRender = m_rparams;
+  const QString sourceBase =
+      !m_parameterFile.path.isEmpty() && !m_parameterFile.suggested
+          ? QFileInfo(m_parameterFile.path).absoluteFilePath()
+          : (!m_currentImageFile.isEmpty()
+                 ? QFileInfo(m_currentImageFile).absoluteFilePath()
+                 : QFileInfo(paramsPath).absoluteFilePath());
+  std::string provenanceError;
+  if (!colorscreen::absolutize_parameter_mtf_source_paths(
+          &recoveryRender.sharpen.scanner_mtf,
+          sourceBase.toUtf8().toStdString(), &provenanceError)) {
+    qWarning() << "Could not preserve MTF source paths in recovery snapshot:"
+               << QString::fromStdString(provenanceError);
+    return;
+  }
+  // A recovery snapshot must contain every persistent calibration input
+  // even if the user's normal target remains .par. Keep it independent
+  // of legacy CSP and the private snapshot directory's path.
   if (!saveParameterPayloadAtomically(
-          paramsPath, true, m_scrToImgParams, &m_detectParams, m_rparams,
+          paramsPath, true, m_scrToImgParams, &m_detectParams, recoveryRender,
           m_solverParams, m_profileSpots, &paramsError)) {
     // Preserve the previous usable recovery snapshot and its image/target
     // metadata rather than publishing metadata for a snapshot we did not save.
