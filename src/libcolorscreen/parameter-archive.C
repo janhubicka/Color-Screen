@@ -5819,5 +5819,31 @@ rebase_parameter_mtf_source_paths (
   return true;
 }
 
+/* Save As keeps the external scan attached to the original image, even when
+   the .cspar moves to another directory or Windows volume. */
+bool
+rebase_parameter_source_image (
+    parameter_source_image *source, const std::string &old_parameter_file,
+    const std::string &new_parameter_file, std::string *error)
+{
+  if (error)
+    error->clear ();
+  if (!source)
+    return archive_fail (error, "missing source-image rebase destination");
+  v3_absolute_path from, to;
+  if (!v3_parse_absolute_path (old_parameter_file, &from)
+      || !v3_parse_absolute_path (new_parameter_file, &to)
+      || from.windows != to.windows)
+    return archive_fail (error,
+                         "source-image Save As requires absolute paths on one platform");
+  std::string rewritten;
+  if (!v3_rebase_one_path (source->path, from, to, &rewritten))
+    return archive_fail (error, "invalid linked source-image path for Save As");
+  parameter_source_image staged = *source;
+  staged.path = std::move (rewritten);
+  *source = std::move (staged);
+  return true;
+}
+
 
 }
