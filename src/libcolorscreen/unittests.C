@@ -11093,6 +11093,162 @@ test_legacy_csp_representability ()
 }
 
 
+/* The optional linked scan belongs to a document, not render_parameters.
+   Exercise canonical JSON, corruption nonmutation, portable Save As, and
+   Unicode file I/O without reading a large real scan. */
+static bool
+test_native_json_v3_source_image ()
+{
+  scr_to_img_parameters geometry;
+  scr_detect_parameters detection;
+  render_parameters render;
+  solver_parameters solver;
+  std::vector<point_t> spots;
+  parameter_source_image link;
+  link.path = u8"../scans/žlutoučký.tif";
+  link.width_px = 5000;
+  link.height_px = 3000;
+  link.file_size_bytes = UINT64_C (150123456);
+
+  std::string error, payload, plain, canonical;
+  if (!encode_parameter_json_v3_document (
+          geometry, detection, render, solver, spots, &payload, &error, &link)
+      || payload.find ("\"source_image\":{") == std::string::npos
+      || payload.find ("\"base\":\"parameter_file\"") == std::string::npos
+      || !encode_parameter_json_v3_document (
+          geometry, detection, render, solver, spots, &plain, &error)
+      || plain.find ("\"source_image\"") != std::string::npos)
+    {
+      fprintf (stderr, "Source-image JSON writing failed: %s\n", error.c_str ());
+      return false;
+    }
+
+  parameter_source_image decoded;
+  scr_to_img_parameters g;
+  scr_detect_parameters d;
+  render_parameters r;
+  solver_parameters p;
+  std::vector<point_t> ps;
+  if (!decode_parameter_json_v3_document (
+          payload, &g, &d, &r, &p, &ps, &error, &decoded)
+      || decoded.path != link.path || decoded.width_px != link.width_px
+      || decoded.height_px != link.height_px
+      || decoded.file_size_bytes != link.file_size_bytes
+      || !encode_parameter_json_v3_document (
+          g, d, r, p, ps, &canonical, &error, &decoded)
+      || canonical != payload)
+    {
+      fprintf (stderr, "Linked scan canonical roundtrip failed: %s\n",
+               error.c_str ());
+      return false;
+    }
+
+  auto must_reject = [&] (const std::string &text) {
+    decoded.path = "unchanged";
+    decoded.width_px = 127;
+    g.center.x = 987.25;
+    if (decode_parameter_json_v3_document (
+          text, &g, &d, &r, &p, &ps, &error, &decoded)
+        || decoded.path != "unchanged" || decoded.width_px != 127
+        || g.center.x != 987.25)
+      return false;
+    return true;
+  };
+  std::string bad = payload;
+  const std::string base_good = "\"base\":\"parameter_file\"";
+  const size_t base_pos = bad.find (base_good);
+  if (base_pos == std::string::npos)
+    return false;
+  bad.replace (base_pos, base_good.size (), "\"base\":\"absolute\"");
+  if (!must_reject (bad))
+    return false;
+
+  bad = payload;
+  const std::string field = "\"source_image\":{";
+  const size_t field_pos = bad.find (field);
+  if (field_pos == std::string::npos)
+    return false;
+  bad.replace (field_pos, field.size (),
+               "\"source_image\":{\"unexpected\":1,");
+  if (!must_reject (bad))
+    return false;
+
+  bad = payload;
+  const std::string dimension = "\"width_px\":5000";
+  const size_t dimension_pos = bad.find (dimension);
+  if (dimension_pos == std::string::npos)
+    return false;
+  bad.replace (dimension_pos, dimension.size (), "\"width_px\":null");
+  if (!must_reject (bad))
+    return false;
+
+  parameter_source_image unbound;
+  if (!encode_parameter_json_v3_document (
+          geometry, detection, render, solver, spots, &plain, &error, &unbound)
+      || plain.find ("\"source_image\":null") == std::string::npos
+      || !decode_parameter_json_v3_document (
+          plain, &g, &d, &r, &p, &ps, &error, &decoded)
+      || !decoded.path.empty ())
+    return false;
+
+  const std::string filename = u8"linked-source-žluťoučký.cspar";
+  struct file_cleanup
+  {
+    std::filesystem::path path;
+    ~file_cleanup () {
+      std::error_code ec;
+      std::filesystem::remove (path, ec);
+    }
+  } cleanup {std::filesystem::u8path (filename)};
+  if (!write_parameter_json_v3_file (
+          filename.c_str (), geometry, detection, render, solver, spots,
+          &error, &link)
+      || !validate_parameter_document_file (filename.c_str (), &error)
+      || !read_parameter_json_v3_file (
+          filename.c_str (), &g, &d, &r, &p, &ps, &error, &decoded)
+      || decoded.path != link.path || decoded.file_size_bytes != link.file_size_bytes)
+    {
+      fprintf (stderr, "Linked Unicode document I/O failed: %s\n",
+               error.c_str ());
+      return false;
+    }
+  parameter_source_image invalid = link;
+  invalid.path = "C:drive-relative.tif";
+  if (write_parameter_json_v3_file (
+          filename.c_str (), geometry, detection, render, solver, spots,
+          &error, &invalid))
+    return false;
+  {
+    std::ifstream saved (std::filesystem::u8path (filename), std::ios::binary);
+    const std::string bytes {(std::istreambuf_iterator<char> (saved)),
+                              std::istreambuf_iterator<char> ()};
+    if (bytes != payload)
+      return false; // A failed Save must never replace a good .cspar.
+  }
+
+  parameter_source_image moved = link;
+  if (!rebase_parameter_source_image_path (
+          &moved, "/project/params/old.cspar",
+          "/project/exports/sub/new.cspar", &error)
+      || moved.path != "../../scans/žlutoučký.tif"
+      || moved.width_px != link.width_px
+      || moved.file_size_bytes != link.file_size_bytes)
+    return false;
+  moved.path = "..\\scans\\plate.tif";
+  if (!rebase_parameter_source_image_path (
+          &moved, "C:\\photos\\params\\old.cspar",
+          "D:\\out\\new.cspar", &error)
+      || moved.path != "C:\\photos\\scans\\plate.tif")
+    return false;
+  moved.path = "C:ambiguous.tif";
+  if (rebase_parameter_source_image_path (
+          &moved, "C:\\photos\\params\\old.cspar",
+          "D:\\out\\new.cspar", &error)
+      || moved.path != "C:ambiguous.tif")
+    return false;
+  return true;
+}
+
 /* Exercise the complete first-shipping semantic JSON layout directly from
    typed state. The old v2 component helpers remain an internal implementation
    detail; v2 JSON is not an accepted file-format compatibility contract. */
@@ -13343,6 +13499,8 @@ main (int argc, char **argv)
       [] () { return test_legacy_csp_representability (); } },
     { "json_v3_document", "complete canonical schema-3 JSON document roundtrip",
       [] () { return test_native_json_v3_document (); } },
+    { "json_v3_source_image", "linked scan source/identity/rebase and failure atomicity",
+      [] () { return test_native_json_v3_source_image (); } },
     { "json_v2_document", "complete native schema-v2 JSON document roundtrip",
       [] () { return test_native_json_v2_document (); } },
     { "json_v2_correction_grids", "native JSON schema-v2 spatial correction grid codec",
