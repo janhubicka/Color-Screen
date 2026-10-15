@@ -613,8 +613,19 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
     }
     const std::string expectedRecordId = mtfSources.measurements[0].id;
     first->applySharedDocumentState(withMtf, QStringLiteral("MTF source reference"));
-    if (!first->saveParametersToFile(mtfOldFile) ||
-        !first->saveParametersToFile(
+    if (!first->saveParametersToFile(mtfOldFile)) {
+      qCritical() << "MTF Save As smoke could not save the initial evidence";
+      app.exit(documentLifecycleFailure);
+      return;
+    }
+    /* This pre-Save-As Undo command contains relative MTF paths in BOTH
+       snapshots. Undo/Redo after moving the document must rebase them too. */
+    ParameterState renamedMtf = first->documentStateSnapshot();
+    renamedMtf.rparams.sharpen.scanner_mtf.measurements[0].name =
+        "MTF Save As renamed";
+    first->applySharedDocumentState(renamedMtf,
+                                    QStringLiteral("Rename MTF evidence"));
+    if (!first->saveParametersToFile(
             mtfNewFile, MainWindow::ParameterSaveFormat::JsonV3)) {
       qCritical() << "MTF Save As smoke could not move the parameter file";
       app.exit(documentLifecycleFailure);
@@ -622,6 +633,35 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
     }
     const ParameterState rebasedState = first->documentStateSnapshot();
     const auto &rebasedMtf = rebasedState.rparams.sharpen.scanner_mtf;
+    const std::string expectedRebasedPath =
+        rebasedMtf.measurements.empty()
+            ? std::string()
+            : rebasedMtf.measurements[0].source_filename;
+    if (!first->m_undoStack || !first->m_undoStack->canUndo()) {
+      qCritical() << "Save As unexpectedly discarded a valid MTF Undo edit";
+      app.exit(documentLifecycleFailure);
+      return;
+    }
+    first->m_undoStack->undo();
+    const auto undoMtf =
+        first->documentStateSnapshot().rparams.sharpen.scanner_mtf;
+    if (undoMtf.measurements.size() != 1 ||
+        undoMtf.measurements[0].name != "MTF Save As evidence" ||
+        undoMtf.measurements[0].source_filename != expectedRebasedPath) {
+      qCritical() << "Undo after Save As returned stale MTF source location";
+      app.exit(documentLifecycleFailure);
+      return;
+    }
+    first->m_undoStack->redo();
+    const auto redoMtf =
+        first->documentStateSnapshot().rparams.sharpen.scanner_mtf;
+    if (redoMtf.measurements.size() != 1 ||
+        redoMtf.measurements[0].name != "MTF Save As renamed" ||
+        redoMtf.measurements[0].source_filename != expectedRebasedPath) {
+      qCritical() << "Redo after Save As returned stale MTF source location";
+      app.exit(documentLifecycleFailure);
+      return;
+    }
     if (rebasedMtf.measurements.size() != 1 ||
         rebasedMtf.measurements[0].id != expectedRecordId ||
         QString::fromStdString(rebasedMtf.measurements[0].source_filename)
