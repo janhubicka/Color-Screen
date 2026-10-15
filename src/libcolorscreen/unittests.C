@@ -11521,11 +11521,11 @@ test_native_json_v2_document ()
       return false;
     }
 
-  /* Exercise the explicit on-disk v2 API without altering the normal
-     alpha GUI/CLI Save preference. It must write plain UTF-8 JSON and use
-     the same Unicode-path atomic staging as the existing v1 writer. */
+  /* Exercise only the first supported on-disk JSON API (schema 3).
+     The v2-named component tests above are internal bridge validation,
+     not evidence that unshipped JSON-v2 files remain loadable. */
   const std::string native_path
-      = u8"native-v2-žluťoučký-測試.cspar";
+      = u8"native-v3-žluťoučký-測試.cspar";
   struct native_path_cleanup
   {
     std::filesystem::path path;
@@ -11535,13 +11535,15 @@ test_native_json_v2_document ()
       std::filesystem::remove (path, ignored);
     }
   } cleanup {std::filesystem::u8path (native_path)};
-  if (!write_parameter_json_v2_file (
+  std::string canonical_v3;
+  if (!encode_parameter_json_v3_document (
+          geometry, detection, render, solver, spots, &canonical_v3, &error)
+      || !write_parameter_json_v3_file (
           native_path.c_str (), geometry, detection, render,
           solver, spots, &error)
-      || !parameter_json_signature_p (native_path.c_str ())
-)
+      || !parameter_json_signature_p (native_path.c_str ()))
     {
-      fprintf (stderr, "Native v2 Unicode-path file save failed: %s\n",
+      fprintf (stderr, "Native v3 Unicode-path file save failed: %s\n",
                error.c_str ());
       return false;
     }
@@ -11551,11 +11553,10 @@ test_native_json_v2_document ()
     const std::string bytes {
         std::istreambuf_iterator<char> (input),
         std::istreambuf_iterator<char> ()};
-    if (!input.good () && !input.eof ())
-      return false;
-    if (bytes != first)
+    if ((!input.good () && !input.eof ()) || bytes != canonical_v3)
       {
-        fprintf (stderr, "Native v2 file did not contain plain canonical JSON\n");
+        fprintf (stderr,
+                 "Native v3 file did not contain plain canonical JSON\n");
         return false;
       }
   }
@@ -11564,36 +11565,37 @@ test_native_json_v2_document ()
   render_parameters loaded_render;
   solver_parameters loaded_solver;
   std::vector<point_t> loaded_spots;
-  if (!read_parameter_json_v2_file (
+  if (!read_parameter_json_v3_file (
           native_path.c_str (), &loaded_geometry, &loaded_detection,
           &loaded_render, &loaded_solver, &loaded_spots, &error)
-      || !encode_parameter_json_v2_document (
+      || !encode_parameter_json_v3_document (
           loaded_geometry, loaded_detection, loaded_render, loaded_solver,
           loaded_spots, &canonical, &error)
-      || canonical != first)
+      || canonical != canonical_v3)
     {
-      fprintf (stderr, "Native v2 Unicode-path file roundtrip failed: %s\n",
+      fprintf (stderr, "Native v3 Unicode-path roundtrip failed: %s\n",
                error.c_str ());
       return false;
     }
-  /* Independently loaded resources compare by value, while an actual
-     calibration edit must be visible. This also checks mesh and backlight
-     data rather than just the pointer identities.  */
-  if (!(loaded_geometry == geometry) || !(loaded_render == render))
+  /* A native .par-based state is upgraded to IDs when writing JSON.
+     Compare persistent fields after that one-time migration. */
+  render_parameters upgraded_render = render;
+  if (!upgraded_render.sharpen.scanner_mtf.assign_missing_measurement_ids ()
+      || !(loaded_geometry == geometry)
+      || !(loaded_render == upgraded_render))
     return false;
   loaded_geometry.mesh_trans->set_point ({1, 1}, {3.125, 2.25});
   if (loaded_geometry == geometry)
     return false;
   loaded_render.backlight_correction->set_luminosity (
       0, 0, 0.75f, backlight_correction_parameters::red);
-  if (loaded_render == render)
+  if (loaded_render == upgraded_render)
     return false;
 
-  /* A failed attempted replacement must leave the last good file byte
-     for byte intact, never even opening the target for truncation. */
+  /* Failed replacement may not truncate the previous good schema-3 file. */
   render_parameters invalid_render = render;
   invalid_render.gamma = my_quiet_nan<luminosity_t> ();
-  if (write_parameter_json_v2_file (
+  if (write_parameter_json_v3_file (
           native_path.c_str (), geometry, detection, invalid_render,
           solver, spots, &error))
     return false;
@@ -11603,7 +11605,7 @@ test_native_json_v2_document ()
     const std::string bytes {
         std::istreambuf_iterator<char> (input),
         std::istreambuf_iterator<char> ()};
-    if (bytes != first)
+    if (bytes != canonical_v3)
       return false;
   }
 
