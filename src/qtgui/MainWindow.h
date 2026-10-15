@@ -135,7 +135,14 @@ public:
       an occupied window is never overwritten.  SUPPRESSPARAMPROMPT is reserved
       for crash recovery.  */
   void loadFile(const QString &fileName, bool suppressParamPrompt = false,
-                bool preferCachedRaw = false);
+                bool preferCachedRaw = false,
+                const QString &linkedParameterFile = QString());
+
+  /** Open a native .cspar as a complete document. Validate its embedded
+      source-image reference before starting any scan load. When the source
+      moved or the parameters are reusable, ask for an image asynchronously. */
+  void openParameterDocument(const QString &fileName,
+                             bool forceLocateImage = false);
 
   /** Return true when this untouched empty window may host a newly opened
       image instead of allocating another document window.  */
