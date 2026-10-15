@@ -81,7 +81,13 @@ It lets user to effectively move around the image
 Opening an image must not replace an occupied document. All entry points—File
 Open (including multi-selection), recent files, positional command-line paths,
 and `QFileOpenEvent` from the desktop—route through
-`ColorScreenApplication::openFiles()`. The first path may reuse an untouched
+`ColorScreenApplication::openFiles()`. The Ctrl+O image/document chooser also
+advertises source-linked `.cspar` documents alongside scans. The `.cspar`
+loader stages and validates all parameters before decoding its linked scan,
+and falls back to a cancellable Locate image chooser if that source moved;
+a successful relink is dirty until Save writes its new relative path.
+Historical `.par` remains an import through File → Open Parameters into
+an already opened image. The first path may reuse an untouched
 empty document; every other path receives a new `MainWindow` and is attached
 to the primary workspace by default.
 
