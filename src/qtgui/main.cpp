@@ -2457,6 +2457,19 @@ bool runBetaInvariantSmoke() {
       userActivations != 1)
     return fail("user inspector activation was not distinguished from fallback");
 
+  // Slanted-edge reference views have exactly one Sharpness page and no
+  // workflow stages; their only panel must remain accessible without an
+  // otherwise meaningless tab strip.
+  MultiLineTabWidget referenceTabs(&hiddenHost);
+  const int loneReferencePanel =
+      referenceTabs.addTab(new QWidget, QStringLiteral("Sharpness"));
+  auto *referenceTabBar =
+      referenceTabs.findChild<QWidget *>(QStringLiteral("DetailedPanelTabBar"));
+  if (!referenceTabBar || !referenceTabBar->isHidden() ||
+      referenceTabs.currentIndex() != loneReferencePanel ||
+      referenceTabs.widget(loneReferencePanel) == nullptr)
+    return fail("single-panel reference view did not suppress redundant tab bar");
+
   // Workflow stages filter only presentation buttons; panel keys, programmatic
   // selection, and explicit logical visibility retain their old semantics.
   MultiLineTabWidget groupedTabs(&hiddenHost);
@@ -2482,6 +2495,26 @@ bool runBetaInvariantSmoke() {
       groupedStageBar->styleSheet() != groupedDetailBar->styleSheet() ||
       groupedDetailBar->isHidden())
     return fail("grouped stage navigation styling or multi-tab display differs");
+
+  // At a width sufficient for exactly the Capture pair, hidden Process
+  // buttons must not produce a phantom second FlowLayout row.
+  QPushButton *capturePanelButton = nullptr;
+  QPushButton *tilesPanelButton = nullptr;
+  for (QPushButton *button : groupedTabs.findChildren<QPushButton *>()) {
+    const QString key = button->property("tabKey").toString();
+    if (key == QStringLiteral("capture_panel"))
+      capturePanelButton = button;
+    else if (key == QStringLiteral("tiles_panel"))
+      tilesPanelButton = button;
+  }
+  if (!capturePanelButton || !tilesPanelButton || !groupedDetailBar->layout())
+    return fail("grouped inspector lost its Capture tab buttons/layout");
+  const int pairWidth = capturePanelButton->sizeHint().width() +
+                        tilesPanelButton->sizeHint().width() + 10;
+  const int oneRowHeight = qMax(capturePanelButton->sizeHint().height(),
+                                tilesPanelButton->sizeHint().height()) + 4;
+  if (groupedDetailBar->layout()->heightForWidth(pairWidth) > oneRowHeight + 2)
+    return fail("hidden Process tab reserved a phantom FlowLayout row");
 
   if (groupedTabs.stageCount() != 2 ||
       groupedTabs.stageText(0) != QStringLiteral("Capture") ||
