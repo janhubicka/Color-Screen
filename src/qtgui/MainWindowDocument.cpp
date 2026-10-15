@@ -134,14 +134,15 @@ bool saveParameterPayloadAtomically(
     const colorscreen::scr_detect_parameters *detect,
     const colorscreen::render_parameters &render,
     const colorscreen::solver_parameters &solver,
-    const std::vector<colorscreen::point_t> &profileSpots, QString *error) {
+    const std::vector<colorscreen::point_t> &profileSpots, QString *error,
+    const colorscreen::parameter_source_image *sourceImage = nullptr) {
   if (json) {
     const colorscreen::scr_detect_parameters defaultDetection;
     const auto &detection = detect ? *detect : defaultDetection;
     std::string writeError;
     const bool written = colorscreen::write_parameter_json_v3_file(
         path.toUtf8().constData(), scrToImg, detection, render, solver,
-        profileSpots, &writeError);
+        profileSpots, &writeError, sourceImage);
     if (error)
       *error = written ? QString() : QString::fromUtf8(writeError);
     return written;
@@ -174,7 +175,8 @@ bool saveRecoveryTextAtomically(const QString &path, const QString &text) {
 bool loadParameterPayload(
     const QString &path, ParameterState *state,
     std::vector<colorscreen::color_match> *spotResults, QString *error,
-    bool *isJsonV3 = nullptr) {
+    bool *isJsonV3 = nullptr,
+    colorscreen::parameter_source_image *sourceImage = nullptr) {
   if (!state)
     return false;
 
@@ -184,16 +186,19 @@ bool loadParameterPayload(
     // fall back to legacy CSP or publish even a subset of its parameters.
     ParameterState loadedState;
     std::string jsonError;
+    colorscreen::parameter_source_image linkedSource;
     const bool loaded = colorscreen::read_parameter_json_v3_file(
         encodedPath.constData(), &loadedState.scrToImg, &loadedState.detect,
         &loadedState.rparams, &loadedState.solver,
-        &loadedState.profileSpots, &jsonError);
+        &loadedState.profileSpots, &jsonError, &linkedSource);
     if (!loaded) {
       if (error)
         *error = QString::fromUtf8(jsonError);
       return false;
     }
     *state = std::move(loadedState);
+    if (sourceImage)
+      *sourceImage = std::move(linkedSource);
     if (spotResults)
       spotResults->clear();  // Derived per-view measurements are not file state.
     if (isJsonV3)
@@ -247,6 +252,8 @@ bool loadParameterPayload(
     return false;
   }
   *state = std::move(loadedState);
+  if (sourceImage)
+    *sourceImage = {};
   if (spotResults)
     *spotResults = std::move(loadedSpotResults);
   if (isJsonV3)
