@@ -1,13 +1,8 @@
-!ifdef COLORSCREEN_NSIS_PLUGIN_DIR
-  ; MSYS2 installs Unicode NSIS plugins beside its toolchain. The optional
-  ; override is passed by CI; developer installations use normal discovery.
-  ; The MSYS2/clang64 and ucrt64 makensis currently emit amd64-unicode
-  ; installers. Explicitly search the same target architecture for nsDialogs;
-  ; x86-unicode discovery is insufficient and fails intermittently.
-  !addplugindir /amd64-unicode "${COLORSCREEN_NSIS_PLUGIN_DIR}"
-!endif
-
-!include "MUI2.nsh"
+; Color-Screen Windows installer.
+; The MSYS2 NSIS 3.12 packages expose their page plug-ins with incompatible
+; architecture registration on some runner/toolchain combinations. Built-in
+; license/directory/progress pages need no external DLL and also work with
+; both x86 and amd64 Unicode installer stubs.
 !include "FileFunc.nsh"
 
 Name "Color-Screen"
@@ -18,26 +13,18 @@ Name "Color-Screen"
 !endif
 InstallDir "$PROGRAMFILES64\Color-Screen"
 RequestExecutionLevel admin
+Icon "icon.ico"
+UninstallIcon "icon.ico"
 
-!define MUI_ABORTWARNING
-!define MUI_ICON "icon.ico"
-!define MUI_UNICON "icon.ico"
+ShowInstDetails show
+ShowUninstDetails show
+LicenseData "${SOURCE_DIR}\LICENSE"
+Page license
+Page directory
+Page instfiles
 
-!insertmacro MUI_PAGE_WELCOME
-!insertmacro MUI_PAGE_LICENSE "${SOURCE_DIR}\LICENSE"
-!insertmacro MUI_PAGE_DIRECTORY
-!insertmacro MUI_PAGE_INSTFILES
-
-# Finish page with Readme option
-!define MUI_FINISHPAGE_SHOWREADME "$INSTDIR\README.txt"
-!insertmacro MUI_PAGE_FINISH
-
-!insertmacro MUI_UNPAGE_WELCOME
-!insertmacro MUI_UNPAGE_CONFIRM
-!insertmacro MUI_UNPAGE_INSTFILES
-!insertmacro MUI_UNPAGE_FINISH
-
-!insertmacro MUI_LANGUAGE "English"
+UninstPage uninstConfirm
+UninstPage instfiles
 
 Section "Install"
     SetOutPath "$INSTDIR"
