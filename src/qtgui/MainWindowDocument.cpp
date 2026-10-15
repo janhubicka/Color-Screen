@@ -1316,10 +1316,11 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
   // decision has settled. The continuation is generation-gated because the
   // non-blocking question may remain open while another image load supersedes
   // this request.
+  const bool linkedParameterOpen = !explicitParameterFile.isEmpty();
   const auto startImageRead =
       [this, requestedImageFile, outgoingImageFile, outgoingScan,
        restoreOutgoingImage, sidecarStaging, suppressParamPrompt,
-       loadGeneration, preferCachedRaw]() {
+       loadGeneration, preferCachedRaw, linkedParameterOpen]() {
         if (m_closeLifecycle.closing() ||
             loadGeneration != m_imageLoad.generation)
           return;
@@ -1330,7 +1331,10 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
         // Capture-type compatibility can only be checked after image_data has
         // been loaded. Keep this as permission to offer the guide; the actual
         // decision is made in the successful-load callback below.
-        const bool allowInitialGuide = !suppressParamPrompt;
+        // An explicitly linked .cspar already contains configured processing
+        // state; do not ask the initial image-setup wizard a second time.
+        const bool allowInitialGuide =
+            !suppressParamPrompt && !linkedParameterOpen;
 
         auto progress = std::make_shared<colorscreen::progress_info>();
         progress->set_task("Opening image", 0);
