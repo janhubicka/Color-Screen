@@ -11373,8 +11373,8 @@ test_native_json_v3_document ()
              && spots_copy == parsed_spots;
     };
   if (!bad_source (replace_once (
-          linked_json, "\"base\":\"parameter_file\"",
-          "\"base\":\"absolute\""))
+          linked_json, "\"source_image\":{\"base\":\"parameter_file\"",
+          "\"source_image\":{\"base\":\"absolute\""))
       || !bad_source (replace_once (
           linked_json, "\"width_px\":15000", "\"width_px\":0"))
       || !bad_source (replace_once (
