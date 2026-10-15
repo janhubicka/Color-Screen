@@ -2491,7 +2491,7 @@ void MainWindow::promptDeletePreset() {
    hold-to-zoom.  */
 void MainWindow::createMenus() {
   m_fileMenu = menuBar()->addMenu("&File");
-  m_openAction = m_fileMenu->addAction("&Open Image(s)...");
+  m_openAction = m_fileMenu->addAction("&Open Image or Document...");
   m_openAction->setShortcut(QKeySequence::Open); // Ctrl+O
   m_openAction->setShortcutContext(Qt::WindowShortcut);
   connect(m_openAction, &QAction::triggered, this, &MainWindow::onOpenImage);
