@@ -28,6 +28,23 @@ worker controls and fit scratch/plots are not document state.
 
 ## Explicit field semantics
 
+### Optional source-image document link
+
+Top-level `source_image` is `null`, absent for earlier development-generated
+reusable documents, or an object with `path`, `base`, `width_px`,
+`height_px`, and `size_bytes`. The path is relative to the containing
+`.cspar` or an unambiguous absolute path. Decoded dimensions must agree
+before applying crop, registration, or calibration. A changed on-disk byte
+size requires confirmation or a different scan; matching byte size alone
+does not establish image identity. Zero means unknown source byte size.
+
+Direct `.cspar` Open (Ctrl+O, command line, Explorer/Finder or Linux desktop)
+loads the linked image before its processing parameters. Missing sources
+first try a unique nearby candidate, then offer a nonblocking Locate image
+chooser without overwriting the .cspar. A manual relink is dirty until the
+operator saves the updated reference. Source-free parameter sets ask for an
+image. Legacy `.par` remains a separate parameter-only import.
+
 ### Capture and process
 
 `capture.linearization` distinguishes `{"mode":"srgb"}` from
