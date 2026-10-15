@@ -75,6 +75,8 @@ function Assert-OpenWithRegistration {
 $installer = (Resolve-Path -LiteralPath $InstallerPath).Path
 $jpgDefaultBefore = Get-DefaultClass 'jpg'
 $tiffDefaultBefore = Get-DefaultClass 'tif'
+$legacyParamsBefore = Get-DefaultClass 'par'
+$jsonParamsBefore = Get-DefaultClass 'cspar'
 Write-Host "Installing $installer into $installDir"
 
 # /D must be the final NSIS argument. Avoid quoting ambiguities by using an
@@ -130,18 +132,26 @@ Invoke-BoundedProcess -Path $gui -Arguments @(
     $fixture, $fixture
 ) -Phase 'Installed Qt GUI smoke' -TimeoutSeconds 70
 
-foreach ($ext in @('cspar', 'csprj', 'par', 'jpg', 'tif')) {
+# The executable supports image and stitch-project Explorer opens. Parameter
+# sidecars require an already chosen scan and are loaded from inside the GUI;
+# they must not acquire a broken Explorer "Open" command.
+foreach ($ext in @('csprj', 'jpg', 'tif')) {
     Assert-OpenWithRegistration -Extension $ext -ShouldExist $true
 }
-foreach ($ext in @('cspar', 'csprj')) {
+foreach ($ext in @('par', 'cspar')) {
+    Assert-OpenWithRegistration -Extension $ext -ShouldExist $false
+}
+foreach ($ext in @('csprj')) {
     $actualClass = Get-DefaultClass $ext
     if ($actualClass -ne "Color-Screen.$ext") {
         throw ".$ext default is $actualClass, expected Color-Screen.$ext"
     }
 }
 if ((Get-DefaultClass 'jpg') -ne $jpgDefaultBefore -or
-    (Get-DefaultClass 'tif') -ne $tiffDefaultBefore) {
-    throw 'Installing Color-Screen changed an existing image-app default'
+    (Get-DefaultClass 'tif') -ne $tiffDefaultBefore -or
+    (Get-DefaultClass 'par') -ne $legacyParamsBefore -or
+    (Get-DefaultClass 'cspar') -ne $jsonParamsBefore) {
+    throw 'Installing Color-Screen changed an existing image/parameter default'
 }
 
 Write-Host "Uninstalling the CI-only $installDir installation"
@@ -162,13 +172,15 @@ if (Test-Path -LiteralPath $uninstallKey) {
 foreach ($ext in @('cspar', 'csprj', 'par', 'jpg', 'tif')) {
     Assert-OpenWithRegistration -Extension $ext -ShouldExist $false
 }
-foreach ($ext in @('cspar', 'csprj')) {
+foreach ($ext in @('csprj')) {
     if ((Get-DefaultClass $ext) -eq "Color-Screen.$ext") {
         throw "Uninstaller left Color-Screen as the default for .$ext"
     }
 }
 if ((Get-DefaultClass 'jpg') -ne $jpgDefaultBefore -or
-    (Get-DefaultClass 'tif') -ne $tiffDefaultBefore) {
-    throw 'Uninstalling Color-Screen changed an existing image-app default'
+    (Get-DefaultClass 'tif') -ne $tiffDefaultBefore -or
+    (Get-DefaultClass 'par') -ne $legacyParamsBefore -or
+    (Get-DefaultClass 'cspar') -ne $jsonParamsBefore) {
+    throw 'Uninstalling Color-Screen changed an existing image/parameter default'
 }
 Write-Host 'NSIS silent install, CLI launch, registry and uninstall smoke passed.'
