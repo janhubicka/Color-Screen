@@ -1835,11 +1835,146 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
         return;
       }
 
-      case 10:
+      case 10: {
         QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
         if (!app.documentWindows().isEmpty() || app.tabCount() != 0) {
           if (retryOrFail(QStringLiteral(
                   "Linked document did not close without dirty-state prompt")))
+            return;
+          return;
+        }
+
+        // Relink a moved source via the user's Locate-image chooser, then
+        // save the document and prove that the new relative reference points
+        // at the chosen scan. This must not silently alter the on-disk .cspar
+        // merely by opening it.
+        colorscreen::scr_to_img_parameters g;
+        colorscreen::scr_detect_parameters d;
+        colorscreen::render_parameters r;
+        colorscreen::solver_parameters solver;
+        std::vector<colorscreen::point_t> spots;
+        colorscreen::parameter_source_image moved;
+        std::string problem;
+        if (!colorscreen::read_parameter_json_v3_file(
+                state->firstParameters.toUtf8().constData(),
+                &g, &d, &r, &solver, &spots, &problem, &moved) ||
+            moved.path.empty()) {
+          fail(QStringLiteral("Cannot construct relocated scan document"));
+          return;
+        }
+        moved.path = "old-location/relocated-only-archival-scan.tif";
+        const QString relocatedDocument =
+            state->temporaryDirectory->filePath(
+                QStringLiteral("relocated-linked-source.cspar"));
+        if (!colorscreen::write_parameter_json_v3_file(
+                relocatedDocument.toUtf8().constData(),
+                g, d, r, solver, spots, &problem, &moved)) {
+          fail(QStringLiteral("Cannot save relocated scan test document"));
+          return;
+        }
+        app.openFiles({relocatedDocument});
+        schedule(11, 60, 100);
+        return;
+      }
+
+      case 11: {
+        const auto docs = app.documentWindows();
+        if (docs.size() != 1 || !docs.constFirst()) {
+          if (retryOrFail(QStringLiteral(
+                  "Relink test did not create a document")))
+            return;
+          return;
+        }
+        MainWindow *relocated = docs.constFirst();
+        QFileDialog *chooser = relocated->findChild<QFileDialog *>(
+            QStringLiteral("LinkedSourceImageDialog"));
+        if (!chooser || relocated->m_imageLoad.pending ||
+            relocated->sharedImageData()) {
+          if (retryOrFail(QStringLiteral(
+                  "Relink test did not offer source-image selection")))
+            return;
+          return;
+        }
+        chooser->selectFile(QFileInfo(state->firstImageFile).absoluteFilePath());
+        chooser->accept();
+        schedule(12, 140, 150);
+        return;
+      }
+
+      case 12: {
+        const auto docs = app.documentWindows();
+        if (docs.size() != 1 || !docs.constFirst()) {
+          if (retryOrFail(QStringLiteral(
+                  "Selected source image did not open")))
+            return;
+          return;
+        }
+        MainWindow *relocated = docs.constFirst();
+        if (relocated->m_imageLoad.pending || !relocated->sharedImageData()) {
+          if (retryOrFail(QStringLiteral(
+                  "Relocated image decode has not completed")))
+            return;
+          return;
+        }
+        const QString relocatedDocument =
+            state->temporaryDirectory->filePath(
+                QStringLiteral("relocated-linked-source.cspar"));
+        if (QFileInfo(relocated->currentImageFile()).absoluteFilePath() !=
+                QFileInfo(state->firstImageFile).absoluteFilePath() ||
+            relocated->m_parameterFile.path !=
+                QFileInfo(relocatedDocument).absoluteFilePath() ||
+            relocated->m_parameterFile.suggested ||
+            !relocated->isDocumentModified()) {
+          fail(QStringLiteral(
+              "Relinked source was not opened as a dirty linked document"));
+          return;
+        }
+        if (!relocated->saveParametersToFile(
+                relocatedDocument, MainWindow::ParameterSaveFormat::JsonV3) ||
+            relocated->isDocumentModified()) {
+          fail(QStringLiteral(
+              "Saving relocated source failed to adopt its new path"));
+          return;
+        }
+        colorscreen::scr_to_img_parameters g;
+        colorscreen::scr_detect_parameters d;
+        colorscreen::render_parameters r;
+        colorscreen::solver_parameters solver;
+        std::vector<colorscreen::point_t> spots;
+        colorscreen::parameter_source_image saved;
+        std::string problem;
+        if (!colorscreen::read_parameter_json_v3_file(
+                relocatedDocument.toUtf8().constData(),
+                &g, &d, &r, &solver, &spots, &problem, &saved) ||
+            saved.path.empty()) {
+          fail(QStringLiteral(
+              "Saved relocated document lost source image metadata"));
+          return;
+        }
+        const QString spelling = QString::fromStdString(saved.path);
+        const QString absoluteSource = QFileInfo(spelling).isAbsolute()
+            ? QFileInfo(spelling).absoluteFilePath()
+            : QDir(QFileInfo(relocatedDocument).absolutePath())
+                  .absoluteFilePath(spelling);
+        if (QDir::cleanPath(absoluteSource) !=
+                QDir::cleanPath(QFileInfo(state->firstImageFile)
+                                    .absoluteFilePath()) ||
+            saved.width_px != relocated->m_scan->width ||
+            saved.height_px != relocated->m_scan->height) {
+          fail(QStringLiteral(
+              "Saved relocated source no longer identifies the chosen scan"));
+          return;
+        }
+        app.closeAllDocumentWindows();
+        schedule(13, 80, 120);
+        return;
+      }
+
+      case 13:
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+        if (!app.documentWindows().isEmpty() || app.tabCount() != 0) {
+          if (retryOrFail(QStringLiteral(
+                  "Relocated document did not close cleanly after Save")))
             return;
           return;
         }
