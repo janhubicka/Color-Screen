@@ -1320,7 +1320,9 @@ void MainWindow::openParameterDocument(const QString &fileName,
    completion, the scan is set on ImageWidget, stitch tile loading is launched
    in parallel for .csprj projects, and undo history is cleared.  */
 void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
-                          bool preferCachedRaw) {
+                          bool preferCachedRaw,
+                          const QString &linkedParameterFile,
+                          bool allowLinkedSizeMismatch) {
   if (fileName.isEmpty())
     return;
 
@@ -1353,10 +1355,48 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
     QString suggestedPath;
     bool suggestedJsonV3 = false;
     std::optional<ParameterState> baseline;
+    colorscreen::parameter_source_image linkedSource;
+    bool explicitDocumentOpen = false;
+    bool sourceWasRelocated = false;
   };
   auto sidecarStaging = std::make_shared<SidecarLoadStaging>();
   if (!suppressParamPrompt)
     sidecarStaging->baseline = getCurrentState();
+
+  /* A directly opened .cspar is parsed before clearing the old view or
+     cancelling workers. Its parameters participate in demosaic selection and
+     are published only after the linked scan loads successfully. */
+  if (!linkedParameterFile.isEmpty()) {
+    ParameterState linkedState;
+    std::vector<colorscreen::color_match> spots;
+    bool isJsonV3 = false;
+    QString error;
+    if (!loadParameterPayload(linkedParameterFile, &linkedState, &spots,
+                              &error, &isJsonV3,
+                              &sidecarStaging->linkedSource) || !isJsonV3) {
+      showParameterLoadFailure(this, error.isEmpty()
+                                         ? tr("Invalid linked .cspar document.")
+                                         : error);
+      return;
+    }
+    sidecarStaging->state = std::move(linkedState);
+    sidecarStaging->spotResults = std::move(spots);
+    sidecarStaging->loadedPath =
+        QFileInfo(linkedParameterFile).absoluteFilePath();
+    sidecarStaging->loadedJsonV3 = true;
+    sidecarStaging->explicitDocumentOpen = true;
+    const QString recorded =
+        QString::fromUtf8(sidecarStaging->linkedSource.path.c_str());
+    const QString resolved = recorded.isEmpty()
+        ? QString()
+        : QFileInfo(recorded).isAbsolute()
+              ? QFileInfo(recorded).absoluteFilePath()
+              : QDir(QFileInfo(sidecarStaging->loadedPath).absolutePath())
+                    .absoluteFilePath(recorded);
+    sidecarStaging->sourceWasRelocated =
+        resolved.isEmpty() ||
+        QDir::cleanPath(resolved) != QDir::cleanPath(requestedImageFile);
+  }
 
   // A failed older load may still have a non-blocking warning open. Starting a
   // new image request supersedes that presentation just like it supersedes the
@@ -1428,7 +1468,7 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
   const auto startImageRead =
       [this, requestedImageFile, outgoingImageFile, outgoingScan,
        restoreOutgoingImage, sidecarStaging, suppressParamPrompt,
-       loadGeneration, preferCachedRaw]() {
+       loadGeneration, preferCachedRaw, allowLinkedSizeMismatch]() {
         if (m_closeLifecycle.closing() ||
             loadGeneration != m_imageLoad.generation)
           return;
@@ -1474,7 +1514,7 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
              suggestDetectedMetadata,
              loadGeneration, outgoingScan,
              outgoingImageFile, restoreOutgoingImage, sidecarStaging,
-             suppressParamPrompt]() {
+             suppressParamPrompt, allowLinkedSizeMismatch]() {
               if (m_closeLifecycle.closing()) {
                 watcher->deleteLater();
                 return;
@@ -1503,6 +1543,53 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
               m_imageLoad.pendingDemosaic.reset();
 
               if (result.first) {
+                /* A replaced source must not inherit old crop/registration.
+                   File-size differences can only be waived explicitly;
+                   decoded dimensions are always authoritative. This check
+                   precedes sidecar calibration publication. */
+                if (sidecarStaging->explicitDocumentOpen && tempScan) {
+                  const auto &linked = sidecarStaging->linkedSource;
+                  const bool badDimensions =
+                      !linked.path.empty() &&
+                      (tempScan->width != linked.width_px ||
+                       tempScan->height != linked.height_px);
+                  const bool badSize =
+                      !allowLinkedSizeMismatch && linked.size_bytes &&
+                      static_cast<uint64_t>(std::max<qint64>(
+                          0, QFileInfo(requestedImageFile).size())) !=
+                          linked.size_bytes;
+                  if (badDimensions || badSize) {
+                    sidecarStaging->state.reset();
+                    sidecarStaging->suggestedPath =
+                        sidecarStaging->loadedPath;
+                    sidecarStaging->suggestedJsonV3 = true;
+                    auto *warning = new QMessageBox(
+                        QMessageBox::Warning,
+                        tr("Source image does not match"),
+                        tr("The selected scan does not match the dimensions "
+                           "or size recorded in %1. Its calibration was NOT "
+                           "applied. You may keep the scan without these "
+                           "parameters or locate the original image.")
+                            .arg(QFileInfo(sidecarStaging->loadedPath)
+                                     .fileName()),
+                        QMessageBox::NoButton, this);
+                    warning->setObjectName(
+                        QStringLiteral("LinkedSourceImageMismatchDialog"));
+                    auto *locateButton = warning->addButton(
+                        tr("Locate another image"), QMessageBox::AcceptRole);
+                    warning->addButton(tr("Keep scan without parameters"),
+                                       QMessageBox::RejectRole);
+                    warning->setAttribute(Qt::WA_DeleteOnClose);
+                    const QString document = sidecarStaging->loadedPath;
+                    connect(warning, &QMessageBox::finished, this,
+                            [this, warning, locateButton, document](int) {
+                              if (!m_closeLifecycle.closing() &&
+                                  warning->clickedButton() == locateButton)
+                                openParameterDocument(document, true);
+                            });
+                    warning->open();
+                  }
+                }
                 const bool liveEditsWhileLoading =
                     !suppressParamPrompt && sidecarStaging->baseline &&
                     getCurrentState() != *sidecarStaging->baseline;
@@ -1590,7 +1677,10 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
                 if (!sameImageDemosaic)
                   m_undoStack->clear();
                 if (!suppressParamPrompt)
-                  m_recoveryDirty = liveEditsWhileLoading;
+                  m_recoveryDirty = liveEditsWhileLoading ||
+                      (sidecarStaging->explicitDocumentOpen &&
+                       sidecarStaging->state.has_value() &&
+                       sidecarStaging->sourceWasRelocated);
 
                 // Grid corrections are saved processing state; preserve them
                 // while background workers load tile image data. The renderer's
@@ -1786,7 +1876,9 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
   // question is presentation state of this exact image-load generation: never
   // enter a nested event loop, and never let an obsolete prompt launch decoding
   // after a newer Open/Reload request has taken ownership.
-  if (!suppressParamPrompt) {
+  if (!linkedParameterFile.isEmpty()) {
+    startImageRead();
+  } else if (!suppressParamPrompt) {
     const QFileInfo fileInfo(requestedImageFile);
     const QString base =
         fileInfo.path() + "/" + fileInfo.completeBaseName();
