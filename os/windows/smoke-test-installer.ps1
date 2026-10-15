@@ -68,6 +68,20 @@ if ($LASTEXITCODE -ne 0) {
     throw "Installed CLI failed to launch: exit $LASTEXITCODE"
 }
 
+# Exercise the Qt GUI from the *installed* directory too. The existing
+# portable/staging GUI smoke cannot detect missing files inside the installer.
+$fixture = Join-Path $env:GITHUB_WORKSPACE 'testsuite\dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif'
+if (-not (Test-Path -LiteralPath $fixture -PathType Leaf)) {
+    throw "Missing installed-GUI smoke input: $fixture"
+}
+$guiRun = Start-Process -FilePath $gui -ArgumentList @(
+    '--debug-qt', '--smoke-test', '30000', '--smoke-test-expect-windows', '2',
+    $fixture, $fixture
+) -Wait -PassThru
+if ($guiRun.ExitCode -ne 0) {
+    throw "Installed GUI smoke failed: exit $($guiRun.ExitCode)"
+}
+
 foreach ($ext in @('cspar', 'csprj', 'par', 'jpg', 'tif')) {
     Assert-OpenWithRegistration -Extension $ext -ShouldExist $true
 }
