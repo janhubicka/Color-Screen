@@ -11434,6 +11434,47 @@ test_native_json_v3_document ()
       || !invalid ("{}", "empty schema-3 document"))
     return false;
 
+  /* The top-level scan link follows the same lexical rebase semantics:
+     moving .cspar must never silently change its referenced input image. */
+  auto source_rebase_check = [&] (const std::string &old_document,
+                                 const std::string &new_document,
+                                 const std::string &path,
+                                 const std::string &expected) {
+    parameter_source_image linked;
+    linked.path = path;
+    linked.width_px = 15000;
+    linked.height_px = 10000;
+    linked.size_bytes = 943718400;
+    std::string problem;
+    return rebase_parameter_source_image (
+               &linked, old_document, new_document, &problem)
+           && linked.path == expected
+           && linked.width_px == 15000
+           && linked.height_px == 10000
+           && linked.size_bytes == 943718400;
+  };
+  if (!source_rebase_check ("/archive/old/a.cspar",
+                            "/archive/new/a.cspar", "scan.tif",
+                            "../old/scan.tif")
+      || !source_rebase_check ("C:\\old\\a.cspar",
+                               "D:\\new\\a.cspar", "scan.tif",
+                               "C:\\old\\scan.tif")
+      || !source_rebase_check ("/archive/old/a.cspar",
+                               "/archive/new/a.cspar", "/images/scan.tif",
+                               "/images/scan.tif"))
+    return false;
+  parameter_source_image unchanged_link;
+  unchanged_link.path = "C:relative.tif";
+  unchanged_link.width_px = 100;
+  unchanged_link.height_px = 50;
+  std::string source_error;
+  if (rebase_parameter_source_image (
+          &unchanged_link, "/old/a.cspar", "/new/a.cspar",
+          &source_error)
+      || unchanged_link.path != "C:relative.tif"
+      || source_error.empty ())
+    return false;
+
   /* Save As rebases measurement evidence against document directories,
      independent of the current host OS and without touching live parameters
      on a late invalid path. */
