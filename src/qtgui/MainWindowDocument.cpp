@@ -398,19 +398,26 @@ bool MainWindow::saveParametersToFile(
     error = tr("An existing .cspar file has an unrecognized format or invalid "
                "contents. Select an explicit format in Save As to replace it.\n%1")
                 .arg(QString::fromStdString(validationError));
-  /* A relative measurement source belongs to the previous parameter-file
-     directory. Save As must preserve that source image, and must not mutate
-     the live document when serialization or file replacement fails. */
-  const bool movingParameterDocument =
-      !m_parameterFile.suggested && !m_parameterFile.path.isEmpty() &&
-      !preservingCurrentTarget;
+  /* Relative MTF references in an established parameter document are based
+     on that document's directory. Before the FIRST Save, the image directory
+     is the source base instead (also used by resolveMtfSourcePath and private
+     recovery). A first Save As into another directory must rebase references
+     just like moving an established document. */
+  const QString originalSourceBase =
+      !m_parameterFile.suggested && !m_parameterFile.path.isEmpty()
+          ? QFileInfo(m_parameterFile.path).absoluteFilePath()
+          : (!m_currentImageFile.isEmpty()
+                 ? QFileInfo(m_currentImageFile).absoluteFilePath()
+                 : QString());
+  const bool rebasingParameterSources =
+      !originalSourceBase.isEmpty() &&
+      originalSourceBase != absoluteFileName;
   colorscreen::render_parameters outgoingRender = m_rparams;
-  if (!unrecognizedExistingTarget && movingParameterDocument) {
+  if (!unrecognizedExistingTarget && rebasingParameterSources) {
     std::string provenanceError;
     if (!colorscreen::rebase_parameter_mtf_source_paths(
             &outgoingRender.sharpen.scanner_mtf,
-            QFileInfo(m_parameterFile.path).absoluteFilePath()
-                .toUtf8().toStdString(),
+            originalSourceBase.toUtf8().toStdString(),
             absoluteFileName.toUtf8().toStdString(), &provenanceError))
       error = tr("Could not preserve the measured-MTF source images on Save As: %1")
                   .arg(QString::fromStdString(provenanceError));
@@ -425,11 +432,9 @@ bool MainWindow::saveParametersToFile(
   };
   std::vector<UndoRebase> stagedUndo;
   bool undoRebaseValid = true;
-  if (movingParameterDocument && !unrecognizedExistingTarget &&
+  if (rebasingParameterSources && !unrecognizedExistingTarget &&
       error.isEmpty() && m_undoStack) {
-    const std::string oldDocument =
-        QFileInfo(m_parameterFile.path).absoluteFilePath()
-            .toUtf8().toStdString();
+    const std::string oldDocument = originalSourceBase.toUtf8().toStdString();
     const std::string newDocument = absoluteFileName.toUtf8().toStdString();
     stagedUndo.reserve(m_undoStack->count());
     for (int i = 0; i < m_undoStack->count(); ++i) {
@@ -474,7 +479,7 @@ bool MainWindow::saveParametersToFile(
   }
 
   bool clearedUnsafeUndo = false;
-  if (movingParameterDocument) {
+  if (rebasingParameterSources) {
     /* The file exists and owns the rebased path spellings now. Adopt them
        only after successful atomic replacement, then rebase Undo snapshots
        to the same document base before anything can replay an older edit. */
