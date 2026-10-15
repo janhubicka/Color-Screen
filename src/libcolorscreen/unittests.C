@@ -11106,8 +11106,19 @@ test_native_json_v3_document ()
   geometry.coordinate2 = {-0.25, 4.75};
   geometry.final_angle = 47.5;
   geometry.final_ratio = 1.375;
+  geometry.final_rotation = 0.25;
+  geometry.final_mirror = true;
+  geometry.lens_correction.kr[0] = 0.003;
+  geometry.lens_correction.center = {5.25, 6.75};
+  geometry.mesh_trans = std::make_shared<mesh> (0.5, 0.25, 2.0, 2.0, 2, 2);
+  geometry.mesh_trans_is_scr_to_img = true;
+  geometry.mesh_trans->set_point ({0, 0}, {0.125, 0.25});
+  geometry.mesh_trans->set_point ({1, 0}, {2.125, 0.25});
+  geometry.mesh_trans->set_point ({0, 1}, {0.125, 2.25});
+  geometry.mesh_trans->set_point ({1, 1}, {2.125, 2.25});
   scr_detect_parameters detection;
   detection.min_ratio = 1.25f;
+  detection.min_luminosity = 0.05f;
   solver_parameters solver;
   solver.optimize_tilt = false;
   solver.lens_center_distance = 1.5;
@@ -11123,10 +11134,38 @@ test_native_json_v3_document ()
   render.scan_exposure = 1.25f;
   render.ignore_infrared = true;
   render.demosaiced_scaling = render_parameters::lanczos3_scaling;
+  render.dark_point = 0.00625f;
+  render.backlight_correction_black = 0.02f;
+  render.scan_rotation = 1;
+  render.scan_mirror = true;
+  render.red_strip_width = 0.375;
+  render.green_strip_width = 0.29;
+  render.screen_denoise.mode = denoise_parameters::nl_fast;
+  render.screen_denoise.strength = 1.25f;
+  render.screen_denoise.patch_radius = 2;
+  render.screen_denoise.search_radius = 5;
+  render.demosaiced_denoise.mode = denoise_parameters::bilateral;
+  render.demosaiced_denoise.bilateral_sigma_s = 1.125;
+  render.demosaiced_denoise.bilateral_sigma_r = 0.075;
+  render.color_model = render_parameters::color_model_dufay_manual;
+  render.contact_copy.simulate = true;
+  render.contact_copy.exposure = 0.875f;
+  render.contact_copy.preflash = 0.125f;
+  render.contact_copy.boost = 1.2f;
+  render.temperature = 5800;
+  render.backlight_temperature = 4800;
+  render.observer_whitepoint = {0.3127f, 0.329f};
+  render.white_balance = {1.1f, 0.95f, 0.85f};
   render.output_tone_curve = tone_curve::tone_curve_custom;
   render.output_tone_curve_control_points
       = {{0, 0}, {0.25, 0.2}, {0.75, 0.8}, {1, 1}};
   render.sharpen.mode = sharpen_parameters::wiener_deconvolution;
+  render.sharpen.usm_radius = 1.75f; // Inactive, but still persistent.
+  render.sharpen.usm_amount = 1.5f;
+  render.sharpen.scanner_snr = 50;
+  render.sharpen.scanner_mtf_scale = 1.25;
+  render.sharpen.richardson_lucy_iterations = 7;
+  render.sharpen.richardson_lucy_sigma = 0.65f;
   mtf_parameters &mtf = render.sharpen.scanner_mtf;
   mtf.model = mtf_model::physical_diffraction;
   mtf.sigma = 0.625;
@@ -11154,6 +11193,29 @@ test_native_json_v3_document ()
   mtf.measurements[0].source_width = 1600;
   mtf.measurements[0].source_height = 1200;
   mtf.measurements[0].roi = {4, 5, 80, 40};
+  mtf.measurements[1].source_filename = "../calibration/edge.tif";
+  mtf.measurements[1].source_width = -1;
+  mtf.measurements[1].source_height = 0;
+  mtf.measurements[1].roi = {9, 15, -1, 0};
+  bool channels[4] = {true, true, false, true};
+  render.backlight_correction
+      = std::make_shared<backlight_correction_parameters> ();
+  if (!render.backlight_correction->alloc (2, 2, channels))
+    return false;
+  render.backlight_correction->black_correction = true;
+  render.backlight_correction->set_luminosity (
+      0, 0, 0.875f, backlight_correction_parameters::red);
+  render.backlight_correction->set_sub (
+      0, 0, 0.0625f, backlight_correction_parameters::red);
+  render.scanner_blur_correction
+      = std::make_shared<scanner_blur_correction_parameters> ();
+  if (!render.scanner_blur_correction->alloc (
+          2, 2, scanner_blur_correction_parameters::mtf_blur_diameter))
+    return false;
+  render.scanner_blur_correction->set_correction (1, 1, 0.03125f);
+  render.set_tile_adjustments_dimensions (2, 1);
+  render.get_tile_adjustment (1, 0).exposure = 1.125f;
+  render.get_tile_adjustment (1, 0).dark_point = 0.0625f;
 
   std::string json, error;
   if (!encode_parameter_json_v3_document (
@@ -11193,11 +11255,7 @@ test_native_json_v3_document ()
       || !(parsed_detection == detection)
       || parsed_solver.points != solver.points
       || parsed_spots != spots
-      || parsed_render.gamma != render.gamma
-      || !(parsed_render.image_area == render.image_area)
-      || !parsed_render.sharpen.equal_p (render.sharpen)
-      || parsed_render.output_tone_curve_control_points
-             != render.output_tone_curve_control_points
+      || !(parsed_render == render)
       || parsed_render.sharpen.scanner_mtf.selected_measurement_id ()
              != mtf.selected_measurement_id ())
     {
@@ -11239,7 +11297,7 @@ test_native_json_v3_document ()
           || problem.empty ()
           || !(target_g == parsed_geometry)
           || !(target_d == parsed_detection)
-          || !target_r.sharpen.equal_p (parsed_render.sharpen)
+          || !(target_r == parsed_render)
           || target_s.points != parsed_solver.points
           || target_spots != parsed_spots)
         {
