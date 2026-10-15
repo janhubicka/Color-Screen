@@ -5712,6 +5712,50 @@ v3_rebase_one_path (const std::string &source,
 }
 } // anonymous namespace
 
+/* Recovery files are private snapshots: make every relative image source
+   absolute so the snapshot directory has no effect on the meaning of MTF
+   provenance, and the recovered document can later be saved elsewhere. */
+bool
+absolutize_parameter_mtf_source_paths (
+    mtf_parameters *mtf, const std::string &parameter_file,
+    std::string *error)
+{
+  if (error)
+    error->clear ();
+  if (!mtf)
+    return archive_fail (error, "missing recovery source destination");
+  v3_absolute_path base;
+  if (!v3_parse_absolute_path (parameter_file, &base))
+    return archive_fail (error,
+                         "recovery needs an absolute parameter-file base");
+
+  mtf_parameters updated = *mtf;
+  for (size_t i = 0; i < updated.measurements.size (); ++i)
+    {
+      mtf_measurement &measurement = updated.measurements[i];
+      if (measurement.source_filename.empty ())
+        continue;
+      std::string kind;
+      if (!v3_mtf_path_base (measurement.source_filename, &kind))
+        return archive_fail (
+            error, "invalid recovery MTF source at measurement "
+                       + std::to_string (i));
+      if (kind == "absolute")
+        continue;
+      std::vector<std::string> resolved (base.parts.begin (),
+                                         base.parts.end () - 1);
+      if (!v3_resolve_relative (measurement.source_filename,
+                                base.windows, &resolved))
+        return archive_fail (
+            error, "cannot resolve recovery MTF source at measurement "
+                       + std::to_string (i));
+      measurement.source_filename
+          = base.root + v3_join_components (resolved, base.windows);
+    }
+  *mtf = std::move (updated);
+  return true;
+}
+
 /* The operation is all-or-nothing even if a later measurement uses malformed
    source provenance. No location is resolved against process CWD. */
 bool
