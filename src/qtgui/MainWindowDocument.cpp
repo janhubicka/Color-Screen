@@ -814,20 +814,21 @@ void MainWindow::onSaveReproducibilityReport() {
   dialog->open();
 }
 
-/** Show a multi-selection file dialog and open each image independently.
+/** Show a multi-selection file dialog for images and native .cspar documents.
    The application may reuse this window only when it is untouched and empty;
-   otherwise every selected image receives a new MainWindow.  Dispatch is
-   deferred by one event-loop turn so KDE can dispose of KIO file-dialog jobs
-   before an associated parameter prompt is shown.  */
+   otherwise each selected path receives a new MainWindow. Dispatch is deferred
+   one event-loop turn so KDE can dispose of KIO file-dialog jobs before an
+   associated parameter or missing-source prompt is shown. */
 void MainWindow::onOpenImage() {
   const QString startDirectory =
       fileDialogDirectoryPreference(QStringLiteral("lastOpenDir"));
 
   auto *dialog = new QFileDialog(
-      this, tr("Open Images"), startDirectory,
-      tr("Images (*.tif *.tiff *.jpg *.jpeg *.jp2 *.j2k *.jpc *.jpf *.jpx "
-         "*.png *.raw *.dng *.iiq *.nef *.cr2 *.eip *.arw *.raf *.arq "
-         "*.csprj);;All Files (*)"));
+      this, tr("Open Images and Documents"), startDirectory,
+      tr("Images and Color-Screen documents (*.tif *.tiff *.jpg *.jpeg "
+         "*.jp2 *.j2k *.jpc *.jpf *.jpx *.png *.raw *.dng *.iiq *.nef "
+         "*.cr2 *.eip *.arw *.raf *.arq *.csprj *.cspar);;"
+         "Color-Screen documents (*.cspar);;All Files (*)"));
   dialog->setObjectName(QStringLiteral("ImageOpenFileDialog"));
   dialog->setFileMode(QFileDialog::ExistingFiles);
   dialog->setAcceptMode(QFileDialog::AcceptOpen);
@@ -848,6 +849,9 @@ void MainWindow::onOpenImage() {
         return;
       if (ColorScreenApplication *application = documentApplication())
         application->openFiles(fileNames, guardedWindow);
+      else if (fileNames.constFirst().endsWith(
+                   QLatin1String(".cspar"), Qt::CaseInsensitive))
+        guardedWindow->openParameterDocument(fileNames.constFirst());
       else
         guardedWindow->loadFile(fileNames.constFirst());
     });
