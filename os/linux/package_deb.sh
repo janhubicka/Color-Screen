@@ -29,6 +29,15 @@ fi
 sed -i "s/Architecture: .*/Architecture: $ARCH/" "$DESTDIR/DEBIAN/control"
 sed -i "s/Version: .*/Version: $VERSION/" "$DESTDIR/DEBIAN/control"
 
+# Associate native .cspar documents with the Qt frontend through the
+# freedesktop MIME database. Legacy .par remains a reusable parameter preset.
+mkdir -p "$DESTDIR/usr/share/applications" "$DESTDIR/usr/share/mime/packages"
+cp os/linux/org.colorscreen.ColorScreen.desktop \
+   "$DESTDIR/usr/share/applications/"
+cp os/linux/colorscreen-parameters.xml "$DESTDIR/usr/share/mime/packages/"
+mkdir -p "$DESTDIR/usr/share/icons/hicolor/scalable/apps"
+cp images/icon.svg "$DESTDIR/usr/share/icons/hicolor/scalable/apps/colorscreen.svg"
+
 # Calculate Installed-Size
 INSTALLED_SIZE=$(du -s "$DESTDIR/usr" | cut -f1)
 echo "Installed-Size: $INSTALLED_SIZE" >> "$DESTDIR/DEBIAN/control"
