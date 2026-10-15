@@ -4811,7 +4811,8 @@ encode_parameter_json_v3_document (
     const render_parameters &render,
     const solver_parameters &solver,
     const std::vector<point_t> &profile_spots,
-    std::string *output, std::string *error)
+    std::string *output, std::string *error,
+    const parameter_source_image *source_image)
 {
   if (error)
     error->clear ();
@@ -4869,6 +4870,45 @@ encode_parameter_json_v3_document (
         &document, error))
     return false;
 
+  /* A source scan is document-association metadata, never a render parameter.
+     Store only a portable spelling and cheap identity hints. */
+  if (source_image)
+    {
+      if (source_image->path.empty ())
+        {
+          if (source_image->width_px || source_image->height_px
+              || source_image->file_size_bytes)
+            return archive_fail (error, "empty source image with metadata");
+          document.object_value.emplace ("source_image",
+                                         v3_node (json_value::kind::null_value));
+        }
+      else
+        {
+          std::string base;
+          if (!valid_utf8 (source_image->path)
+              || !v3_mtf_path_base (source_image->path, &base)
+              || source_image->path == "." || source_image->path == ".."
+              || source_image->path.back () == '/'
+              || source_image->path.back () == '\\'
+              || (source_image->width_px == 0)
+                 != (source_image->height_px == 0)
+              || source_image->width_px < 0 || source_image->height_px < 0)
+            return archive_fail (error, "invalid source image reference");
+          auto optional_number = [] (uint64_t value) {
+            return value ? v3_number (std::to_string (value))
+                         : v3_node (json_value::kind::null_value);
+          };
+          document.object_value.emplace (
+            "source_image",
+            v3_object ({{"path", v3_string (source_image->path)},
+                        {"base", v3_string (base)},
+                        {"width_px", optional_number (source_image->width_px)},
+                        {"height_px", optional_number (source_image->height_px)},
+                        {"file_size_bytes",
+                         optional_number (source_image->file_size_bytes)}}));
+        }
+    }
+
   std::string serialized;
   v3_json_text (document, &serialized);
   serialized.push_back ('\n');
@@ -4883,6 +4923,67 @@ encode_parameter_json_v3_document (
 
 namespace
 {
+/* Decode an optional top-level scan link without relying on host filesystem
+   path rules. No image is opened while parsing .cspar. */
+bool
+v3_source_image_from_tree (const json_value &root,
+                           parameter_source_image *out, std::string *error)
+{
+  const json_value *node = object_member (root, "source_image");
+  parameter_source_image result;
+  if (!node || node->type == json_value::kind::null_value)
+    {
+      if (out)
+        *out = std::move (result);
+      return true;
+    }
+  if (!v3_mtf_exact_keys (
+          *node, {"path", "base", "width_px", "height_px",
+                  "file_size_bytes"}, "document.source_image", error))
+    return false;
+  const json_value *path = v3_mtf_required (
+    *node, "path", json_value::kind::string, "document.source_image", error);
+  const json_value *base = v3_mtf_required (
+    *node, "base", json_value::kind::string, "document.source_image", error);
+  const json_value *width = object_member (*node, "width_px");
+  const json_value *height = object_member (*node, "height_px");
+  const json_value *size = object_member (*node, "file_size_bytes");
+  std::string expected_base;
+  if (!path || !base || !width || !height || !size
+      || !valid_utf8 (path->text)
+      || !v3_mtf_path_base (path->text, &expected_base)
+      || path->text == "." || path->text == ".."
+      || path->text.back () == '/' || path->text.back () == '\\'
+      || base->text != expected_base)
+    return v3_mtf_fail (error, "document.source_image",
+                         "invalid path or mismatched base");
+  const bool unknown_dimensions =
+      width->type == json_value::kind::null_value
+      && height->type == json_value::kind::null_value;
+  uint64_t w = 0, h = 0, bytes = 0;
+  if (!unknown_dimensions
+      && (width->type != json_value::kind::number
+          || height->type != json_value::kind::number
+          || !json_uint64 (*width, &w) || !json_uint64 (*height, &h)
+          || w == 0 || h == 0
+          || w > (uint64_t)std::numeric_limits<int>::max ()
+          || h > (uint64_t)std::numeric_limits<int>::max ()))
+    return v3_mtf_fail (error, "document.source_image",
+                         "invalid image dimensions");
+  if (size->type != json_value::kind::null_value
+      && (size->type != json_value::kind::number
+          || !json_uint64 (*size, &bytes) || bytes == 0))
+    return v3_mtf_fail (error, "document.source_image",
+                         "invalid file size");
+  result.path = path->text;
+  result.width_px = (int)w;
+  result.height_px = (int)h;
+  result.file_size_bytes = bytes;
+  if (out)
+    *out = std::move (result);
+  return true;
+}
+
 /* Exact semantic subtree contracts for schema 3. The opaque subtrees moved
    from native components are subsequently checked by the existing strict
    per-component validators; these wrappers may not hide unknown fields. */
@@ -4902,10 +5003,18 @@ v3_named_object (const json_value &parent, const char *key,
 bool
 v3_validate_document_tree (const json_value &root, std::string *error)
 {
-  if (!v3_mtf_exact_keys (
-      root, {"format", "schema_version", "capture", "process", "geometry",
-             "registration", "calibration", "reconstruction", "color"},
-      "document", error))
+  const bool linked = object_member (root, "source_image") != nullptr;
+  if (!(linked
+        ? v3_mtf_exact_keys (
+            root, {"format", "schema_version", "capture", "process",
+                   "geometry", "registration", "calibration",
+                   "reconstruction", "color", "source_image"},
+            "document", error)
+        : v3_mtf_exact_keys (
+            root, {"format", "schema_version", "capture", "process",
+                   "geometry", "registration", "calibration",
+                   "reconstruction", "color"}, "document", error))
+      || !v3_source_image_from_tree (root, nullptr, error))
     return false;
   const json_value *marker = v3_mtf_required (
       root, "format", json_value::kind::string, "document", error);
@@ -5287,7 +5396,7 @@ decode_parameter_json_v3_document (
     render_parameters *render,
     solver_parameters *solver,
     std::vector<point_t> *profile_spots,
-    std::string *error)
+    std::string *error, parameter_source_image *source_image)
 {
   if (error)
     error->clear ();
@@ -5302,6 +5411,9 @@ decode_parameter_json_v3_document (
   if (!parser.parse (&root))
     return archive_fail (error, "invalid schema-3 JSON: " + parser.error ());
   if (!v3_validate_document_tree (root, error))
+    return false;
+  parameter_source_image parsed_source;
+  if (!v3_source_image_from_tree (root, &parsed_source, error))
     return false;
 
   /* Decode native measured-MTF IDs/source metadata before publishing any
@@ -5344,6 +5456,8 @@ decode_parameter_json_v3_document (
   *render = std::move (parsed_render);
   *solver = std::move (parsed_solver);
   *profile_spots = std::move (parsed_spots);
+  if (source_image)
+    *source_image = std::move (parsed_source);
   return true;
 }
 
@@ -5356,7 +5470,7 @@ read_parameter_json_v3_file (
     const char *name, scr_to_img_parameters *geometry,
     scr_detect_parameters *detection, render_parameters *render,
     solver_parameters *solver, std::vector<point_t> *profile_spots,
-    std::string *error)
+    std::string *error, parameter_source_image *source_image)
 {
   if (error)
     error->clear ();
@@ -5400,7 +5514,8 @@ read_parameter_json_v3_file (
       ok = false;
     }
   return ok && decode_parameter_json_v3_document (
-      contents, geometry, detection, render, solver, profile_spots, error);
+      contents, geometry, detection, render, solver, profile_spots, error,
+      source_image);
 }
 
 /* A complete source and all derived JSON text must validate before touching
@@ -5410,7 +5525,8 @@ write_parameter_json_v3_file (
     const char *name, const scr_to_img_parameters &geometry,
     const scr_detect_parameters &detection,
     const render_parameters &render, const solver_parameters &solver,
-    const std::vector<point_t> &profile_spots, std::string *error)
+    const std::vector<point_t> &profile_spots, std::string *error,
+    const parameter_source_image *source_image)
 {
   if (error)
     error->clear ();
@@ -5419,7 +5535,7 @@ write_parameter_json_v3_file (
   std::string payload;
   if (!encode_parameter_json_v3_document (
           geometry, detection, render, solver,
-          profile_spots, &payload, error))
+          profile_spots, &payload, error, source_image))
     return false;
   return write_parameter_text_file (name, payload, error);
 }
@@ -5637,6 +5753,31 @@ v3_rebase_one_path (const std::string &source,
   return true;
 }
 } // anonymous namespace
+
+/* The .cspar image link follows the same lexical Windows/POSIX rules as
+   captured-MTF evidence, but never modifies dimensions or file identity. */
+bool
+rebase_parameter_source_image_path (
+    parameter_source_image *source, const std::string &old_parameter_file,
+    const std::string &new_parameter_file, std::string *error)
+{
+  if (error)
+    error->clear ();
+  if (!source)
+    return archive_fail (error, "missing image-link rebase destination");
+  if (source->path.empty ())
+    return true;
+  v3_absolute_path old_path, new_path;
+  if (!v3_parse_absolute_path (old_parameter_file, &old_path)
+      || !v3_parse_absolute_path (new_parameter_file, &new_path)
+      || old_path.windows != new_path.windows)
+    return archive_fail (error, "source image Save As needs absolute paths");
+  std::string rewritten;
+  if (!v3_rebase_one_path (source->path, old_path, new_path, &rewritten))
+    return archive_fail (error, "cannot rebase linked source image");
+  source->path = std::move (rewritten);
+  return true;
+}
 
 /* Recovery files are private snapshots: make every relative image source
    absolute so the snapshot directory has no effect on the meaning of MTF
