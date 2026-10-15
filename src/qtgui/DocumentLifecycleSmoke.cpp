@@ -1830,6 +1830,20 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
               "or saved processing state"));
           return;
         }
+        // The ordinary File -> Open chooser must also expose linked .cspar
+        // documents. Without this, Explorer worked but Ctrl+O silently
+        // filtered out the format unless the user selected "All Files".
+        linked->onOpenImage();
+        QFileDialog *openChooser = linked->findChild<QFileDialog *>(
+            QStringLiteral("ImageOpenFileDialog"));
+        if (!openChooser ||
+            !openChooser->nameFilters().join(QStringLiteral(";;")).contains(
+                QStringLiteral("*.cspar"))) {
+          fail(QStringLiteral(
+              "File Open chooser excluded source-linked .cspar documents"));
+          return;
+        }
+        openChooser->reject();
         app.closeAllDocumentWindows();
         schedule(10, 80, 120);
         return;
