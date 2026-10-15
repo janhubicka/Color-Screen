@@ -21,9 +21,11 @@ the current `image_data` capabilities and `render_parameters`; never cache a
 second authoritative image-layer choice in the GUI. Dynamic Workflow labels
 must keep the horizontal `QSizePolicy::Ignored` contract so changing text
 cannot move the main image/inspector splitter. The status and `Next:`
-paragraphs use zero-margin rich-text blocks with explicit 100% line-height;
-both labels have `QSizePolicy::Maximum` vertically and `Ignored` horizontally
-so surplus inspector height does not stretch wrapped Next lines. **Bold only
+paragraphs use **inline rich-text fragments**, with no `<p>` block or
+explicit percentage line height: QLabel should use its native font leading
+when guidance wraps. Both labels have `QSizePolicy::Maximum` vertically and
+`Ignored` horizontally so surplus inspector height does not stretch the
+recommendation. **Bold only
 the captions** (Process, Image layer, Registration, Sharpening, Capture MTF,
 Profile, Next), leaving values at normal weight. HTML-escape document-derived
 values before adding markup, and keep machine-readable plain strings as the
