@@ -523,6 +523,7 @@ EXTRA_DIST = defs.sh $(TESTS) \
 			  validate-mtf-physical-model.py \
 			  check-parameter-v2-inventory.py \
 			  check-parameter-v3-corpus.py \
+			  parameter_schema_validate.py \
 			  parameter-v2-key-inventory.tsv \
 			  benchmark-screen-detection.py
 
