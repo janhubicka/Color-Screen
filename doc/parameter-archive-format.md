@@ -53,6 +53,7 @@ the empty objects above are merely an overview, **not** valid input.
 
 | Section | Responsibility |
 | --- | --- |
+| `source_image` (optional) | Associated scan path relative to the `.cspar`, with inexpensive source-identity hints; `null` or omitted for reusable templates |
 | `capture` | Input/camera/RAW interpretation, linearization, orientation, physical-object crop and inner photographic area, gain/black offset |
 | `process` | Historical screen type and strip geometry, dye measurements and aging, color model and contact-copy response |
 | `geometry` | Screen-to-image mapping, scanner imaging model, lens distortion, accepted meshes and final output coordinate frame |
