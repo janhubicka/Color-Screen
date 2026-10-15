@@ -1165,6 +1165,18 @@ void MainWindow::maybeOfferInitialSetupGuide(
 void MainWindow::openParameterDocument(const QString &fileName,
                                        bool forceLocateImage) {
   const QString documentFile = QFileInfo(fileName).absoluteFilePath();
+  // This new open supersedes every pending linked-source decision, including
+  // one where an earlier document has not yet started decoding an image.
+  if (m_sourceLocateDialog) {
+    QPointer<QFileDialog> previous = m_sourceLocateDialog;
+    m_sourceLocateDialog.clear();
+    previous->close();
+  }
+  if (m_sourceMismatchPrompt) {
+    QPointer<QMessageBox> previous = m_sourceMismatchPrompt;
+    m_sourceMismatchPrompt.clear();
+    previous->close();
+  }
   ParameterState staged;
   std::vector<colorscreen::color_match> spots;
   colorscreen::parameter_source_image source;
@@ -1178,11 +1190,6 @@ void MainWindow::openParameterDocument(const QString &fileName,
                        "as image documents.")
                   : problem);
     return;
-  }
-
-  if (m_sourceLocateDialog) {
-    m_sourceLocateDialog->close();
-    m_sourceLocateDialog.clear();
   }
 
   const QString sourcePath = QString::fromUtf8(source.path.c_str());
@@ -1278,12 +1285,16 @@ void MainWindow::openParameterDocument(const QString &fileName,
                   QMessageBox::NoButton, this);
               warning->setObjectName(
                   QStringLiteral("LinkedSourceImageMismatchDialog"));
+              m_sourceMismatchPrompt = warning;
               auto *useButton = warning->addButton(
                   tr("Open image"), QMessageBox::AcceptRole);
               warning->addButton(QMessageBox::Cancel);
               warning->setAttribute(Qt::WA_DeleteOnClose);
               connect(warning, &QMessageBox::finished, this,
                       [this, warning, useButton, image, documentFile](int) {
+                        if (m_sourceMismatchPrompt != warning)
+                          return;
+                        m_sourceMismatchPrompt.clear();
                         if (!m_closeLifecycle.closing() &&
                             warning->clickedButton() == useButton)
                           loadFile(image, false, false, documentFile, true);
@@ -1316,6 +1327,7 @@ void MainWindow::openParameterDocument(const QString &fileName,
                               QFileInfo(documentFile).fileName()),
         QMessageBox::NoButton, this);
     warning->setObjectName(QStringLiteral("LinkedSourceImageMismatchDialog"));
+    m_sourceMismatchPrompt = warning;
     auto *locateButton = warning->addButton(tr("Locate another image"),
                                             QMessageBox::AcceptRole);
     auto *openButton = warning->addButton(tr("Open this image"),
@@ -1326,6 +1338,9 @@ void MainWindow::openParameterDocument(const QString &fileName,
     connect(warning, &QMessageBox::finished, this,
             [this, warning, locateButton, openButton,
              candidate, documentFile, locate](int) {
+              if (m_sourceMismatchPrompt != warning)
+                return;
+              m_sourceMismatchPrompt.clear();
               if (m_closeLifecycle.closing())
                 return;
               if (warning->clickedButton() == locateButton)
@@ -1433,8 +1448,14 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
   // new image request supersedes that presentation just like it supersedes the
   // old worker/result generation.
   if (m_sourceLocateDialog) {
-    m_sourceLocateDialog->close();
+    QPointer<QFileDialog> previous = m_sourceLocateDialog;
     m_sourceLocateDialog.clear();
+    previous->close();
+  }
+  if (m_sourceMismatchPrompt) {
+    QPointer<QMessageBox> previous = m_sourceMismatchPrompt;
+    m_sourceMismatchPrompt.clear();
+    previous->close();
   }
   if (m_imageLoad.failurePrompt) {
     m_imageLoad.failurePrompt->close();
@@ -1611,6 +1632,7 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
                         QMessageBox::NoButton, this);
                     warning->setObjectName(
                         QStringLiteral("LinkedSourceImageMismatchDialog"));
+                    m_sourceMismatchPrompt = warning;
                     auto *locateButton = warning->addButton(
                         tr("Locate another image"), QMessageBox::AcceptRole);
                     warning->addButton(tr("Keep scan without parameters"),
@@ -1619,6 +1641,9 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
                     const QString document = sidecarStaging->loadedPath;
                     connect(warning, &QMessageBox::finished, this,
                             [this, warning, locateButton, document](int) {
+                              if (m_sourceMismatchPrompt != warning)
+                                return;
+                              m_sourceMismatchPrompt.clear();
                               if (!m_closeLifecycle.closing() &&
                                   warning->clickedButton() == locateButton)
                                 openParameterDocument(document, true);
