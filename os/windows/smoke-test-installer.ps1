@@ -162,13 +162,11 @@ Invoke-BoundedProcess -Path $gui -Arguments @(
 # The executable supports image and stitch-project Explorer opens. Parameter
 # sidecars require an already chosen scan and are loaded from inside the GUI;
 # they must not acquire a broken Explorer "Open" command.
-foreach ($ext in @('csprj', 'jpg', 'tif')) {
+foreach ($ext in @('cspar', 'csprj', 'jpg', 'tif')) {
     Assert-OpenWithRegistration -Extension $ext -ShouldExist $true
 }
-foreach ($ext in @('par', 'cspar')) {
-    Assert-OpenWithRegistration -Extension $ext -ShouldExist $false
-}
-foreach ($ext in @('csprj')) {
+Assert-OpenWithRegistration -Extension 'par' -ShouldExist $false
+foreach ($ext in @('cspar', 'csprj')) {
     $actualClass = Get-DefaultClass $ext
     if ($actualClass -ne "Color-Screen.$ext") {
         throw ".$ext default is $actualClass, expected Color-Screen.$ext"
@@ -176,8 +174,7 @@ foreach ($ext in @('csprj')) {
 }
 if ((Get-DefaultClass 'jpg') -ne $jpgDefaultBefore -or
     (Get-DefaultClass 'tif') -ne $tiffDefaultBefore -or
-    (Get-DefaultClass 'par') -ne $legacyParamsBefore -or
-    (Get-DefaultClass 'cspar') -ne $jsonParamsBefore) {
+    (Get-DefaultClass 'par') -ne $legacyParamsBefore) {
     throw 'Installing Color-Screen changed an existing image/parameter default'
 }
 
@@ -199,7 +196,7 @@ if (Test-Path -LiteralPath $uninstallKey) {
 foreach ($ext in @('cspar', 'csprj', 'par', 'jpg', 'tif')) {
     Assert-OpenWithRegistration -Extension $ext -ShouldExist $false
 }
-foreach ($ext in @('csprj')) {
+foreach ($ext in @('cspar', 'csprj')) {
     if ((Get-DefaultClass $ext) -eq "Color-Screen.$ext") {
         throw "Uninstaller left Color-Screen as the default for .$ext"
     }
