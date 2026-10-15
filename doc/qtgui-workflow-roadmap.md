@@ -822,12 +822,12 @@ malformed files atomically, without resetting the current document on failure.
 An unsupported future JSON version must fail visibly rather than be
 reinterpreted as a legacy `.par` input.
 
-The current alpha runtime temporarily emits native JSON-v2 while the full
-schema-3 implementation is tested. **JSON-v2 readability is not a release
-requirement:** when the new document codec passes the complete suite, switch
-all active save/load paths together and remove the unused old JSON code,
-version-preserving behaviour and compatibility tests. Keep only meaningful
-legacy `.par` import/export tests plus canonical JSON roundtrips.
+The draft schema-3 runtime switch (PR #556) now routes Qt Open/Save/Save As,
+recovery and the CLI through the complete native schema-3 codec. **This remains
+unmerged alpha code until its final-head CI and real-project acceptance pass.**
+JSON-v2 readability is not required and old experimental adapters are removed
+from the release tests. Undoable source-path state also must be rebased across
+Save As; the draft stores staged changes and applies them only after success.
 
 The beta gate is the whole checked-in historical `.par` corpus, full nested
 field/Undo/recovery validation, real large-project operator tests and the
