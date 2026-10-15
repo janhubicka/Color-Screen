@@ -1684,6 +1684,33 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
         const QString mismatchDocument =
             state->temporaryDirectory->filePath(
                 QStringLiteral("stale-source-confirmation.cspar"));
+        // This fixture moves a linked document to a new directory: its scan
+        // reference must be rebased exactly as production Save As would do.
+        // Otherwise the open correctly chooses Locate image instead of the
+        // file-size confirmation that this test intends to exercise.
+        if (!colorscreen::rebase_parameter_source_image(
+                &mismatched,
+                QFileInfo(state->firstParameters).absoluteFilePath()
+                    .toUtf8().toStdString(),
+                QFileInfo(mismatchDocument).absoluteFilePath()
+                    .toUtf8().toStdString(), &problem)) {
+          fail(QStringLiteral("Could not rebase size-mismatch test source: %1")
+                   .arg(QString::fromStdString(problem)));
+          return;
+        }
+        const QString recordedForMismatch =
+            QString::fromStdString(mismatched.path);
+        const QString resolvedForMismatch =
+            QFileInfo(recordedForMismatch).isAbsolute()
+                ? QFileInfo(recordedForMismatch).absoluteFilePath()
+                : QDir(QFileInfo(mismatchDocument).absolutePath())
+                      .absoluteFilePath(recordedForMismatch);
+        if (QDir::cleanPath(resolvedForMismatch) !=
+            QDir::cleanPath(QFileInfo(state->firstImageFile)
+                                .absoluteFilePath())) {
+          fail(QStringLiteral("Size-mismatch fixture lost its source image"));
+          return;
+        }
         if (!colorscreen::write_parameter_json_v3_file(
                 mismatchDocument.toUtf8().constData(), g, d, rp, solver,
                 spots, &problem, &mismatched)) {
