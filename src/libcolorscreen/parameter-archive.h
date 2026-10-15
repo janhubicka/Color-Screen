@@ -112,6 +112,14 @@ write_parameter_json_v3_file (
     const std::vector<point_t> &profile_spots, std::string *error,
     const parameter_source_image *source_image = nullptr);
 
+/* Preserve an external scan/project reference through CLI Save As or moving
+   a .cspar: relative paths are rebased using the same host-independent
+   POSIX/drive/UNC rules as measured MTF. Invalid paths leave SOURCE unchanged. */
+DLL_PUBLIC bool
+rebase_parameter_source_image (
+    parameter_source_image *source, const std::string &old_parameter_file,
+    const std::string &new_parameter_file, std::string *error);
+
 /* Rebase relative measured-MTF source paths when a canonical parameter
    document is saved under a different absolute pathname. Source references
    must continue designating the same image. Handles POSIX, Windows drives
