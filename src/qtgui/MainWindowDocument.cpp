@@ -74,6 +74,26 @@ void rememberFileDialogDirectory(const QString &settingsKey,
   settings.setValue(settingsKey, QFileInfo(fileName).absolutePath());
 }
 
+/** Make a portable .cspar source link from the scan the user actually
+    opened, without touching scanner pixels. FILE SIZE is only an identity
+    hint; image dimensions refer to the decoded image (including RAW mode). */
+colorscreen::parameter_source_image linkedImageForSave(
+    const QString &imagePath, const QString &parameterPath,
+    int width, int height) {
+  colorscreen::parameter_source_image link;
+  if (imagePath.isEmpty() || parameterPath.isEmpty())
+    return link;
+  const QFileInfo source(imagePath);
+  const QDir destination(QFileInfo(parameterPath).absolutePath());
+  link.path = destination.relativeFilePath(source.absoluteFilePath())
+                  .toUtf8().toStdString();
+  link.width_px = width > 0 && height > 0 ? width : 0;
+  link.height_px = width > 0 && height > 0 ? height : 0;
+  const qint64 bytes = source.size();
+  link.file_size_bytes = bytes > 0 ? static_cast<uint64_t>(bytes) : 0;
+  return link;
+}
+
 /** Serialize one complete CSP + Qt metadata payload into BYTES. */
 bool serializeParameterPayload(
     const colorscreen::scr_to_img_parameters &scrToImg,
@@ -420,6 +440,18 @@ bool MainWindow::saveParametersToFile(
       !originalSourceBase.isEmpty() &&
       originalSourceBase != absoluteFileName;
   colorscreen::render_parameters outgoingRender = m_rparams;
+  colorscreen::parameter_source_image outgoingSource = m_linkedSourceImage;
+  if (m_scan && !m_currentImageFile.isEmpty()) {
+    outgoingSource = linkedImageForSave(
+        m_currentImageFile, absoluteFileName, m_scan->width, m_scan->height);
+  } else if (!outgoingSource.path.empty() && rebasingParameterSources) {
+    std::string sourceError;
+    if (!colorscreen::rebase_parameter_source_image_path(
+            &outgoingSource, originalSourceBase.toUtf8().toStdString(),
+            absoluteFileName.toUtf8().toStdString(), &sourceError))
+      error = tr("Could not preserve the associated source scan: %1")
+                  .arg(QString::fromStdString(sourceError));
+  }
   if (!unrecognizedExistingTarget && rebasingParameterSources) {
     std::string provenanceError;
     if (!colorscreen::rebase_parameter_mtf_source_paths(
@@ -462,7 +494,8 @@ bool MainWindow::saveParametersToFile(
       !saveParameterPayloadAtomically(
           absoluteFileName, jsonV3, m_scrToImgParams,
           (hasRgb || jsonV3) ? &m_detectParams : nullptr,
-          outgoingRender, m_solverParams, m_profileSpots, &error)) {
+          outgoingRender, m_solverParams, m_profileSpots, &error,
+          jsonV3 ? &outgoingSource : nullptr)) {
     // The write result is synchronous because closeEvent needs it immediately,
     // but its explanation must not enter a nested event loop while close/save
     // policy is still on the stack. Veto the close first and let Qt present the
@@ -507,6 +540,10 @@ bool MainWindow::saveParametersToFile(
     }
   }
   m_parameterFile.setLoaded(absoluteFileName, format);
+  // Only adopt the newly linked scan after the file has been atomically
+  // committed; failed writes retain the previous source/reference.
+  m_linkedSourceImage = jsonV3 ? std::move(outgoingSource)
+                               : colorscreen::parameter_source_image{};
   m_recoveryDirty = false;
   rememberFileDialogDirectory(QStringLiteral("lastParameterDir"),
                               absoluteFileName);
@@ -2161,9 +2198,10 @@ bool MainWindow::loadParameterFile(const QString &fileName) {
   ParameterState loadedState;
   std::vector<colorscreen::color_match> loadedSpotResults;
   bool loadedJsonV3 = false;
+  colorscreen::parameter_source_image linkedSource;
   QString loadError;
   if (!loadParameterPayload(fileName, &loadedState, &loadedSpotResults,
-                            &loadError, &loadedJsonV3)) {
+                            &loadError, &loadedJsonV3, &linkedSource)) {
     showParameterLoadFailure(this, loadError);
     return false;
   }
@@ -2174,6 +2212,7 @@ bool MainWindow::loadParameterFile(const QString &fileName) {
   m_solverParams = std::move(loadedState.solver);
   m_profileSpots = std::move(loadedState.profileSpots);
   m_profileCalibration.spotResults = std::move(loadedSpotResults);
+  m_linkedSourceImage = std::move(linkedSource);
 
   // Successful external parameter load establishes a new calibration context.
   m_solverQueue.cancelAll();
