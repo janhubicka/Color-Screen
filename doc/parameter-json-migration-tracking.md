@@ -6,6 +6,32 @@ Decision updated: **15 October 2026**. Only legacy `.par` parameter files exist
 outside development. JSON-v1 and JSON-v2 are unreleased development artefacts,
 not compatibility contracts. `parameter-json-v2-plan.md` is obsolete history.
 
+## 16 October 2026: linked-source regression and operator Open integration
+
+- CI on `8d31e0c` compiled the source-linked document implementation on
+  Ubuntu/macOS and passed Ubuntu `distcheck`, but the macOS ASan+UBSan
+  DocumentLifecycleSmoke reported "Linked-source size mismatch did not warn".
+  The test wrote a valid linked .cspar into another folder without rebasing
+  its parameter-relative scan path; the correct production behavior was
+  therefore to present Locate image instead of the mismatch warning.
+  Rebase the test fixture with the Qt-independent helper, and assert that
+  its absolute image identity is unchanged before testing stale prompts.
+- Qt lifecycle smoke now additionally exercises *successful* Locate image
+  from a missing source reference, user selection of the existing scan,
+  modified/dirty state, explicit Save, and recovery of the rewritten
+  portable source link. It also checks that ordinary Ctrl+O exposes
+  `*.cspar` in the image/document chooser, not only through desktop
+  file associations and All Files.
+- Normal File → Open was previously labeled "Open Image(s)" and filtered
+  out `.cspar` despite desktop/positional support. It now advertises
+  images and documents, with a separate `.cspar` filter and equivalent
+  fallback routing when no application-level manager is available.
+- **Current branch requires new exact-head CI** after these fixes.
+  Installer PR #554 still has an independent Windows NSIS runtime stall:
+  the native package builds, but unattended smoke consumed one core and
+  extracted no files within 150 seconds. Keep that separate from core
+  schema-3 validation; do not declare either release-qualified yet.
+
 ## Scope and non-negotiable invariants
 
 The unused ZIP-v1 parameter format is **entirely removed**: no reader, writer,
