@@ -24,6 +24,13 @@ upcoming 2.0 release are published as the
 Those packages are built from tested `main` revisions and are not the final
 2.0 release. We are happy to build more configurations if that seems useful.
 
+Native `.cspar` parameter documents remember the source scan when saved from
+an open image. On Windows, macOS and supported Linux desktops, opening a
+`.cspar` can open its source scan and apply its stored calibration in one
+operation. If the scan has moved, Color-Screen offers **Locate source scan**;
+saving again updates the link. Traditional `.par` parameters remain reusable
+presets opened through **File → Open Parameters** after choosing an image.
+
 ## Building from source code
 ### Prerequisites
 Color-Screen can be built using recent versions of either GCC or Clang
