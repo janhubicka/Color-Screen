@@ -63,6 +63,7 @@ struct DocumentLifecycleState {
   ParameterState recoveryExpectedState;
   bool recoveryStarted = false;
   QString firstParameters;
+  QString firstImageFile;
   QString secondParameters;
   QByteArray firstBaselineParameters;
   bool firstInitialMirror = false;
@@ -450,6 +451,8 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
 
     MainWindow *first = state->first.data();
     MainWindow *second = state->second.data();
+    state->firstImageFile = QFileInfo(first->currentImageFile())
+                                .absoluteFilePath();
     state->firstInitialMirror =
         first->documentStateSnapshot().rparams.scan_mirror;
     state->secondInitialMirror =
@@ -1647,6 +1650,62 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
             app.tabCount() != 0 || (workspace && workspace->isVisible())) {
           if (retryOrFail(QStringLiteral(
                   "Document lifecycle close did not cancel/join background work")))
+            return;
+          return;
+        }
+        // The same .cspar saved through Qt must open as a complete document
+        // from a desktop/CLI positional path, not as a bogus JSON image.
+        app.openFiles({state->firstParameters});
+        schedule(7, 100, 150);
+        return;
+
+      case 7: {
+        const auto docs = app.documentWindows();
+        if (docs.size() != 1 || !docs.constFirst() ||
+            docs.constFirst()->m_imageLoad.pending ||
+            !docs.constFirst()->sharedImageData()) {
+          if (retryOrFail(QStringLiteral(
+                  "Direct .cspar open did not load its linked image")))
+            return;
+          return;
+        }
+        MainWindow *linked = docs.constFirst();
+        colorscreen::scr_to_img_parameters g;
+        colorscreen::scr_detect_parameters d;
+        colorscreen::render_parameters r;
+        colorscreen::solver_parameters sol;
+        std::vector<colorscreen::point_t> spots;
+        colorscreen::parameter_source_image original;
+        std::string problem;
+        if (!colorscreen::read_parameter_json_v3_file(
+                state->firstParameters.toUtf8().constData(),
+                &g, &d, &r, &sol, &spots, &problem, &original) ||
+            !linked->m_scan ||
+            linked->currentImageFile() != state->firstImageFile ||
+            linked->m_parameterFile.path !=
+                QFileInfo(state->firstParameters).absoluteFilePath() ||
+            linked->m_parameterFile.suggested ||
+            linked->m_parameterFile.format !=
+                MainWindow::ParameterFileState::Format::JsonV3 ||
+            linked->m_rparams.scan_mirror != r.scan_mirror ||
+            linked->m_scrToImgParams.type != g.type ||
+            linked->m_scan->width != original.width_px ||
+            linked->m_scan->height != original.height_px) {
+          fail(QStringLiteral(
+              "Desktop .cspar open lost its image, source dimensions, "
+              "or saved processing state"));
+          return;
+        }
+        app.closeAllDocumentWindows();
+        schedule(8, 80, 120);
+        return;
+      }
+
+      case 8:
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+        if (!app.documentWindows().isEmpty() || app.tabCount() != 0) {
+          if (retryOrFail(QStringLiteral(
+                  "Linked document did not close without dirty-state prompt")))
             return;
           return;
         }
