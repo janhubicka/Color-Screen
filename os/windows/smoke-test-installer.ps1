@@ -7,6 +7,36 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+# Start-Process -Wait follows descendant processes on Windows. NSIS may
+# spawn a helper (including its elevated/uninstaller process), so that wait
+# can hang even when the original executable has exited. Wait on the actual
+# process handle and always bound the operation.
+function Invoke-BoundedProcess {
+    param(
+        [Parameter(Mandatory = $true)] [string]$Path,
+        [Parameter(Mandatory = $true)] [string[]]$Arguments,
+        [Parameter(Mandatory = $true)] [string]$Phase,
+        [int]$TimeoutSeconds = 120
+    )
+    Write-Host "Starting $Phase (timeout: $TimeoutSeconds seconds)"
+    $process = Start-Process -FilePath $Path -ArgumentList $Arguments -PassThru
+    try {
+        if (-not $process.WaitForExit($TimeoutSeconds * 1000)) {
+            $processId = $process.Id
+            Stop-Process -Id $processId -Force -ErrorAction SilentlyContinue
+            throw "$Phase timed out after $TimeoutSeconds seconds (PID $processId)"
+        }
+        $exitCode = $process.ExitCode
+        if ($exitCode -ne 0) {
+            throw "$Phase failed with exit code $exitCode"
+        }
+        Write-Host "$Phase completed successfully."
+    }
+    finally {
+        $process.Dispose()
+    }
+}
+
 $installDir = Join-Path $env:SystemDrive 'Color-Screen-Installer-Smoke'
 if (Test-Path -LiteralPath $installDir) {
     throw "Installer test directory already exists: $installDir"
@@ -46,9 +76,14 @@ Write-Host "Installing $installer into $installDir"
 
 # /D must be the final NSIS argument. Avoid quoting ambiguities by using an
 # isolated destination without spaces (this does not test interactive /D).
-$installation = Start-Process -FilePath $installer -ArgumentList @('/S', "/D=$installDir") -Wait -PassThru
-if ($installation.ExitCode -ne 0) {
-    throw "Silent installer exited with $($installation.ExitCode)"
+Invoke-BoundedProcess -Path $installer -Arguments @('/S', "/D=$installDir") -Phase 'NSIS silent installation' -TimeoutSeconds 150
+
+# A system installer may launch an elevated child and return before the last
+# file has been written. Poll the expected installed executable, not just the
+# bootstrapper's exit status.
+$cli = Join-Path $installDir 'bin\colorscreen.exe'
+for ($i = 0; $i -lt 60 -and -not (Test-Path -LiteralPath $cli -PathType Leaf); $i++) {
+    Start-Sleep -Seconds 1
 }
 
 $cli = Join-Path $installDir 'bin\colorscreen.exe'
@@ -74,13 +109,10 @@ $fixture = Join-Path $env:GITHUB_WORKSPACE 'testsuite\dufaycolor_nikon_coolsan90
 if (-not (Test-Path -LiteralPath $fixture -PathType Leaf)) {
     throw "Missing installed-GUI smoke input: $fixture"
 }
-$guiRun = Start-Process -FilePath $gui -ArgumentList @(
+Invoke-BoundedProcess -Path $gui -Arguments @(
     '--debug-qt', '--smoke-test', '30000', '--smoke-test-expect-windows', '2',
     $fixture, $fixture
-) -Wait -PassThru
-if ($guiRun.ExitCode -ne 0) {
-    throw "Installed GUI smoke failed: exit $($guiRun.ExitCode)"
-}
+) -Phase 'Installed Qt GUI smoke' -TimeoutSeconds 70
 
 foreach ($ext in @('cspar', 'csprj', 'par', 'jpg', 'tif')) {
     Assert-OpenWithRegistration -Extension $ext -ShouldExist $true
@@ -97,10 +129,7 @@ if ((Get-DefaultClass 'jpg') -ne $jpgDefaultBefore -or
 }
 
 Write-Host "Uninstalling the CI-only $installDir installation"
-$removal = Start-Process -FilePath $uninstaller -ArgumentList '/S' -Wait -PassThru
-if ($removal.ExitCode -ne 0) {
-    throw "Silent uninstaller exited with $($removal.ExitCode)"
-}
+Invoke-BoundedProcess -Path $uninstaller -Arguments @('/S') -Phase 'NSIS silent uninstallation' -TimeoutSeconds 120
 
 # A temporary process may finish deleting NSIS's original uninstaller.
 for ($i = 0; $i -lt 30 -and (Test-Path -LiteralPath $installDir); $i++) {
