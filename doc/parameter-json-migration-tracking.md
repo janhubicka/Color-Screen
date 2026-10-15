@@ -362,3 +362,34 @@ renderer ownership or changing numerical algorithms.
   JSON Schema and examples, structured prettier output, and removal of
   obsolete private v2 component codecs when their native implementations are
   no longer shared by the v3 encoder.
+
+## 15 October 2026: final beta-preparation audit (review branch)
+
+- On PR #556 revision `edcc67f`, **Ubuntu amd64/arm64 builds and checking,
+  `distcheck`, macOS build, and all three dedicated sanitizer jobs passed**.
+  Windows GCC/Clang built the application but failed in `makensis` at
+  `installer.nsi:71`: `Plugin not found, cannot call System::Call`. Thus
+  that revision was *not* an exact-head full-platform pass. The same issue
+  affected dedicated installer PR #554. The optional Shell32 notification
+  dependency was removed from **both** review branches; the new installer
+  heads require their own Windows CI.
+- An additional Qt source-path audit found a first-save gap. A newly opened
+  image with only a *suggested* parameter path resolves relative measured-MTF
+  sources from the image directory. First Save As to another directory must
+  rebase them, just like later Save As, including both Undo snapshots. The
+  GUI implementation now uses the same initial base as the source resolver
+  and private recovery. Offscreen lifecycle smoke checks the absolute source
+  identity, Undo/Redo and a complete reload of that first saved document.
+- Do **not** call this beta yet: run the complete matrix at the new exact head
+  (especially native installer generation and GUI smoke); qualify a real
+  150+ megapixel document under constrained and normal cache budgets,
+  including demosaic changes and scratch/mmap use; and exercise the manual
+  end-to-end regular-screen, line-screen, monochrome/IR, MTF reference,
+  cancellation, recovery, and installed/portable launch scenarios from
+  `.github/RELEASE-2.0.md`. The integrated PRs #552/#553/#555/#556 are
+  stacked; use the full #556 head for release qualification, and retire
+  predecessor reviews only once that final integration is accepted.
+- Schema-3 is the first supported `.cspar` format. Keep the sole `.par`
+  compatibility boundary; do not add v1/v2 JSON or unused ZIP migration code
+  back to unblock beta. Keep the final-release-only PR #510 draft.
+
