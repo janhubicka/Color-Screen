@@ -1063,8 +1063,11 @@ private:
   };
   ParameterFileState m_parameterFile;
 
-  /* Nonblocking source-file chooser for double-clicked .cspar documents. */
+  /* One active linked-document source prompt at a time. New Open/Reload
+     supersedes both the chooser and the mismatch confirmation, preventing
+     an obsolete dialog from replacing an unrelated image later. */
   QPointer<QFileDialog> m_sourceLocateDialog;
+  QPointer<QMessageBox> m_sourceMismatchPrompt;
 
   /** Presentation ownership for one non-blocking parameter-save failure.
       A newer save attempt supersedes an older warning; save success/failure
