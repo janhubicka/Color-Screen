@@ -32,6 +32,7 @@
 #include <QMessageBox>
 #include <QObject>
 #include <QPointer>
+#include <QPushButton>
 #include <QScreen>
 #include <QSettings>
 #include <QSignalBlocker>
@@ -1401,6 +1402,10 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
   // A failed older load may still have a non-blocking warning open. Starting a
   // new image request supersedes that presentation just like it supersedes the
   // old worker/result generation.
+  if (m_sourceLocateDialog) {
+    m_sourceLocateDialog->close();
+    m_sourceLocateDialog.clear();
+  }
   if (m_imageLoad.failurePrompt) {
     m_imageLoad.failurePrompt->close();
     m_imageLoad.failurePrompt.clear();
@@ -1479,7 +1484,8 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
         // Capture-type compatibility can only be checked after image_data has
         // been loaded. Keep this as permission to offer the guide; the actual
         // decision is made in the successful-load callback below.
-        const bool allowInitialGuide = !suppressParamPrompt;
+        const bool allowInitialGuide =
+            !suppressParamPrompt && !sidecarStaging->explicitDocumentOpen;
 
         auto progress = std::make_shared<colorscreen::progress_info>();
         progress->set_task("Opening image", 0);
