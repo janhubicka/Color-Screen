@@ -134,14 +134,15 @@ bool saveParameterPayloadAtomically(
     const colorscreen::scr_detect_parameters *detect,
     const colorscreen::render_parameters &render,
     const colorscreen::solver_parameters &solver,
-    const std::vector<colorscreen::point_t> &profileSpots, QString *error) {
+    const std::vector<colorscreen::point_t> &profileSpots, QString *error,
+    const colorscreen::parameter_source_image *sourceImage = nullptr) {
   if (json) {
     const colorscreen::scr_detect_parameters defaultDetection;
     const auto &detection = detect ? *detect : defaultDetection;
     std::string writeError;
     const bool written = colorscreen::write_parameter_json_v3_file(
         path.toUtf8().constData(), scrToImg, detection, render, solver,
-        profileSpots, &writeError);
+        profileSpots, &writeError, sourceImage);
     if (error)
       *error = written ? QString() : QString::fromUtf8(writeError);
     return written;
@@ -174,7 +175,8 @@ bool saveRecoveryTextAtomically(const QString &path, const QString &text) {
 bool loadParameterPayload(
     const QString &path, ParameterState *state,
     std::vector<colorscreen::color_match> *spotResults, QString *error,
-    bool *isJsonV3 = nullptr) {
+    bool *isJsonV3 = nullptr,
+    colorscreen::parameter_source_image *sourceImage = nullptr) {
   if (!state)
     return false;
 
@@ -187,7 +189,7 @@ bool loadParameterPayload(
     const bool loaded = colorscreen::read_parameter_json_v3_file(
         encodedPath.constData(), &loadedState.scrToImg, &loadedState.detect,
         &loadedState.rparams, &loadedState.solver,
-        &loadedState.profileSpots, &jsonError);
+        &loadedState.profileSpots, &jsonError, sourceImage);
     if (!loaded) {
       if (error)
         *error = QString::fromUtf8(jsonError);
@@ -247,6 +249,8 @@ bool loadParameterPayload(
     return false;
   }
   *state = std::move(loadedState);
+  if (sourceImage)
+    *sourceImage = {};
   if (spotResults)
     *spotResults = std::move(loadedSpotResults);
   if (isJsonV3)
@@ -393,6 +397,21 @@ bool MainWindow::saveParametersToFile(
     format = ParameterFileState::Format::JsonV3;
   const bool jsonV3 = format == ParameterFileState::Format::JsonV3;
   const bool hasRgb = m_scan && m_scan->has_rgb();
+  /* Document linkage is not a processing parameter. A linked source follows
+     the chosen .cspar directory on Save As; image dimensions refer to the
+     decoded scan, not the crop, and the file-size check is advisory identity. */
+  colorscreen::parameter_source_image linkedImage;
+  if (jsonV3 && m_scan && !m_currentImageFile.isEmpty()) {
+    const QFileInfo imageInfo(m_currentImageFile);
+    linkedImage.path =
+        QDir(QFileInfo(absoluteFileName).absolutePath())
+            .relativeFilePath(imageInfo.absoluteFilePath())
+            .toUtf8().toStdString();
+    linkedImage.width_px = m_scan->width;
+    linkedImage.height_px = m_scan->height;
+    linkedImage.size_bytes =
+        static_cast<uint64_t>(std::max<qint64>(0, imageInfo.size()));
+  }
   QString error;
   if (unrecognizedExistingTarget)
     error = tr("An existing .cspar file has an unrecognized format or invalid "
@@ -455,7 +474,8 @@ bool MainWindow::saveParametersToFile(
       !saveParameterPayloadAtomically(
           absoluteFileName, jsonV3, m_scrToImgParams,
           (hasRgb || jsonV3) ? &m_detectParams : nullptr,
-          outgoingRender, m_solverParams, m_profileSpots, &error)) {
+          outgoingRender, m_solverParams, m_profileSpots, &error,
+          jsonV3 ? &linkedImage : nullptr)) {
     // The write result is synchronous because closeEvent needs it immediately,
     // but its explanation must not enter a nested event loop while close/save
     // policy is still on the stack. Veto the close first and let Qt present the
