@@ -64,6 +64,11 @@ struct DocumentLifecycleState {
   bool recoveryStarted = false;
   QString firstParameters;
   QString secondParameters;
+  QString movedLinkedParameters;
+  QString movedLinkedImage;
+  QPointer<MainWindow> linkedOpenProbe;
+  bool movedLinkedOpenStarted = false;
+  bool directLinkedOpenStarted = false;
   QByteArray firstBaselineParameters;
   bool firstInitialMirror = false;
   bool secondInitialMirror = false;
@@ -839,6 +844,38 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
       return;
     }
 
+    // Simulate moving a .cspar and scan together while an older recorded
+    // source path points into a directory that no longer exists. The expected
+    // basename next to the .cspar must resolve unambiguously.
+    const QString movedDir =
+        state->temporaryDirectory->filePath(QStringLiteral("linked-relocated"));
+    const QFileInfo imageInfo(first->currentImageFile());
+    state->movedLinkedImage =
+        QDir(movedDir).filePath(imageInfo.fileName());
+    state->movedLinkedParameters =
+        QDir(movedDir).filePath(QStringLiteral("linked-relocated.cspar"));
+    const ParameterState linkState = first->documentStateSnapshot();
+    colorscreen::parameter_source_image movedLink;
+    movedLink.path = QStringLiteral("../not-present/%1")
+                         .arg(imageInfo.fileName()).toUtf8().toStdString();
+    movedLink.width_px = first->m_scan->width;
+    movedLink.height_px = first->m_scan->height;
+    movedLink.file_size_bytes = static_cast<uint64_t>(imageInfo.size());
+    std::string linkError;
+    if (!QDir().mkpath(movedDir) ||
+        !QFile::copy(imageInfo.absoluteFilePath(),
+                     state->movedLinkedImage) ||
+        !colorscreen::write_parameter_json_v3_file(
+            state->movedLinkedParameters.toUtf8().constData(),
+            linkState.scrToImg, linkState.detect, linkState.rparams,
+            linkState.solver, linkState.profileSpots, &linkError,
+            &movedLink)) {
+      qCritical() << "Failed creating moved linked-document fixture"
+                  << QString::fromStdString(linkError);
+      app.exit(documentLifecycleFailure);
+      return;
+    }
+
     state->firstBaselineParameters = readFile(state->firstParameters);
     if (state->firstBaselineParameters.isEmpty()) {
       qCritical() << "Document lifecycle smoke could not read its baseline parameters";
@@ -897,6 +934,76 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
       WorkspaceWindow *workspace = state->workspace.data();
 
       switch (phase) {
+      case -4: {
+        // The recorded relative location is missing, but its basename beside
+        // the moved .cspar identifies exactly one valid scan.
+        if (!state->movedLinkedOpenStarted) {
+          state->movedLinkedOpenStarted = true;
+          app.openFiles({state->movedLinkedParameters});
+          const auto docs = app.documentWindows();
+          if (docs.size() != 3) {
+            fail(QStringLiteral("Linked moved-document open did not create a scan"));
+            return;
+          }
+          state->linkedOpenProbe = docs.constLast();
+        }
+        MainWindow *probe = state->linkedOpenProbe.data();
+        if (!probe || !probe->sharedImageData()) {
+          retryOrFail(QStringLiteral("Moved linked .cspar did not load its scan"));
+          return;
+        }
+        if (QFileInfo(probe->currentImageFile()).absoluteFilePath() !=
+                QFileInfo(state->movedLinkedImage).absoluteFilePath() ||
+            probe->m_parameterFile.path !=
+                QFileInfo(state->movedLinkedParameters).absoluteFilePath() ||
+            !probe->m_undoStack->isClean()) {
+          fail(QStringLiteral("Moved linked .cspar lost document/scan ownership"));
+          return;
+        }
+        probe->close();
+        schedule(-3, 50, 120);
+        return;
+      }
+      case -3: {
+        if (app.documentWindows().size() != 2) {
+          retryOrFail(QStringLiteral("Moved linked document did not close"));
+          return;
+        }
+        if (!state->directLinkedOpenStarted) {
+          state->directLinkedOpenStarted = true;
+          app.openFiles({state->firstParameters});
+          const auto docs = app.documentWindows();
+          if (docs.size() != 3) {
+            fail(QStringLiteral("Direct .cspar open did not create another document"));
+            return;
+          }
+          state->linkedOpenProbe = docs.constLast();
+        }
+        MainWindow *probe = state->linkedOpenProbe.data();
+        if (!probe || !probe->sharedImageData()) {
+          retryOrFail(QStringLiteral("Direct linked .cspar did not load its scan"));
+          return;
+        }
+        if (QFileInfo(probe->currentImageFile()).absoluteFilePath() !=
+                QFileInfo(first->currentImageFile()).absoluteFilePath() ||
+            probe->m_parameterFile.path !=
+                QFileInfo(state->firstParameters).absoluteFilePath() ||
+            probe->documentStateSnapshot() != first->documentStateSnapshot()) {
+          fail(QStringLiteral("Direct linked .cspar applied incorrect image/parameters"));
+          return;
+        }
+        probe->close();
+        schedule(-2, 50, 120);
+        return;
+      }
+      case -2: {
+        if (app.documentWindows().size() != 2) {
+          retryOrFail(QStringLiteral("Direct linked document did not close"));
+          return;
+        }
+        schedule(-1, 0, 120);
+        return;
+      }
       case -1: {
         if (!first || !second || !view || !workspace) {
           fail(QStringLiteral(
@@ -1679,7 +1786,7 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
       }
     };
 
-    QTimer::singleShot(0, &app, [runPhase]() { (*runPhase)(-1, 120); });
+    QTimer::singleShot(0, &app, [runPhase]() { (*runPhase)(-4, 120); });
   };
 
   startTaskQueueAsyncPublicationSmoke(
