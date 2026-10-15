@@ -37,7 +37,7 @@ function Invoke-BoundedProcess {
     }
 }
 
-$installDir = Join-Path $env:SystemDrive 'Color-Screen-Installer-Smoke'
+$installDir = Join-Path $env:LOCALAPPDATA 'Color-Screen-Installer-Smoke'
 if (Test-Path -LiteralPath $installDir) {
     throw "Installer test directory already exists: $installDir"
 }
@@ -69,25 +69,28 @@ function Assert-OpenWithRegistration {
     }
 }
 
+# The production installer is now per-user and must not request UAC.
+# In CI the user-writable test target is intentionally separate from the
+# default LOCALAPPDATA/Programs destination.
 $installer = (Resolve-Path -LiteralPath $InstallerPath).Path
 $jpgDefaultBefore = Get-DefaultClass 'jpg'
 $tiffDefaultBefore = Get-DefaultClass 'tif'
 Write-Host "Installing $installer into $installDir"
 
 # /D must be the final NSIS argument. Avoid quoting ambiguities by using an
-# isolated destination without spaces (this does not test interactive /D).
+# user-writable destination (this does not test the interactive wizard).
 Invoke-BoundedProcess -Path $installer -Arguments @('/S', "/D=$installDir") -Phase 'NSIS silent installation' -TimeoutSeconds 150
 
 # A system installer may launch an elevated child and return before the last
 # file has been written. Poll the expected installed executable, not just the
 # bootstrapper's exit status.
-$cli = Join-Path $installDir 'bin\colorscreen.exe'
+$cli = Join-Path $installDir 'colorscreen.exe'
 for ($i = 0; $i -lt 60 -and -not (Test-Path -LiteralPath $cli -PathType Leaf); $i++) {
     Start-Sleep -Seconds 1
 }
 
-$cli = Join-Path $installDir 'bin\colorscreen.exe'
-$gui = Join-Path $installDir 'bin\colorscreen-qt.exe'
+$cli = Join-Path $installDir 'colorscreen.exe'
+$gui = Join-Path $installDir 'colorscreen-qt.exe'
 $uninstaller = Join-Path $installDir 'uninstall.exe'
 foreach ($path in @($cli, $gui, $uninstaller,
                     (Join-Path $installDir 'LICENSE.txt'),
