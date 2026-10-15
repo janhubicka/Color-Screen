@@ -13,6 +13,7 @@
 #include <QDir>
 #include <QDebug>
 #include <QFile>
+#include <QFileDialog>
 #include <QFileInfo>
 #include <QMessageBox>
 #include <QMetaObject>
@@ -66,7 +67,11 @@ struct DocumentLifecycleState {
   QString secondParameters;
   QString movedLinkedParameters;
   QString movedLinkedImage;
+  QString missingLinkedParameters;
   QPointer<MainWindow> linkedOpenProbe;
+  bool missingPickerStarted = false;
+  bool missingPickerCancelled = false;
+  bool missingPickerAccepted = false;
   bool movedLinkedOpenStarted = false;
   bool directLinkedOpenStarted = false;
   QByteArray firstBaselineParameters;
@@ -876,6 +881,23 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
       return;
     }
 
+    // A wholly missing source must offer a nonblocking chooser instead of
+    // creating a blank document or silently applying geometry to a random scan.
+    const QString missingDir = state->temporaryDirectory->filePath(
+        QStringLiteral("linked-missing-source"));
+    state->missingLinkedParameters =
+        QDir(missingDir).filePath(QStringLiteral("chooser.cspar"));
+    movedLink.path = "../missing/never-exists.tif";
+    if (!QDir().mkpath(missingDir) ||
+        !colorscreen::write_parameter_json_v3_file(
+            state->missingLinkedParameters.toUtf8().constData(),
+            linkState.scrToImg, linkState.detect, linkState.rparams,
+            linkState.solver, linkState.profileSpots, &linkError, &movedLink)) {
+      qCritical() << "Failed creating missing linked-document fixture";
+      app.exit(documentLifecycleFailure);
+      return;
+    }
+
     state->firstBaselineParameters = readFile(state->firstParameters);
     if (state->firstBaselineParameters.isEmpty()) {
       qCritical() << "Document lifecycle smoke could not read its baseline parameters";
@@ -934,6 +956,62 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
       WorkspaceWindow *workspace = state->workspace.data();
 
       switch (phase) {
+      case -6: {
+        // Cancelling a missing-image chooser must not publish any image,
+        // parameters, target path or empty document window.
+        if (!state->missingPickerStarted) {
+          state->missingPickerStarted = true;
+          app.openFiles({state->missingLinkedParameters});
+        }
+        auto *chooser = workspace->findChild<QFileDialog *>(
+            QStringLiteral("LocateLinkedSourceDialog"));
+        if (!chooser) {
+          retryOrFail(QStringLiteral("Missing linked source offered no chooser"));
+          return;
+        }
+        chooser->reject();
+        if (app.documentWindows().size() != 2) {
+          fail(QStringLiteral("Cancelled linked-source chooser created a document"));
+          return;
+        }
+        schedule(-5, 50, 120);
+        return;
+      }
+      case -5: {
+        if (!state->missingPickerCancelled) {
+          state->missingPickerCancelled = true;
+          app.openFiles({state->missingLinkedParameters});
+        }
+        if (!state->missingPickerAccepted) {
+          auto *chooser = workspace->findChild<QFileDialog *>(
+              QStringLiteral("LocateLinkedSourceDialog"));
+          if (!chooser) {
+            retryOrFail(QStringLiteral("Missing source chooser did not reopen"));
+            return;
+          }
+          state->missingPickerAccepted = true;
+          chooser->selectFile(first->currentImageFile());
+          chooser->accept();
+          schedule(-5, 100, 120);
+          return;
+        }
+        const auto docs = app.documentWindows();
+        if (docs.size() != 3 || !docs.constLast()->sharedImageData()) {
+          retryOrFail(QStringLiteral("Selected relocated scan was not opened"));
+          return;
+        }
+        MainWindow *probe = docs.constLast();
+        if (QFileInfo(probe->currentImageFile()).absoluteFilePath() !=
+                QFileInfo(first->currentImageFile()).absoluteFilePath() ||
+            probe->m_parameterFile.path !=
+                QFileInfo(state->missingLinkedParameters).absoluteFilePath()) {
+          fail(QStringLiteral("Missing-image chooser did not restore .cspar"));
+          return;
+        }
+        probe->close();
+        schedule(-4, 50, 120);
+        return;
+      }
       case -4: {
         // The recorded relative location is missing, but its basename beside
         // the moved .cspar identifies exactly one valid scan.
@@ -1786,7 +1864,7 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
       }
     };
 
-    QTimer::singleShot(0, &app, [runPhase]() { (*runPhase)(-4, 120); });
+    QTimer::singleShot(0, &app, [runPhase]() { (*runPhase)(-6, 120); });
   };
 
   startTaskQueueAsyncPublicationSmoke(
