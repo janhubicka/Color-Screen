@@ -1028,14 +1028,15 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
         }
         queueDialogResponses(app, {{QStringLiteral("Unsaved Changes"),
                                     QMessageBox::Discard}});
+        QPointer<MainWindow> closingProbe = probe;
         if (!probe->close()) {
           fail(QStringLiteral("Relinked chooser document refused Discard"));
           return;
         }
-        // Once the tab's close policy succeeds, explicit application close
-        // uses deleteLater() too: the MDI wrapper can otherwise retain an
-        // otherwise closed MainWindow through reparenting.
-        probe->deleteLater();
+        // Match application's deferred destruction without dereferencing a
+        // MainWindow that WA_DeleteOnClose might already have destroyed.
+        if (closingProbe)
+          closingProbe->deleteLater();
         schedule(-104, 50, 120);
         return;
       }
@@ -1076,11 +1077,13 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
         }
         queueDialogResponses(app, {{QStringLiteral("Unsaved Changes"),
                                     QMessageBox::Discard}});
+        QPointer<MainWindow> closingProbe = probe;
         if (!probe->close()) {
           fail(QStringLiteral("Moved linked document refused Discard"));
           return;
         }
-        probe->deleteLater();
+        if (closingProbe)
+          closingProbe->deleteLater();
         schedule(-103, 50, 120);
         return;
       }
@@ -1112,11 +1115,13 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
           fail(QStringLiteral("Direct linked .cspar applied incorrect image/parameters"));
           return;
         }
+        QPointer<MainWindow> closingProbe = probe;
         if (!probe->close()) {
           fail(QStringLiteral("Direct linked document refused close"));
           return;
         }
-        probe->deleteLater();
+        if (closingProbe)
+          closingProbe->deleteLater();
         schedule(-102, 50, 120);
         return;
       }
