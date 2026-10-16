@@ -66,6 +66,16 @@ QString fileDialogDirectoryPreference(const QString &settingsKey) {
   return directory.isEmpty() || QDir(directory).exists() ? directory : QString();
 }
 
+/** Resolve existing scan/parameter-directory aliases before constructing
+    document-relative references. In particular /var on macOS often resolves
+    to /private/var: ".." traverses the physical hierarchy when the saved
+    document is reopened, not the apparent lexical path hierarchy. */
+QString physicalPathForDocumentLink(const QString &path) {
+  const QFileInfo info(path);
+  const QString physical = info.canonicalFilePath();
+  return physical.isEmpty() ? info.absoluteFilePath() : physical;
+}
+
 /** Remember the containing directory of one successfully chosen/used file. */
 void rememberFileDialogDirectory(const QString &settingsKey,
                                  const QString &fileName) {
@@ -404,10 +414,17 @@ bool MainWindow::saveParametersToFile(
   colorscreen::parameter_source_image linkedImage;
   if (jsonV3 && m_scan && !m_currentImageFile.isEmpty()) {
     const QFileInfo imageInfo(m_currentImageFile);
+    // The target filename might not exist yet, but its parent directory
+    // does. Canonicalize both that directory and the existing scan before
+    // counting ".." segments. Lexically rebasing /var/... to /Users/... on
+    // macOS would otherwise point under /private/Users after the OS follows
+    // the /var -> /private/var symlink.
+    const QString sourceBase = physicalPathForDocumentLink(
+        QFileInfo(absoluteFileName).absolutePath());
+    const QString sourceFile = physicalPathForDocumentLink(
+        imageInfo.absoluteFilePath());
     linkedImage.path =
-        QDir(QFileInfo(absoluteFileName).absolutePath())
-            .relativeFilePath(imageInfo.absoluteFilePath())
-            .toUtf8().toStdString();
+        QDir(sourceBase).relativeFilePath(sourceFile).toUtf8().toStdString();
     linkedImage.width_px = m_scan->width;
     linkedImage.height_px = m_scan->height;
     linkedImage.size_bytes =
@@ -1198,12 +1215,13 @@ void MainWindow::openParameterDocument(const QString &fileName,
 
   const QString sourcePath = QString::fromUtf8(source.path.c_str());
   const QString baseDir = QFileInfo(documentFile).absolutePath();
+  const QString physicalBaseDir = physicalPathForDocumentLink(baseDir);
   QString candidate;
   if (!forceLocateImage && !sourcePath.isEmpty()) {
     const QFileInfo recorded(sourcePath);
     candidate = recorded.isAbsolute()
                     ? recorded.absoluteFilePath()
-                    : QDir(baseDir).absoluteFilePath(sourcePath);
+                    : QDir(physicalBaseDir).absoluteFilePath(sourcePath);
     if (!QFileInfo(candidate).isFile()) {
       // Moving a scan and its sidecar together, or just replacing its parent
       // directory, should not require a recursive filesystem search.
@@ -1453,11 +1471,13 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
         ? QString()
         : QFileInfo(recorded).isAbsolute()
               ? QFileInfo(recorded).absoluteFilePath()
-              : QDir(QFileInfo(sidecarStaging->loadedPath).absolutePath())
+              : QDir(physicalPathForDocumentLink(
+                    QFileInfo(sidecarStaging->loadedPath).absolutePath()))
                     .absoluteFilePath(recorded);
     sidecarStaging->sourceWasRelocated =
         resolved.isEmpty() ||
-        QDir::cleanPath(resolved) != QDir::cleanPath(requestedImageFile);
+        physicalPathForDocumentLink(resolved) !=
+            physicalPathForDocumentLink(requestedImageFile);
   }
 
   // A failed older load may still have a non-blocking warning open. Starting a
