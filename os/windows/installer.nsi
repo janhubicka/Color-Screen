@@ -5,6 +5,13 @@
 ; testing and avoids changing other users' file associations.
 
 Name "Color-Screen"
+; The MSYS2 x86-Unicode NSIS stub on Windows Server 2025 currently spins at
+; 100% CPU before extracting any file from the zlib-compressed 55 MiB payload.
+; It also stalls with /NCRC, so the executable self-check is not the culprit.
+; Avoid data decompression entirely while qualifying a reliable 2.0 installer.
+; This increases the .exe size, but installed contents and signatures are
+; unchanged. Revisit an efficient compressor after installer smoke passes.
+SetCompress off
 !ifdef OUTFILE
   OutFile "${OUTFILE}"
 !else
