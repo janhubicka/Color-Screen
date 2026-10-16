@@ -93,6 +93,19 @@ int MultiLineTabWidget::addStage(const QString &label, const QString &key)
     return id;
 }
 
+/** Configure the stable default panel when entering an available stage. */
+void MultiLineTabWidget::setStageDefaultPanel(
+    const QString &stageKey, const QString &panelKey)
+{
+    const int stageIndex = indexOfStageKey(stageKey);
+    const int panelIndex = indexOfKey(panelKey);
+    if (stageIndex < 0 || panelIndex < 0 ||
+        m_tabs[panelIndex].stageKey != stageKey)
+        return;
+
+    m_stages[stageIndex].defaultPanelKey = panelKey;
+}
+
 int MultiLineTabWidget::addTab(QWidget *page, const QString &label,
                                const QString &key, const QString &stageKey)
 {
@@ -382,18 +395,29 @@ void MultiLineTabWidget::onStageClicked(int id)
     if (id < 0 || id >= m_stages.size() || m_stages[id].button->isHidden())
         return;
 
+    const bool enteringStage = m_currentStage != id;
     setCurrentStageIndex(id);
 
     const int current = m_stack->currentIndex();
-    if (current >= 0 && current < m_tabs.size() && m_tabs[current].visible &&
-        stageIndexForTab(current) == id)
+    // Clicking the already active stage must not undo an intentional
+    // detailed-panel choice (for example Contact copy).
+    if (!enteringStage && current >= 0 && current < m_tabs.size() &&
+        m_tabs[current].visible && stageIndexForTab(current) == id)
         return;
 
-    const int fallback = firstVisibleTabInStage(id);
-    if (fallback < 0)
+    int destination = -1;
+    if (enteringStage && !m_stages[id].defaultPanelKey.isEmpty()) {
+        const int preferred = indexOfKey(m_stages[id].defaultPanelKey);
+        if (preferred >= 0 && m_tabs[preferred].visible &&
+            stageIndexForTab(preferred) == id)
+            destination = preferred;
+    }
+    if (destination < 0)
+        destination = firstVisibleTabInStage(id);
+    if (destination < 0)
         return;
 
-    setCurrentIndex(fallback);
-    if (m_stack->currentIndex() == fallback)
-        emit tabActivated(fallback);
+    setCurrentIndex(destination);
+    if (m_stack->currentIndex() == destination)
+        emit tabActivated(destination);
 }
