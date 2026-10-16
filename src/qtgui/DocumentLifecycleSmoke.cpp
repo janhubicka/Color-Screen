@@ -2059,15 +2059,34 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
           return;
         }
         const QString spelling = QString::fromStdString(saved.path);
-        const QString absoluteSource = QFileInfo(spelling).isAbsolute()
+        const QString physicalDocumentDirectory =
+            QFileInfo(QFileInfo(relocatedDocument).absolutePath())
+                .canonicalFilePath();
+        const QString resolvedSource = QFileInfo(spelling).isAbsolute()
             ? QFileInfo(spelling).absoluteFilePath()
-            : QDir(QFileInfo(relocatedDocument).absolutePath())
-                  .absoluteFilePath(spelling);
-        if (QDir::cleanPath(absoluteSource) !=
-                QDir::cleanPath(QFileInfo(state->firstImageFile)
-                                    .absoluteFilePath()) ||
+            : QDir(physicalDocumentDirectory).absoluteFilePath(spelling);
+        const QFileInfo scanReference(resolvedSource);
+        const QString actualScan = scanReference.canonicalFilePath();
+        const QString expectedScan =
+            QFileInfo(state->firstImageFile).canonicalFilePath();
+        // Compare the same physical source identities as desktop .cspar Open.
+        // The original test compared lexical paths under /var/folders on
+        // macOS; that alias to /private/var changes the apparent number of
+        // ".." components while the saved relative link remains correct.
+        if (physicalDocumentDirectory.isEmpty() ||
+            !scanReference.isFile() || actualScan.isEmpty() ||
+            expectedScan.isEmpty() || actualScan != expectedScan ||
             saved.width_px != relocated->m_scan->width ||
             saved.height_px != relocated->m_scan->height) {
+          qCritical() << "Relocated .cspar source resolution:"
+                      << "recorded" << spelling
+                      << "physical base" << physicalDocumentDirectory
+                      << "resolved" << resolvedSource
+                      << "actual" << actualScan
+                      << "expected" << expectedScan
+                      << "saved dimensions" << saved.width_px << saved.height_px
+                      << "decoded dimensions" << relocated->m_scan->width
+                      << relocated->m_scan->height;
           fail(QStringLiteral(
               "Saved relocated source no longer identifies the chosen scan"));
           return;
