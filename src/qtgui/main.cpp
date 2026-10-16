@@ -2591,6 +2591,64 @@ bool runBetaInvariantSmoke() {
       groupedChanges != 5 || groupedActivations != 1)
     return fail("restoring the second Capture panel did not restore navigation");
 
+  // Switching to Process must land on Screen even when Contact copy was
+  // the last detailed panel the operator visited. Explicitly selecting
+  // Contact copy inside Process must remain respected until the next stage
+  // transition; disabling Screen must fall back safely to Image Layer.
+  MultiLineTabWidget processDefaults(&hiddenHost);
+  processDefaults.addStage(QStringLiteral("Process"),
+                           QStringLiteral("process"));
+  processDefaults.addStage(QStringLiteral("Reconstruct"),
+                           QStringLiteral("reconstruct"));
+  const int processImage = processDefaults.addTab(
+      new QWidget, QStringLiteral("Image Layer"),
+      QStringLiteral("image_layer"), QStringLiteral("process"));
+  const int processScreen = processDefaults.addTab(
+      new QWidget, QStringLiteral("Screen"),
+      QStringLiteral("screen"), QStringLiteral("process"));
+  const int processContact = processDefaults.addTab(
+      new QWidget, QStringLiteral("Contact copy"),
+      QStringLiteral("contact_copy"), QStringLiteral("process"));
+  const int processSharpness = processDefaults.addTab(
+      new QWidget, QStringLiteral("Sharpness"),
+      QStringLiteral("sharpness"), QStringLiteral("reconstruct"));
+  processDefaults.setStageDefaultPanel(QStringLiteral("process"),
+                                       QStringLiteral("screen"));
+  QPushButton *processStageButton = nullptr;
+  for (QPushButton *button : processDefaults.findChildren<QPushButton *>()) {
+    if (button->objectName() == QStringLiteral("WorkflowStageButton") &&
+        button->property("stageKey").toString() == QStringLiteral("process")) {
+      processStageButton = button;
+      break;
+    }
+  }
+  if (!processStageButton)
+    return fail("Process stage lost its stable stage-button key");
+
+  processDefaults.setCurrentIndex(processContact);
+  processDefaults.setCurrentIndex(processSharpness);
+  processStageButton->click();
+  if (processDefaults.currentIndex() != processScreen ||
+      processDefaults.currentStageKey() != QStringLiteral("process"))
+    return fail("Process stage did not enter Screen by default");
+
+  processDefaults.setCurrentIndex(processContact);
+  processStageButton->click();
+  if (processDefaults.currentIndex() != processContact)
+    return fail("Re-clicking Process overrode explicit Contact copy selection");
+
+  processDefaults.setCurrentIndex(processSharpness);
+  processDefaults.setTabVisible(processScreen, false);
+  processStageButton->click();
+  if (processDefaults.currentIndex() != processImage)
+    return fail("Process did not fall back when Screen became unavailable");
+
+  processDefaults.setTabVisible(processScreen, true);
+  processDefaults.setCurrentIndex(processSharpness);
+  processStageButton->click();
+  if (processDefaults.currentIndex() != processScreen)
+    return fail("Restored Process Screen was not its stable default panel");
+
   // Checkbox enabledCheck must match the rest of ParameterPanel: a missing
   // prerequisite disables a still-visible row. Logical disappearance is an
   // explicit setParameterApplicability() decision, never an overloaded meaning
