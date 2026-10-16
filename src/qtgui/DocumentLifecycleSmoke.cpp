@@ -1010,7 +1010,19 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
           fail(QStringLiteral("Missing-image chooser did not restore .cspar"));
           return;
         }
-        probe->close();
+        // Choosing a relocated scan deliberately marks the document dirty.
+        // Discard those test-only edits on close; otherwise the unsaved-change
+        // modal dialog blocks the next asynchronous smoke phase.
+        if (!probe->isDocumentModified()) {
+          fail(QStringLiteral("Relinked chooser document was not marked dirty"));
+          return;
+        }
+        queueDialogResponses(app, {{QStringLiteral("Unsaved Changes"),
+                                    QMessageBox::Discard}});
+        if (!probe->close()) {
+          fail(QStringLiteral("Relinked chooser document refused Discard"));
+          return;
+        }
         schedule(-104, 50, 120);
         return;
       }
@@ -1044,7 +1056,17 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
           fail(QStringLiteral("Moved linked .cspar lost document/scan ownership"));
           return;
         }
-        probe->close();
+        // The same applies to the relocated same-folder source fallback.
+        if (!probe->isDocumentModified()) {
+          fail(QStringLiteral("Moved linked document was not marked dirty"));
+          return;
+        }
+        queueDialogResponses(app, {{QStringLiteral("Unsaved Changes"),
+                                    QMessageBox::Discard}});
+        if (!probe->close()) {
+          fail(QStringLiteral("Moved linked document refused Discard"));
+          return;
+        }
         schedule(-103, 50, 120);
         return;
       }
