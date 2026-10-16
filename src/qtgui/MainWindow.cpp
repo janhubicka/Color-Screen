@@ -1136,6 +1136,10 @@ void MainWindow::setupUi() {
   m_configTabs->addTab(m_contactCopyPanel, tr("Contact copy"),
                        QStringLiteral("contact_copy"),
                        QStringLiteral("process"));
+  // Entering Process is normally about choosing the physical screen.
+  // Contact copy remains an explicit optional panel, not the landing page.
+  m_configTabs->setStageDefaultPanel(QStringLiteral("process"),
+                                     QStringLiteral("screen"));
   m_configTabs->addTab(m_geometryPanel, tr("Geometry"),
                        QStringLiteral("geometry"),
                        QStringLiteral("register"));
