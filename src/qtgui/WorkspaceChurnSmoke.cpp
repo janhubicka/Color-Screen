@@ -1123,10 +1123,10 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
   return;
 }
 
-        // Real QLabel geometry regression for the closely spaced Workflow
-        // Next paragraph, independently of the current screen/capture state.
-        // Compare the same wrapped words in rich and plain modes; a bold
-        // caption may cost one extra line but not double every line's leading.
+        // Actual Workflow QLabel geometry regression at a narrow inspector
+        // width: a bold caption must not inflate *each wrapped line* by
+        // roughly 50% relative to adjacent ordinary QLabel status text.
+        // Screenshot regression: ~29 px vs ~19 px line baselines on Windows.
         {
           const QString probeText = QStringLiteral(
               "Next: inspect reconstructed colors before adjusting the original "
@@ -1146,10 +1146,12 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
           nextStepSummary->setText(probeHtml);
           const int richHeight = nextStepSummary->heightForWidth(probeWidth);
           nextStepSummary->setText(savedNextHtml);
-          if (plainHeight <= plainProbe.fontMetrics().lineSpacing() ||
-              richHeight <= 0 ||
-              richHeight > plainHeight +
-                               nextStepSummary->fontMetrics().lineSpacing() + 4) {
+          const int normalLeading =
+              nextStepSummary->fontMetrics().lineSpacing();
+          // Allow a small rounding/bold-metric difference but not another
+          // entire line of spurious rich-text leading.
+          if (plainHeight <= normalLeading || richHeight <= 0 ||
+              richHeight > plainHeight + qMax(5, normalLeading / 3)) {
             fail(QStringLiteral(
                 "Workflow Next wrapped rich text has excessive line spacing "
                 "(plain=%1, rich=%2)").arg(plainHeight).arg(richHeight));
