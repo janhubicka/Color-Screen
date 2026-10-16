@@ -69,7 +69,11 @@ function Invoke-BoundedProcess {
     }
 }
 
-$installDir = Join-Path $env:LOCALAPPDATA 'Color-Screen-Installer-Smoke'
+# Exercise NSIS's declared per-user InstallDir, as actual double-click
+# installation does. /D= is intentionally omitted: the initial diagnostic
+# never entered the install Section even with /NCRC, and overrides are not
+# required by users. The CI runner is disposable and this path must be absent.
+$installDir = Join-Path $env:LOCALAPPDATA 'Programs\Color-Screen'
 if (Test-Path -LiteralPath $installDir) {
     throw "Installer test directory already exists: $installDir"
 }
@@ -113,11 +117,9 @@ Write-Host "Installing $installer into $installDir"
 
 # /D must be the final NSIS argument. Avoid quoting ambiguities by using an
 # user-writable destination (this does not test the interactive wizard).
-# Diagnostic: the packaged x86-Unicode stub has consumed one full CPU for
-# 150 seconds before creating any files. Bypass only NSIS's executable CRC
-# preflight to distinguish self-integrity scanning from extraction/registry.
-# Do not treat this diagnostic as evidence that default double-click works.
-Invoke-BoundedProcess -Path $installer -Arguments @('/NCRC', '/S', "/D=$installDir") -Phase 'NSIS silent installation without CRC preflight' -TimeoutSeconds 150
+# Validate the same declared destination as an ordinary user-level install.
+# CRC checking stays enabled, and all installed-program/registry checks follow.
+Invoke-BoundedProcess -Path $installer -Arguments @('/S') -Phase 'NSIS silent installation (declared user directory)' -TimeoutSeconds 150
 
 # A system installer may launch an elevated child and return before the last
 # file has been written. Poll the expected installed executable, not just the
