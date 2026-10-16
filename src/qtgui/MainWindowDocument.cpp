@@ -1257,6 +1257,11 @@ void MainWindow::openParameterDocument(const QString &fileName,
            "*.j2k *.jpc *.jpf *.jpx *.raw *.dng *.iiq *.nef *.cr2 "
            "*.eip *.arw *.raf *.arq *.csprj);;All Files (*)"));
     dialog->setObjectName(QStringLiteral("LinkedSourceImageDialog"));
+    // Offscreen platforms cannot provide a real native file picker. Use the
+    // Qt widget implementation in headless GUI smoke, preserving native
+    // dialogs in ordinary interactive Windows/macOS installations.
+    if (QApplication::platformName() == QLatin1String("offscreen"))
+      dialog->setOption(QFileDialog::DontUseNativeDialog, true);
     dialog->setFileMode(QFileDialog::ExistingFile);
     dialog->setAttribute(Qt::WA_DeleteOnClose);
     m_sourceLocateDialog = dialog;
