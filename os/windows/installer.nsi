@@ -97,8 +97,10 @@ SectionEnd
 Section "Uninstall"
     Delete "$SMPROGRAMS\Color-Screen.lnk"
     Delete "$DESKTOP\Color-Screen.lnk"
-    RMDir /r "$INSTDIR"
 
+    ; Remove published metadata before deleting the installation directory.
+    ; This remains reliable when Windows temporarily holds a packaged file
+    ; open (or a running GUI) and file cleanup takes longer than registry I/O.
     DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\Color-Screen"
     # Remove only our Open With entries, and clear a file-type default only
     # when it still refers to us. Never erase another application's choice.
@@ -129,6 +131,10 @@ Section "Uninstall"
     !insertmacro UnregisterExtension "csprj"
 
     DeleteRegKey HKCU "Software\Classes\Color-Screen.File"
+
+    ; File removal may be deferred while a GUI/AV process still holds a DLL.
+    ; Perform it only after all registry/file-association cleanup has run.
+    RMDir /r "$INSTDIR"
 
     ; No System plug-in: file associations become visible at the next shell refresh.
 SectionEnd
