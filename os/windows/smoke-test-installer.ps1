@@ -181,16 +181,24 @@ if ((Get-DefaultClass 'jpg') -ne $jpgDefaultBefore -or
 Write-Host "Uninstalling the CI-only $installDir installation"
 Invoke-BoundedProcess -Path $uninstaller -Arguments @('/S') -Phase 'NSIS silent uninstallation' -TimeoutSeconds 120
 
-# A temporary process may finish deleting NSIS's original uninstaller.
-for ($i = 0; $i -lt 30 -and (Test-Path -LiteralPath $installDir); $i++) {
+# The NSIS launcher may return before its self-copy in TEMP finishes.
+# Wait for *both* the installation directory and the Add/Remove Programs key:
+# returning quickly from the outer executable alone does not qualify removal.
+# Remain bounded; a genuine incomplete uninstall is still a hard CI failure.
+$uninstallWait = [System.Diagnostics.Stopwatch]::StartNew()
+while ($uninstallWait.Elapsed.TotalSeconds -lt 45) {
+    $filesRemain = Test-Path -LiteralPath $installDir
+    $registryRemains = Test-Path -LiteralPath $uninstallKey
+    if (-not $filesRemain -and -not $registryRemains) {
+        break
+    }
     Start-Sleep -Milliseconds 500
 }
 if (Test-Path -LiteralPath $installDir) {
-    throw "Uninstaller left files in $installDir"
+    throw "Uninstaller left files in $installDir after $([int]$uninstallWait.Elapsed.TotalSeconds)s"
 }
-
 if (Test-Path -LiteralPath $uninstallKey) {
-    throw "Silent uninstall left a per-user Add/Remove Programs entry"
+    throw "Silent uninstall left a per-user Add/Remove Programs entry after $([int]$uninstallWait.Elapsed.TotalSeconds)s"
 }
 
 foreach ($ext in @('cspar', 'csprj', 'par', 'jpg', 'tif')) {
