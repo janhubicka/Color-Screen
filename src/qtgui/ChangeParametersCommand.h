@@ -1,6 +1,11 @@
 #pragma once
 
 #include "MainWindow.h"
+#include "../libcolorscreen/parameter-archive.h"
+
+#include <string>
+#include <utility>
+#include <vector>
 
 #include <QDateTime>
 #include <QUndoCommand>
@@ -42,6 +47,54 @@ public:
 
     m_newState = command->m_newState;
     m_timestamp = command->m_timestamp;
+    return true;
+  }
+
+  /* Relative measured-MTF sources in undo/redo snapshots must retain
+     their physical meaning when Save As changes the parameter-file directory.
+     Stage only path spellings, not full image/calibration copies, so a failed
+     Save or a later invalid command cannot partially rewrite the Undo stack. */
+  struct RebasedMtfPaths {
+    std::vector<std::string> before;
+    std::vector<std::string> after;
+  };
+
+  bool prepareMtfPathRebase(const std::string &oldDocument,
+                            const std::string &newDocument,
+                            RebasedMtfPaths *paths) const {
+    if (!paths)
+      return false;
+    RebasedMtfPaths proposed;
+    auto prepare = [&oldDocument, &newDocument](
+                       const colorscreen::mtf_parameters &source,
+                       std::vector<std::string> *names) {
+      colorscreen::mtf_parameters temporary = source;
+      std::string error;
+      if (!colorscreen::rebase_parameter_mtf_source_paths(
+              &temporary, oldDocument, newDocument, &error))
+        return false;
+      names->reserve(temporary.measurements.size());
+      for (const auto &record : temporary.measurements)
+        names->push_back(record.source_filename);
+      return true;
+    };
+    if (!prepare(m_oldState.rparams.sharpen.scanner_mtf, &proposed.before) ||
+        !prepare(m_newState.rparams.sharpen.scanner_mtf, &proposed.after))
+      return false;
+    *paths = std::move(proposed);
+    return true;
+  }
+
+  bool applyPreparedMtfPaths(const RebasedMtfPaths &paths) {
+    auto &before = m_oldState.rparams.sharpen.scanner_mtf.measurements;
+    auto &after = m_newState.rparams.sharpen.scanner_mtf.measurements;
+    if (before.size() != paths.before.size() ||
+        after.size() != paths.after.size())
+      return false;
+    for (size_t i = 0; i < before.size(); ++i)
+      before[i].source_filename = paths.before[i];
+    for (size_t i = 0; i < after.size(); ++i)
+      after[i].source_filename = paths.after[i];
     return true;
   }
 

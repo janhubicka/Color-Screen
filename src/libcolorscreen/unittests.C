@@ -3332,6 +3332,471 @@ load_quickmtf_text (mtf_parameters &parameters, const char *name,
   return result;
 }
 
+/* Verify the Qt-independent schema-3 record identity foundation and the
+   legacy format's adjacency-preserving reorder semantics.  Production JSON-v2
+   remains unchanged; this tests explicit in-memory upgrading only.  */
+static bool
+test_mtf_record_identity ()
+{
+  bool ok = true;
+  const auto check = [&ok] (bool condition, const char *what)
+    {
+      if (!condition)
+        {
+          fprintf (stderr, "MTF identity: %s\n", what);
+          ok = false;
+        }
+    };
+
+  mtf_parameters records;
+  for (int i = 0; i < 4; ++i)
+    {
+      mtf_measurement record;
+      record.name = std::string ("curve-") + std::to_string (i);
+      record.same_capture = i == 1 || i == 3;
+      records.measurements.push_back (record);
+    }
+  records.measured_mtf_idx = 2;
+  const mtf_parameters legacy = records;
+  check (!records.measurement_ids_valid_p (),
+         "unmigrated legacy records must not masquerade as schema 3");
+  check (records.assign_missing_measurement_ids (),
+         "legacy upgrade failed");
+  check (records.measurement_ids_valid_p (),
+         "upgraded record IDs were rejected");
+  for (int i = 0; i < 4; ++i)
+    check (records.measurements[i].id
+             == std::string ("measurement-00000") + std::to_string (i + 1),
+           "deterministic legacy identity differs from reference");
+  check (records.measurements[0].capture_group_id == "capture-000001"
+         && records.measurements[1].capture_group_id == "capture-000001"
+         && records.measurements[2].capture_group_id == "capture-000002"
+         && records.measurements[3].capture_group_id == "capture-000002",
+         "legacy capture boundary migration failed");
+  check (records.selected_measurement_id () == "measurement-000003",
+         "selected curve was not converted to stable identity");
+  check (records.fit_inputs_equal_p (legacy),
+         "identity-only upgrade invalidated numerical fit inputs");
+
+  const mtf_parameters upgraded = records;
+  check (records.assign_missing_measurement_ids ()
+         && records.equal_p (upgraded),
+         "upgrading twice regenerated stable IDs");
+  check (!records.select_measurement_id ("absent")
+         && records.measured_mtf_idx == 2,
+         "unknown selected ID changed the selection");
+  check (records.select_measurement_id ("measurement-000004")
+         && records.measured_mtf_idx == 3,
+         "selection by existing ID failed");
+  check (records.select_measurement_id ("measurement-000003")
+         && records.measured_mtf_idx == 2,
+         "selected ID did not restore expected curve");
+
+  mtf_parameters nonadjacent = records;
+  std::vector<size_t> captures;
+  check (nonadjacent.move_measurement (2, 1)
+         && nonadjacent.capture_group_indices (&captures)
+         && captures.size () == 4
+         && captures[0] == captures[2]
+         && captures[1] == captures[3]
+         && captures[0] != captures[1]
+         && nonadjacent.selected_measurement_id () == "measurement-000003"
+         && nonadjacent.measured_mtf_idx == 1,
+         "stable IDs did not survive splitting a capture into distant curves");
+  mtf_parameters capture_editor = records;
+  const std::string preserved_other_group
+      = capture_editor.measurements[3].capture_group_id;
+  check (capture_editor.set_measurement_same_capture (2, true)
+         && capture_editor.measurements[2].capture_group_id
+                == capture_editor.measurements[1].capture_group_id
+         && capture_editor.measurements[3].capture_group_id
+                == preserved_other_group,
+         "joining the preceding capture relabelled unrelated curves");
+  check (capture_editor.set_measurement_same_capture (2, false)
+         && capture_editor.measurements[2].capture_group_id
+                != capture_editor.measurements[1].capture_group_id
+         && capture_editor.measurements[2].capture_group_id
+                != preserved_other_group,
+         "splitting one curve did not create a distinct capture");
+  check (capture_editor.erase_measurement (0)
+         && capture_editor.selected_measurement_id ()
+                == "measurement-000003"
+         && capture_editor.measured_mtf_idx == 1
+         && capture_editor.measurements[0].same_capture == false,
+         "deleting an earlier record changed selected curve or group");
+  check (capture_editor.erase_measurement (1)
+         && capture_editor.measured_mtf_idx == -1
+         && capture_editor.measurements[1].capture_group_id
+                == preserved_other_group,
+         "deleting selected curve selected another or changed surviving group");
+  check (!capture_editor.erase_measurement (90),
+         "out-of-range deletion changed MTF state");
+  check (records.equal_p (upgraded),
+         "independent nonadjacent reorder mutated original MTF state");
+  check (records.move_measurement (0, 1)
+         && records.measurements[0].id == "measurement-000002"
+         && records.measurements[1].id == "measurement-000001"
+         && records.selected_measurement_id () == "measurement-000003"
+         && records.measured_mtf_idx == 2,
+         "reorder did not preserve curve/group identity");
+  check (records.move_measurement (2, 3)
+         && records.selected_measurement_id () == "measurement-000003"
+         && records.measured_mtf_idx == 3
+         && records.measurements[2].capture_group_id == "capture-000002"
+         && records.measurements[3].capture_group_id == "capture-000002",
+         "selected curve moved to a different identity after reorder");
+  check (!records.move_measurement (-1, 0)
+         && !records.move_measurement (0, 8),
+         "out-of-bounds reorder unexpectedly succeeded");
+
+  records.measurements.push_back (mtf_measurement ());
+  records.measurements.back ().name = "new capture";
+  check (records.assign_missing_measurement_ids ()
+         && records.measurements.back ().id == "measurement-000005"
+         && records.measurements.back ().capture_group_id == "capture-000003",
+         "new measurement reused an ID or joined the wrong capture");
+  records.measurements.push_back (mtf_measurement ());
+  records.measurements.back ().same_capture = true;
+  check (records.assign_missing_measurement_ids ()
+         && records.measurements.back ().id == "measurement-000006"
+         && records.measurements.back ().capture_group_id == "capture-000003",
+         "append to existing capture produced a different group ID");
+
+  mtf_parameters bad = records;
+  bad.measurements.back ().id = bad.measurements[0].id;
+  const mtf_parameters before_rejection = bad;
+  check (!bad.measurement_ids_valid_p ()
+         && !bad.assign_missing_measurement_ids ()
+         && bad.equal_p (before_rejection),
+         "duplicate IDs must reject without mutation");
+  bad = records;
+  bad.measurements[0].capture_group_id.clear ();
+  const mtf_parameters partial = bad;
+  std::vector<size_t> untouched_capture_indices = {22};
+  check (!bad.move_measurement (0, 1)
+         && !bad.capture_group_indices (&untouched_capture_indices)
+         && untouched_capture_indices == std::vector<size_t>{22}
+         && bad.equal_p (partial),
+         "partially upgraded identity model must not be reordered or indexed");
+
+  bad = records;
+  for (mtf_measurement &record : bad.measurements)
+    record.capture_group_id.clear ();
+  const mtf_parameters no_groups = bad;
+  check (!bad.capture_group_indices (&untouched_capture_indices)
+         && untouched_capture_indices == std::vector<size_t>{22}
+         && bad.equal_p (no_groups),
+         "measurement IDs with no capture groups fell back to legacy grouping");
+
+  mtf_parameters collision;
+  collision.measurements.resize (2);
+  collision.measurements[1].id = "measurement-000001";
+  collision.measurements[1].capture_group_id = "capture-000001";
+  check (collision.assign_missing_measurement_ids ()
+         && collision.measurements[0].id == "measurement-000002"
+         && collision.measurements[0].capture_group_id == "capture-000002"
+         && collision.measurements[1].id == "measurement-000001"
+         && collision.measurements[1].capture_group_id == "capture-000001",
+         "legacy migration overwrote a reserved identifier");
+
+  /* Internal JSON-v2 helpers must never discard stable IDs. Real .par
+     export instead remains supported for groups whose physical membership
+     is expressible by the old adjacency flags. */
+  render_parameters render_with_ids;
+  render_with_ids.sharpen.scanner_mtf = records;
+  std::string untouched = "existing destination";
+  std::string error;
+  check (!encode_parameter_json_v2_sharpness (render_with_ids,
+                                               &untouched, &error)
+         && untouched == "existing destination"
+         && error.find ("identities") != std::string::npos,
+         "old internal codec silently lost stable MTF identities");
+  FILE *legacy_file = tmpfile ();
+  check (legacy_file != nullptr, "cannot allocate legacy export fixture");
+  if (legacy_file)
+    {
+      check (render_with_ids.sharpen.scanner_mtf
+                 .legacy_capture_groups_representable_p ()
+             && save_csp (legacy_file, nullptr, nullptr, &render_with_ids,
+                          nullptr)
+             && ftell (legacy_file) > 0,
+             "contiguous canonical captures could not export to .par");
+      fclose (legacy_file);
+    }
+  mtf_parameters split_groups = records;
+  check (split_groups.move_measurement (2, 1)
+         && !split_groups.legacy_capture_groups_representable_p (),
+         "nonadjacent canonical capture unexpectedly representable in .par");
+  render_with_ids.sharpen.scanner_mtf = split_groups;
+  legacy_file = tmpfile ();
+  if (!legacy_file)
+    check (false, "cannot allocate nonadjacent legacy export fixture");
+  else
+    {
+      check (!save_csp (legacy_file, nullptr, nullptr, &render_with_ids,
+                        nullptr)
+             && ftell (legacy_file) == 0,
+             "nonadjacent capture was lost or partially written to .par");
+      fclose (legacy_file);
+    }
+
+  mtf_parameters legacy_move = legacy;
+  legacy_move.measurements.pop_back ();
+  legacy_move.measured_mtf_idx = 2;
+  check (legacy_move.move_measurement (2, 0)
+         && legacy_move.measurements[0].name == "curve-2"
+         && legacy_move.measured_mtf_idx == 0
+         && legacy_move.measurements[0].same_capture == false
+         && legacy_move.measurements[1].same_capture == false
+         && legacy_move.measurements[2].same_capture == true,
+         "unmigrated v2 move changed capture membership or selected curve");
+  check (records.select_measurement_id ("")
+         && records.measured_mtf_idx == -1,
+         "clearing a selection by empty ID failed");
+  return ok;
+}
+
+
+/* Exercise native C++ schema-3 MTF serialization in isolation. The .cspar
+   dispatcher still writes v2; these tests establish the strict future codec
+   contract without prematurely changing saved project files.  */
+static bool
+test_native_json_v3_mtf ()
+{
+  bool ok = true;
+  const auto check = [&ok] (bool condition, const char *description)
+    {
+      if (!condition)
+        {
+          fprintf (stderr, "native v3 MTF: %s\n", description);
+          ok = false;
+        }
+    };
+
+  mtf_parameters original;
+  original.model = mtf_model::physical_diffraction;
+  original.sigma = 0.25;
+  original.halo_fraction = 0.15;
+  original.halo_sigma = 2.5;
+  original.blur_diameter = 1.75;
+  original.defocus = 0.02;
+  original.f_stop = 8;
+  original.pixel_pitch = 3.76;
+  original.sensor_fill_factor = 0.8;
+  original.scan_dpi = 2400;
+  original.wavelengths = {600, 540, 460, 780};
+  original.measured_mtf_idx = 1;
+  original.measurements.resize (3);
+  for (int i = 0; i < 3; ++i)
+    {
+      mtf_measurement &m = original.measurements[i];
+      m.name = std::string ("calibrated edge ") + std::to_string (i);
+      m.channel = i == 2 ? 3 : i;
+      m.image_layer = i == 2;
+      m.wavelength = 500.0 + i * 75.0;
+      m.same_capture = i == 1;
+      m.edge_p1 = {(double)(i + 1), (double)(i + 2)};
+      m.edge_p2 = {(double)(i + 5), (double)(i + 6)};
+      m.edge_angle = 4.5 + i;
+      m.edge_fit_rms = 0.12 + i * 0.01;
+      m.edge_contrast = 0.6;
+      m.edge_snr = 24 + i;
+      m.phase_coverage = 0.9;
+      m.add_value (0, 100, 0);
+      m.add_value (0.25, 65.0 - i, 0.5);
+      m.add_value (0.5, 20.0 + i, 1.1);
+    }
+  /* Both completely unavailable and selected source locations must survive.
+     The third curve deliberately has a missing filename but known geometry. */
+  original.measurements[0].source_filename = "../captures/archival scan.tif";
+  original.measurements[0].source_width = -3;
+  original.measurements[0].source_height = 0;
+  original.measurements[0].roi = int_image_area (11, -2, -1, 0);
+  original.measurements[1].source_filename = "C:\\scans\\mtf edge.tif";
+  original.measurements[1].source_width = 1200;
+  original.measurements[1].source_height = 800;
+  original.measurements[1].roi = int_image_area (12, 24, 140, 80);
+  original.measurements[2].source_filename.clear ();
+  original.measurements[2].source_width = 600;
+  original.measurements[2].source_height = 400;
+  original.measurements[2].roi = int_image_area (0, 0, 80, 100);
+  check (original.assign_missing_measurement_ids (),
+         "could not upgrade legacy capture groups");
+
+  std::string json = "unmodified";
+  std::string error;
+  check (encode_parameter_json_v3_mtf (original, &json, &error),
+         "could not serialize native v3 MTF");
+  check (json.find ("\"capture_group_id\"") != std::string::npos
+         && json.find ("\"selected_measurement_id\": \"measurement-000002\"")
+              != std::string::npos
+         && json.find ("\"legacy_first_same_capture\"") == std::string::npos
+         && json.find ("\"sample_columns\"") != std::string::npos
+         && json.find ("\"base\": \"absolute\"") != std::string::npos
+         && json.find ("\"base\": \"parameter_file\"") != std::string::npos
+         && json.find ("\"path\": null") != std::string::npos,
+         "missing schema-3 fields or unexpected compatibility-only field");
+
+  mtf_parameters accepted;
+  check (decode_parameter_json_v3_mtf (json, &accepted, &error)
+         && accepted.equal_p (original),
+         "native v3 MTF typed-state roundtrip changed a field");
+  std::string canonical;
+  check (encode_parameter_json_v3_mtf (accepted, &canonical, &error)
+         && canonical == json,
+         "native v3 MTF rewrite is not canonical");
+
+  auto replace_once = [] (const std::string &input,
+                          const std::string &from,
+                          const std::string &to) -> std::string
+    {
+      std::string changed = input;
+      const size_t start = changed.find (from);
+      if (start == std::string::npos)
+        return {};
+      changed.replace (start, from.size (), to);
+      return changed;
+    };
+
+  /* Failure is fully transactional; even successful syntax parsing does not
+     publish half the collection before a later record validation fails. */
+  auto rejected = [&] (const std::string &input, const char *what)
+    {
+      if (input.empty ())
+        {
+          check (false, "a malformed-case replacement anchor was absent");
+          return;
+        }
+      mtf_parameters current = accepted;
+      const mtf_parameters before = current;
+      std::string diagnostic;
+      check (!decode_parameter_json_v3_mtf (input, &current, &diagnostic)
+             && !diagnostic.empty ()
+             && current.equal_p (before), what);
+    };
+  rejected (replace_once (
+      json, "\"id\": \"measurement-000002\"",
+      "\"id\": \"measurement-000001\""),
+      "duplicate measurement IDs accepted");
+  rejected (replace_once (
+      json, "\"selected_measurement_id\": \"measurement-000002\"",
+      "\"selected_measurement_id\": \"missing-id\""),
+      "dangling selected record accepted");
+  rejected (replace_once (
+      json, "\"base\": \"parameter_file\"", "\"base\": \"absolute\""),
+      "source path-base disagreement accepted");
+  rejected (replace_once (
+      json, "\"value\": \"../captures/archival scan.tif\"",
+      "\"value\": \"C:ambiguous\\\\image.tif\""),
+      "Windows drive-relative source was accepted during import");
+  rejected (replace_once (
+      json, "\"status\": \"unavailable\"", "\"status\": \"available\""),
+      "contradictory geometry availability accepted");
+  rejected (replace_once (
+      json, "\"contrast_percent\"", "\"contrast_fraction\""),
+      "unknown sample units accepted");
+  rejected (replace_once (
+      json, "\"angle_deg\":", "\"unknown_quality\": 1, \"angle_deg\":"),
+      "unknown nested MTF metadata accepted");
+  rejected (replace_once (
+      json, "\"selected_measurement_id\":",
+      "\"legacy_first_same_capture\": false, \"selected_measurement_id\":"),
+      "legacy compatibility wart accepted in production-v3 component");
+  rejected (replace_once (
+      json, "\"selected_measurement_id\": \"measurement-000002\"",
+      "\"selected_measurement_id\": 1"),
+      "array-index selection accepted in schema 3");
+  rejected (replace_once (
+      json, "\"selected_measurement_id\": \"measurement-000002\"",
+      "\"selected_measurement_id\": \"\""),
+      "empty selected ID accepted instead of null");
+  rejected (replace_once (
+      json, "\"capture_group_id\": \"capture-000001\"",
+      "\"capture_group_id\": \"\""),
+      "empty capture-group ID accepted");
+  rejected (replace_once (
+      json, "\"source\":", "\"unexpected\": 1, \"source\":"),
+      "unknown record metadata accepted");
+  rejected ("{\"calibration\":{}}", "missing nested MTF subtree accepted");
+
+  /* Writer checks the same invariants before changing OUTPUT. */
+  mtf_parameters invalid = original;
+  invalid.measurements[0].same_capture = true;
+  std::string untouched = "existing";
+  std::string first_flag_json;
+  mtf_parameters first_flag_import;
+  check (encode_parameter_json_v3_mtf (invalid, &first_flag_json, &error)
+         && decode_parameter_json_v3_mtf (first_flag_json,
+                                          &first_flag_import, &error)
+         && !first_flag_import.measurements[0].same_capture
+         && first_flag_import.measurements[0].capture_group_id
+              == invalid.measurements[0].capture_group_id,
+         "meaningless first-record legacy flag leaked into schema 3");
+  invalid = original;
+  invalid.measurements[1].capture_group_id = "capture-000002";
+  invalid.measurements[1].same_capture = false;
+  invalid.measurements[2].capture_group_id = "capture-000001";
+  invalid.measurements[2].same_capture = false;
+  invalid.measurements[2].channel = 1;
+  invalid.measurements[2].image_layer = false;
+  invalid.measured_mtf_idx = 0;
+  std::string nonadjacent_json;
+  mtf_parameters parsed_groups;
+  std::vector<size_t> group_indices;
+  check (encode_parameter_json_v3_mtf (invalid, &nonadjacent_json, &error)
+         && decode_parameter_json_v3_mtf (nonadjacent_json,
+                                          &parsed_groups, &error)
+         && parsed_groups.capture_group_indices (&group_indices)
+         && group_indices.size () == 3
+         && group_indices[0] == group_indices[2]
+         && group_indices[0] != group_indices[1]
+         && parsed_groups.selected_measurement_id ()
+              == "measurement-000001",
+         "nonadjacent capture group or selection failed native v3 roundtrip");
+  render_parameters grouped_render;
+  grouped_render.sharpen.scanner_mtf = parsed_groups;
+  check (grouped_render.get_sharpen_parameters_for_channel (1, true)
+              .scanner_mtf.measured_mtf_idx == 2,
+         "per-channel sharpen selection used another capture's record");
+  invalid = original;
+  invalid.measurements[0].source_filename = "C:relative\\bad.tif";
+  check (!encode_parameter_json_v3_mtf (invalid, &untouched, &error)
+         && untouched == "existing",
+         "ambiguous Windows drive-relative source was accepted");
+  invalid.measurements[0].source_filename
+    = std::string ("valid", 5) + '\0' + "hidden.tif";
+  check (!encode_parameter_json_v3_mtf (invalid, &untouched, &error)
+         && untouched == "existing",
+         "embedded NUL in source path was accepted");
+  invalid = original;
+  invalid.measurements[0].id.clear ();
+  check (!encode_parameter_json_v3_mtf (invalid, &untouched, &error)
+         && untouched == "existing",
+         "missing identity silently regenerated during output");
+  invalid = original;
+  invalid.measurements[2].source_filename
+    = "\\\\archive-server\\plates\\edge.tif";
+  std::string unc_json;
+  mtf_parameters unc_loaded;
+  check (encode_parameter_json_v3_mtf (invalid, &unc_json, &error)
+         && decode_parameter_json_v3_mtf (unc_json, &unc_loaded, &error)
+         && unc_loaded.equal_p (invalid),
+         "Windows UNC absolute provenance was not preserved");
+  invalid.measurements[2].source_filename = "\\volume-rooted\\edge.tif";
+  check (!encode_parameter_json_v3_mtf (invalid, &untouched, &error)
+         && untouched == "existing",
+         "unqualified Windows volume-rooted source was accepted");
+
+  mtf_parameters empty;
+  std::string empty_json;
+  mtf_parameters empty_loaded;
+  check (encode_parameter_json_v3_mtf (empty, &empty_json, &error)
+         && decode_parameter_json_v3_mtf (empty_json, &empty_loaded, &error)
+         && empty_loaded.equal_p (empty),
+         "no-measurement schema-3 MTF roundtrip failed");
+  return ok;
+}
+
 /* Verify the QuickMTF append/result contract used by GUI batch import.  A
    rejected file must not append a partial measurement because callers can
    safely keep already accepted files while skipping malformed ones.  */
@@ -3373,6 +3838,29 @@ test_quickmtf_load_contract ()
     {
       fprintf (stderr, "QuickMTF RGB import contract failed%s%s\n",
                error ? ": " : "", error ? error : "");
+      ok = false;
+    }
+
+  /* Once .par input has been upgraded, later QuickMTF imports must keep
+     existing IDs and assign new ones without changing capture membership. */
+  mtf_parameters canonical_import = parameters;
+  if (!canonical_import.assign_missing_measurement_ids ())
+    {
+      fprintf (stderr, "QuickMTF identity upgrade failed\n");
+      ok = false;
+    }
+  const std::string earlier_id = canonical_import.measurements[0].id;
+  error = nullptr;
+  const int appended
+      = load_quickmtf_text (canonical_import, "later", monochrome, &error);
+  if (appended != 1 || canonical_import.measurements.size () != 5
+      || canonical_import.measurements[0].id != earlier_id
+      || canonical_import.measurements.back ().id.empty ()
+      || canonical_import.measurements.back ().capture_group_id
+             == canonical_import.measurements[3].capture_group_id
+      || !canonical_import.measurement_ids_valid_p ())
+    {
+      fprintf (stderr, "QuickMTF canonical identity append failed\n");
       ok = false;
     }
 
@@ -3930,6 +4418,34 @@ test_mtf_physical_model ()
                capture_weighted_defocus);
       ok = false;
     }
+  /* Reorder the same two measurement curves into a discontiguous capture
+     while excluding an unrelated middle capture. Explicit group IDs must
+     preserve the shared focus variable and joint uncertainty weighting. */
+  std::vector<mtf_measurement> nonadjacent_capture
+      = {precise_capture_measurement,
+         uniform_conflicting_capture_measurement,
+         uncertain_capture_measurement};
+  nonadjacent_capture[0].id = "precise";
+  nonadjacent_capture[0].capture_group_id = "capture-A";
+  nonadjacent_capture[1].id = "unrelated";
+  nonadjacent_capture[1].capture_group_id = "capture-B";
+  nonadjacent_capture[1].same_capture = false;
+  nonadjacent_capture[2].id = "uncertain";
+  nonadjacent_capture[2].capture_group_id = "capture-A";
+  nonadjacent_capture[2].same_capture = false;
+  double nonadjacent_capture_defocus = 0;
+  if (!fit_shared_defocus (nonadjacent_capture, {true, false, true},
+                           &nonadjacent_capture_defocus)
+      || std::abs (nonadjacent_capture_defocus
+                   - capture_weighted_defocus) > 1e-5)
+    {
+      fprintf (stderr,
+               "Nonadjacent capture IDs changed shared focus fit: "
+               "%.12g versus %.12g\n",
+               nonadjacent_capture_defocus, capture_weighted_defocus);
+      ok = false;
+    }
+
   /* The metadata-free fallback remains a separate model and must not silently
      enable diffraction.  */
   mtf_parameters fallback;
@@ -10576,6 +11092,467 @@ test_legacy_csp_representability ()
   return true;
 }
 
+
+/* Exercise the complete first-shipping semantic JSON layout directly from
+   typed state. The old v2 component helpers remain an internal implementation
+   detail; v2 JSON is not an accepted file-format compatibility contract. */
+static bool
+test_native_json_v3_document ()
+{
+  scr_to_img_parameters geometry;
+  geometry.type = Dufay;
+  geometry.center = {77.125, 22.375};
+  geometry.coordinate1 = {3.25, 0.125};
+  geometry.coordinate2 = {-0.25, 4.75};
+  geometry.final_angle = 47.5;
+  geometry.final_ratio = 1.375;
+  geometry.final_rotation = 0.25;
+  geometry.final_mirror = true;
+  geometry.lens_correction.kr[0] = 0.003;
+  geometry.lens_correction.center = {5.25, 6.75};
+  geometry.mesh_trans = std::make_shared<mesh> (0.5, 0.25, 2.0, 2.0, 2, 2);
+  geometry.mesh_trans_is_scr_to_img = true;
+  geometry.mesh_trans->set_point ({0, 0}, {0.125, 0.25});
+  geometry.mesh_trans->set_point ({1, 0}, {2.125, 0.25});
+  geometry.mesh_trans->set_point ({0, 1}, {0.125, 2.25});
+  geometry.mesh_trans->set_point ({1, 1}, {2.125, 2.25});
+  scr_detect_parameters detection;
+  detection.min_ratio = 1.25f;
+  detection.min_luminosity = 0.05f;
+  solver_parameters solver;
+  solver.optimize_tilt = false;
+  solver.lens_center_distance = 1.5;
+  solver.points.push_back ({{1, 2}, {3, 4},
+                            solver_parameters::point_color (0)});
+  const std::vector<point_t> spots {{12.25, 13.75}};
+
+  render_parameters render;
+  render.capture_type = render_parameters::capture_transparency_with_screen;
+  render.gamma = -1;
+  render.scan_crop = int_image_area (1, 2, 500, 400);
+  render.image_area = int_image_area (10, 11, 450, 350);
+  render.scan_exposure = 1.25f;
+  render.ignore_infrared = true;
+  render.demosaiced_scaling = render_parameters::lanczos3_scaling;
+  render.dark_point = 0.00625f;
+  render.backlight_correction_black = 0.02f;
+  render.scan_rotation = 1;
+  render.scan_mirror = true;
+  render.red_strip_width = 0.375;
+  render.green_strip_width = 0.29;
+  render.screen_denoise.mode = denoise_parameters::nl_fast;
+  render.screen_denoise.strength = 1.25f;
+  render.screen_denoise.patch_radius = 2;
+  render.screen_denoise.search_radius = 5;
+  render.demosaiced_denoise.mode = denoise_parameters::bilateral;
+  render.demosaiced_denoise.bilateral_sigma_s = 1.125;
+  render.demosaiced_denoise.bilateral_sigma_r = 0.075;
+  render.color_model = render_parameters::color_model_dufay_manual;
+  render.contact_copy.simulate = true;
+  render.contact_copy.exposure = 0.875f;
+  render.contact_copy.preflash = 0.125f;
+  render.contact_copy.boost = 1.2f;
+  render.temperature = 5800;
+  render.backlight_temperature = 4800;
+  render.observer_whitepoint = {0.3127f, 0.329f};
+  render.white_balance = {1.1f, 0.95f, 0.85f};
+  render.output_tone_curve = tone_curve::tone_curve_custom;
+  render.output_tone_curve_control_points
+      = {{0, 0}, {0.25, 0.2}, {0.75, 0.8}, {1, 1}};
+  render.sharpen.mode = sharpen_parameters::wiener_deconvolution;
+  render.sharpen.usm_radius = 1.75f; // Inactive, but still persistent.
+  render.sharpen.usm_amount = 1.5f;
+  render.sharpen.scanner_snr = 50;
+  render.sharpen.scanner_mtf_scale = 1.25;
+  render.sharpen.richardson_lucy_iterations = 7;
+  render.sharpen.richardson_lucy_sigma = 0.65f;
+  mtf_parameters &mtf = render.sharpen.scanner_mtf;
+  mtf.model = mtf_model::physical_diffraction;
+  mtf.sigma = 0.625;
+  mtf.scan_dpi = 2400;
+  mtf.wavelengths = {600, 540, 460, 780};
+  mtf.measurements.resize (3);
+  for (int i = 0; i < 3; ++i)
+    {
+      mtf.measurements[i].name = std::string ("edge-") + std::to_string (i);
+      mtf.measurements[i].channel = i % 3;
+      mtf.measurements[i].wavelength = 540;
+      mtf.measurements[i].add_value (0, 100, 0);
+      mtf.measurements[i].add_value (0.25, 60 - i, 0.5);
+      mtf.measurements[i].add_value (0.5, 12 + i, 1.25);
+    }
+  mtf.measured_mtf_idx = 2;
+  if (!mtf.assign_missing_measurement_ids ())
+    return false;
+  /* The first and last records are from the same physical capture, with
+     an unrelated capture deliberately between them. */
+  mtf.measurements[2].capture_group_id
+      = mtf.measurements[0].capture_group_id;
+  mtf.measurements[2].same_capture = false;
+  mtf.measurements[0].source_filename = "C:\\scans\\plate.tif";
+  mtf.measurements[0].source_width = 1600;
+  mtf.measurements[0].source_height = 1200;
+  mtf.measurements[0].roi = {4, 5, 80, 40};
+  mtf.measurements[1].source_filename = "../calibration/edge.tif";
+  mtf.measurements[1].source_width = -1;
+  mtf.measurements[1].source_height = 0;
+  mtf.measurements[1].roi = {9, 15, -1, 0};
+  bool channels[4] = {true, true, false, true};
+  render.backlight_correction
+      = std::make_shared<backlight_correction_parameters> ();
+  if (!render.backlight_correction->alloc (2, 2, channels))
+    return false;
+  render.backlight_correction->black_correction = true;
+  render.backlight_correction->set_luminosity (
+      0, 0, 0.875f, backlight_correction_parameters::red);
+  render.backlight_correction->set_sub (
+      0, 0, 0.0625f, backlight_correction_parameters::red);
+  render.scanner_blur_correction
+      = std::make_shared<scanner_blur_correction_parameters> ();
+  if (!render.scanner_blur_correction->alloc (
+          2, 2, scanner_blur_correction_parameters::mtf_blur_diameter))
+    return false;
+  render.scanner_blur_correction->set_correction (1, 1, 0.03125f);
+  render.set_tile_adjustments_dimensions (2, 1);
+  render.get_tile_adjustment (1, 0).exposure = 1.125f;
+  render.get_tile_adjustment (1, 0).dark_point = 0.0625f;
+
+  std::string json, error;
+  if (!encode_parameter_json_v3_document (
+          geometry, detection, render, solver, spots, &json, &error))
+    {
+      fprintf (stderr, "Native schema-3 document encode: %s\n",
+               error.c_str ());
+      return false;
+    }
+  if (json.find ("\"schema_version\":3") == std::string::npos
+      || json.find ("\"calibration\"") == std::string::npos
+      || json.find ("\"capture_group_id\"") == std::string::npos
+      || json.find ("\"legacy_first_same_capture\"") != std::string::npos
+      || json.find ("\"linearization\":{\"mode\":\"srgb\"}")
+            == std::string::npos
+      || json.find ("\"object_crop\"") == std::string::npos
+      || json.find ("\"scanner_primaries_xyz\"") == std::string::npos)
+    {
+      fprintf (stderr, "Native schema-3 document structure is incomplete\n");
+      return false;
+    }
+
+  scr_to_img_parameters parsed_geometry;
+  scr_detect_parameters parsed_detection;
+  render_parameters parsed_render;
+  solver_parameters parsed_solver;
+  std::vector<point_t> parsed_spots;
+  if (!decode_parameter_json_v3_document (
+          json, &parsed_geometry, &parsed_detection, &parsed_render,
+          &parsed_solver, &parsed_spots, &error))
+    {
+      fprintf (stderr, "Native schema-3 document decode: %s\n",
+               error.c_str ());
+      return false;
+    }
+  if (!(parsed_geometry == geometry)
+      || !(parsed_detection == detection)
+      || parsed_solver.points != solver.points
+      || parsed_spots != spots
+      || !(parsed_render == render)
+      || parsed_render.sharpen.scanner_mtf.selected_measurement_id ()
+             != mtf.selected_measurement_id ())
+    {
+      fprintf (stderr, "Native schema-3 typed parameter equality failed\n");
+      return false;
+    }
+  std::vector<size_t> groups;
+  if (!parsed_render.sharpen.scanner_mtf.capture_group_indices (&groups)
+      || groups.size () != 3 || groups[0] != groups[2]
+      || groups[0] == groups[1])
+    {
+      fprintf (stderr, "Native schema-3 capture membership changed\n");
+      return false;
+    }
+
+  std::string rewritten;
+  if (!encode_parameter_json_v3_document (
+          parsed_geometry, parsed_detection, parsed_render,
+          parsed_solver, parsed_spots, &rewritten, &error)
+      || rewritten != json)
+    {
+      fprintf (stderr, "Native schema-3 rewrite was not canonical: %s\n",
+               error.c_str ());
+      return false;
+    }
+
+  auto invalid = [&] (const std::string &source,
+                      const char *failure) -> bool
+    {
+      scr_to_img_parameters target_g = parsed_geometry;
+      scr_detect_parameters target_d = parsed_detection;
+      render_parameters target_r = parsed_render;
+      solver_parameters target_s = parsed_solver;
+      std::vector<point_t> target_spots = parsed_spots;
+      std::string problem;
+      if (decode_parameter_json_v3_document (
+            source, &target_g, &target_d, &target_r,
+            &target_s, &target_spots, &problem)
+          || problem.empty ()
+          || !(target_g == parsed_geometry)
+          || !(target_d == parsed_detection)
+          || !(target_r == parsed_render)
+          || target_s.points != parsed_solver.points
+          || target_spots != parsed_spots)
+        {
+          fprintf (stderr, "Native schema-3 accepted or mutated %s: %s\n",
+                   failure, problem.c_str ());
+          return false;
+        }
+      return true;
+    };
+  auto replace_once = [] (const std::string &source,
+                          const std::string &from,
+                          const std::string &to) -> std::string
+    {
+      std::string edited = source;
+      const size_t pos = edited.find (from);
+      if (pos == std::string::npos)
+        return {};
+      edited.replace (pos, from.size (), to);
+      return edited;
+    };
+  /* Linked scan identity is a separate optional document-level field.
+     The strict decoder must reject misleading base/dimension changes
+     transactionally while old source-free .cspar documents still work. */
+  parameter_source_image source_image;
+  source_image.path = "../scans/plate 42.tif";
+  source_image.width_px = 15000;
+  source_image.height_px = 10000;
+  source_image.size_bytes = UINT64_C(943718400);
+  std::string linked_json;
+  if (!encode_parameter_json_v3_document (
+          geometry, detection, render, solver, spots, &linked_json,
+          &error, &source_image))
+    return false;
+  parameter_source_image parsed_source;
+  if (!decode_parameter_json_v3_document (
+          linked_json, &parsed_geometry, &parsed_detection, &parsed_render,
+          &parsed_solver, &parsed_spots, &error, &parsed_source)
+      || parsed_source.path != source_image.path
+      || parsed_source.width_px != source_image.width_px
+      || parsed_source.height_px != source_image.height_px
+      || parsed_source.size_bytes != source_image.size_bytes)
+    {
+      fprintf (stderr, "Native schema-3 lost linked scan identity: %s\\n",
+               error.c_str ());
+      return false;
+    }
+  std::string canonical_linked;
+  if (!encode_parameter_json_v3_document (
+          parsed_geometry, parsed_detection, parsed_render, parsed_solver,
+          parsed_spots, &canonical_linked, &error, &parsed_source)
+      || canonical_linked != linked_json)
+    return false;
+
+  /* A malformed linked source must preserve all existing destination data,
+     including the previously accepted source reference. */
+  auto bad_source = [&] (const std::string &edited) -> bool
+    {
+      parameter_source_image retained_source = parsed_source;
+      scr_to_img_parameters g = parsed_geometry;
+      scr_detect_parameters d = parsed_detection;
+      render_parameters r = parsed_render;
+      solver_parameters sp = parsed_solver;
+      std::vector<point_t> spots_copy = parsed_spots;
+      std::string problem;
+      return !decode_parameter_json_v3_document (
+                edited, &g, &d, &r, &sp, &spots_copy,
+                &problem, &retained_source)
+             && !problem.empty ()
+             && retained_source.path == parsed_source.path
+             && retained_source.size_bytes == parsed_source.size_bytes
+             && g == parsed_geometry && d == parsed_detection
+             && r == parsed_render && sp.points == parsed_solver.points
+             && spots_copy == parsed_spots;
+    };
+  if (!bad_source (replace_once (
+          linked_json, "\"source_image\":{\"base\":\"parameter_file\"",
+          "\"source_image\":{\"base\":\"absolute\""))
+      || !bad_source (replace_once (
+          linked_json, "\"width_px\":15000", "\"width_px\":0"))
+      || !bad_source (replace_once (
+          linked_json, "\"size_bytes\":943718400", "\"size_bytes\":-1"))
+      || !bad_source (replace_once (
+          linked_json, "\"path\":\"../scans/plate 42.tif\"",
+          "\"path\":\"C:relative.tif\""))
+      || !bad_source (replace_once (
+          linked_json, "\"size_bytes\":943718400",
+          "\"size_bytes\":943718400,\"extra\":1")))
+    {
+      fprintf (stderr, "Schema-3 accepted malformed linked source image\\n");
+      return false;
+    }
+  parameter_source_image detached;
+  std::string reusable_json;
+  if (!encode_parameter_json_v3_document (
+          geometry, detection, render, solver, spots, &reusable_json,
+          &error, &detached)
+      || reusable_json.find ("\"source_image\":null") == std::string::npos
+      || !decode_parameter_json_v3_document (
+          reusable_json, &parsed_geometry, &parsed_detection, &parsed_render,
+          &parsed_solver, &parsed_spots, &error, &parsed_source)
+      || !parsed_source.path.empty ())
+    return false;
+  parsed_source = source_image;
+  if (!decode_parameter_json_v3_document (
+          json, &parsed_geometry, &parsed_detection, &parsed_render,
+          &parsed_solver, &parsed_spots, &error, &parsed_source)
+      || !parsed_source.path.empty ())
+    return false;
+
+  if (!invalid (replace_once (json, "\"schema_version\":3",
+                              "\"schema_version\":2"), "old JSON-v2 version")
+      || !invalid (replace_once (
+          json, "\"selected_measurement_id\":\"measurement-000003\"",
+          "\"selected_measurement_id\":\"unknown\""),
+          "dangling selected MTF ID")
+      || !invalid (replace_once (json, "\"capture\":{",
+                                  "\"capture\":{\"unknown\":1,"),
+                   "unknown capture field")
+      || !invalid (replace_once (
+          json, "\"linearization\":{\"mode\":\"srgb\"}",
+          "\"linearization\":{\"mode\":\"srgb\",\"exponent\":2.2}"),
+          "invalid sRGB transfer fields")
+      || !invalid (replace_once (
+          json, "\"linearization\":{\"mode\":\"srgb\"}",
+          "\"linearization\":42"),
+          "non-object input linearization")
+      || !invalid (replace_once (
+          json, "\"linearization\":{\"mode\":\"srgb\"}",
+          "\"linearization\":{}"),
+          "missing input transfer mode")
+      || !invalid (replace_once (json, "\"schema_version\":3",
+                                  "\"schema_version\":999"),
+                   "future schema version")
+      || !invalid ("{}", "empty schema-3 document"))
+    return false;
+
+  /* The top-level scan link follows the same lexical rebase semantics:
+     moving .cspar must never silently change its referenced input image. */
+  auto source_rebase_check = [&] (const std::string &old_document,
+                                 const std::string &new_document,
+                                 const std::string &path,
+                                 const std::string &expected) {
+    parameter_source_image linked;
+    linked.path = path;
+    linked.width_px = 15000;
+    linked.height_px = 10000;
+    linked.size_bytes = 943718400;
+    std::string problem;
+    return rebase_parameter_source_image (
+               &linked, old_document, new_document, &problem)
+           && linked.path == expected
+           && linked.width_px == 15000
+           && linked.height_px == 10000
+           && linked.size_bytes == 943718400;
+  };
+  if (!source_rebase_check ("/archive/old/a.cspar",
+                            "/archive/new/a.cspar", "scan.tif",
+                            "../old/scan.tif")
+      || !source_rebase_check ("C:\\old\\a.cspar",
+                               "D:\\new\\a.cspar", "scan.tif",
+                               "C:\\old\\scan.tif")
+      || !source_rebase_check ("/archive/old/a.cspar",
+                               "/archive/new/a.cspar", "/images/scan.tif",
+                               "/images/scan.tif"))
+    return false;
+  parameter_source_image unchanged_link;
+  unchanged_link.path = "C:relative.tif";
+  unchanged_link.width_px = 100;
+  unchanged_link.height_px = 50;
+  std::string source_error;
+  if (rebase_parameter_source_image (
+          &unchanged_link, "/old/a.cspar", "/new/a.cspar",
+          &source_error)
+      || unchanged_link.path != "C:relative.tif"
+      || source_error.empty ())
+    return false;
+
+  /* Save As rebases measurement evidence against document directories,
+     independent of the current host OS and without touching live parameters
+     on a late invalid path. */
+  auto rebase_check = [&] (const std::string &old_document,
+                          const std::string &new_document,
+                          const std::string &source,
+                          const std::string &expected)
+    {
+      mtf_parameters p;
+      p.measurements.resize (1);
+      p.measurements[0].source_filename = source;
+      std::string problem;
+      return rebase_parameter_mtf_source_paths (
+               &p, old_document, new_document, &problem)
+             && p.measurements[0].source_filename == expected;
+    };
+  if (!rebase_check ("/archive/old/plate.cspar",
+                     "/archive/new/plate.cspar", "scan.tif",
+                     "../old/scan.tif")
+      || !rebase_check ("/archive/old/plate.cspar",
+                        "/archive/new/plate.cspar", "../images/scan.tif",
+                        "../images/scan.tif")
+      || !rebase_check ("C:\\plates\\old\\plate.cspar",
+                        "C:\\plates\\new\\plate.cspar",
+                        "..\\images\\scan.tif",
+                        "..\\images\\scan.tif")
+      || !rebase_check ("C:\\plates\\old\\plate.cspar",
+                        "D:\\publication\\plate.cspar",
+                        "..\\images\\scan.tif",
+                        "C:\\plates\\images\\scan.tif")
+      || !rebase_check ("\\\\server\\share\\old\\plate.cspar",
+                        "\\\\server\\share\\new\\plate.cspar",
+                        "scan.tif", "..\\old\\scan.tif")
+      || !rebase_check ("/archive/old/plate.cspar",
+                        "/archive/new/plate.cspar",
+                        "/absolute/scan.tif", "/absolute/scan.tif")
+      || !rebase_check ("/archive/old/plate.cspar",
+                        "/archive/new/plate.cspar", "", ""))
+    {
+      fprintf (stderr, "MTF source provenance Save As rebasing failed\n");
+      return false;
+    }
+  mtf_parameters invalid_rebase = parsed_render.sharpen.scanner_mtf;
+  invalid_rebase.measurements[0].source_filename = "scan.tif";
+  invalid_rebase.measurements[1].source_filename = "\\rooted\\image.tif";
+  const mtf_parameters original_rebase = invalid_rebase;
+  std::string rebase_error;
+  if (rebase_parameter_mtf_source_paths (
+          &invalid_rebase, "C:\\plates\\old\\plate.cspar",
+          "C:\\plates\\new\\plate.cspar", &rebase_error)
+      || rebase_error.empty ()
+      || !invalid_rebase.equal_p (original_rebase))
+    {
+      fprintf (stderr, "Invalid MTF Save As changed a live source\n");
+      return false;
+    }
+
+  /* Even a legacy .par-based state without initialized MTF record IDs can
+     produce a complete canonical JSON document without mutating its source. */
+  render_parameters legacy_render = render;
+  for (mtf_measurement &m : legacy_render.sharpen.scanner_mtf.measurements)
+    {
+      m.id.clear ();
+      m.capture_group_id.clear ();
+    }
+  const render_parameters before = legacy_render;
+  std::string upgraded;
+  if (!encode_parameter_json_v3_document (
+          geometry, detection, legacy_render, solver,
+          spots, &upgraded, &error)
+      || !legacy_render.sharpen.equal_p (before.sharpen))
+    {
+      fprintf (stderr, "Legacy .par schema-3 conversion changed source\n");
+      return false;
+    }
+  return true;
+}
+
 /* Compose and reload one COMPLETE native JSON v2 document using one parse,
    then reject missing sections and corrupted nested content transactionally. */
 static bool
@@ -10732,11 +11709,11 @@ test_native_json_v2_document ()
       return false;
     }
 
-  /* Exercise the explicit on-disk v2 API without altering the normal
-     alpha GUI/CLI Save preference. It must write plain UTF-8 JSON and use
-     the same Unicode-path atomic staging as the existing v1 writer. */
+  /* Exercise only the first supported on-disk JSON API (schema 3).
+     The v2-named component tests above are internal bridge validation,
+     not evidence that unshipped JSON-v2 files remain loadable. */
   const std::string native_path
-      = u8"native-v2-žluťoučký-測試.cspar";
+      = u8"native-v3-žluťoučký-測試.cspar";
   struct native_path_cleanup
   {
     std::filesystem::path path;
@@ -10746,13 +11723,15 @@ test_native_json_v2_document ()
       std::filesystem::remove (path, ignored);
     }
   } cleanup {std::filesystem::u8path (native_path)};
-  if (!write_parameter_json_v2_file (
+  std::string canonical_v3;
+  if (!encode_parameter_json_v3_document (
+          geometry, detection, render, solver, spots, &canonical_v3, &error)
+      || !write_parameter_json_v3_file (
           native_path.c_str (), geometry, detection, render,
           solver, spots, &error)
-      || !parameter_json_v2_signature_p (native_path.c_str ())
-)
+      || !parameter_json_signature_p (native_path.c_str ()))
     {
-      fprintf (stderr, "Native v2 Unicode-path file save failed: %s\n",
+      fprintf (stderr, "Native v3 Unicode-path file save failed: %s\n",
                error.c_str ());
       return false;
     }
@@ -10762,11 +11741,10 @@ test_native_json_v2_document ()
     const std::string bytes {
         std::istreambuf_iterator<char> (input),
         std::istreambuf_iterator<char> ()};
-    if (!input.good () && !input.eof ())
-      return false;
-    if (bytes != first)
+    if ((!input.good () && !input.eof ()) || bytes != canonical_v3)
       {
-        fprintf (stderr, "Native v2 file did not contain plain canonical JSON\n");
+        fprintf (stderr,
+                 "Native v3 file did not contain plain canonical JSON\n");
         return false;
       }
   }
@@ -10775,36 +11753,37 @@ test_native_json_v2_document ()
   render_parameters loaded_render;
   solver_parameters loaded_solver;
   std::vector<point_t> loaded_spots;
-  if (!read_parameter_json_v2_file (
+  if (!read_parameter_json_v3_file (
           native_path.c_str (), &loaded_geometry, &loaded_detection,
           &loaded_render, &loaded_solver, &loaded_spots, &error)
-      || !encode_parameter_json_v2_document (
+      || !encode_parameter_json_v3_document (
           loaded_geometry, loaded_detection, loaded_render, loaded_solver,
           loaded_spots, &canonical, &error)
-      || canonical != first)
+      || canonical != canonical_v3)
     {
-      fprintf (stderr, "Native v2 Unicode-path file roundtrip failed: %s\n",
+      fprintf (stderr, "Native v3 Unicode-path roundtrip failed: %s\n",
                error.c_str ());
       return false;
     }
-  /* Independently loaded resources compare by value, while an actual
-     calibration edit must be visible. This also checks mesh and backlight
-     data rather than just the pointer identities.  */
-  if (!(loaded_geometry == geometry) || !(loaded_render == render))
+  /* A native .par-based state is upgraded to IDs when writing JSON.
+     Compare persistent fields after that one-time migration. */
+  render_parameters upgraded_render = render;
+  if (!upgraded_render.sharpen.scanner_mtf.assign_missing_measurement_ids ()
+      || !(loaded_geometry == geometry)
+      || !(loaded_render == upgraded_render))
     return false;
   loaded_geometry.mesh_trans->set_point ({1, 1}, {3.125, 2.25});
   if (loaded_geometry == geometry)
     return false;
   loaded_render.backlight_correction->set_luminosity (
       0, 0, 0.75f, backlight_correction_parameters::red);
-  if (loaded_render == render)
+  if (loaded_render == upgraded_render)
     return false;
 
-  /* A failed attempted replacement must leave the last good file byte
-     for byte intact, never even opening the target for truncation. */
+  /* Failed replacement may not truncate the previous good schema-3 file. */
   render_parameters invalid_render = render;
   invalid_render.gamma = my_quiet_nan<luminosity_t> ();
-  if (write_parameter_json_v2_file (
+  if (write_parameter_json_v3_file (
           native_path.c_str (), geometry, detection, invalid_render,
           solver, spots, &error))
     return false;
@@ -10814,7 +11793,7 @@ test_native_json_v2_document ()
     const std::string bytes {
         std::istreambuf_iterator<char> (input),
         std::istreambuf_iterator<char> ()};
-    if (bytes != first)
+    if (bytes != canonical_v3)
       return false;
   }
 
@@ -12438,6 +13417,10 @@ main (int argc, char **argv)
     { "sharpening", "screen sharpening tests", [] () { return test_screen_sharpening (); } },
     { "screen_simulation", "screen simulation tests",
       [] () { return test_screen_simulation (); } },
+    { "mtf_record_identity", "stable MTF IDs and v2-safe capture reordering",
+      [] () { return test_mtf_record_identity (); } },
+    { "json_v3_mtf", "native schema-3 MTF typed component and validation",
+      [] () { return test_native_json_v3_mtf (); } },
     { "mtf_quickmtf_load", "QuickMTF import contract tests",
       [] () { return test_quickmtf_load_contract (); } },
     { "mtf_model", "physical MTF model tests",
@@ -12488,6 +13471,8 @@ main (int argc, char **argv)
     { "image_area", "image area tests", [] () { return test_image_area (); } },
     { "legacy_csp_representability", "reject lossy saves to historical .par",
       [] () { return test_legacy_csp_representability (); } },
+    { "json_v3_document", "complete canonical schema-3 JSON document roundtrip",
+      [] () { return test_native_json_v3_document (); } },
     { "json_v2_document", "complete native schema-v2 JSON document roundtrip",
       [] () { return test_native_json_v2_document (); } },
     { "json_v2_correction_grids", "native JSON schema-v2 spatial correction grid codec",

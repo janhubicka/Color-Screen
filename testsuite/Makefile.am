@@ -41,9 +41,8 @@ EXTRA_DIST              = defs.sh $(TESTS) \
 			  generate-slanted-edge-tests.sh \
 			  validate-mtf-physical-model.py \
 			  check-parameter-v2-inventory.py \
-			  check-parameter-v2-corpus.py \
-			  parameter-json-v3-reference.py \
-			  check-parameter-v3-reference.py \
+			  check-parameter-v3-corpus.py \
+			  parameter_schema_validate.py \
 			  parameter-v2-key-inventory.tsv \
 			  benchmark-screen-detection.py
 
@@ -75,8 +74,7 @@ CLEANFILES              = slanted-edge-1.log \
 
 TESTS                   = unittests.test \
                           raw-demosaic-cache.test \
-                          parameter-v2-corpus.test \
-                          parameter-v3-reference.test \
+                          parameter-v3-corpus.test \
                           parameter-archive-cli.test \
 			  dufaycolor_nikon_coolsan9000ED_4000DPI_raw.test  \
 			  dufaycolor_nikon_coolsan9000ED_4000DPI_raw-finetune.test \

@@ -183,7 +183,7 @@ jobs:
         # Automake distcheck runs under _build/sub, not _build. Print the
         # captured diagnostics where the reason for a pre-plan exit lives.
         for log in colorscreen-*/_build/sub/testsuite/unittests.log \
-                   colorscreen-*/_build/sub/testsuite/parameter-v2-corpus.log \
+                   colorscreen-*/_build/sub/testsuite/parameter-v3-corpus.log \
                    colorscreen-*/_build/sub/testsuite/test-suite.log; do
           if [ -f "$log" ]; then
             echo "=== $log ==="

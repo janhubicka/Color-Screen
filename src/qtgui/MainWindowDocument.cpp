@@ -1,4 +1,5 @@
 #include "MainWindow.h"
+#include "ChangeParametersCommand.h"
 #include "AtomicFileSave.h"
 #include "../libcolorscreen/include/base.h"
 #include "../libcolorscreen/include/render-parameters.h"
@@ -31,6 +32,7 @@
 #include <QMessageBox>
 #include <QObject>
 #include <QPointer>
+#include <QPushButton>
 #include <QScreen>
 #include <QSettings>
 #include <QSignalBlocker>
@@ -62,6 +64,16 @@ QString fileDialogDirectoryPreference(const QString &settingsKey) {
   QSettings settings;
   const QString directory = settings.value(settingsKey).toString();
   return directory.isEmpty() || QDir(directory).exists() ? directory : QString();
+}
+
+/** Resolve existing scan/parameter-directory aliases before constructing
+    document-relative references. In particular /var on macOS often resolves
+    to /private/var: ".." traverses the physical hierarchy when the saved
+    document is reopened, not the apparent lexical path hierarchy. */
+QString physicalPathForDocumentLink(const QString &path) {
+  const QFileInfo info(path);
+  const QString physical = info.canonicalFilePath();
+  return physical.isEmpty() ? info.absoluteFilePath() : physical;
 }
 
 /** Remember the containing directory of one successfully chosen/used file. */
@@ -133,14 +145,15 @@ bool saveParameterPayloadAtomically(
     const colorscreen::scr_detect_parameters *detect,
     const colorscreen::render_parameters &render,
     const colorscreen::solver_parameters &solver,
-    const std::vector<colorscreen::point_t> &profileSpots, QString *error) {
+    const std::vector<colorscreen::point_t> &profileSpots, QString *error,
+    const colorscreen::parameter_source_image *sourceImage = nullptr) {
   if (json) {
     const colorscreen::scr_detect_parameters defaultDetection;
     const auto &detection = detect ? *detect : defaultDetection;
     std::string writeError;
-    const bool written = colorscreen::write_parameter_json_v2_file(
+    const bool written = colorscreen::write_parameter_json_v3_file(
         path.toUtf8().constData(), scrToImg, detection, render, solver,
-        profileSpots, &writeError);
+        profileSpots, &writeError, sourceImage);
     if (error)
       *error = written ? QString() : QString::fromUtf8(writeError);
     return written;
@@ -173,20 +186,21 @@ bool saveRecoveryTextAtomically(const QString &path, const QString &text) {
 bool loadParameterPayload(
     const QString &path, ParameterState *state,
     std::vector<colorscreen::color_match> *spotResults, QString *error,
-    bool *isJsonV2 = nullptr) {
+    bool *isJsonV3 = nullptr,
+    colorscreen::parameter_source_image *sourceImage = nullptr) {
   if (!state)
     return false;
 
   const QByteArray encodedPath = path.toUtf8();
-  if (colorscreen::parameter_json_v2_signature_p(encodedPath.constData())) {
+  if (colorscreen::parameter_json_signature_p(encodedPath.constData())) {
     // Decode into a fresh document; a malformed or future JSON file must not
     // fall back to legacy CSP or publish even a subset of its parameters.
     ParameterState loadedState;
     std::string jsonError;
-    const bool loaded = colorscreen::read_parameter_json_v2_file(
+    const bool loaded = colorscreen::read_parameter_json_v3_file(
         encodedPath.constData(), &loadedState.scrToImg, &loadedState.detect,
         &loadedState.rparams, &loadedState.solver,
-        &loadedState.profileSpots, &jsonError);
+        &loadedState.profileSpots, &jsonError, sourceImage);
     if (!loaded) {
       if (error)
         *error = QString::fromUtf8(jsonError);
@@ -195,8 +209,8 @@ bool loadParameterPayload(
     *state = std::move(loadedState);
     if (spotResults)
       spotResults->clear();  // Derived per-view measurements are not file state.
-    if (isJsonV2)
-      *isJsonV2 = true;
+    if (isJsonV3)
+      *isJsonV3 = true;
     if (error)
       error->clear();
     return true;
@@ -237,11 +251,21 @@ bool loadParameterPayload(
     return false;
   }
 
+  /* The real compatibility path is legacy .par: upgrade its adjacency-only
+     capture evidence once, before any GUI editor/Undo state can use it. */
+  if (!loadedState.rparams.sharpen.scanner_mtf.assign_missing_measurement_ids()) {
+    if (error)
+      *error = QCoreApplication::translate(
+          "MainWindow", "Invalid measured MTF selection or capture metadata.");
+    return false;
+  }
   *state = std::move(loadedState);
+  if (sourceImage)
+    *sourceImage = {};
   if (spotResults)
     *spotResults = std::move(loadedSpotResults);
-  if (isJsonV2)
-    *isJsonV2 = false;
+  if (isJsonV3)
+    *isJsonV3 = false;
   if (error)
     error->clear();
   return true;
@@ -271,6 +295,25 @@ void showParameterLoadFailure(QWidget *parent, const QString &detail) {
   box->open();
 }
 } // namespace
+
+/** Resolve a captured source reference against the accepted parameter
+    location, not Qt's process working directory. Recovery writes absolute
+    source paths so restored images need no private snapshot-dir base. */
+QString MainWindow::resolveMtfSourcePath(const std::string &sourceName) const {
+  const QString spelling = QString::fromUtf8(sourceName.c_str());
+  if (spelling.isEmpty())
+    return QString();
+  const QFileInfo source(spelling);
+  if (source.isAbsolute())
+    return source.absoluteFilePath();
+  const QString oldDocument = !m_parameterFile.path.isEmpty() &&
+                                      !m_parameterFile.suggested
+                                  ? m_parameterFile.path
+                                  : m_currentImageFile;
+  if (oldDocument.isEmpty())
+    return source.absoluteFilePath();
+  return QDir(QFileInfo(oldDocument).absolutePath()).absoluteFilePath(spelling);
+}
 
 /** Open a legacy or JSON parameter file chosen by the user.
    Prompts for unsaved changes first, then delegates to the transactional
@@ -353,28 +396,104 @@ bool MainWindow::saveParametersToFile(
         absoluteFileName.toUtf8().constData(), &validationError);
   }
   ParameterFileState::Format format = ParameterFileState::Format::LegacyCsp;
-  if (requestedFormat == ParameterSaveFormat::JsonV2)
-    format = ParameterFileState::Format::JsonV2;
+  if (requestedFormat == ParameterSaveFormat::JsonV3)
+    format = ParameterFileState::Format::JsonV3;
   else if (requestedFormat == ParameterSaveFormat::LegacyCsp)
     format = ParameterFileState::Format::LegacyCsp;
   else if (preservingCurrentTarget)
     format = m_parameterFile.format == ParameterFileState::Format::LegacyCsp
         ? ParameterFileState::Format::LegacyCsp
-        : ParameterFileState::Format::JsonV2;
+        : ParameterFileState::Format::JsonV3;
   else if (csparTarget)
-    format = ParameterFileState::Format::JsonV2;
-  const bool jsonV2 = format == ParameterFileState::Format::JsonV2;
+    format = ParameterFileState::Format::JsonV3;
+  const bool jsonV3 = format == ParameterFileState::Format::JsonV3;
   const bool hasRgb = m_scan && m_scan->has_rgb();
+  /* Document linkage is not a processing parameter. A linked source follows
+     the chosen .cspar directory on Save As; image dimensions refer to the
+     decoded scan, not the crop, and the file-size check is advisory identity. */
+  colorscreen::parameter_source_image linkedImage;
+  if (jsonV3 && m_scan && !m_currentImageFile.isEmpty()) {
+    const QFileInfo imageInfo(m_currentImageFile);
+    // The target filename might not exist yet, but its parent directory
+    // does. Canonicalize both that directory and the existing scan before
+    // counting ".." segments. Lexically rebasing /var/... to /Users/... on
+    // macOS would otherwise point under /private/Users after the OS follows
+    // the /var -> /private/var symlink.
+    const QString sourceBase = physicalPathForDocumentLink(
+        QFileInfo(absoluteFileName).absolutePath());
+    const QString sourceFile = physicalPathForDocumentLink(
+        imageInfo.absoluteFilePath());
+    linkedImage.path =
+        QDir(sourceBase).relativeFilePath(sourceFile).toUtf8().toStdString();
+    linkedImage.width_px = m_scan->width;
+    linkedImage.height_px = m_scan->height;
+    linkedImage.size_bytes =
+        static_cast<uint64_t>(std::max<qint64>(0, imageInfo.size()));
+  }
   QString error;
   if (unrecognizedExistingTarget)
     error = tr("An existing .cspar file has an unrecognized format or invalid "
                "contents. Select an explicit format in Save As to replace it.\n%1")
                 .arg(QString::fromStdString(validationError));
-  if (unrecognizedExistingTarget ||
+  /* Relative MTF references in an established parameter document are based
+     on that document's directory. Before the FIRST Save, the image directory
+     is the source base instead (also used by resolveMtfSourcePath and private
+     recovery). A first Save As into another directory must rebase references
+     just like moving an established document. */
+  const QString originalSourceBase =
+      !m_parameterFile.suggested && !m_parameterFile.path.isEmpty()
+          ? QFileInfo(m_parameterFile.path).absoluteFilePath()
+          : (!m_currentImageFile.isEmpty()
+                 ? QFileInfo(m_currentImageFile).absoluteFilePath()
+                 : QString());
+  const bool rebasingParameterSources =
+      !originalSourceBase.isEmpty() &&
+      originalSourceBase != absoluteFileName;
+  colorscreen::render_parameters outgoingRender = m_rparams;
+  if (!unrecognizedExistingTarget && rebasingParameterSources) {
+    std::string provenanceError;
+    if (!colorscreen::rebase_parameter_mtf_source_paths(
+            &outgoingRender.sharpen.scanner_mtf,
+            originalSourceBase.toUtf8().toStdString(),
+            absoluteFileName.toUtf8().toStdString(), &provenanceError))
+      error = tr("Could not preserve the measured-MTF source images on Save As: %1")
+                  .arg(QString::fromStdString(provenanceError));
+  }
+  /* Undo commands own parameter snapshots, including MTF provenance from
+     before Save As. Prepare rebased spellings for every retained snapshot
+     before writing. If one obsolete command cannot be translated, preserve
+     the actual Save As but clear unsafe Undo history *after* success. */
+  struct UndoRebase {
+    ChangeParametersCommand *command;
+    ChangeParametersCommand::RebasedMtfPaths paths;
+  };
+  std::vector<UndoRebase> stagedUndo;
+  bool undoRebaseValid = true;
+  if (rebasingParameterSources && !unrecognizedExistingTarget &&
+      error.isEmpty() && m_undoStack) {
+    const std::string oldDocument = originalSourceBase.toUtf8().toStdString();
+    const std::string newDocument = absoluteFileName.toUtf8().toStdString();
+    stagedUndo.reserve(m_undoStack->count());
+    for (int i = 0; i < m_undoStack->count(); ++i) {
+      auto *command = const_cast<ChangeParametersCommand *>(
+          dynamic_cast<const ChangeParametersCommand *>(
+              m_undoStack->command(i)));
+      ChangeParametersCommand::RebasedMtfPaths paths;
+      if (!command || !command->prepareMtfPathRebase(
+                          oldDocument, newDocument, &paths)) {
+        undoRebaseValid = false;
+        stagedUndo.clear();
+        break;
+      }
+      stagedUndo.push_back({command, std::move(paths)});
+    }
+  }
+  if (unrecognizedExistingTarget || !error.isEmpty() ||
       !saveParameterPayloadAtomically(
-          absoluteFileName, jsonV2, m_scrToImgParams,
-          (hasRgb || jsonV2) ? &m_detectParams : nullptr,
-          m_rparams, m_solverParams, m_profileSpots, &error)) {
+          absoluteFileName, jsonV3, m_scrToImgParams,
+          (hasRgb || jsonV3) ? &m_detectParams : nullptr,
+          outgoingRender, m_solverParams, m_profileSpots, &error,
+          jsonV3 ? &linkedImage : nullptr)) {
     // The write result is synchronous because closeEvent needs it immediately,
     // but its explanation must not enter a nested event loop while close/save
     // policy is still on the stack. Veto the close first and let Qt present the
@@ -397,6 +516,27 @@ bool MainWindow::saveParametersToFile(
     return false;
   }
 
+  bool clearedUnsafeUndo = false;
+  if (rebasingParameterSources) {
+    /* The file exists and owns the rebased path spellings now. Adopt them
+       only after successful atomic replacement, then rebase Undo snapshots
+       to the same document base before anything can replay an older edit. */
+    m_rparams.sharpen.scanner_mtf =
+        std::move(outgoingRender.sharpen.scanner_mtf);
+    if (m_undoStack) {
+      if (undoRebaseValid) {
+        for (const UndoRebase &item : stagedUndo)
+          if (!item.command->applyPreparedMtfPaths(item.paths)) {
+            undoRebaseValid = false;
+            break;
+          }
+      }
+      if (!undoRebaseValid) {
+        m_undoStack->clear();
+        clearedUnsafeUndo = true;
+      }
+    }
+  }
   m_parameterFile.setLoaded(absoluteFileName, format);
   m_recoveryDirty = false;
   rememberFileDialogDirectory(QStringLiteral("lastParameterDir"),
@@ -408,7 +548,12 @@ bool MainWindow::saveParametersToFile(
   saveRecoveryState();
 
   statusBar()->showMessage(
-      QString("Parameters saved to %1").arg(absoluteFileName), 3000);
+      clearedUnsafeUndo
+          ? tr("Parameters saved to %1. Undo history was cleared because "
+               "older MTF source references could not be safely relocated.")
+                .arg(absoluteFileName)
+          : tr("Parameters saved to %1").arg(absoluteFileName),
+      clearedUnsafeUndo ? 8000 : 3000);
   return true;
 }
 
@@ -424,7 +569,7 @@ bool MainWindow::saveParametersAs() {
   // JSON is the only .cspar output. Legacy .par remains an explicit export.
   QString selectedFilter = jsonFilter;
   if (!m_parameterFile.path.isEmpty()) {
-    if (m_parameterFile.format == ParameterFileState::Format::JsonV2)
+    if (m_parameterFile.format == ParameterFileState::Format::JsonV3)
       selectedFilter = jsonFilter;
     else if (m_parameterFile.format == ParameterFileState::Format::LegacyCsp)
       selectedFilter = legacyFilter;
@@ -442,7 +587,7 @@ bool MainWindow::saveParametersAs() {
     if (!fileName.endsWith(QLatin1String(".par"), Qt::CaseInsensitive))
       fileName += QStringLiteral(".par");
   } else if (selectedFilter == jsonFilter) {
-    chosen = ParameterSaveFormat::JsonV2;
+    chosen = ParameterSaveFormat::JsonV3;
     if (!fileName.endsWith(QLatin1String(".cspar"), Qt::CaseInsensitive))
       fileName += QStringLiteral(".cspar");
   } else if (!fileName.endsWith(QLatin1String(".par"), Qt::CaseInsensitive) &&
@@ -522,8 +667,8 @@ bool MainWindow::saveReproducibilityReportToFile(const QString &fileName,
   metadata.insert(QStringLiteral("parameter_file_state"), parameterState);
   metadata.insert(
       QStringLiteral("parameter_file_format"),
-      m_parameterFile.format == ParameterFileState::Format::JsonV2
-          ? QStringLiteral("json-v2")
+      m_parameterFile.format == ParameterFileState::Format::JsonV3
+          ? QStringLiteral("json-v3")
           : QStringLiteral("legacy"));
   metadata.insert(QStringLiteral("document_modified"), isDocumentModified());
   metadata.insert(QStringLiteral("registration_point_count"),
@@ -686,20 +831,21 @@ void MainWindow::onSaveReproducibilityReport() {
   dialog->open();
 }
 
-/** Show a multi-selection file dialog and open each image independently.
+/** Show a multi-selection file dialog for images and native .cspar documents.
    The application may reuse this window only when it is untouched and empty;
-   otherwise every selected image receives a new MainWindow.  Dispatch is
-   deferred by one event-loop turn so KDE can dispose of KIO file-dialog jobs
-   before an associated parameter prompt is shown.  */
+   otherwise each selected path receives a new MainWindow. Dispatch is deferred
+   one event-loop turn so KDE can dispose of KIO file-dialog jobs before an
+   associated parameter or missing-source prompt is shown. */
 void MainWindow::onOpenImage() {
   const QString startDirectory =
       fileDialogDirectoryPreference(QStringLiteral("lastOpenDir"));
 
   auto *dialog = new QFileDialog(
-      this, tr("Open Images"), startDirectory,
-      tr("Images (*.tif *.tiff *.jpg *.jpeg *.jp2 *.j2k *.jpc *.jpf *.jpx "
-         "*.png *.raw *.dng *.iiq *.nef *.cr2 *.eip *.arw *.raf *.arq "
-         "*.csprj);;All Files (*)"));
+      this, tr("Open Images and Documents"), startDirectory,
+      tr("Images and Color-Screen documents (*.tif *.tiff *.jpg *.jpeg "
+         "*.jp2 *.j2k *.jpc *.jpf *.jpx *.png *.raw *.dng *.iiq *.nef "
+         "*.cr2 *.eip *.arw *.raf *.arq *.csprj *.cspar);;"
+         "Color-Screen documents (*.cspar);;All Files (*)"));
   dialog->setObjectName(QStringLiteral("ImageOpenFileDialog"));
   dialog->setFileMode(QFileDialog::ExistingFiles);
   dialog->setAcceptMode(QFileDialog::AcceptOpen);
@@ -720,6 +866,9 @@ void MainWindow::onOpenImage() {
         return;
       if (ColorScreenApplication *application = documentApplication())
         application->openFiles(fileNames, guardedWindow);
+      else if (fileNames.constFirst().endsWith(
+                   QLatin1String(".cspar"), Qt::CaseInsensitive))
+        guardedWindow->openParameterDocument(fileNames.constFirst());
       else
         guardedWindow->loadFile(fileNames.constFirst());
     });
@@ -1030,6 +1179,215 @@ void MainWindow::maybeOfferInitialSetupGuide(
   dialog->open();
 }
 
+/** Open a source-linked .cspar as a first-class document. Validate the
+    complete file before choosing or decoding any scan. The path is only a
+    reference: no image bytes or scanner-dependent caches are stored in JSON.
+    A moved scan can be located without changing the original saved file. */
+void MainWindow::openParameterDocument(const QString &fileName,
+                                       bool forceLocateImage) {
+  const QString documentFile = QFileInfo(fileName).absoluteFilePath();
+  // This new open supersedes every pending linked-source decision, including
+  // one where an earlier document has not yet started decoding an image.
+  if (m_sourceLocateDialog) {
+    QPointer<QFileDialog> previous = m_sourceLocateDialog;
+    m_sourceLocateDialog.clear();
+    previous->close();
+  }
+  if (m_sourceMismatchPrompt) {
+    QPointer<QMessageBox> previous = m_sourceMismatchPrompt;
+    m_sourceMismatchPrompt.clear();
+    previous->close();
+  }
+  ParameterState staged;
+  std::vector<colorscreen::color_match> spots;
+  colorscreen::parameter_source_image source;
+  bool isJson = false;
+  QString problem;
+  if (!loadParameterPayload(documentFile, &staged, &spots, &problem,
+                            &isJson, &source) || !isJson) {
+    showParameterLoadFailure(
+        this, problem.isEmpty()
+                  ? tr("Only complete schema-3 .cspar documents can be opened "
+                       "as image documents.")
+                  : problem);
+    return;
+  }
+
+  const QString sourcePath = QString::fromUtf8(source.path.c_str());
+  const QString baseDir = QFileInfo(documentFile).absolutePath();
+  const QString physicalBaseDir = physicalPathForDocumentLink(baseDir);
+  QString candidate;
+  if (!forceLocateImage && !sourcePath.isEmpty()) {
+    const QFileInfo recorded(sourcePath);
+    candidate = recorded.isAbsolute()
+                    ? recorded.absoluteFilePath()
+                    : QDir(physicalBaseDir).absoluteFilePath(sourcePath);
+    if (!QFileInfo(candidate).isFile()) {
+      // Moving a scan and its sidecar together, or just replacing its parent
+      // directory, should not require a recursive filesystem search.
+      const QString nearby =
+          QDir(baseDir).absoluteFilePath(recorded.fileName());
+      candidate = QFileInfo(nearby).isFile() ? nearby : QString();
+    }
+    if (candidate.isEmpty()) {
+      const QString stem = QFileInfo(documentFile).completeBaseName();
+      const QStringList extensions = {
+          QStringLiteral("tif"), QStringLiteral("tiff"),
+          QStringLiteral("jpg"), QStringLiteral("jpeg"),
+          QStringLiteral("png"), QStringLiteral("dng"),
+          QStringLiteral("raw"), QStringLiteral("nef"),
+          QStringLiteral("cr2"), QStringLiteral("arw"),
+          QStringLiteral("raf"), QStringLiteral("iiq"),
+          QStringLiteral("csprj")};
+      // Accept only a unique adjacent basename match. Guessing between
+      // multiple scans would risk applying image-specific crop/registration
+      // to the wrong source.
+      for (const QString &ext : extensions) {
+        const QString near = QDir(baseDir).filePath(stem + '.' + ext);
+        if (QFileInfo(near).isFile()) {
+          if (!candidate.isEmpty()) {
+            candidate.clear();
+            break;
+          }
+          candidate = near;
+        }
+      }
+    }
+  }
+
+  // The chooser remains asynchronous, just like existing image and sidecar
+  // selection. It is also used for intentional source-free parameter sets.
+  const auto locate = [this, documentFile, sourcePath, baseDir,
+                       recordedBytes = source.size_bytes]() {
+    if (m_closeLifecycle.closing())
+      return;
+    if (m_sourceLocateDialog) {
+      m_sourceLocateDialog->close();
+      m_sourceLocateDialog.clear();
+    }
+    // Only provide an existing DIRECTORY as the dialog's initial path.
+    // Pre-filling an unavailable scan filename makes QFileDialog keep that
+    // stale name in its filename editor when the user browses elsewhere;
+    // this can then mask a newly selected image. Show the old basename in
+    // the caption instead, without preselecting a nonexistent file.
+    const QString oldName = QFileInfo(sourcePath).fileName();
+    const QString title = oldName.isEmpty()
+        ? tr("Locate source image for %1").arg(
+              QFileInfo(documentFile).fileName())
+        : tr("Locate source image for %1 (previously %2)")
+              .arg(QFileInfo(documentFile).fileName(), oldName);
+    auto *dialog = new QFileDialog(
+        this, title, baseDir,
+        tr("Images and projects (*.tif *.tiff *.jpg *.jpeg *.png *.jp2 "
+           "*.j2k *.jpc *.jpf *.jpx *.raw *.dng *.iiq *.nef *.cr2 "
+           "*.eip *.arw *.raf *.arq *.csprj);;All Files (*)"));
+    dialog->setObjectName(QStringLiteral("LinkedSourceImageDialog"));
+    // Offscreen platforms cannot provide a real native file picker. Use the
+    // Qt widget implementation in headless GUI smoke, preserving native
+    // dialogs in ordinary interactive Windows/macOS installations.
+    if (QApplication::platformName() == QLatin1String("offscreen"))
+      dialog->setOption(QFileDialog::DontUseNativeDialog, true);
+    dialog->setFileMode(QFileDialog::ExistingFile);
+    dialog->setAttribute(Qt::WA_DeleteOnClose);
+    m_sourceLocateDialog = dialog;
+    connect(dialog, &QFileDialog::accepted, this,
+            [this, documentFile, dialog, recordedBytes]() {
+              if (m_sourceLocateDialog != dialog)
+                return;
+              const QStringList chosen = dialog->selectedFiles();
+              m_sourceLocateDialog.clear();
+              if (chosen.isEmpty())
+                return;
+              const QString image = QFileInfo(chosen.constFirst())
+                                        .absoluteFilePath();
+              const bool changedBytes =
+                  recordedBytes &&
+                  static_cast<uint64_t>(std::max<qint64>(
+                      0, QFileInfo(image).size())) != recordedBytes;
+              if (!changedBytes) {
+                loadFile(image, false, false, documentFile);
+                return;
+              }
+              // A user may deliberately relink a re-encoded image whose byte
+              // size changed; ask explicitly before retaining its calibration.
+              // Matching decoded dimensions remain mandatory in loadFile.
+              auto *warning = new QMessageBox(
+                  QMessageBox::Warning, tr("Source image may have changed"),
+                  tr("The chosen image differs in size from the scan recorded "
+                     "in this .cspar. Open it anyway? Its decoded dimensions "
+                     "will be checked before calibration is applied."),
+                  QMessageBox::NoButton, this);
+              warning->setObjectName(
+                  QStringLiteral("LinkedSourceImageMismatchDialog"));
+              m_sourceMismatchPrompt = warning;
+              auto *useButton = warning->addButton(
+                  tr("Open image"), QMessageBox::AcceptRole);
+              warning->addButton(QMessageBox::Cancel);
+              warning->setAttribute(Qt::WA_DeleteOnClose);
+              connect(warning, &QMessageBox::finished, this,
+                      [this, warning, useButton, image, documentFile](int) {
+                        if (m_sourceMismatchPrompt != warning)
+                          return;
+                        m_sourceMismatchPrompt.clear();
+                        if (!m_closeLifecycle.closing() &&
+                            warning->clickedButton() == useButton)
+                          loadFile(image, false, false, documentFile, true);
+                      });
+              warning->open();
+            });
+    connect(dialog, &QFileDialog::rejected, this, [this, dialog]() {
+      if (m_sourceLocateDialog == dialog)
+        m_sourceLocateDialog.clear();
+    });
+    dialog->open();
+  };
+  if (candidate.isEmpty()) {
+    locate();
+    return;
+  }
+
+  // A filename match alone is not identity. A changed file size prompts
+  // explicitly, but the decoder later verifies decoded dimensions as well.
+  const QFileInfo imageInfo(candidate);
+  if (source.size_bytes > 0
+      && static_cast<uint64_t>(std::max<qint64>(0, imageInfo.size()))
+             != source.size_bytes) {
+    auto *warning = new QMessageBox(
+        QMessageBox::Warning, tr("Source image may have changed"),
+        tr("The image %1 does not have the original file size recorded "
+           "in %2. Choose another scan or explicitly open this image; "
+           "pixel dimensions will also be checked before calibration "
+           "is applied.").arg(imageInfo.fileName(),
+                              QFileInfo(documentFile).fileName()),
+        QMessageBox::NoButton, this);
+    warning->setObjectName(QStringLiteral("LinkedSourceImageMismatchDialog"));
+    m_sourceMismatchPrompt = warning;
+    auto *locateButton = warning->addButton(tr("Locate another image"),
+                                            QMessageBox::AcceptRole);
+    auto *openButton = warning->addButton(tr("Open this image"),
+                                          QMessageBox::ActionRole);
+    warning->addButton(QMessageBox::Cancel);
+    warning->setDefaultButton(qobject_cast<QPushButton *>(locateButton));
+    warning->setAttribute(Qt::WA_DeleteOnClose);
+    connect(warning, &QMessageBox::finished, this,
+            [this, warning, locateButton, openButton,
+             candidate, documentFile, locate](int) {
+              if (m_sourceMismatchPrompt != warning)
+                return;
+              m_sourceMismatchPrompt.clear();
+              if (m_closeLifecycle.closing())
+                return;
+              if (warning->clickedButton() == locateButton)
+                locate();
+              else if (warning->clickedButton() == openButton)
+                loadFile(candidate, false, false, documentFile, true);
+            });
+    warning->open();
+    return;
+  }
+  loadFile(candidate, false, false, documentFile);
+}
+
 /** Load an image file and optionally its associated parameter sidecar.
    If SUPPRESSPARAMPROMPT is false, the optional sidecar decision is presented
    asynchronously and owned by this image-load generation. An accepted sidecar
@@ -1042,7 +1400,9 @@ void MainWindow::maybeOfferInitialSetupGuide(
    completion, the scan is set on ImageWidget, stitch tile loading is launched
    in parallel for .csprj projects, and undo history is cleared.  */
 void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
-                          bool preferCachedRaw) {
+                          bool preferCachedRaw,
+                          const QString &linkedParameterFile,
+                          bool allowLinkedSizeMismatch) {
   if (fileName.isEmpty())
     return;
 
@@ -1071,18 +1431,68 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
     std::optional<ParameterState> state;
     std::vector<colorscreen::color_match> spotResults;
     QString loadedPath;
-    bool loadedJsonV2 = false;
+    bool loadedJsonV3 = false;
     QString suggestedPath;
-    bool suggestedJsonV2 = false;
+    bool suggestedJsonV3 = false;
     std::optional<ParameterState> baseline;
+    colorscreen::parameter_source_image linkedSource;
+    bool explicitDocumentOpen = false;
+    bool sourceWasRelocated = false;
   };
   auto sidecarStaging = std::make_shared<SidecarLoadStaging>();
   if (!suppressParamPrompt)
     sidecarStaging->baseline = getCurrentState();
 
+  /* A directly opened .cspar is parsed before clearing the old view or
+     cancelling workers. Its parameters participate in demosaic selection and
+     are published only after the linked scan loads successfully. */
+  if (!linkedParameterFile.isEmpty()) {
+    ParameterState linkedState;
+    std::vector<colorscreen::color_match> spots;
+    bool isJsonV3 = false;
+    QString error;
+    if (!loadParameterPayload(linkedParameterFile, &linkedState, &spots,
+                              &error, &isJsonV3,
+                              &sidecarStaging->linkedSource) || !isJsonV3) {
+      showParameterLoadFailure(this, error.isEmpty()
+                                         ? tr("Invalid linked .cspar document.")
+                                         : error);
+      return;
+    }
+    sidecarStaging->state = std::move(linkedState);
+    sidecarStaging->spotResults = std::move(spots);
+    sidecarStaging->loadedPath =
+        QFileInfo(linkedParameterFile).absoluteFilePath();
+    sidecarStaging->loadedJsonV3 = true;
+    sidecarStaging->explicitDocumentOpen = true;
+    const QString recorded =
+        QString::fromUtf8(sidecarStaging->linkedSource.path.c_str());
+    const QString resolved = recorded.isEmpty()
+        ? QString()
+        : QFileInfo(recorded).isAbsolute()
+              ? QFileInfo(recorded).absoluteFilePath()
+              : QDir(physicalPathForDocumentLink(
+                    QFileInfo(sidecarStaging->loadedPath).absolutePath()))
+                    .absoluteFilePath(recorded);
+    sidecarStaging->sourceWasRelocated =
+        resolved.isEmpty() ||
+        physicalPathForDocumentLink(resolved) !=
+            physicalPathForDocumentLink(requestedImageFile);
+  }
+
   // A failed older load may still have a non-blocking warning open. Starting a
   // new image request supersedes that presentation just like it supersedes the
   // old worker/result generation.
+  if (m_sourceLocateDialog) {
+    QPointer<QFileDialog> previous = m_sourceLocateDialog;
+    m_sourceLocateDialog.clear();
+    previous->close();
+  }
+  if (m_sourceMismatchPrompt) {
+    QPointer<QMessageBox> previous = m_sourceMismatchPrompt;
+    m_sourceMismatchPrompt.clear();
+    previous->close();
+  }
   if (m_imageLoad.failurePrompt) {
     m_imageLoad.failurePrompt->close();
     m_imageLoad.failurePrompt.clear();
@@ -1150,7 +1560,7 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
   const auto startImageRead =
       [this, requestedImageFile, outgoingImageFile, outgoingScan,
        restoreOutgoingImage, sidecarStaging, suppressParamPrompt,
-       loadGeneration, preferCachedRaw]() {
+       loadGeneration, preferCachedRaw, allowLinkedSizeMismatch]() {
         if (m_closeLifecycle.closing() ||
             loadGeneration != m_imageLoad.generation)
           return;
@@ -1161,7 +1571,8 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
         // Capture-type compatibility can only be checked after image_data has
         // been loaded. Keep this as permission to offer the guide; the actual
         // decision is made in the successful-load callback below.
-        const bool allowInitialGuide = !suppressParamPrompt;
+        const bool allowInitialGuide =
+            !suppressParamPrompt && !sidecarStaging->explicitDocumentOpen;
 
         auto progress = std::make_shared<colorscreen::progress_info>();
         progress->set_task("Opening image", 0);
@@ -1196,7 +1607,7 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
              suggestDetectedMetadata,
              loadGeneration, outgoingScan,
              outgoingImageFile, restoreOutgoingImage, sidecarStaging,
-             suppressParamPrompt]() {
+             suppressParamPrompt, allowLinkedSizeMismatch]() {
               if (m_closeLifecycle.closing()) {
                 watcher->deleteLater();
                 return;
@@ -1225,6 +1636,57 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
               m_imageLoad.pendingDemosaic.reset();
 
               if (result.first) {
+                /* A replaced source must not inherit old crop/registration.
+                   File-size differences can only be waived explicitly;
+                   decoded dimensions are always authoritative. This check
+                   precedes sidecar calibration publication. */
+                if (sidecarStaging->explicitDocumentOpen && tempScan) {
+                  const auto &linked = sidecarStaging->linkedSource;
+                  const bool badDimensions =
+                      !linked.path.empty() &&
+                      (tempScan->width != linked.width_px ||
+                       tempScan->height != linked.height_px);
+                  const bool badSize =
+                      !allowLinkedSizeMismatch && linked.size_bytes &&
+                      static_cast<uint64_t>(std::max<qint64>(
+                          0, QFileInfo(requestedImageFile).size())) !=
+                          linked.size_bytes;
+                  if (badDimensions || badSize) {
+                    sidecarStaging->state.reset();
+                    sidecarStaging->suggestedPath =
+                        sidecarStaging->loadedPath;
+                    sidecarStaging->suggestedJsonV3 = true;
+                    auto *warning = new QMessageBox(
+                        QMessageBox::Warning,
+                        tr("Source image does not match"),
+                        tr("The selected scan does not match the dimensions "
+                           "or size recorded in %1. Its calibration was NOT "
+                           "applied. You may keep the scan without these "
+                           "parameters or locate the original image.")
+                            .arg(QFileInfo(sidecarStaging->loadedPath)
+                                     .fileName()),
+                        QMessageBox::NoButton, this);
+                    warning->setObjectName(
+                        QStringLiteral("LinkedSourceImageMismatchDialog"));
+                    m_sourceMismatchPrompt = warning;
+                    auto *locateButton = warning->addButton(
+                        tr("Locate another image"), QMessageBox::AcceptRole);
+                    warning->addButton(tr("Keep scan without parameters"),
+                                       QMessageBox::RejectRole);
+                    warning->setAttribute(Qt::WA_DeleteOnClose);
+                    const QString document = sidecarStaging->loadedPath;
+                    connect(warning, &QMessageBox::finished, this,
+                            [this, warning, locateButton, document](int) {
+                              if (m_sourceMismatchPrompt != warning)
+                                return;
+                              m_sourceMismatchPrompt.clear();
+                              if (!m_closeLifecycle.closing() &&
+                                  warning->clickedButton() == locateButton)
+                                openParameterDocument(document, true);
+                            });
+                    warning->open();
+                  }
+                }
                 const bool liveEditsWhileLoading =
                     !suppressParamPrompt && sidecarStaging->baseline &&
                     getCurrentState() != *sidecarStaging->baseline;
@@ -1250,8 +1712,8 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
                           std::move(sidecarStaging->spotResults);
                       m_parameterFile.setLoaded(
                           sidecarStaging->loadedPath,
-                          sidecarStaging->loadedJsonV2
-                              ? ParameterFileState::Format::JsonV2
+                          sidecarStaging->loadedJsonV3
+                              ? ParameterFileState::Format::JsonV3
                               : ParameterFileState::Format::LegacyCsp);
                       addToRecentParams(sidecarStaging->loadedPath);
 
@@ -1262,8 +1724,8 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
                     } else {
                       m_parameterFile.setSuggested(
                           sidecarStaging->loadedPath,
-                          sidecarStaging->loadedJsonV2
-                              ? ParameterFileState::Format::JsonV2
+                          sidecarStaging->loadedJsonV3
+                              ? ParameterFileState::Format::JsonV3
                               : ParameterFileState::Format::LegacyCsp);
                       inspectorStatusBar()->showMessage(
                           tr("Image loaded; sidecar parameters were not applied "
@@ -1273,8 +1735,8 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
                   } else if (!sidecarStaging->suggestedPath.isEmpty()) {
                     m_parameterFile.setSuggested(
                         sidecarStaging->suggestedPath,
-                        sidecarStaging->suggestedJsonV2
-                            ? ParameterFileState::Format::JsonV2
+                        sidecarStaging->suggestedJsonV3
+                            ? ParameterFileState::Format::JsonV3
                             : ParameterFileState::Format::LegacyCsp);
                   }
                 }
@@ -1312,7 +1774,10 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
                 if (!sameImageDemosaic)
                   m_undoStack->clear();
                 if (!suppressParamPrompt)
-                  m_recoveryDirty = liveEditsWhileLoading;
+                  m_recoveryDirty = liveEditsWhileLoading ||
+                      (sidecarStaging->explicitDocumentOpen &&
+                       sidecarStaging->state.has_value() &&
+                       sidecarStaging->sourceWasRelocated);
 
                 // Grid corrections are saved processing state; preserve them
                 // while background workers load tile image data. The renderer's
@@ -1508,7 +1973,9 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
   // question is presentation state of this exact image-load generation: never
   // enter a nested event loop, and never let an obsolete prompt launch decoding
   // after a newer Open/Reload request has taken ownership.
-  if (!suppressParamPrompt) {
+  if (!linkedParameterFile.isEmpty()) {
+    startImageRead();
+  } else if (!suppressParamPrompt) {
     const QFileInfo fileInfo(requestedImageFile);
     const QString base =
         fileInfo.path() + "/" + fileInfo.completeBaseName();
@@ -1545,31 +2012,31 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
             if (result == QMessageBox::Yes) {
               ParameterState sidecarState;
               std::vector<colorscreen::color_match> sidecarSpotResults;
-              bool sidecarJsonV2 = false;
+              bool sidecarJsonV3 = false;
               QString loadError;
               if (!loadParameterPayload(sidecarFile, &sidecarState,
                                         &sidecarSpotResults, &loadError,
-                                        &sidecarJsonV2)) {
+                                        &sidecarJsonV3)) {
                 // Parsing failed, so the named sidecar is at most a later
                 // Save-As suggestion. Publish that suggestion only if the
                 // image itself opens successfully.
                 sidecarStaging->suggestedPath = sidecarFile;
-                sidecarStaging->suggestedJsonV2 =
-                    haveArchive && colorscreen::parameter_json_v2_signature_p(
+                sidecarStaging->suggestedJsonV3 =
+                    haveArchive && colorscreen::parameter_json_signature_p(
                                        sidecarFile.toUtf8().constData());
                 showParameterLoadFailure(this, loadError);
               } else {
                 sidecarStaging->state = std::move(sidecarState);
                 sidecarStaging->spotResults = std::move(sidecarSpotResults);
                 sidecarStaging->loadedPath = sidecarFile;
-                sidecarStaging->loadedJsonV2 = sidecarJsonV2;
+                sidecarStaging->loadedJsonV3 = sidecarJsonV3;
               }
             } else {
               // Declining the optional question retains the chosen existing
               // sidecar only as a format-aware Save-As suggestion.
               sidecarStaging->suggestedPath = sidecarFile;
-              sidecarStaging->suggestedJsonV2 =
-                  haveArchive && colorscreen::parameter_json_v2_signature_p(
+              sidecarStaging->suggestedJsonV3 =
+                  haveArchive && colorscreen::parameter_json_signature_p(
                                      sidecarFile.toUtf8().constData());
             }
 
@@ -1581,7 +2048,7 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
       // retain their format, and a
       // suggested path still requires an explicit Save As before overwrite.
       sidecarStaging->suggestedPath = archiveFile;
-      sidecarStaging->suggestedJsonV2 = true;
+      sidecarStaging->suggestedJsonV3 = true;
       startImageRead();
     }
   } else {
@@ -1846,12 +2313,29 @@ void MainWindow::saveRecoveryState() {
   const QString paramsPath =
       directory.filePath(QStringLiteral("recovery_params.cspar"));
   QString paramsError;
-  // A recovery snapshot must contain every persistent input even if the
-  // user's normal target remains .par. The complete native JSON v2
-  // codec and existing atomic staging preserve that invariant without a
-  // second, lossy CSP representation.
+  // Recovery has its own temporary directory, which must never become the
+  // base for relative measured-MTF source paths. Preserve source identity
+  // by writing absolute references to the *private* snapshot only.
+  colorscreen::render_parameters recoveryRender = m_rparams;
+  const QString sourceBase =
+      !m_parameterFile.path.isEmpty() && !m_parameterFile.suggested
+          ? QFileInfo(m_parameterFile.path).absoluteFilePath()
+          : (!m_currentImageFile.isEmpty()
+                 ? QFileInfo(m_currentImageFile).absoluteFilePath()
+                 : QFileInfo(paramsPath).absoluteFilePath());
+  std::string provenanceError;
+  if (!colorscreen::absolutize_parameter_mtf_source_paths(
+          &recoveryRender.sharpen.scanner_mtf,
+          sourceBase.toUtf8().toStdString(), &provenanceError)) {
+    qWarning() << "Could not preserve MTF source paths in recovery snapshot:"
+               << QString::fromStdString(provenanceError);
+    return;
+  }
+  // A recovery snapshot must contain every persistent calibration input
+  // even if the user's normal target remains .par. Keep it independent
+  // of legacy CSP and the private snapshot directory's path.
   if (!saveParameterPayloadAtomically(
-          paramsPath, true, m_scrToImgParams, &m_detectParams, m_rparams,
+          paramsPath, true, m_scrToImgParams, &m_detectParams, recoveryRender,
           m_solverParams, m_profileSpots, &paramsError)) {
     // Preserve the previous usable recovery snapshot and its image/target
     // metadata rather than publishing metadata for a snapshot we did not save.
@@ -1879,8 +2363,8 @@ void MainWindow::saveRecoveryState() {
                                  : QStringLiteral("0\n")) +
       (isDocumentModified() ? QStringLiteral("1\n")
                             : QStringLiteral("0\n")) +
-      (m_parameterFile.format == ParameterFileState::Format::JsonV2
-           ? QStringLiteral("json-v2\n")
+      (m_parameterFile.format == ParameterFileState::Format::JsonV3
+           ? QStringLiteral("json-v3\n")
            : QStringLiteral("legacy\n"));
   if (!saveRecoveryTextAtomically(
           directory.filePath(QStringLiteral("recovery_params_meta.txt")),
@@ -1964,11 +2448,11 @@ bool MainWindow::restoreRecoveryState() {
     const QString dirtyFlag = in.readLine().trimmed();
     const QString recoveredFormat = in.readLine().trimmed();
     const ParameterFileState::Format format =
-        recoveredFormat == QLatin1String("json-v2")
-            ? ParameterFileState::Format::JsonV2
+        recoveredFormat == QLatin1String("json-v3")
+            ? ParameterFileState::Format::JsonV3
             : (recoveredParameterPath.endsWith(
                    QLatin1String(".cspar"), Qt::CaseInsensitive)
-                   ? ParameterFileState::Format::JsonV2
+                   ? ParameterFileState::Format::JsonV3
                    : ParameterFileState::Format::LegacyCsp);
     if (recoveredParameterPathSuggested)
       m_parameterFile.setSuggested(recoveredParameterPath, format);
@@ -2029,10 +2513,10 @@ bool MainWindow::loadParameterFile(const QString &fileName) {
 
   ParameterState loadedState;
   std::vector<colorscreen::color_match> loadedSpotResults;
-  bool loadedJsonV2 = false;
+  bool loadedJsonV3 = false;
   QString loadError;
   if (!loadParameterPayload(fileName, &loadedState, &loadedSpotResults,
-                            &loadError, &loadedJsonV2)) {
+                            &loadError, &loadedJsonV3)) {
     showParameterLoadFailure(this, loadError);
     return false;
   }
@@ -2077,7 +2561,7 @@ bool MainWindow::loadParameterFile(const QString &fileName) {
   const QString absoluteFileName = QFileInfo(fileName).absoluteFilePath();
   m_parameterFile.setLoaded(
       absoluteFileName,
-      loadedJsonV2 ? ParameterFileState::Format::JsonV2
+      loadedJsonV3 ? ParameterFileState::Format::JsonV3
                    : ParameterFileState::Format::LegacyCsp);
   rememberFileDialogDirectory(QStringLiteral("lastParameterDir"),
                               absoluteFileName);

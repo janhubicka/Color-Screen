@@ -1107,8 +1107,8 @@ void ImageViewWindow::updateMtfMeasurementOverlay(bool locate) {
     matches = measurement->source_width == m_scan->width &&
               measurement->source_height == m_scan->height;
   if (matches) {
-    const QFileInfo recorded(QString::fromUtf8(
-        measurement->source_filename.c_str()));
+    const QFileInfo recorded(
+        m_document->resolveMtfSourcePath(measurement->source_filename));
     const QFileInfo current(m_referenceFile);
     matches = recorded.absoluteFilePath() == current.absoluteFilePath() ||
               (recorded.fileName() == current.fileName() &&
@@ -1237,9 +1237,18 @@ void ImageViewWindow::startReferenceMtfMeasurement(
       return;
     }
     ParameterState updated = document->documentStateSnapshot();
-    auto &measurements = updated.rparams.sharpen.scanner_mtf.measurements;
+    auto &mtf = updated.rparams.sharpen.scanner_mtf;
+    const bool named = !mtf.measurements.empty()
+                       && !mtf.measurements.front().id.empty();
+    auto &measurements = mtf.measurements;
     measurements.insert(measurements.end(), result->measurements.begin(),
                         result->measurements.end());
+    if (named && !mtf.assign_missing_measurement_ids()) {
+      view->statusBar()->showMessage(
+          tr("Could not assign stable capture IDs; measurements unchanged"),
+          5000);
+      return;
+    }
     document->applySharedDocumentState(
         updated, tr("Measure MTF from slanted-edge reference"));
     view->statusBar()->showMessage(tr("Reference MTF measurements added"), 3000);

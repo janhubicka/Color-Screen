@@ -134,8 +134,9 @@ There are two programs installed.
 information.
 
 `colorscreen-qt` is a Qt 6 based GUI application. It can open several
-images at once, either by selecting multiple files in **File → Open Image(s)**
-or by passing several paths on the command line:
+images or source-linked native `.cspar` documents at once, either by selecting
+multiple files in **File → Open Image or Document** or by passing several
+paths on the command line:
 
     colorscreen-qt scan-1.tif scan-2.tif scan-3.csprj
 

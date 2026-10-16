@@ -9,13 +9,361 @@
 #include "nmsimplex.h"
 #include "gsl-solver.h"
 #include "include/colorscreen.h"
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <complex>
 #include <limits>
 #include <memory>
+#include <unordered_map>
+#include <unordered_set>
 namespace colorscreen
 {
+
+/* Allocate the next unused document-local MTF identifier with PREFIX,
+   recording it in RESERVED.  Existing imported IDs reserve their spelling,
+   so appending a record cannot reuse a prior identity.  */
+static std::string
+next_mtf_identifier (const char *prefix,
+                     std::unordered_set<std::string> &reserved,
+                     size_t &candidate_number)
+{
+  for (;;)
+    {
+      std::string suffix = std::to_string (candidate_number++);
+      if (suffix.size () < 6)
+        suffix.insert (0, 6 - suffix.size (), '0');
+      std::string id = std::string (prefix) + suffix;
+      if (reserved.insert (id).second)
+        return id;
+    }
+}
+
+/* Upgrade an in-memory legacy MTF collection to named schema-3 identities.
+   Validate first, so duplicate imported IDs or an invalid selection do not
+   produce a partially upgraded state.  */
+bool
+mtf_parameters::assign_missing_measurement_ids ()
+{
+  if (measured_mtf_idx < -1
+      || (measured_mtf_idx >= 0
+          && (size_t)measured_mtf_idx >= measurements.size ()))
+    return false;
+
+  std::unordered_set<std::string> existing_ids;
+  std::unordered_set<std::string> existing_groups;
+  for (const mtf_measurement &record : measurements)
+    {
+      if (!record.id.empty () && !existing_ids.insert (record.id).second)
+        return false;
+      if (!record.capture_group_id.empty ())
+        existing_groups.insert (record.capture_group_id);
+    }
+
+  size_t next_measurement = 1;
+  size_t next_group = 1;
+  for (size_t i = 0; i < measurements.size (); ++i)
+    {
+      mtf_measurement &record = measurements[i];
+      if (record.id.empty ())
+        record.id = next_mtf_identifier ("measurement-", existing_ids,
+                                         next_measurement);
+      if (record.capture_group_id.empty ())
+        {
+          if (i && record.same_capture)
+            record.capture_group_id = measurements[i - 1].capture_group_id;
+          else
+            record.capture_group_id
+              = next_mtf_identifier ("capture-", existing_groups, next_group);
+        }
+    }
+  return measurement_ids_valid_p ();
+}
+
+/* Verify a complete explicit schema-3 identity model without modifying it.  */
+bool
+mtf_parameters::measurement_ids_valid_p () const
+{
+  if (measured_mtf_idx < -1
+      || (measured_mtf_idx >= 0
+          && (size_t)measured_mtf_idx >= measurements.size ()))
+    return false;
+  std::unordered_set<std::string> ids;
+  for (const mtf_measurement &record : measurements)
+    if (record.id.empty () || record.capture_group_id.empty ()
+        || !ids.insert (record.id).second)
+      return false;
+  return true;
+}
+
+/* Legacy .par stores only adjacency flags. Preserve physical grouping
+   when exporting canonical state by requiring each group to occupy one
+   contiguous run and the derived flags to agree with those runs. */
+bool
+mtf_parameters::legacy_capture_groups_representable_p () const
+{
+  bool any_identity = false;
+  for (const mtf_measurement &record : measurements)
+    any_identity |= !record.id.empty () || !record.capture_group_id.empty ();
+  if (!any_identity)
+    return true;
+  if (!measurement_ids_valid_p ())
+    return false;
+  std::vector<size_t> groups;
+  if (!capture_group_indices (&groups))
+    return false;
+  std::unordered_set<size_t> visited;
+  for (size_t i = 0; i < groups.size (); ++i)
+    {
+      const bool linked = i && groups[i] == groups[i - 1];
+      if (measurements[i].same_capture != linked)
+        return false;
+      if (!linked && !visited.insert (groups[i]).second)
+        return false;
+    }
+  return true;
+}
+
+/* Return the selected record's stable identity or empty when none is valid.  */
+std::string
+mtf_parameters::selected_measurement_id () const
+{
+  if (measured_mtf_idx < 0
+      || (size_t)measured_mtf_idx >= measurements.size ())
+    return {};
+  return measurements[measured_mtf_idx].id;
+}
+
+/* Find and select a unique MTF record ID rather than an array position.  */
+bool
+mtf_parameters::select_measurement_id (const std::string &id)
+{
+  if (id.empty ())
+    {
+      measured_mtf_idx = -1;
+      return true;
+    }
+  int found = -1;
+  for (size_t i = 0; i < measurements.size (); ++i)
+    if (measurements[i].id == id)
+      {
+        if (found >= 0)
+          return false;
+        found = (int)i;
+      }
+  if (found < 0)
+    return false;
+  measured_mtf_idx = found;
+  return true;
+}
+
+/* Return a group index for each curve. Explicit capture IDs are independent
+   of storage order; only old unupgraded .par data relies on adjacent flags.
+   An incomplete collection fails without publishing partial results. */
+bool
+mtf_parameters::capture_group_indices (std::vector<size_t> *out) const
+{
+  if (!out)
+    return false;
+  bool explicit_groups = false;
+  bool any_record_ids = false;
+  for (const mtf_measurement &record : measurements)
+    {
+      explicit_groups |= !record.capture_group_id.empty ();
+      any_record_ids |= !record.id.empty ();
+    }
+  /* A half-upgraded document must not accidentally fall back to .par's
+     adjacency semantics just because all capture IDs are missing. */
+  if (!explicit_groups && any_record_ids)
+    return false;
+
+  std::vector<size_t> indices;
+  indices.reserve (measurements.size ());
+  if (explicit_groups)
+    {
+      std::unordered_map<std::string, size_t> groups;
+      for (const mtf_measurement &record : measurements)
+        {
+          if (record.capture_group_id.empty ())
+            return false;
+          const size_t next = groups.size ();
+          const auto pair = groups.emplace (record.capture_group_id, next);
+          indices.push_back (pair.first->second);
+        }
+    }
+  else
+    {
+      size_t group = 0;
+      for (size_t i = 0; i < measurements.size (); ++i)
+        {
+          if (i && !measurements[i].same_capture)
+            ++group;
+          indices.push_back (group);
+        }
+    }
+  *out = std::move (indices);
+  return true;
+}
+
+/* Make or break the selected record's link with its predecessor. With
+   explicit IDs this edits only that record's physical-capture membership,
+   not its neighbours' identity, even for nonadjacent group members. */
+bool
+mtf_parameters::set_measurement_same_capture (size_t index, bool same)
+{
+  if (index >= measurements.size () || (index == 0 && same))
+    return false;
+
+  bool explicit_ids = false;
+  for (const mtf_measurement &record : measurements)
+    explicit_ids |= !record.id.empty () || !record.capture_group_id.empty ();
+
+  if (!explicit_ids)
+    {
+      measurements[index].same_capture = same;
+      return true;
+    }
+  if (!measurement_ids_valid_p ())
+    return false;
+
+  if (index == 0)
+    {
+      measurements[0].same_capture = false;
+      return true;
+    }
+
+  const std::string &previous = measurements[index - 1].capture_group_id;
+  mtf_measurement &current = measurements[index];
+  if (same)
+    current.capture_group_id = previous;
+  else if (current.capture_group_id == previous)
+    {
+      std::unordered_set<std::string> groups;
+      for (const mtf_measurement &record : measurements)
+        groups.insert (record.capture_group_id);
+      size_t next_group = 1;
+      current.capture_group_id
+          = next_mtf_identifier ("capture-", groups, next_group);
+    }
+
+  /* Derived adjacency hints are retained solely for old in-memory/legacy
+     callers. Group-ID-aware operations never infer capture identity from them. */
+  for (size_t i = 0; i < measurements.size (); ++i)
+    measurements[i].same_capture
+        = i && measurements[i].capture_group_id
+                      == measurements[i - 1].capture_group_id;
+  return true;
+}
+
+/* Delete a measured curve without transferring its selection or capture
+   relationship to a different vector position. */
+bool
+mtf_parameters::erase_measurement (size_t index)
+{
+  if (index >= measurements.size ()
+      || measured_mtf_idx < -1
+      || (measured_mtf_idx >= 0
+          && (size_t)measured_mtf_idx >= measurements.size ()))
+    return false;
+  std::vector<size_t> groups;
+  if (!capture_group_indices (&groups))
+    return false;
+
+  measurements.erase (measurements.begin () + index);
+  groups.erase (groups.begin () + index);
+  if (measured_mtf_idx == (int)index)
+    measured_mtf_idx = -1;
+  else if (measured_mtf_idx > (int)index)
+    --measured_mtf_idx;
+
+  /* Legacy adjacency flags are a derived view of the group assignment,
+     never a reason to change the physical capture of surviving records. */
+  for (size_t i = 0; i < measurements.size (); ++i)
+    measurements[i].same_capture = i && groups[i] == groups[i - 1];
+  return true;
+}
+
+/* Reorder records without changing the selected curve or explicit group.
+   Only legacy in-memory records lack stable IDs and remain subject to
+   adjacency constraints until their one-time .par migration. */
+bool
+mtf_parameters::move_measurement (int from, int to)
+{
+  const size_t count = measurements.size ();
+  if (from < 0 || to < 0 || (size_t)from >= count || (size_t)to >= count
+      || measured_mtf_idx < -1
+      || (measured_mtf_idx >= 0 && (size_t)measured_mtf_idx >= count))
+    return false;
+  if (from == to)
+    return true;
+
+  bool any_id = false;
+  bool complete_ids = true;
+  for (const mtf_measurement &record : measurements)
+    {
+      any_id |= !record.id.empty () || !record.capture_group_id.empty ();
+      complete_ids &= !record.id.empty () && !record.capture_group_id.empty ();
+    }
+  if (any_id && (!complete_ids || !measurement_ids_valid_p ()))
+    return false;
+
+  std::vector<std::string> groups;
+  groups.reserve (count);
+  if (complete_ids)
+    for (const mtf_measurement &record : measurements)
+      groups.push_back (record.capture_group_id);
+  else
+    {
+      size_t group = 0;
+      for (size_t i = 0; i < count; ++i)
+        {
+          if (i && !measurements[i].same_capture)
+            ++group;
+          groups.push_back (std::to_string (group));
+        }
+    }
+
+  std::vector<size_t> order;
+  order.reserve (count);
+  for (size_t i = 0; i < count; ++i)
+    order.push_back (i);
+  if (from < to)
+    std::rotate (order.begin () + from, order.begin () + from + 1,
+                 order.begin () + to + 1);
+  else
+    std::rotate (order.begin () + to, order.begin () + from,
+                 order.begin () + from + 1);
+
+  /* The old adjacency representation cannot express a split capture. Once
+     records carry stable group IDs, however, any order is lossless. */
+  if (!complete_ids)
+    {
+      std::unordered_set<std::string> visited_groups;
+      for (size_t i = 0; i < count; ++i)
+        if (!i || groups[order[i]] != groups[order[i - 1]])
+          if (!visited_groups.insert (groups[order[i]]).second)
+            return false;
+    }
+
+  const int original_selection = measured_mtf_idx;
+  if (from < to)
+    std::rotate (measurements.begin () + from,
+                 measurements.begin () + from + 1,
+                 measurements.begin () + to + 1);
+  else
+    std::rotate (measurements.begin () + to,
+                 measurements.begin () + from,
+                 measurements.begin () + from + 1);
+
+  for (size_t i = 0; i < count; ++i)
+    {
+      measurements[i].same_capture
+        = i && groups[order[i]] == groups[order[i - 1]];
+      if (original_selection >= 0 && order[i] == (size_t)original_selection)
+        measured_mtf_idx = (int)i;
+    }
+  return true;
+}
 
 namespace
 {
@@ -251,7 +599,7 @@ public:
               progress_info *progress, bool verbose,
               bool legacy_channel_wavelengths, double request_wavelength_nm)
       : m_measurements (measured), m_params (params), m_options (options),
-        m_request_wavelength_nm (request_wavelength_nm),
+        m_group_indices (), m_request_wavelength_nm (request_wavelength_nm),
         m_progress (progress), be_verbose (verbose), start_vec (),
         fit_weights (), start (nullptr), diffraction (false),
         m_legacy_channel_wavelengths (legacy_channel_wavelengths), nvalues (0),
@@ -260,6 +608,10 @@ public:
         f_stop_index (-1), halo_fraction_index (-1), halo_sigma_index (-1)
   {
     channel_wavelength_index.fill (-1);
+    /* Estimation entry points verify that group metadata is complete.
+       A group ID identifies the same capture even when curves are reordered. */
+    const bool valid_groups = params.capture_group_indices (&m_group_indices);
+    assert (valid_groups);
     m_params.measured_mtf_idx = -1;
     m_params.clear_data ();
     mtf_model requested_model = options.model == mtf_model::automatic_legacy
@@ -297,26 +649,25 @@ public:
             f_stop_index = nvalues++;
           }
 
-        int current_defocus_index = -1;
+        std::vector<int> defocus_by_group (m_measurements.size (), -1);
         for (size_t measurement = 0; measurement < m_measurements.size ();
              measurement++)
           {
-            if (!m_measurements[measurement].same_capture)
-              current_defocus_index = -1;
             if (!m_options.include_measurement_p (measurement))
               continue;
 
             if (options.optimize_defocus)
               {
-                if (current_defocus_index < 0)
+                int &group_index = defocus_by_group[m_group_indices[measurement]];
+                if (group_index < 0)
                   {
                     start_vec.push_back (my_isfinite (m_params.defocus)
                                              && m_params.defocus >= 0
                                          ? m_params.defocus
                                          : 0.0);
-                    current_defocus_index = nvalues++;
+                    group_index = nvalues++;
                   }
-                blur_index[measurement] = current_defocus_index;
+                blur_index[measurement] = group_index;
               }
 
             if (options.optimize_measurement_wavelength_p (measurement))
@@ -382,25 +733,24 @@ public:
       }
     else
       {
-        int current_blur_index = -1;
+        std::vector<int> blur_by_group (m_measurements.size (), -1);
         for (size_t measurement = 0; measurement < m_measurements.size ();
              measurement++)
           {
-            if (!m_measurements[measurement].same_capture)
-              current_blur_index = -1;
             if (!m_options.include_measurement_p (measurement))
               continue;
             if (options.optimize_blur_diameter)
               {
-                if (current_blur_index < 0)
+                int &group_index = blur_by_group[m_group_indices[measurement]];
+                if (group_index < 0)
                   {
                     start_vec.push_back (my_isfinite (m_params.blur_diameter)
                                              && m_params.blur_diameter >= 0
                                          ? m_params.blur_diameter
                                          : 0.0);
-                    current_blur_index = nvalues++;
+                    group_index = nvalues++;
                   }
-                blur_index[measurement] = current_blur_index;
+                blur_index[measurement] = group_index;
               }
           }
       }
@@ -474,25 +824,18 @@ public:
               }
           }
       }
-    /* SAME_CAPTURE marks a curve as belonging to the same physical capture as
-       the preceding curve.  When two or more included curves in such a group
-       all have usable uncertainty metadata, retain their raw inverse-sigma
-       ratio and apply one normalization to the whole capture.  In particular,
-       constant 0.25- and 5-percentage-point uncertainties keep a 20:1 residual
-       weight ratio instead of each curve being separately normalized back to
-       unit RMS weight.  The common normalization keeps sum(w^2) equal to the
-       number of included observations, so the capture's overall scale remains
-       comparable with the historical uniformly weighted objective.  */
-    for (size_t first = 0; first < m_measurements.size ();)
-      {
-        size_t last = first + 1;
-        while (last < m_measurements.size ()
-               && m_measurements[last].same_capture)
-          last++;
+    /* A capture's included uncertainty-aware curves share one normalization.
+       Explicit group IDs may be nonadjacent after GUI reorder; old .par data
+       without IDs still produces the same contiguous groups as before.  */
+    std::vector<std::vector<size_t>> group_members (m_measurements.size ());
+    for (size_t i = 0; i < m_measurements.size (); ++i)
+      group_members[m_group_indices[i]].push_back (i);
 
+    for (const std::vector<size_t> &members : group_members)
+      {
         size_t included_curves = 0;
         bool complete_uncertainty = true;
-        for (size_t measurement = first; measurement < last; measurement++)
+        for (size_t measurement : members)
           if (m_options.include_measurement_p (measurement))
             {
               included_curves++;
@@ -501,47 +844,45 @@ public:
                     && has_uncertainty_weights[measurement];
             }
 
-        if (included_curves >= 2 && complete_uncertainty)
+        if (included_curves < 2 || !complete_uncertainty)
+          continue;
+
+        long double sum_weights_squared = 0;
+        size_t weighted_points = 0;
+        for (size_t measurement : members)
+          if (m_options.include_measurement_p (measurement))
+            {
+              const mtf_measurement &curve = m_measurements[measurement];
+              for (size_t i = 0; i < curve.size (); i++)
+                if (curve.get_freq (i) <= 0.5)
+                  {
+                    double uncertainty = curve.get_uncertainty (i);
+                    if (!(my_isfinite (uncertainty) && uncertainty > 0))
+                      uncertainty = uncertainty_medians[measurement];
+                    const double weight
+                        = 1.0 / std::max (
+                                    uncertainty,
+                                    uncertainty_floors[measurement]);
+                    fit_weights[measurement][i] = weight;
+                    sum_weights_squared
+                        += (long double)weight * (long double)weight;
+                    weighted_points++;
+                  }
+            }
+        if (sum_weights_squared > 0 && weighted_points)
           {
-            long double sum_weights_squared = 0;
-            size_t weighted_points = 0;
-            for (size_t measurement = first; measurement < last; measurement++)
+            const double normalization
+                = my_sqrt ((double)((long double)weighted_points
+                                    / sum_weights_squared));
+            for (size_t measurement : members)
               if (m_options.include_measurement_p (measurement))
                 {
                   const mtf_measurement &curve = m_measurements[measurement];
                   for (size_t i = 0; i < curve.size (); i++)
                     if (curve.get_freq (i) <= 0.5)
-                      {
-                        double uncertainty = curve.get_uncertainty (i);
-                        if (!(my_isfinite (uncertainty) && uncertainty > 0))
-                          uncertainty = uncertainty_medians[measurement];
-                        const double weight
-                            = 1.0 / std::max (
-                                        uncertainty,
-                                        uncertainty_floors[measurement]);
-                        fit_weights[measurement][i] = weight;
-                        sum_weights_squared
-                            += (long double)weight * (long double)weight;
-                        weighted_points++;
-                      }
+                      fit_weights[measurement][i] *= normalization;
                 }
-            if (sum_weights_squared > 0 && weighted_points)
-              {
-                const double normalization
-                    = my_sqrt ((double)((long double)weighted_points
-                                        / sum_weights_squared));
-                for (size_t measurement = first; measurement < last;
-                     measurement++)
-                  if (m_options.include_measurement_p (measurement))
-                    {
-                      const mtf_measurement &curve = m_measurements[measurement];
-                      for (size_t i = 0; i < curve.size (); i++)
-                        if (curve.get_freq (i) <= 0.5)
-                          fit_weights[measurement][i] *= normalization;
-                    }
-              }
           }
-        first = last;
       }
 
     start = start_vec.data ();
@@ -877,6 +1218,9 @@ public:
   const std::vector <mtf_measurement> &m_measurements;
   mtf_parameters m_params;
   mtf_estimation_options m_options;
+  /* Group indices are stable under arbitrary record ordering in schema 3.
+     Legacy .par measurements retain their adjacent-group interpretation. */
+  std::vector<size_t> m_group_indices;
   double m_request_wavelength_nm;
   progress_info *m_progress;
   bool be_verbose;
@@ -2016,15 +2360,17 @@ mtf_parameters::validate_estimation_options (
   size_t fitted_wavelengths = 0;
   size_t fixed_wavelengths = 0;
   bool any_wavelength_fitted = false;
-  bool capture_has_variable = false;
+  std::vector<size_t> capture_groups;
+  if (!par.capture_group_indices (&capture_groups))
+    return fail ("MTF capture-group identifiers are incomplete");
+  std::vector<bool> capture_has_variable (par.measurements.size (), false);
   const bool physical = physical_estimation_model_p (par, options);
 
   for (size_t measurement = 0; measurement < par.measurements.size ();
        measurement++)
     {
       const mtf_measurement &value = par.measurements[measurement];
-      if (!value.same_capture)
-        capture_has_variable = false;
+      const size_t group = capture_groups[measurement];
       if (!options.include_measurement_p (measurement))
         continue;
 
@@ -2072,16 +2418,16 @@ mtf_parameters::validate_estimation_options (
             return fail ("every selected physical MTF measurement needs a "
                          "positive wavelength or wavelength optimization");
 
-          if (options.optimize_defocus && !capture_has_variable)
+          if (options.optimize_defocus && !capture_has_variable[group])
             {
               variables++;
-              capture_has_variable = true;
+              capture_has_variable[group] = true;
             }
         }
-      else if (options.optimize_blur_diameter && !capture_has_variable)
+      else if (options.optimize_blur_diameter && !capture_has_variable[group])
         {
           variables++;
-          capture_has_variable = true;
+          capture_has_variable[group] = true;
         }
     }
 
@@ -2280,6 +2626,17 @@ mtf_parameters::estimate_parameters_internal (
     {
       if (error)
         *error = "no measured MTF curve to fit";
+      return -1;
+    }
+
+  /* The legacy estimator bypasses modern option validation but must still
+     reject partially initialized capture IDs rather than access a malformed
+     group-index vector. */
+  std::vector<size_t> capture_groups;
+  if (!par.capture_group_indices (&capture_groups))
+    {
+      if (error)
+        *error = "MTF capture-group identifiers are incomplete";
       return -1;
     }
 
@@ -2543,7 +2900,32 @@ mtf_parameters::load_csv (FILE *in, std::string name, const char **error)
       loaded.push_back (std::move (measurement));
     }
 
-  measurements.insert (measurements.end (), loaded.begin (), loaded.end ());
+  /* Existing canonical JSON documents keep their stable IDs when a
+     QuickMTF import appends fresh measurements. Legacy .par collections
+     without IDs remain unupgraded until the load-time conversion stage.
+     Prepare on a copy so even an invalid partial ID model cannot mutate
+     the accepted measured curves. */
+  const bool already_named
+      = std::any_of (measurements.begin (), measurements.end (),
+                     [] (const mtf_measurement &m)
+                     {
+                       return !m.id.empty () || !m.capture_group_id.empty ();
+                     });
+  if (already_named)
+    {
+      mtf_parameters staged = *this;
+      staged.measurements.insert (staged.measurements.end (),
+                                  loaded.begin (), loaded.end ());
+      if (!staged.assign_missing_measurement_ids ())
+        {
+          if (error)
+            *error = "MTF capture IDs are invalid; imported curves not added";
+          return -1;
+        }
+      *this = std::move (staged);
+    }
+  else
+    measurements.insert (measurements.end (), loaded.begin (), loaded.end ());
   return rgb ? 3 : 1;
 }
 

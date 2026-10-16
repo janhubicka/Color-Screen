@@ -33,6 +33,8 @@
 #include <QSignalBlocker>
 #include <QTimer>
 #include <QToolButton>
+#include <QToolTip>
+#include <QCursor>
 #include <QTabWidget>
 #include <QVBoxLayout>
 #include <QMimeData>
@@ -50,7 +52,24 @@ using resampling_kernel
 
 namespace {
 
-
+/* Resolve the record represented by a measurement editor. Schema-3 rows use
+   immutable IDs so a delayed GUI signal cannot modify a different curve
+   after reorder. Legacy .par rows have only their original vector index. */
+static int
+currentMeasurementIndex (const colorscreen::mtf_parameters &mtf,
+                         const std::string &id, int originalIndex)
+{
+    if (!id.empty()) {
+        for (int i = 0; i < static_cast<int>(mtf.measurements.size()); ++i)
+            if (mtf.measurements[i].id == id)
+                return i;
+        return -1;
+    }
+    return originalIndex >= 0
+               && originalIndex < static_cast<int>(mtf.measurements.size())
+               && mtf.measurements[originalIndex].id.empty()
+           ? originalIndex : -1;
+}
 
 // Helper for drag and drop reordering
 class DragHandle : public QLabel {
@@ -470,13 +489,20 @@ void SharpnessPanel::setupUi() {
   addButtonParameter("", "Load QuickMTF measurement", [this]() { loadMTF(); });
 
   QWidget *measContainer = new MeasurementContainer([this](int from, int to) {
+    // Validate before applying a document edit. JSON-v2 saves capture groups
+    // as adjacency flags, so a drag may not split one capture into two blocks.
+    colorscreen::mtf_parameters preview =
+        m_stateGetter().rparams.sharpen.scanner_mtf;
+    if (!preview.move_measurement(from, to)) {
+      QToolTip::showText(
+          QCursor::pos(),
+          tr("Keep measurements from each capture adjacent. Change the "
+             "'Same' links before moving a curve between captures."),
+          this);
+      return;
+    }
     applyChange([from, to](ParameterState &s) {
-        auto &ms = s.rparams.sharpen.scanner_mtf.measurements;
-        if (from >= 0 && from < (int)ms.size() && to >= 0 && to < (int)ms.size()) {
-            auto item = ms[from];
-            ms.erase(ms.begin() + from);
-            ms.insert(ms.begin() + to, item);
-        }
+      s.rparams.sharpen.scanner_mtf.move_measurement(from, to);
     }, tr("Reorder MTF measurements"));
   });
   m_measurementsLayout = new QVBoxLayout(measContainer);
@@ -1229,15 +1255,24 @@ void SharpnessPanel::updateMeasurementList() {
         updateSelectedMeasurementDetails();
         return;
     }
+    /* On schema-3 documents, inspection is attached to the record ID, not
+       its former row. A deleted record clears inspection; a reordered or
+       renamed record retains the same provenance/overlay in every view. */
+    int nextSelection = -1;
+    if (m_measurementUiInitialized && m_selectedMtfMeasurement >= 0
+        && m_selectedMtfMeasurement
+               < static_cast<int>(m_lastMeasurements.size())) {
+        const std::string oldId =
+            m_lastMeasurements[m_selectedMtfMeasurement].id;
+        if (!oldId.empty())
+            nextSelection = currentMeasurementIndex(state.rparams.sharpen.scanner_mtf,
+                                                    oldId, -1);
+    }
     m_measurementUiInitialized = true;
     m_lastMeasurements = measurements;
-
-    /* Structural/metadata edits can reorder or replace records. Clear the
-       inspection index rather than accidentally associating an old overlay
-       with a different measurement occupying the same vector position. */
-    m_selectedMtfMeasurement = -1;
+    m_selectedMtfMeasurement = nextSelection;
     if (m_mtfChart)
-        m_mtfChart->setSelectedMeasurement(-1);
+        m_mtfChart->setSelectedMeasurement(nextSelection);
     if (m_measurementSelector) {
         const QSignalBlocker blocker(m_measurementSelector);
         m_measurementSelector->clear();
@@ -1248,11 +1283,12 @@ void SharpnessPanel::updateMeasurementList() {
                                 .arg(QString::fromStdString(measurements[i].name));
             m_measurementSelector->addItem(label, i);
         }
-        m_measurementSelector->setCurrentIndex(0);
+        const int row = m_measurementSelector->findData(nextSelection);
+        m_measurementSelector->setCurrentIndex(row >= 0 ? row : 0);
         m_measurementSelector->setEnabled(!measurements.empty());
     }
     updateSelectedMeasurementDetails();
-    emit mtfMeasurementSelected(-1);
+    emit mtfMeasurementSelected(nextSelection);
 
     // Clear layout
     QLayoutItem *item;
@@ -1298,8 +1334,11 @@ void SharpnessPanel::updateMeasurementList() {
 
     for (int i = 0; i < (int)measurements.size(); ++i) {
         const auto &m = measurements[i];
-        const QString measurementKeyBase =
-            QStringLiteral("sharpness.measurements.%1").arg(i);
+        const QString measurementKeyBase = m.id.empty()
+            ? QStringLiteral("sharpness.measurements.%1").arg(i)
+            : QStringLiteral("sharpness.measurements.%1")
+                  .arg(QString::fromStdString(m.id));
+        const std::string measurementId = m.id;
         QWidget *row = new QWidget();
         QHBoxLayout *hLayout = new QHBoxLayout(row);
         hLayout->setContentsMargins(0, 0, 0, 0);
@@ -1315,14 +1354,13 @@ void SharpnessPanel::updateMeasurementList() {
         delBtn->setFlat(true);
         delBtn->setToolTip(tr("Delete measurement"));
         delBtn->setMaximumWidth(30);
-        connect(delBtn, &QPushButton::clicked, this, [this, i]() {
-            applyChange([i](ParameterState &s) {
-                if (i < (int)s.rparams.sharpen.scanner_mtf.measurements.size()) {
-                    s.rparams.sharpen.scanner_mtf.measurements.erase(
-                        s.rparams.sharpen.scanner_mtf.measurements.begin() + i);
-                    if (s.rparams.sharpen.scanner_mtf.measured_mtf_idx >= (int)s.rparams.sharpen.scanner_mtf.measurements.size())
-                        s.rparams.sharpen.scanner_mtf.measured_mtf_idx = (int)s.rparams.sharpen.scanner_mtf.measurements.size() - 1;
-                }
+        connect(delBtn, &QPushButton::clicked, this,
+                [this, i, measurementId]() {
+            applyChange([i, measurementId](ParameterState &s) {
+                auto &mtf = s.rparams.sharpen.scanner_mtf;
+                const int index = currentMeasurementIndex(mtf, measurementId, i);
+                if (index >= 0)
+                    mtf.erase_measurement(static_cast<size_t>(index));
             }, tr("Delete MTF measurement"));
         });
         hLayout->addWidget(delBtn);
@@ -1332,11 +1370,13 @@ void SharpnessPanel::updateMeasurementList() {
         const QString nameKey = measurementKeyBase + QStringLiteral(".name");
         nameEdit->setProperty("parameterKey", nameKey);
         connect(nameEdit, &QLineEdit::editingFinished, this,
-                [this, i, nameEdit, nameKey]() {
-            applyChange([i, nameEdit](ParameterState &s) {
-                if (i < (int)s.rparams.sharpen.scanner_mtf.measurements.size()) {
-                    s.rparams.sharpen.scanner_mtf.measurements[i].name = nameEdit->text().toStdString();
-                }
+                [this, i, measurementId, nameEdit, nameKey]() {
+            const std::string name = nameEdit->text().toStdString();
+            applyChange([i, measurementId, name](ParameterState &s) {
+                auto &mtf = s.rparams.sharpen.scanner_mtf;
+                const int index = currentMeasurementIndex(mtf, measurementId, i);
+                if (index >= 0)
+                    mtf.measurements[index].name = name;
             }, tr("Change MTF measurement name"), nameKey);
         });
         hLayout->addWidget(nameEdit, 1);
@@ -1357,12 +1397,13 @@ void SharpnessPanel::updateMeasurementList() {
         chanCombo->setFixedWidth(100);
 
         connect(chanCombo, QOverload<int>::of(&QComboBox::activated), this,
-                [this, i, chanCombo, channelKey](int index) {
-            int val = chanCombo->itemData(index).toInt();
-            applyChange([i, val](ParameterState &s) {
-                if (i < (int)s.rparams.sharpen.scanner_mtf.measurements.size()) {
-                    s.rparams.sharpen.scanner_mtf.measurements[i].channel = val;
-                }
+                [this, i, measurementId, chanCombo, channelKey](int index) {
+            const int val = chanCombo->itemData(index).toInt();
+            applyChange([i, measurementId, val](ParameterState &s) {
+                auto &mtf = s.rparams.sharpen.scanner_mtf;
+                const int row = currentMeasurementIndex(mtf, measurementId, i);
+                if (row >= 0)
+                    mtf.measurements[row].channel = val;
             }, tr("Change MTF measurement channel"), channelKey);
         });
         hLayout->addWidget(chanCombo);
@@ -1382,12 +1423,13 @@ void SharpnessPanel::updateMeasurementList() {
                "only a label and does not disable this field."));
         waveSpin->setFixedWidth(120);
         connect(waveSpin, &QDoubleSpinBox::editingFinished, this,
-                [this, i, waveSpin, wavelengthKey]() {
-            double val = waveSpin->value();
-            applyChange([i, val](ParameterState &s) {
-                if (i < (int)s.rparams.sharpen.scanner_mtf.measurements.size()) {
-                    s.rparams.sharpen.scanner_mtf.measurements[i].wavelength = val;
-                }
+                [this, i, measurementId, waveSpin, wavelengthKey]() {
+            const double val = waveSpin->value();
+            applyChange([i, measurementId, val](ParameterState &s) {
+                auto &mtf = s.rparams.sharpen.scanner_mtf;
+                const int row = currentMeasurementIndex(mtf, measurementId, i);
+                if (row >= 0)
+                    mtf.measurements[row].wavelength = val;
             }, tr("Change MTF measurement wavelength"), wavelengthKey);
         });
         hLayout->addWidget(waveSpin);
@@ -1408,12 +1450,14 @@ void SharpnessPanel::updateMeasurementList() {
         }
 
         connect(sameCheck, &QCheckBox::toggled, this,
-                [this, i, sameCaptureKey](bool v) {
-            applyChange([i, v](ParameterState &s) {
-                if (i < (int)s.rparams.sharpen.scanner_mtf.measurements.size()) {
-                    s.rparams.sharpen.scanner_mtf.measurements[i].same_capture = v;
-                }
-            }, tr("Change MTF measurement same capture"), sameCaptureKey);
+                [this, i, measurementId, sameCaptureKey](bool v) {
+            applyChange([i, measurementId, v](ParameterState &s) {
+                auto &mtf = s.rparams.sharpen.scanner_mtf;
+                const int row = currentMeasurementIndex(mtf, measurementId, i);
+                if (row >= 0)
+                    mtf.set_measurement_same_capture(
+                        static_cast<size_t>(row), v);
+            }, tr("Change MTF measurement capture"), sameCaptureKey);
         });
         hLayout->addWidget(sameCheck);
 

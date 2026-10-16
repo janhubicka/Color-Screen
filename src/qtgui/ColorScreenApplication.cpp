@@ -904,8 +904,15 @@ void ColorScreenApplication::openFiles(const QStringList &fileNames,
       target->activateWindow();
     }
 
-    target->loadFile(QFileInfo(fileName).absoluteFilePath(),
-                     suppressParamPrompt);
+    const QString absoluteFile = QFileInfo(fileName).absoluteFilePath();
+    if (absoluteFile.endsWith(QLatin1String(".cspar"), Qt::CaseInsensitive)) {
+      // Desktop double-click, drag/drop, command-line and QFileOpenEvent must
+      // all treat parameter documents as source-linked documents, never as
+      // scan files. A missing scan invokes the document's Locate image dialog.
+      target->openParameterDocument(absoluteFile);
+    } else {
+      target->loadFile(absoluteFile, suppressParamPrompt);
+    }
     openedAny = true;
     target = nullptr; // Only the first image may reuse an existing blank window.
   }

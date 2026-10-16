@@ -1,34 +1,33 @@
-!include "MUI2.nsh"
-!include "FileFunc.nsh"
+; Color-Screen Windows installer.
+; Use only built-in NSIS pages so both GCC and Clang Windows packages work
+; without optional NSIS plug-in DLLs. Install per user, without an interactive
+; UAC elevation request; this also permits unattended installer regression
+; testing and avoids changing other users' file associations.
 
 Name "Color-Screen"
+; Build with the official Windows NSIS distribution, not the MSYS2
+; x86-Unicode stub which spins before file extraction on CI Windows 2025.
+; Standard compression keeps the installer conveniently small.
+SetCompressor zlib
 !ifdef OUTFILE
   OutFile "${OUTFILE}"
 !else
   OutFile "Color-Screen-Installer.exe"
 !endif
-InstallDir "$PROGRAMFILES64\Color-Screen"
-RequestExecutionLevel admin
+InstallDir "$LOCALAPPDATA\Programs\Color-Screen"
+RequestExecutionLevel user
+Icon "icon.ico"
+UninstallIcon "icon.ico"
 
-!define MUI_ABORTWARNING
-!define MUI_ICON "icon.ico"
-!define MUI_UNICON "icon.ico"
+ShowInstDetails show
+ShowUninstDetails show
+LicenseData "${SOURCE_DIR}\LICENSE"
+Page license
+Page directory
+Page instfiles
 
-!insertmacro MUI_PAGE_WELCOME
-!insertmacro MUI_PAGE_LICENSE "${SOURCE_DIR}\LICENSE"
-!insertmacro MUI_PAGE_DIRECTORY
-!insertmacro MUI_PAGE_INSTFILES
-
-# Finish page with Readme option
-!define MUI_FINISHPAGE_SHOWREADME "$INSTDIR\README.txt"
-!insertmacro MUI_PAGE_FINISH
-
-!insertmacro MUI_UNPAGE_WELCOME
-!insertmacro MUI_UNPAGE_CONFIRM
-!insertmacro MUI_UNPAGE_INSTFILES
-!insertmacro MUI_UNPAGE_FINISH
-
-!insertmacro MUI_LANGUAGE "English"
+UninstPage uninstConfirm
+UninstPage instfiles
 
 Section "Install"
     SetOutPath "$INSTDIR"
@@ -43,20 +42,34 @@ Section "Install"
     CreateShortcut "$SMPROGRAMS\Color-Screen.lnk" "$INSTDIR\colorscreen-qt.exe" "" "$INSTDIR\colorscreen-qt.exe" 0
     CreateShortcut "$DESKTOP\Color-Screen.lnk" "$INSTDIR\colorscreen-qt.exe" "" "$INSTDIR\colorscreen-qt.exe" 0
 
+    # Add/Remove Programs entry is per-user, matching the installation.
     # Registry keys for "Color-Screen" app
-    WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Color-Screen" "DisplayName" "Color-Screen"
-    WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Color-Screen" "UninstallString" "$INSTDIR\uninstall.exe"
-    WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Color-Screen" "DisplayIcon" "$INSTDIR\colorscreen-qt.exe"
+    WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\Color-Screen" "DisplayName" "Color-Screen"
+    # Programs and Features must handle user-profile paths containing spaces.
+    WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\Color-Screen" "UninstallString" '"$INSTDIR\uninstall.exe"'
+    WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\Color-Screen" "QuietUninstallString" '"$INSTDIR\uninstall.exe" /S'
+    WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\Color-Screen" "InstallLocation" "$INSTDIR"
+    WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\Color-Screen" "DisplayIcon" '"$INSTDIR\colorscreen-qt.exe"'
 
-    # File associations
+    # Register an Open With handler for all supported extensions, without
+    # replacing the operator's default JPEG/TIFF/RAW application. Each format
+    # needs its own ProgID so descriptions and uninstall stay independent.
     !macro RegisterExtension Ext Desc
-        WriteRegStr HKCR ".${Ext}" "" "Color-Screen.File"
-        WriteRegStr HKCR "Color-Screen.File\shell\open\command" "" '"$INSTDIR\colorscreen-qt.exe" "%1"'
-        WriteRegStr HKCR "Color-Screen.File" "" "${Desc}"
-        WriteRegStr HKCR "Color-Screen.File\DefaultIcon" "" "$INSTDIR\colorscreen-qt.exe,0"
+        # An old development installer overwrote shared defaults with one
+        # Color-Screen.File class; remove only that known obsolete default.
+        ReadRegStr $0 HKCU "Software\Classes\.${Ext}" ""
+        StrCmp $0 "Color-Screen.File" 0 +2
+            DeleteRegValue HKCU "Software\Classes\.${Ext}" ""
+        WriteRegStr HKCU "Software\Classes\.${Ext}\OpenWithProgids" "Color-Screen.${Ext}" ""
+        WriteRegStr HKCU "Software\Classes\Color-Screen.${Ext}" "" "${Desc}"
+        WriteRegStr HKCU "Software\Classes\Color-Screen.${Ext}\shell\open\command" "" '"$INSTDIR\colorscreen-qt.exe" "%1"'
+        WriteRegStr HKCU "Software\Classes\Color-Screen.${Ext}\DefaultIcon" "" "$INSTDIR\colorscreen-qt.exe,0"
     !macroend
 
-    !insertmacro RegisterExtension "par" "Color-Screen Parameter File"
+    # Native schema-3 .cspar now opens its source image through the GUI's
+    # document loader. Only historical .par remains a parameter-only import
+    # requiring an already selected scan.
+    !insertmacro RegisterExtension "cspar" "Color-Screen Parameters"
     !insertmacro RegisterExtension "tif" "TIFF Image"
     !insertmacro RegisterExtension "tiff" "TIFF Image"
     !insertmacro RegisterExtension "jpg" "JPEG Image"
@@ -72,17 +85,56 @@ Section "Install"
     !insertmacro RegisterExtension "arq" "Sony Pixel Shift Raw Image"
     !insertmacro RegisterExtension "csprj" "Color-Screen Project"
 
-    System::Call 'Shell32::SHChangeNotify(i 0x08000000, i 0, i 0, i 0)'
+    # App-owned .cspar and .csprj documents may be opened from Explorer.
+    # Do not replace a user's defaults for ordinary image formats or .par.
+    WriteRegStr HKCU "Software\Classes\.cspar" "" "Color-Screen.cspar"
+    WriteRegStr HKCU "Software\Classes\.csprj" "" "Color-Screen.csprj"
+    DeleteRegKey HKCU "Software\Classes\Color-Screen.File"
+
+    ; No System plug-in: file associations become visible at the next shell refresh.
 SectionEnd
 
 Section "Uninstall"
     Delete "$SMPROGRAMS\Color-Screen.lnk"
     Delete "$DESKTOP\Color-Screen.lnk"
+
+    ; Remove published metadata before deleting the installation directory.
+    ; This remains reliable when Windows temporarily holds a packaged file
+    ; open (or a running GUI) and file cleanup takes longer than registry I/O.
+    DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\Color-Screen"
+    # Remove only our Open With entries, and clear a file-type default only
+    # when it still refers to us. Never erase another application's choice.
+    !macro UnregisterExtension Ext
+        DeleteRegValue HKCU "Software\Classes\.${Ext}\OpenWithProgids" "Color-Screen.${Ext}"
+        DeleteRegKey /ifempty HKCU "Software\Classes\.${Ext}\OpenWithProgids"
+        ReadRegStr $0 HKCU "Software\Classes\.${Ext}" ""
+        StrCmp $0 "Color-Screen.${Ext}" 0 +2
+            DeleteRegValue HKCU "Software\Classes\.${Ext}" ""
+        DeleteRegKey /ifempty HKCU "Software\Classes\.${Ext}"
+        DeleteRegKey HKCU "Software\Classes\Color-Screen.${Ext}"
+    !macroend
+
+    !insertmacro UnregisterExtension "cspar"
+    !insertmacro UnregisterExtension "tif"
+    !insertmacro UnregisterExtension "tiff"
+    !insertmacro UnregisterExtension "jpg"
+    !insertmacro UnregisterExtension "jpeg"
+    !insertmacro UnregisterExtension "raw"
+    !insertmacro UnregisterExtension "dng"
+    !insertmacro UnregisterExtension "iiq"
+    !insertmacro UnregisterExtension "nef"
+    !insertmacro UnregisterExtension "cr2"
+    !insertmacro UnregisterExtension "eip"
+    !insertmacro UnregisterExtension "arw"
+    !insertmacro UnregisterExtension "raf"
+    !insertmacro UnregisterExtension "arq"
+    !insertmacro UnregisterExtension "csprj"
+
+    DeleteRegKey HKCU "Software\Classes\Color-Screen.File"
+
+    ; File removal may be deferred while a GUI/AV process still holds a DLL.
+    ; Perform it only after all registry/file-association cleanup has run.
     RMDir /r "$INSTDIR"
 
-    DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\Color-Screen"
-    DeleteRegKey HKCR "Color-Screen.File"
-    # Note: Extension keys are usually left alone or we could clean them up if they point to us.
-    
-    System::Call 'Shell32::SHChangeNotify(i 0x08000000, i 0, i 0, i 0)'
+    ; No System plug-in: file associations become visible at the next shell refresh.
 SectionEnd

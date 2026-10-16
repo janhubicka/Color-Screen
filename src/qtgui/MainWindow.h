@@ -38,6 +38,7 @@ class QLabel;
 class QProgressBar;
 class QDialog;
 class QMessageBox;
+class QFileDialog;
 class QPushButton;
 class QWidget;
 #include "ImageWidget.h"
@@ -135,7 +136,15 @@ public:
       an occupied window is never overwritten.  SUPPRESSPARAMPROMPT is reserved
       for crash recovery.  */
   void loadFile(const QString &fileName, bool suppressParamPrompt = false,
-                bool preferCachedRaw = false);
+                bool preferCachedRaw = false,
+                const QString &linkedParameterFile = QString(),
+                bool allowLinkedSizeMismatch = false);
+
+  /** Open a native .cspar as a complete document. Validate its embedded
+      source-image reference before starting any scan load. When the source
+      moved or the parameters are reusable, ask for an image asynchronously. */
+  void openParameterDocument(const QString &fileName,
+                             bool forceLocateImage = false);
 
   /** Return true when this untouched empty window may host a newly opened
       image instead of allocating another document window.  */
@@ -148,12 +157,16 @@ public:
   /** Return the absolute path of the image assigned to this document. */
   QString currentImageFile() const { return m_currentImageFile; }
 
+  /** Resolve an MTF source reference relative to the accepted parameter
+      document, never the process working directory or recovery directory. */
+  QString resolveMtfSourcePath(const std::string &sourceName) const;
+
   /** Output format for Save As. Automatic mode retains legacy .par targets;
       new .cspar files use native JSON. The old ZIP parameter format is unsupported. */
   enum class ParameterSaveFormat {
     PreserveOrInfer,
     LegacyCsp,
-    JsonV2
+    JsonV3
   };
 
   /** Save FILENAME atomically as JSON or compatible legacy .par.
@@ -1029,11 +1042,11 @@ private:
       A suggested path is only a Save-As default and must never be overwritten
       without confirmation as though it had already been loaded/saved. */
   struct ParameterFileState {
-    enum class Format { LegacyCsp, JsonV2 };
+    enum class Format { LegacyCsp, JsonV3 };
 
     QString path;
     bool suggested = false;
-    Format format = Format::JsonV2;
+    Format format = Format::JsonV3;
 
     void setLoaded(const QString &fileName,
                    Format fileFormat = Format::LegacyCsp) {
@@ -1049,6 +1062,12 @@ private:
     }
   };
   ParameterFileState m_parameterFile;
+
+  /* One active linked-document source prompt at a time. New Open/Reload
+     supersedes both the chooser and the mismatch confirmation, preventing
+     an obsolete dialog from replacing an unrelated image later. */
+  QPointer<QFileDialog> m_sourceLocateDialog;
+  QPointer<QMessageBox> m_sourceMismatchPrompt;
 
   /** Presentation ownership for one non-blocking parameter-save failure.
       A newer save attempt supersedes an older warning; save success/failure

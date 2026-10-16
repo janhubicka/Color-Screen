@@ -122,6 +122,12 @@ bool
 save_csp (FILE *f, const scr_to_img_parameters *param, const scr_detect_parameters *dparam,
           const render_parameters *rparam, const solver_parameters *sparam)
 {
+  /* .par is the real historical format. Canonical record IDs do not exist
+     there, but the physical capture-group meaning must remain representable
+     by the old adjacency flags. Check before writing the first byte. */
+  if (rparam
+      && !rparam->sharpen.scanner_mtf.legacy_capture_groups_representable_p ())
+    return false;
   if (fprintf (f, "%s\n", HEADER) < 0)
     return false;
   /* TODO: hack.  */

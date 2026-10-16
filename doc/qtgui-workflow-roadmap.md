@@ -304,8 +304,8 @@ possibly short subtitles/tooltips.  The current order can be interpreted as:
 2. Tiles
 3. Sharpness (capture restoration)
 4. Image Layer
-5. Contact copy
-6. Screen
+5. Screen
+6. Contact copy
 7. Geometry
 8. Color
 9. Profile
@@ -319,7 +319,7 @@ After observing real operators, consider replacing the flat nine-tab row with
 five workflow categories whose detailed panels remain reusable:
 
 1. **Capture** — Digital capture, Tiles, capture Sharpness
-2. **Process** — Image Layer, Contact copy, Screen/process identity
+2. **Process** — Image Layer, Screen/process identity, optional Contact copy
 3. **Register** — detection, Geometry, overlays/quality diagnostics
 4. **Reconstruct** — screen demosaic, denoise, restoration/detail
 5. **Color** — Color, Profile, final adjustments
@@ -656,8 +656,8 @@ coverage for archive recovery, and field testing of the finished workflow.
   still off or already active, so the persistent state line agrees with the
   next-step handoff into the simulated darkroom. Field names in Workflow are
   emphasized while values remain normal weight. The state and Next paragraphs
-  have the same tightly controlled line height, including when recommendations
-  wrap across multiple lines. When a `Next:` recommendation names
+  use inline rich text and native QLabel font leading instead of rich-text
+  paragraph block spacing when recommendations wrap across multiple lines. When a `Next:` recommendation names
   one unambiguous inspector stage, the card also offers a compact **Open stage**
   action resolved through that stage's stable semantic key. Choice points,
   toolbar-only actions, file loading, and running operations remain text-only;
@@ -768,9 +768,14 @@ The inspector now exposes five workflow stages — Capture, Process, Register,
 Reconstruct, and Color — while retaining all nine specialist panels and their
 stable semantic keys. Programmatic **Open stage** navigation, saved active-panel
 state, hidden-panel fallback, detached views, and New View all continue to use
-the original document/view ownership model. Keep the five-stage grouping under
-alpha field observation; changing it again should be driven by operator evidence,
-not by generic editor conventions.
+the original document/view ownership model. The two navigation rows now use the
+same palette-aware underline styling. When a stage has only one logically visible
+panel, omit its redundant secondary tab row; restore it as soon as another panel
+becomes applicable. Hidden buttons must not reserve wrapped FlowLayout rows.
+In Process, place Screen before Contact copy (Image Layer remains first): normally
+the physical screen is configured before optional simulated contact printing.
+Keep the five-stage grouping under alpha field observation; changing it again
+should be driven by operator evidence, not by generic editor conventions.
 
 ### Phase E — presets/provenance (implemented foundation)
 
@@ -785,65 +790,54 @@ the current workflow/provenance summary together with an exact parameter
 payload. Keep expanding provenance only where a concrete saved/measured/fitted
 distinction remains ambiguous to operators.
 
-### Phase F — project/parameter format modernization
+### Phase F — final parameter format and legacy import
 
-This work is now in progress while the application intentionally remains
-`2.0alpha`. The current CSP/`.par` reader remains available indefinitely for
-backwards compatibility. New parameter saves use the versioned `.cspar`
-container by default, while explicit legacy `.par` export remains available.
-The remaining migration is inside the archive: move state from the legacy mirror
-to explicitly structured sections without extending the ad-hoc keyword stream.
+**15 October 2026 decision:** the only parameter files in circulation are old
+plain-text `.par` files. The ZIP-based parameter archive and both earlier
+JSON layouts were development experiments; there is no need to preserve or
+migrate from any of them. ZIP-based `.csprj` *stitching projects* remain
+supported and are unrelated to the parameter file format.
 
-The format decision is now a libzip-backed `.cspar` archive with a UTF-8
-JSON manifest; see [the parameter archive format](parameter-archive-format.md).
-Versioned required features now preserve render settings absent from legacy
-CSP, the final screen-coordinate angle and axis ratio, and the separate
-photographic bounding rectangle within the full physical-object crop.
-Capture's `Crop object` may retain binding tape, mount and borders while
-`Select image area` stores the actual picture's bounds. The saved inner region
-controls default export dimensions and the area used by image analyses, but
-never erases the surrounding object from the scan canvas.
-Older alpha archive readers reject unknown authoritative features rather than
-accepting a file whose final geometry they would silently change.
-JSON is deliberately used as the strict manifest syntax because it is also valid
-YAML 1.2 while avoiding a new YAML parser dependency in libcolorscreen and the
-CLI. General YAML tags, anchors/aliases, merge keys and implicit scalar typing
-therefore never enter the compatibility surface.
+The first user-facing `.cspar` format for 2.0 is a single human-readable UTF-8
+JSON document with explicitly named, semantically grouped fields. The current
+implementation/design tracker is
+[Parameter JSON redesign](parameter-json-migration-tracking.md), which
+supersedes the obsolete ZIP/archive specification and v2 rollout note.
 
-Crash recovery also uses the versioned `.cspar` container for private
-snapshots, rather than silently dropping structured-only render settings through
-an internal `.par` file. Legacy recovery snapshots still load when no archive
-exists; corrupt archives are reported without falling back to stale legacy
-data. The document-lifecycle smoke covers structured values, old snapshots and
-partial/corrupt recovery. This remains an alpha validation gate.
+The complete JSON document owns the durable inputs from the Capture, Process,
+Registration, Calibration, Reconstruction and Color workflows, including the
+accepted geometry/mesh, profile spots, MTF measurements and source provenance,
+scanner/backlight correction grids and stitched-tile calibration. Inactive
+calibration settings must remain saved. The same source processing state can
+be rendered into different output profiles without changing the document.
 
-The archive keeps ordinary settings/provenance human-readable while allowing
-dense geometry meshes, scanner-blur correction grids and sampled curves to live
-in typed binary payload entries rather than enormous text arrays. The manifest
-identifies every dense payload by stable name, archive path, explicitly sized
-endian-qualified element type, dimensions and required/optional status. Schema
-version 1 first establishes the durable container/version boundary around an
-exact legacy CSP payload; structured domains then migrate incrementally without
-breaking old `.par` import.
+The core must remain Qt-free, with one native JSON writer/reader shared by Qt,
+CLI and recovery. Conversion from `.par` happens at load time into complete
+typed state; MTF records gain permanent document-local IDs and explicit
+capture-group IDs, replacing saved adjacency/index identity. Records belonging
+to the same capture may be nonadjacent in the file and must still share fit
+parameters and uncertainty weighting. The first-record `same_capture` flag
+has no meaningful predecessor and is not part of the JSON model.
 
-Whichever syntax/container is chosen, the schema is the compatibility contract:
+Serialization and validation must enforce stable enum IDs, finite numbers,
+declared units/coordinate frames, explicit missing/sentinel data, controlled
+maximum sizes and strict nested key handling. Full GUI document Save, Save As,
+sidecars and crash recovery must use the same schema as the CLI and reject
+malformed files atomically, without resetting the current document on failure.
+An unsupported future JSON version must fail visibly rather than be
+reinterpreted as a legacy `.par` input.
 
-- one top-level format identifier and integer schema version;
-- stable string spellings for enums and named algorithms;
-- optional namespaced sections so new GUI/library state can be added without
-  another trailing-data convention;
-- defined unknown-key behaviour and per-version migrations;
-- explicit distinction between persisted inputs, measured/calibrated results,
-  provenance and transient diagnostics;
-- canonical writer output so round-trip tests produce deterministic files;
-- transactional/atomic save semantics identical to the current GUI path;
-- fixtures proving legacy `.par` import, current-format round trips, forward
-  unknown-key tolerance, and migration of every historical default whose
-  semantics changed.
+The draft schema-3 runtime switch (PR #556) now routes Qt Open/Save/Save As,
+recovery and the CLI through the complete native schema-3 codec. **This remains
+unmerged alpha code until its final-head CI and real-project acceptance pass.**
+JSON-v2 readability is not required and old experimental adapters are removed
+from the release tests. Undoable source-path state also must be rebased across
+Save As; the draft stores staged changes and applies them only after success.
 
-Only after the structured migration, archive-recovery parity, sanitizer/build
-gate, and remaining alpha field testing are complete should the project be
-considered for a beta version.
+The beta gate is the whole checked-in historical `.par` corpus, full nested
+field/Undo/recovery validation, real large-project operator tests and the
+Ubuntu, macOS, Windows and sanitizer matrices. Do not mark 2.0 beta/final
+until these pass on the final file-format implementation.
 
 ## Questions to answer during alpha field testing
 

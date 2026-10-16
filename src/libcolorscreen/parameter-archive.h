@@ -7,6 +7,7 @@
 #include "include/scr-detect-parameters.h"
 #include "include/solver-parameters.h"
 
+#include <cstdint>
 #include <cstdio>
 #include <string>
 #include <vector>
@@ -51,6 +52,93 @@ write_parameter_text_file (const char *name, const std::string &payload,
                            std::string *error);
 
 
+/* Optional provenance of the scan or stitch project which the parameter
+   document was created for. This is *document linkage*, not an image-processing
+   parameter. An empty path means that the parameters are reusable without a
+   particular image. Relative paths are based on the .cspar directory. */
+struct parameter_source_image
+{
+  std::string path;
+  int width_px = 0;
+  int height_px = 0;
+  uint64_t size_bytes = 0;
+};
+
+/* Construct the first public native .cspar JSON document directly from
+   typed processing state, using the canonical semantic schema-3 layout.
+   Legacy .par records are upgraded to stable record/capture IDs on a private
+   copy; original caller values are never modified. No JSON-v1/v2 input is
+   accepted by the new reader. This format is not yet selected by GUI/CLI
+   until the document/recovery integration and corpus gates pass. */
+DLL_PUBLIC bool
+encode_parameter_json_v3_document (
+    const scr_to_img_parameters &geometry,
+    const scr_detect_parameters &detection,
+    const render_parameters &render,
+    const solver_parameters &solver,
+    const std::vector<point_t> &profile_spots,
+    std::string *output, std::string *error,
+    const parameter_source_image *source_image = nullptr);
+
+/* Read a strict complete schema-3 document transactionally into native
+   state. Unknown fields, invalid capture IDs/metadata and incomplete
+   calibration leave every output argument unchanged. */
+DLL_PUBLIC bool
+decode_parameter_json_v3_document (
+    const std::string &input,
+    scr_to_img_parameters *geometry,
+    scr_detect_parameters *detection,
+    render_parameters *render,
+    solver_parameters *solver,
+    std::vector<point_t> *profile_spots,
+    std::string *error, parameter_source_image *source_image = nullptr);
+
+/* Read or write canonical schema-3 .cspar at UTF-8 filesystem path NAME.
+   Readers stage all persistent state until validation succeeds; writers
+   complete the document before atomic same-directory replacement. No
+   unreleased JSON-v1/v2 is recognized by these APIs. */
+DLL_PUBLIC bool
+read_parameter_json_v3_file (
+    const char *name, scr_to_img_parameters *geometry,
+    scr_detect_parameters *detection, render_parameters *render,
+    solver_parameters *solver, std::vector<point_t> *profile_spots,
+    std::string *error, parameter_source_image *source_image = nullptr);
+
+DLL_PUBLIC bool
+write_parameter_json_v3_file (
+    const char *name, const scr_to_img_parameters &geometry,
+    const scr_detect_parameters &detection,
+    const render_parameters &render, const solver_parameters &solver,
+    const std::vector<point_t> &profile_spots, std::string *error,
+    const parameter_source_image *source_image = nullptr);
+
+/* Preserve an external scan/project reference through CLI Save As or moving
+   a .cspar: relative paths are rebased using the same host-independent
+   POSIX/drive/UNC rules as measured MTF. Invalid paths leave SOURCE unchanged. */
+DLL_PUBLIC bool
+rebase_parameter_source_image (
+    parameter_source_image *source, const std::string &old_parameter_file,
+    const std::string &new_parameter_file, std::string *error);
+
+/* Rebase relative measured-MTF source paths when a canonical parameter
+   document is saved under a different absolute pathname. Source references
+   must continue designating the same image. Handles POSIX, Windows drives
+   and UNC paths independent of the host OS; cross-volume Windows moves use
+   absolute paths. Fails without modifying MTF on invalid/ambiguous paths. */
+DLL_PUBLIC bool
+rebase_parameter_mtf_source_paths (
+    mtf_parameters *mtf, const std::string &old_parameter_file,
+    const std::string &new_parameter_file, std::string *error);
+
+/* Convert relative MTF image references to absolute spelling for private
+   crash-recovery snapshots. Unlike Save As, recovery has no user-visible
+   document location of its own; references must survive relocation of the
+   snapshot directory. Failure preserves the original MTF state. */
+DLL_PUBLIC bool
+absolutize_parameter_mtf_source_paths (
+    mtf_parameters *mtf, const std::string &parameter_file,
+    std::string *error);
+
 /* Compose one complete native JSON schema-v2 document from the core and
    Qt profile-spot processing/calibration inputs. Every component is encoded
    directly from typed C++ state, without a legacy CSP mirror or ZIP wrapper.
@@ -81,29 +169,8 @@ decode_parameter_json_v2_document (
 
 /* True if the first non-whitespace byte of UTF-8 path NAME begins a
    native JSON document. This is signature-based dispatch only; the typed
-   schema-v2 reader must still validate the format marker and version. */
-DLL_PUBLIC bool parameter_json_v2_signature_p (const char *name);
-
-/* Read a complete plain JSON v2 parameter file from a UTF-8 host pathname.
-   Every persistent core/Qt-spot input is parsed as typed JSON; no CSP
-   stream or ZIP is involved. All destinations remain unchanged on error. */
-DLL_PUBLIC bool
-read_parameter_json_v2_file (
-    const char *name, scr_to_img_parameters *geometry,
-    scr_detect_parameters *detection, render_parameters *render,
-    solver_parameters *solver, std::vector<point_t> *profile_spots,
-    std::string *error);
-
-/* Atomically save one complete JSON v2 parameter file to UTF-8 path NAME.
-   The existing sibling-staging and native replacement primitive preserves
-   an older destination if any serialization, write or rename fails.
-   All current .cspar save paths use this writer; historical .par files remain readable. */
-DLL_PUBLIC bool
-write_parameter_json_v2_file (
-    const char *name, const scr_to_img_parameters &geometry,
-    const scr_detect_parameters &detection,
-    const render_parameters &render, const solver_parameters &solver,
-    const std::vector<point_t> &profile_spots, std::string *error);
+   schema-3 reader must still validate the format marker and version. */
+DLL_PUBLIC bool parameter_json_signature_p (const char *name);
 
 /* Serialize one native JSON v2 registration component.
 
@@ -202,6 +269,23 @@ DLL_PUBLIC bool
 decode_parameter_json_v2_sharpness (
     const std::string &input, render_parameters *render,
     std::string *error);
+
+/* Experimental typed schema-3 capture-MTF component codec. The JSON root
+   contains calibration.capture.mtf, including stable measurement/capture IDs,
+   selected record ID, measured quality, sample units and source provenance.
+   It is not a complete .cspar document and is NOT used by production
+   JSON-v2 saving. Until the fitter supports arbitrary capture grouping,
+   discontiguous group IDs are rejected rather than misinterpreted. */
+DLL_PUBLIC bool
+encode_parameter_json_v3_mtf (const mtf_parameters &mtf,
+                              std::string *output, std::string *error);
+
+/* Parse a native schema-3 MTF component into privately validated C++ values.
+   On invalid metadata, inconsistent source paths, unknown fields, resource
+   limits or broken record IDs, MTF remains unchanged. */
+DLL_PUBLIC bool
+decode_parameter_json_v3_mtf (const std::string &input,
+                              mtf_parameters *mtf, std::string *error);
 
 /* Encode all persistent spatial calibration grids directly into JSON:
    backlight luminosity/subtraction samples, scanner blur correction cells,

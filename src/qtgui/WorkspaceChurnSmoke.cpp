@@ -282,9 +282,9 @@ void startWorkspaceChurnSmoke(ColorScreenApplication &app,
         if (!parameterFileProbe.path.isEmpty() ||
             parameterFileProbe.suggested ||
             parameterFileProbe.format !=
-                MainWindow::ParameterFileState::Format::JsonV2) {
+                MainWindow::ParameterFileState::Format::JsonV3) {
           fail(QStringLiteral(
-              "Fresh parameter-file target did not default to native JSON v2"));
+              "Fresh parameter-file target did not default to native JSON v3"));
           return;
         }
         parameterFileProbe.setSuggested(QStringLiteral("/tmp/suggested.par"));
@@ -298,11 +298,11 @@ void startWorkspaceChurnSmoke(ColorScreenApplication &app,
         }
         parameterFileProbe.setLoaded(
             QStringLiteral("/tmp/loaded.cspar"),
-            MainWindow::ParameterFileState::Format::JsonV2);
+            MainWindow::ParameterFileState::Format::JsonV3);
         if (parameterFileProbe.path != QStringLiteral("/tmp/loaded.cspar") ||
             parameterFileProbe.suggested ||
             parameterFileProbe.format !=
-                MainWindow::ParameterFileState::Format::JsonV2) {
+                MainWindow::ParameterFileState::Format::JsonV3) {
           fail(QStringLiteral(
               "Loaded parameter-file target lost its explicit archive format"));
           return;
@@ -529,7 +529,7 @@ void startWorkspaceChurnSmoke(ColorScreenApplication &app,
         const QStringList expectedProcessingTabs = {
             QStringLiteral("Digital capture"), QStringLiteral("Tiles"),
             QStringLiteral("Sharpness"), QStringLiteral("Image Layer"),
-            QStringLiteral("Contact copy"), QStringLiteral("Screen"),
+            QStringLiteral("Screen"), QStringLiteral("Contact copy"),
             QStringLiteral("Geometry"), QStringLiteral("Color"),
             QStringLiteral("Profile calibration")};
         QStringList actualProcessingTabs;
@@ -542,7 +542,8 @@ void startWorkspaceChurnSmoke(ColorScreenApplication &app,
           if (actualProcessingTabs.count(name) != 1)
             missingProcessingTabs.append(name);
         }
-        if (!processingTabs || !missingProcessingTabs.isEmpty()) {
+        if (!processingTabs || !missingProcessingTabs.isEmpty() ||
+            actualProcessingTabs != expectedProcessingTabs) {
           const QString detail = QStringLiteral(
                                      "Workspace churn source document lost part of the processing-panel workflow; missing=[%1], actual=[%2]")
                                      .arg(missingProcessingTabs.join(
@@ -1080,8 +1081,11 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
     !calibrationSummary->text().contains(
         QStringLiteral("<b>Capture MTF:</b>")) ||
     !nextStepSummary->text().contains(QStringLiteral("<b>Next:</b>")) ||
-    !nextStepSummary->text().contains(
-        QStringLiteral("line-height:100%")) ||
+    // The Next guidance must be a single inline rich-text paragraph.
+    // Explicit <p> wrappers with line-height percentages have historically
+    // inflated the spacing between its wrapped lines on some Qt versions.
+    nextStepSummary->text().contains(QStringLiteral("<p")) ||
+    nextStepSummary->text().contains(QStringLiteral("line-height:")) ||
     processSummary->font().weight() != QFont::Normal ||
     nextStepSummary->font().weight() != QFont::Normal ||
     captureTypeCombo->findData(
@@ -1118,6 +1122,40 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
     return;
   return;
 }
+
+        // Real QLabel geometry regression for the closely spaced Workflow
+        // Next paragraph, independently of the current screen/capture state.
+        // Compare the same wrapped words in rich and plain modes; a bold
+        // caption may cost one extra line but not double every line's leading.
+        {
+          const QString probeText = QStringLiteral(
+              "Next: inspect reconstructed colors before adjusting the original "
+              "screen, correct registration points where necessary, and "
+              "continue with image sharpening and appearance adjustments.");
+          const QString savedNextHtml = nextStepSummary->text();
+          const QString probeHtml =
+              QStringLiteral("<b>Next:</b> %1")
+                  .arg(probeText.mid(6).toHtmlEscaped());
+          QLabel plainProbe;
+          plainProbe.setWordWrap(true);
+          plainProbe.setTextFormat(Qt::PlainText);
+          plainProbe.setFont(nextStepSummary->font());
+          plainProbe.setText(probeText);
+          constexpr int probeWidth = 245;
+          const int plainHeight = plainProbe.heightForWidth(probeWidth);
+          nextStepSummary->setText(probeHtml);
+          const int richHeight = nextStepSummary->heightForWidth(probeWidth);
+          nextStepSummary->setText(savedNextHtml);
+          if (plainHeight <= plainProbe.fontMetrics().lineSpacing() ||
+              richHeight <= 0 ||
+              richHeight > plainHeight +
+                               nextStepSummary->fontMetrics().lineSpacing() + 4) {
+            fail(QStringLiteral(
+                "Workflow Next wrapped rich text has excessive line spacing "
+                "(plain=%1, rich=%2)").arg(plainHeight).arg(richHeight));
+            return;
+          }
+        }
 
         // Exercise the beta-gate capture matrix with synthetic channel layouts.
         // Workflow is derived from channel capabilities plus ParameterState, so
@@ -3237,10 +3275,10 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
             archiveState, QStringLiteral("Archive persistence smoke edit"));
         if (!second->isDocumentModified() ||
             !second->saveParametersToFile(
-                archiveFile, MainWindow::ParameterSaveFormat::JsonV2) ||
+                archiveFile, MainWindow::ParameterSaveFormat::JsonV3) ||
             second->isDocumentModified() ||
             second->m_parameterFile.format !=
-                MainWindow::ParameterFileState::Format::JsonV2) {
+                MainWindow::ParameterFileState::Format::JsonV3) {
           fail(QStringLiteral(
               "Workspace churn archive save did not establish a clean archive target"));
           return;
@@ -3292,7 +3330,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
         if (!second->loadParameterFile(archiveFile) ||
             second->documentStateSnapshot() != archiveState ||
             second->m_parameterFile.format !=
-                MainWindow::ParameterFileState::Format::JsonV2 ||
+                MainWindow::ParameterFileState::Format::JsonV3 ||
             second->isDocumentModified()) {
           fail(QStringLiteral(
               "Workspace churn archive load did not restore/adopt the complete clean archive state"));
@@ -3307,7 +3345,7 @@ if (!workflowSummary || !workflowToggle || !workflowStages ||
             !second->saveParametersToFile(second->m_parameterFile.path) ||
             second->documentStateSnapshot() != archiveResaveState ||
             second->m_parameterFile.format !=
-                MainWindow::ParameterFileState::Format::JsonV2 ||
+                MainWindow::ParameterFileState::Format::JsonV3 ||
             second->isDocumentModified() ||
             !parameterHasJsonSignature(archiveFile)) {
           fail(QStringLiteral(

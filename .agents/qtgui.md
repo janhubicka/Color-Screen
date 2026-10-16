@@ -2,6 +2,18 @@
 
 This document provides technical details for developing the Qt6-based graphical user interface for Color-Screen.
 
+**Parameter-format decision, 15 October 2026:** only old plain-text `.par`
+parameter files exist outside development. ZIP parameter archives and JSON-v2
+were temporary alpha experiments, not compatibility obligations. The first
+2.0 JSON `.cspar` format is the semantically grouped schema-3 design in
+[`doc/parameter-json-migration-tracking.md`](../doc/parameter-json-migration-tracking.md).
+Draft PR #556 switches the Qt GUI, CLI and recovery to native JSON schema 3,
+but it is **not yet merged or release-qualified**. The old JSON-v2 reader is
+not a compatibility gate. Preserve historical `.par` reading and loss-checked
+export. MTF editors use immutable measurement IDs and capture-group IDs;
+source provenance must retain its physical interpretation through Save As,
+Undo/Redo and recovery, with staging before any disk or live-state mutation.
+
 ## Architecture Overview
 
 The GUI is built using **Qt6** and follows a modular panel-based architecture.
@@ -21,9 +33,11 @@ the current `image_data` capabilities and `render_parameters`; never cache a
 second authoritative image-layer choice in the GUI. Dynamic Workflow labels
 must keep the horizontal `QSizePolicy::Ignored` contract so changing text
 cannot move the main image/inspector splitter. The status and `Next:`
-paragraphs use zero-margin rich-text blocks with explicit 100% line-height;
-both labels have `QSizePolicy::Maximum` vertically and `Ignored` horizontally
-so surplus inspector height does not stretch wrapped Next lines. **Bold only
+paragraphs use **inline rich-text fragments**, with no `<p>` block or
+explicit percentage line height: QLabel should use its native font leading
+when guidance wraps. Both labels have `QSizePolicy::Maximum` vertically and
+`Ignored` horizontally so surplus inspector height does not stretch the
+recommendation. **Bold only
 the captions** (Process, Image layer, Registration, Sharpening, Capture MTF,
 Profile, Next), leaving values at normal weight. HTML-escape document-derived
 values before adding markup, and keep machine-readable plain strings as the
@@ -69,7 +83,13 @@ It lets user to effectively move around the image
 Opening an image must not replace an occupied document. All entry points—File
 Open (including multi-selection), recent files, positional command-line paths,
 and `QFileOpenEvent` from the desktop—route through
-`ColorScreenApplication::openFiles()`. The first path may reuse an untouched
+`ColorScreenApplication::openFiles()`. The Ctrl+O image/document chooser also
+advertises source-linked `.cspar` documents alongside scans. The `.cspar`
+loader stages and validates all parameters before decoding its linked scan,
+and falls back to a cancellable Locate image chooser if that source moved;
+a successful relink is dirty until Save writes its new relative path.
+Historical `.par` remains an import through File → Open Parameters into
+an already opened image. The first path may reuse an untouched
 empty document; every other path receives a new `MainWindow` and is attached
 to the primary workspace by default.
 
@@ -88,64 +108,67 @@ each document has independent:
 - `QUndoStack`, selection/tool state, panels, navigation, and detached docks;
 - worker objects, `TaskQueue` instances, progress entries, and render
   cancellation state;
-- current image filename, one `ParameterFileState` (path + suggested/loaded
-  status + physical LegacyCsp/Archive/JsonV2 format), and a UUID-named recovery
-  directory. A fresh target defaults to JsonV2; explicitly loaded or
-  suggested legacy targets retain their original format. ZIP-v1 is import-only
-  and migrates to native JSON on the next successful Save. Never let a suggested parameter filename
-  become an overwrite target without an explicit save/load transition. An
-  established legacy or JSON target preserves its format on ordinary Save;
-  an imported ZIP target becomes JSON only after a successful atomic write.
-  Legacy CSP writes use `qtgui_io::saveStdioAtomically()`; native JSON `.cspar`
-  writes use `write_parameter_json_v2_file()` directly on typed state with
-  `write_parameter_text_file()` as their format-neutral atomic primitive.
-  There is no ZIP encoder. Writers stage a sibling file and replace the target
-  using the platform-native rename primitive already exercised by core Unicode
-  and failure-preservation tests. A failed serializer/write/replace must leave
-  any previous usable target unchanged. Archive state includes independently
-  negotiated `render-overrides-v1`, `geometry-final-frame-v1`, and
-  `image-area-v1` sections: legacy CSP does not represent the final
-  screen-coordinate frame or the independently selected photographic bounds.
-  The source's `scan_crop` is the physical-object crop (including mounting
-  tapes and borders), while `image_area` is the inner photograph. The editor
-  keeps the object visible, and default file output uses the inner bounding
-  region when active. Direct legacy `.par` export with an active image area
-  must be refused rather than silently losing that document input.
-  Read those supplements only after the full legacy and manifest validation
-  succeeds; preserve them on ordinary Save, Save As, CLI rewrites and private
-  recovery. Private recovery parameters now use
-  `recovery_params.cspar` with the full native-JSON v2 atomic writer.
-  `recovery_params.par` is accepted only when no archive exists. Recovery
-  metadata still preserves the user's Archive/Legacy target identity
-  independently of its private recovery payload. Keep lightweight QSaveFile
-  smoke for legacy writes and core/Qt archive failure tests.
+- current image filename, one `ParameterFileState` (path, suggested/loaded
+  status and physical `LegacyCsp` or `JsonV3` identity), and a unique recovery
+  directory. New parameter targets default to JSON `.cspar`; an existing
+  `.par` remains an explicit legacy target unless Save As changes its format.
+  Suggested names are not overwrite authority, and failed Save/Open must
+  preserve the target, dirty state, Undo and previous file bytes.
 
-**Native JSON v2 alpha migration:** the Qt document loader recognizes the
-plain JSON .cspar by content signature and parses the entire native document
-transactionally; a schema-v1 ZIP and legacy CSP still use their existing
-readers. `ParameterFileState::Format::JsonV2` is a *physical file identity*,
-not a document processing property: ordinary Save never changes JSON v2 to
-ZIP v1 just because both paths end with .cspar. Save As offers native JSON
-parameters first (the default for all .cspar output) and legacy .par.
-The enum value `Archive` describes imported/recovered target identity only;
-never expose it as a write choice. Successful Save promotes it to `JsonV2`.
-On implicit replacement of a different existing .cspar, call the core
-`validate_parameter_document_file()` rather than trusting signature probes.
-Explicit Save As format selection can authorize intentional replacement of an
-unrecognized file. Unknown legacy metadata is refused by GUI import rather
-than lost during later JSON conversion; CLI legacy rewrites may preserve it.
-JSON saves bypass legacy CSP serialization and include persistent profile
-spots. New image sidecars are suggested as JsonV2, while existing sidecars
-retain their physical file identities. Asynchronous sidecar
-staging preserves this format when applying or suggesting a file, and
-crash-recovery target metadata records `json-v2` independently of its
-complete native-JSON v2 snapshot. Existing ZIP-v1 and .par recovery
-snapshots remain supported by content-based parsing. The document lifecycle smoke verifies
-native JSON Save/Open/ordinary Save, corrupt-input failure nonmutation and
-migration from an independently constructed v1 fixture, including failed-Save
-preservation of old bytes/format and successful promotion. See
-`doc/parameter-json-migration-tracking.md` for decisions, evidence and the
-planned semantic schema-3 redesign; the v2 plan is a historical rollout record.
+**Parameter files and lifecycle:** Native `.cspar` is a single UTF-8 JSON
+schema-3 document written through `write_parameter_json_v3_file()`, whose
+Qt-free implementation validates the complete typed state and uses the shared
+staged `write_parameter_text_file()` atomic replacement. The GUI loads it with
+`read_parameter_json_v3_file()`; a content signature is only a dispatch hint,
+never proof that the file has a supported version. Strict input validation
+rejects incomplete, future, malformed or unknown-key JSON without publishing
+partial state. **There are no shipped ZIP/JSON-v1/JSON-v2 parameter files**:
+the sole historical import/export format is plain text `.par`.
+
+Legacy `.par` loads are parsed into private state before publication. The
+load path assigns stable MTF record/capture-group IDs once, then preserves
+them across edits, Undo and Save. Legacy `.par` export is loss-checked:
+selected photographic area, final-frame geometry, noncontiguous MTF groups,
+and all other unrepresentable fields must be rejected rather than silently
+lost. The physical-object `scan_crop` includes mounting tapes and borders;
+`image_area` separately marks the photograph itself and may determine the
+default output extent.
+
+On a new `.cspar` Save As, relative MTF reference paths are rebased
+from their **current source base** to the chosen target while preserving the
+image they identify. That base is the established parameter-file directory,
+or the image directory if no parameter file has yet been loaded/saved (even
+when a sidecar filename has merely been suggested). The first Save As to a
+different directory must preserve the same provenance as subsequent Save As
+operations. This calculation runs on private copies of the live parameters
+and the Undo history; only after successful atomic output may the GUI adopt
+the new spellings. If existing Undo state cannot be rebased without loss,
+discard unsafe history with a clear operator explanation rather than allowing
+Undo to restore stale paths. Relative source references stored in private
+recovery snapshots must resolve against their **owning document**, not the
+temporary recovery directory.
+
+`validate_parameter_document_file()` checks the *complete* document before
+implicitly replacing an existing `.cspar` that is not the current loaded
+target. Explicit Save As may intentionally replace an unsupported file;
+ordinary Save cannot. Legacy `.par` export uses
+`qtgui_io::saveStdioAtomically()`; this is a different file format and
+must preserve its checked constraints. Profile spots and all inactive
+calibration settings are persistent JSON inputs, not UI presentation state.
+
+New image sidecars default to `JsonV3` and keep their suggested/loaded
+status until an explicit successful transaction. `recovery_params.cspar`
+contains one complete schema-3 snapshot; `recovery_params.par` is a historical
+fallback **only if no `.cspar` snapshot exists**. A corrupt JSON snapshot
+must not be ignored in favour of stale legacy parameters. Target identity
+is stored separately in recovery metadata as `json-v3` or legacy.
+Document lifecycle and workspace smoke tests cover Save/Open/Save As,
+transactional error handling, source identity through Undo/Redo, legacy
+recovery, and incomplete/corrupt snapshots.
+
+See `doc/parameter-json-migration-tracking.md` for release gates and
+the remaining nested-member/schema audit. The older JSON-v2 and ZIP archive
+plans are internal history, not supported-format instructions.
 
 Workspace geometry, image/parameter file-dialog directory history, and
 recent-file lists remain application preferences in `QSettings`; they are not
@@ -449,10 +472,10 @@ application-wide help/about actions. Keep this order when adding new menus.
 Crash recovery is session-aware. `ColorScreenApplication` prompts once and
 restores one `MainWindow` per recovery directory. Each `MainWindow` writes and
 removes only its own payload, so closing one image cannot erase another image's
-recovery state. Recovery writes a complete native JSON v2 `recovery_params.cspar`
+recovery state. Recovery writes a complete native JSON schema-3 `recovery_params.cspar`
 atomically before updating image/target metadata. The old
-`recovery_params.par` is read only when no archive exists; an invalid
-archive must not fall back to stale legacy data. Both formats use the same
+`recovery_params.par` is read only when no archive exists; an invalid JSON
+snapshot must not fall back to stale legacy data. Both formats use the same
 transactional private-state parameter parser, and a failed parameter recovery
 is always dirty even if older metadata described a clean document. Corrupt
 payloads are retained for inspection/retry and reported through a parent-owned

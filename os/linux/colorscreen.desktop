@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Color-Screen
+Comment=Reconstruct historical color-screen photographs
+Exec=colorscreen-qt %F
+Icon=applications-graphics
+Terminal=false
+Categories=Graphics;Photography;
+MimeType=application/vnd.colorscreen.parameters+json;
+StartupNotify=true

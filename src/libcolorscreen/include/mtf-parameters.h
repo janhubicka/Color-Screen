@@ -39,6 +39,14 @@ struct mtf_measurement
   /* True if this measurement comes from the same capture as the preceding
      measurement.  */
   bool same_capture;
+  /* Stable document-local identity for eventual schema-3 persistence.
+     Legacy .par and JSON-v2 records leave these fields empty.  Upgrading a
+     document assigns IDs once; renaming/reordering does not replace them.  */
+  std::string id;
+  /* A capture group is independent of record order in schema 3.  Until the
+     native schema-3 writer is enabled, SAME_CAPTURE remains the authoritative
+     representation in saved JSON-v2 and legacy files.  */
+  std::string capture_group_id;
   /* Name.  */
   std::string name;
 
@@ -90,7 +98,10 @@ struct mtf_measurement
   fit_equal_p (const mtf_measurement &o) const
   {
     return channel == o.channel && image_layer == o.image_layer
-           && wavelength == o.wavelength && same_capture == o.same_capture
+           && wavelength == o.wavelength
+           && (capture_group_id.empty () || o.capture_group_id.empty ()
+                 ? same_capture == o.same_capture
+                 : capture_group_id == o.capture_group_id)
            && m_data == o.m_data;
   }
 
@@ -134,6 +145,7 @@ struct mtf_measurement
   {
     return channel == o.channel && image_layer == o.image_layer
            && wavelength == o.wavelength && same_capture == o.same_capture
+           && id == o.id && capture_group_id == o.capture_group_id
            && name == o.name && source_filename == o.source_filename
            && source_width == o.source_width && source_height == o.source_height
            && roi.x == o.roi.x && roi.y == o.roi.y
@@ -264,6 +276,51 @@ struct mtf_parameters
 
   std::vector <mtf_measurement> measurements;
 
+  /* Assign missing document-local record and capture-group IDs using the
+     legacy SAME_CAPTURE adjacency boundary. Existing IDs are never replaced,
+     and duplicate existing record IDs cause failure without mutation.  This
+     explicit migration primitive is NOT called by JSON-v2 or .par writers.  */
+  DLL_PUBLIC bool assign_missing_measurement_ids ();
+
+  /* Return true if every record and capture group has a usable ID, record
+     IDs are unique, and the selected measurement index is valid. Non-adjacent
+     records may belong to the same capture in the future schema-3 format.  */
+  DLL_PUBLIC bool measurement_ids_valid_p () const;
+
+  /* True if the current capture-group relationships can be expressed by
+     historical .par adjacency flags without changing the physical fit.
+     Identity tokens themselves are deliberately omitted on .par export. */
+  DLL_PUBLIC bool legacy_capture_groups_representable_p () const;
+
+  /* Resolve the selected curve to its ID, or return empty for no selection.  */
+  DLL_PUBLIC std::string selected_measurement_id () const;
+
+  /* Select one record by identity. Empty ID clears selection; an unknown or
+     duplicated ID fails without changing the current selection.  */
+  DLL_PUBLIC bool select_measurement_id (const std::string &id);
+
+  /* Compute a compact group index for each measured curve in OUT. Explicit
+     capture-group IDs may occur noncontiguously; old .par records without IDs
+     instead use SAME_CAPTURE adjacency. Return false on partial group IDs and
+     leave OUT unchanged. Index values are assigned in first-occurrence order. */
+  DLL_PUBLIC bool capture_group_indices (std::vector<size_t> *out) const;
+
+  /* Reassign record INDEX either to the preceding record's capture (SAME)
+     or to a fresh, distinct capture group. With stable IDs, no unrelated
+     record changes group membership; update the old adjacency hints only for
+     consumers still reading .par. INDEX=0 cannot join a predecessor. */
+  DLL_PUBLIC bool set_measurement_same_capture (size_t index, bool same);
+
+  /* Delete record INDEX without selecting a different curve by accident.
+     Clear selection if the deleted curve was active, shift later indices,
+     and keep surviving capture group identities and old adjacency hints. */
+  DLL_PUBLIC bool erase_measurement (size_t index);
+
+  /* Move record FROM to TO while preserving selected-curve identity and
+     explicit capture groups even when records become nonadjacent. A legacy
+     in-memory .par collection without IDs still disallows moves that would
+     split one capture before conversion to the canonical JSON format. */
+  DLL_PUBLIC bool move_measurement (int from, int to);
 
   /* Return true when at least one non-empty measurement is available.  */
   bool

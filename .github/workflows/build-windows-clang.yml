@@ -97,7 +97,7 @@ jobs:
       run: |
         if ! make -j$(nproc) check; then
           echo '=== Failed Windows clang TAP tests ==='
-          for log in testsuite/parameter-v2-corpus.log \
+          for log in testsuite/parameter-v3-corpus.log \
                      testsuite/parameter-archive-cli.log \
                      testsuite/unittests.log \
                      testsuite/test-suite.log; do
@@ -157,12 +157,34 @@ jobs:
         cp -r /${{matrix.sys}}/share/icons/Adwaita /c/Color-Screen-install/bin/share/icons/
         cp -r /${{matrix.sys}}/share/icons/hicolor /c/Color-Screen-install/bin/share/icons/
     - name: build installer
-      shell: msys2 {0}
+      shell: pwsh
       if: matrix.sys != 'clangarm64'
       run: |
-        cp LICENSE /c/Color-Screen-install/
-        cp README.md /c/Color-Screen-install/
-        makensis -DSOURCE_DIR="C:\Color-Screen-install" -DOUTFILE="Color-Screen-Installer-${{matrix.sys}}${{matrix.suffix}}.exe" os/windows/installer.nsi
+        Copy-Item -LiteralPath LICENSE -Destination 'C:\Color-Screen-install\LICENSE' -Force
+        Copy-Item -LiteralPath README.md -Destination 'C:\Color-Screen-install\README.md' -Force
+        # Use a known official Windows NSIS stub rather than the MSYS2 stub,
+        # which spins at full CPU before extracting a single installer file.
+        $compiler = Join-Path ${env:ProgramFiles(x86)} 'NSIS\makensis.exe'
+        if (-not (Test-Path -LiteralPath $compiler -PathType Leaf)) {
+          choco install nsis.install --version=3.11.0 --yes --no-progress
+          if ($LASTEXITCODE -ne 0) {
+            throw "Could not install official Windows NSIS 3.11"
+          }
+        }
+        if (-not (Test-Path -LiteralPath $compiler -PathType Leaf)) {
+          throw "Official NSIS compiler not found at $compiler"
+        }
+        Write-Host "Using NSIS compiler: $compiler"
+        & $compiler "/DSOURCE_DIR=C:\Color-Screen-install" "/DOUTFILE=Color-Screen-Installer-${{matrix.sys}}${{matrix.suffix}}.exe" 'os\windows\installer.nsi'
+        if ($LASTEXITCODE -ne 0) {
+          throw "Official NSIS compilation failed with exit code $LASTEXITCODE"
+        }
+    - name: Smoke-test NSIS installer and uninstaller
+      if: matrix.suffix == ''
+      timeout-minutes: 8
+      shell: pwsh
+      run: |
+        & "$env:GITHUB_WORKSPACE\os\windows\smoke-test-installer.ps1" -InstallerPath "$env:GITHUB_WORKSPACE\os\windows\Color-Screen-Installer-${{matrix.sys}}${{matrix.suffix}}.exe"
     - name: Verify application
       shell: msys2 {0}
       if: matrix.suffix == ''
@@ -197,7 +219,7 @@ jobs:
           shot_*.png
 
     - uses: actions/upload-artifact@v4
-      if: matrix.sys != 'clangarm64'
+      if: always() && matrix.sys != 'clangarm64'
       with:
         name: windows-installer-${{matrix.sys}}${{matrix.suffix}}
         path: os/windows/Color-Screen-Installer-${{matrix.sys}}${{matrix.suffix}}.exe
