@@ -117,12 +117,28 @@ jobs:
         cp -r /${{matrix.sys}}/share/icons/Adwaita /c/Color-Screen-install/bin/share/icons/
         cp -r /${{matrix.sys}}/share/icons/hicolor /c/Color-Screen-install/bin/share/icons/
     - name: build installer
-      shell: msys2 {0}
+      shell: pwsh
       run: |
-        cp LICENSE /c/Color-Screen-install/
-        cp README.md /c/Color-Screen-install/
-        # Plugin-free built-in NSIS pages work with the MSYS2 amd64 Unicode stub.
-        makensis -DSOURCE_DIR="C:\Color-Screen-install" -DOUTFILE="Color-Screen-Installer-${{matrix.sys}}${{matrix.suffix}}.exe" os/windows/installer.nsi
+        Copy-Item -LiteralPath LICENSE -Destination 'C:\Color-Screen-install\LICENSE' -Force
+        Copy-Item -LiteralPath README.md -Destination 'C:\Color-Screen-install\README.md' -Force
+        # Do not use MSYS2's makensis/stub: it spun continuously before any
+        # extraction on Windows Server 2025, including uncompressed packages.
+        # Official NSIS 3.11 is independent of the MSYS2 target toolchain.
+        $compiler = Join-Path ${env:ProgramFiles(x86)} 'NSIS\makensis.exe'
+        if (-not (Test-Path -LiteralPath $compiler -PathType Leaf)) {
+          choco install nsis.install --version=3.11.0 --yes --no-progress
+          if ($LASTEXITCODE -ne 0) {
+            throw "Could not install official Windows NSIS 3.11"
+          }
+        }
+        if (-not (Test-Path -LiteralPath $compiler -PathType Leaf)) {
+          throw "Official NSIS compiler not found at $compiler"
+        }
+        Write-Host "Using NSIS compiler: $compiler"
+        & $compiler "/DSOURCE_DIR=C:\Color-Screen-install" "/DOUTFILE=Color-Screen-Installer-${{matrix.sys}}${{matrix.suffix}}.exe" 'os\windows\installer.nsi'
+        if ($LASTEXITCODE -ne 0) {
+          throw "Official NSIS compilation failed with exit code $LASTEXITCODE"
+        }
     - name: Smoke-test NSIS installer and uninstaller
       if: matrix.suffix == ''
       timeout-minutes: 8
