@@ -304,8 +304,8 @@ possibly short subtitles/tooltips.  The current order can be interpreted as:
 2. Tiles
 3. Sharpness (capture restoration)
 4. Image Layer
-5. Contact copy
-6. Screen
+5. Screen
+6. Contact copy
 7. Geometry
 8. Color
 9. Profile
@@ -319,7 +319,7 @@ After observing real operators, consider replacing the flat nine-tab row with
 five workflow categories whose detailed panels remain reusable:
 
 1. **Capture** — Digital capture, Tiles, capture Sharpness
-2. **Process** — Image Layer, Contact copy, Screen/process identity
+2. **Process** — Image Layer, Screen/process identity, optional Contact copy
 3. **Register** — detection, Geometry, overlays/quality diagnostics
 4. **Reconstruct** — screen demosaic, denoise, restoration/detail
 5. **Color** — Color, Profile, final adjustments
@@ -656,8 +656,8 @@ coverage for archive recovery, and field testing of the finished workflow.
   still off or already active, so the persistent state line agrees with the
   next-step handoff into the simulated darkroom. Field names in Workflow are
   emphasized while values remain normal weight. The state and Next paragraphs
-  have the same tightly controlled line height, including when recommendations
-  wrap across multiple lines. When a `Next:` recommendation names
+  use inline rich text and native QLabel font leading instead of rich-text
+  paragraph block spacing when recommendations wrap across multiple lines. When a `Next:` recommendation names
   one unambiguous inspector stage, the card also offers a compact **Open stage**
   action resolved through that stage's stable semantic key. Choice points,
   toolbar-only actions, file loading, and running operations remain text-only;
@@ -768,9 +768,14 @@ The inspector now exposes five workflow stages — Capture, Process, Register,
 Reconstruct, and Color — while retaining all nine specialist panels and their
 stable semantic keys. Programmatic **Open stage** navigation, saved active-panel
 state, hidden-panel fallback, detached views, and New View all continue to use
-the original document/view ownership model. Keep the five-stage grouping under
-alpha field observation; changing it again should be driven by operator evidence,
-not by generic editor conventions.
+the original document/view ownership model. The two navigation rows now use the
+same palette-aware underline styling. When a stage has only one logically visible
+panel, omit its redundant secondary tab row; restore it as soon as another panel
+becomes applicable. Hidden buttons must not reserve wrapped FlowLayout rows.
+In Process, place Screen before Contact copy (Image Layer remains first): normally
+the physical screen is configured before optional simulated contact printing.
+Keep the five-stage grouping under alpha field observation; changing it again
+should be driven by operator evidence, not by generic editor conventions.
 
 ### Phase E — presets/provenance (implemented foundation)
 
