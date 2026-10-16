@@ -991,9 +991,18 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
             return;
           }
           state->missingPickerAccepted = true;
-          chooser->selectFile(first->currentImageFile());
-          // QFileDialog narrows accept() to protected; use QDialog's public slot.
-          static_cast<QDialog *>(chooser)->accept();
+          const QString sourceImage =
+              QFileInfo(first->currentImageFile()).absoluteFilePath();
+          chooser->setDirectory(QFileInfo(sourceImage).absolutePath());
+          chooser->selectFile(sourceImage);
+          // Dispatch the selection normally on the next GUI event turn.
+          // A synchronous QFileDialog::accept can nest native dialogs and
+          // prevent the smoke phase timer from running.
+          QPointer<QFileDialog> dialogGuard = chooser;
+          QTimer::singleShot(0, chooser, [dialogGuard]() {
+            if (dialogGuard)
+              static_cast<QDialog *>(dialogGuard.data())->accept();
+          });
           schedule(-105, 100, 120);
           return;
         }
