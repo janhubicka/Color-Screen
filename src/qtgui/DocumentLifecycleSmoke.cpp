@@ -1917,14 +1917,43 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
         }
         const QString chosenImage =
             QFileInfo(state->firstImageFile).absoluteFilePath();
-        // Select the image from its actual directory. Post acceptance, so the
-        // test does not re-enter a platform QFileDialog during this phase.
+        // Selecting a file immediately after setDirectory is not reliable:
+        // the QFileDialog directory model may still be populating, especially
+        // on offscreen ARM64. Use the basename within the selected folder and
+        // wait for the model to publish the selection before accepting.
         chooser->setDirectory(QFileInfo(chosenImage).absolutePath());
-        chooser->selectFile(chosenImage);
-        const QStringList selected = chooser->selectedFiles();
-        if (selected.isEmpty() ||
-            QFileInfo(selected.constFirst()).absoluteFilePath() != chosenImage) {
-          fail(QStringLiteral("Scripted source Locate could not select the requested scan"));
+        chooser->selectFile(QFileInfo(chosenImage).fileName());
+        schedule(111, 100, 90);
+        return;
+      }
+
+      case 111: {
+        const auto docs = app.documentWindows();
+        MainWindow *relocated = docs.size() == 1 ? docs.constFirst() : nullptr;
+        QFileDialog *chooser = relocated
+            ? relocated->findChild<QFileDialog *>(
+                  QStringLiteral("LinkedSourceImageDialog"))
+            : nullptr;
+        if (!chooser) {
+          retryOrFail(QStringLiteral("Relink chooser disappeared before acceptance"));
+          return;
+        }
+        const QString wanted =
+            QFileInfo(state->firstImageFile).absoluteFilePath();
+        const QStringList files = chooser->selectedFiles();
+        const QString selection = files.isEmpty() ? QString() : files.constFirst();
+        const QString actual = QFileInfo(selection).isAbsolute()
+            ? QFileInfo(selection).absoluteFilePath()
+            : chooser->directory().absoluteFilePath(selection);
+        if (selection.isEmpty() ||
+            QDir::cleanPath(actual) != QDir::cleanPath(wanted)) {
+          if (attemptsLeft == 1)
+            qCritical() << "Relink dialog selected" << files
+                        << "in" << chooser->directory().absolutePath()
+                        << "instead of" << wanted;
+          chooser->selectFile(QFileInfo(wanted).fileName());
+          retryOrFail(QStringLiteral(
+              "Scripted source Locate did not select the requested scan"));
           return;
         }
         QPointer<QFileDialog> dialogGuard = chooser;
