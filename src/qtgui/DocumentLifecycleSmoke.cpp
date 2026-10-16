@@ -15,6 +15,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QFileDialog>
+#include <QLineEdit>
 #include <QMessageBox>
 #include <QMetaObject>
 #include <QObject>
@@ -1804,9 +1805,25 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
         if (docs.size() != 1 || !docs.constFirst() ||
             docs.constFirst()->m_imageLoad.pending ||
             !docs.constFirst()->sharedImageData()) {
-          if (retryOrFail(QStringLiteral(
-                  "Direct .cspar open did not load its linked image")))
-            return;
+          if (attemptsLeft == 150 || attemptsLeft == 75 ||
+              attemptsLeft == 1) {
+            MainWindow *pending = docs.size() == 1 ? docs.constFirst() : nullptr;
+            qInfo() << "Direct .cspar open pending: documents" << docs.size()
+                    << "loading" << (pending && pending->m_imageLoad.pending)
+                    << "pixels" << (pending &&
+                                     static_cast<bool>(pending->sharedImageData()))
+                    << "locate" << (pending &&
+                                     static_cast<bool>(pending->m_sourceLocateDialog))
+                    << "mismatch" << (pending &&
+                                       static_cast<bool>(pending->m_sourceMismatchPrompt))
+                    << "failure" << (pending && pending->m_imageLoad.failurePrompt
+                                         ? pending->m_imageLoad.failurePrompt->text()
+                                         : QString())
+                    << "image" << (pending ? pending->currentImageFile()
+                                           : QString());
+          }
+          retryOrFail(QStringLiteral(
+              "Direct .cspar open did not load its linked image"));
           return;
         }
         MainWindow *linked = docs.constFirst();
@@ -1951,7 +1968,16 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
             qCritical() << "Relink dialog selected" << files
                         << "in" << chooser->directory().absolutePath()
                         << "instead of" << wanted;
-          chooser->selectFile(QFileInfo(wanted).fileName());
+          // Qt 6 may retain the previously typed basename in its widget
+          // filename editor even after QFileDialog::selectFile(). In this
+          // structured UI test, emulate the actual user entering the new
+          // filename instead of repeatedly selecting the obsolete one.
+          if (auto *editor = chooser->findChild<QLineEdit *>(
+                  QStringLiteral("fileNameEdit"))) {
+            editor->setText(QFileInfo(wanted).fileName());
+          } else {
+            chooser->selectFile(QFileInfo(wanted).fileName());
+          }
           retryOrFail(QStringLiteral(
               "Scripted source Locate did not select the requested scan"));
           return;
