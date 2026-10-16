@@ -51,6 +51,7 @@
 #include <QFile>
 #include <QFileDialog>
 #include <QFont>
+#include <QFontMetrics>
 #include <QFileInfo>
 #include <QFormLayout>
 #include <QFrame>
@@ -91,6 +92,7 @@
 #include <QVBoxLayout>
 #include <QWindow>
 #include <QtConcurrent>
+#include <QtMath>
 
 #include <algorithm>
 #include <limits>
