@@ -1001,7 +1001,7 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
           QPointer<QFileDialog> dialogGuard = chooser;
           QTimer::singleShot(0, chooser, [dialogGuard]() {
             if (dialogGuard)
-              static_cast<QDialog *>(dialogGuard.data())->accept();
+              dialogGuard.data()->QDialog::accept();
           });
           schedule(-105, 100, 120);
           return;
