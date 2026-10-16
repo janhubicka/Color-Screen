@@ -880,6 +880,16 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
       ImageViewWindow *view = state->view.data();
       WorkspaceWindow *workspace = state->workspace.data();
 
+      // Print the first attempt at each phase (and long-running retries) so
+      // CI identifies the exact stalled asynchronous GUI transition instead
+      // of reporting only a global one-minute watchdog timeout.
+      if (attemptsLeft == 40 || attemptsLeft == 60 ||
+          attemptsLeft == 80 || attemptsLeft == 100 ||
+          attemptsLeft == 120 || attemptsLeft == 150 ||
+          attemptsLeft == 125 || attemptsLeft == 75 ||
+          attemptsLeft == 25 || attemptsLeft == 1)
+        qInfo() << "Document lifecycle smoke phase" << phase
+                << "remaining attempts" << attemptsLeft;
       switch (phase) {
       case -1: {
         if (!first || !second || !view || !workspace) {
