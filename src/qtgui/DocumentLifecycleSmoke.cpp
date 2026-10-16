@@ -1740,19 +1740,31 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
           return;
         }
         app.openFiles({mismatchDocument});
-        const auto incompleteDocs = app.documentWindows();
-        if (incompleteDocs.size() != 1 || !incompleteDocs.constFirst()) {
-          fail(QStringLiteral("Mismatch probe failed to open a blank document"));
+        // On some platforms shell activation publishes its modeless
+        // warning on a later event-loop turn. Check it asynchronously.
+        schedule(61, 80, 120);
+        return;
+      }
+
+      case 61: {
+        const auto docs = app.documentWindows();
+        if (docs.size() != 1 || !docs.constFirst()) {
+          retryOrFail(QStringLiteral("Mismatch probe failed to open a blank document"));
           return;
         }
-        MainWindow *pending = incompleteDocs.constFirst();
+        MainWindow *pending = docs.constFirst();
         QPointer<QMessageBox> obsoleteWarning =
             pending->m_sourceMismatchPrompt;
         if (!obsoleteWarning) {
-          fail(QStringLiteral("Linked-source size mismatch did not warn"));
+          if (pending->m_sourceLocateDialog)
+            fail(QStringLiteral("Size mismatch opened Locate image, not a size warning"));
+          else
+            retryOrFail(QStringLiteral("Linked-source size mismatch did not warn"));
           return;
         }
-        pending->openParameterDocument(missingDocument);
+        pending->openParameterDocument(
+            state->temporaryDirectory->filePath(
+                QStringLiteral("missing-source.cspar")));
         if (pending->m_sourceMismatchPrompt ||
             (obsoleteWarning && !obsoleteWarning->isHidden()) ||
             !pending->m_sourceLocateDialog ||
@@ -1919,9 +1931,17 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
             return;
           return;
         }
-        chooser->selectFile(QFileInfo(state->firstImageFile).absoluteFilePath());
-        // QFileDialog::accept is protected; invoke the public virtual QDialog slot.
-        static_cast<QDialog *>(chooser)->accept();
+        const QString chosenImage =
+            QFileInfo(state->firstImageFile).absoluteFilePath();
+        // Select the image from its actual directory. Post acceptance, so the
+        // test does not re-enter a platform QFileDialog during this phase.
+        chooser->setDirectory(QFileInfo(chosenImage).absolutePath());
+        chooser->selectFile(chosenImage);
+        QPointer<QFileDialog> dialogGuard = chooser;
+        QTimer::singleShot(0, chooser, [dialogGuard]() {
+          if (dialogGuard)
+            static_cast<QDialog *>(dialogGuard.data())->accept();
+        });
         schedule(12, 140, 150);
         return;
       }
