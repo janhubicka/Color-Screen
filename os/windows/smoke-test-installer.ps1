@@ -149,6 +149,10 @@ if ($LASTEXITCODE -ne 0) {
 
 # Exercise the Qt GUI from the *installed* directory too. The existing
 # portable/staging GUI smoke cannot detect missing files inside the installer.
+# The requested --smoke-test 30000 starts only after GUI initialization; on
+# a busy runner initial plugin/image startup can cost 25-35 seconds, so 70
+# seconds leaves too little teardown margin. Keep the application's 30s
+# self-check intact and allow a separately bounded 105s process lifetime.
 $fixture = Join-Path $env:GITHUB_WORKSPACE 'testsuite\dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif'
 if (-not (Test-Path -LiteralPath $fixture -PathType Leaf)) {
     throw "Missing installed-GUI smoke input: $fixture"
@@ -156,7 +160,7 @@ if (-not (Test-Path -LiteralPath $fixture -PathType Leaf)) {
 Invoke-BoundedProcess -Path $gui -Arguments @(
     '--debug-qt', '--smoke-test', '30000', '--smoke-test-expect-windows', '2',
     $fixture, $fixture
-) -Phase 'Installed Qt GUI smoke' -TimeoutSeconds 70
+) -Phase 'Installed Qt GUI smoke' -TimeoutSeconds 105
 
 # The native document loader now accepts .cspar source-image references;
 # historical .par still requires a scan chosen inside the GUI.
