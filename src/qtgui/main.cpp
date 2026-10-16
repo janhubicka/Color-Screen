@@ -3843,14 +3843,23 @@ bool applicationPreferencesSmoke(ColorScreenApplication &app) {
 /** Start the Qt GUI, restore any crashed document session, and open every
     positional image argument in an independent MainWindow.  */
 int main(int argc, char *argv[]) {
-  // Enable plugin diagnostics before QApplication initializes platform plugins.
+  // Platform choices must be made before QApplication is constructed.
+  // Real users keep their native Windows/macOS pickers. Headless smoke tests
+  // use widget-backed QFileDialogs instead: the native Windows picker starts
+  // QWindowsDialogThread and has crashed inside the Qt platform plugin when
+  // CI shuts down a deliberately superseded asynchronous document dialog.
+  bool smokeRequested = false;
   for (int i = 1; i < argc; ++i) {
     if (std::strcmp(argv[i], "--debug-qt") == 0) {
       qputenv("QT_DEBUG_PLUGINS", "1");
       qputenv("QT_LOGGING_RULES", "*=true");
-      break;
     }
+    if (std::strcmp(argv[i], "--smoke-test") == 0 ||
+        std::strncmp(argv[i], "--smoke-test=", 13) == 0)
+      smokeRequested = true;
   }
+  if (smokeRequested)
+    QCoreApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
 
   ColorScreenApplication app(argc, argv);
   QApplication::setOrganizationName("ColorScreen");
