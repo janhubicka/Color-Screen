@@ -1247,12 +1247,19 @@ void MainWindow::openParameterDocument(const QString &fileName,
       m_sourceLocateDialog->close();
       m_sourceLocateDialog.clear();
     }
+    // Only provide an existing DIRECTORY as the dialog's initial path.
+    // Pre-filling an unavailable scan filename makes QFileDialog keep that
+    // stale name in its filename editor when the user browses elsewhere;
+    // this can then mask a newly selected image. Show the old basename in
+    // the caption instead, without preselecting a nonexistent file.
+    const QString oldName = QFileInfo(sourcePath).fileName();
+    const QString title = oldName.isEmpty()
+        ? tr("Locate source image for %1").arg(
+              QFileInfo(documentFile).fileName())
+        : tr("Locate source image for %1 (previously %2)")
+              .arg(QFileInfo(documentFile).fileName(), oldName);
     auto *dialog = new QFileDialog(
-        this, tr("Locate source image for %1").arg(
-                  QFileInfo(documentFile).fileName()),
-        sourcePath.isEmpty() ? baseDir
-                             : QDir(baseDir).filePath(
-                                   QFileInfo(sourcePath).fileName()),
+        this, title, baseDir,
         tr("Images and projects (*.tif *.tiff *.jpg *.jpeg *.png *.jp2 "
            "*.j2k *.jpc *.jpf *.jpx *.raw *.dng *.iiq *.nef *.cr2 "
            "*.eip *.arw *.raf *.arq *.csprj);;All Files (*)"));
