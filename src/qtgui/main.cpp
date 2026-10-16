@@ -2407,6 +2407,11 @@ bool runBetaInvariantSmoke() {
                   QStringLiteral("third"));
   hiddenHost.hide();
 
+  QWidget *flatDetailBar =
+      tabs.findChild<QWidget *>(QStringLiteral("DetailedPanelTabBar"));
+  if (!flatDetailBar || flatDetailBar->isHidden())
+    return fail("multi-panel inspector unexpectedly hid its detailed tab row");
+
   if (tabs.tabKey(secondTab) != QStringLiteral("second") ||
       tabs.indexOfKey(QStringLiteral("third")) != thirdTab ||
       tabs.indexOfKey(QStringLiteral("missing")) != -1)
@@ -2426,6 +2431,8 @@ bool runBetaInvariantSmoke() {
 
   tabs.setTabVisible(firstTab, false);
   tabs.setTabVisible(secondTab, false);
+  if (!flatDetailBar->isHidden())
+    return fail("single remaining inspector panel kept a redundant tab row");
   if (tabs.currentIndex() != thirdTab || logicalChanges != 2 ||
       userActivations != 0)
     return fail("hidden current tab fallback overwrote user activation semantics");
@@ -2435,6 +2442,8 @@ bool runBetaInvariantSmoke() {
     return fail("programmatic selection entered an explicitly hidden tab");
 
   tabs.setTabVisible(secondTab, true);
+  if (flatDetailBar->isHidden())
+    return fail("restoring another inspector panel did not restore navigation");
   QPushButton *secondButton = nullptr;
   for (QPushButton *button : tabs.findChildren<QPushButton *>())
     if (button->property("tabKey").toString() == QStringLiteral("second")) {
@@ -2447,6 +2456,19 @@ bool runBetaInvariantSmoke() {
   if (tabs.currentIndex() != secondTab || logicalChanges != 3 ||
       userActivations != 1)
     return fail("user inspector activation was not distinguished from fallback");
+
+  // Slanted-edge reference views have exactly one Sharpness page and no
+  // workflow stages; their only panel must remain accessible without an
+  // otherwise meaningless tab strip.
+  MultiLineTabWidget referenceTabs(&hiddenHost);
+  const int loneReferencePanel =
+      referenceTabs.addTab(new QWidget, QStringLiteral("Sharpness"));
+  auto *referenceTabBar =
+      referenceTabs.findChild<QWidget *>(QStringLiteral("DetailedPanelTabBar"));
+  if (!referenceTabBar || !referenceTabBar->isHidden() ||
+      referenceTabs.currentIndex() != loneReferencePanel ||
+      referenceTabs.widget(loneReferencePanel) == nullptr)
+    return fail("single-panel reference view did not suppress redundant tab bar");
 
   // Workflow stages filter only presentation buttons; panel keys, programmatic
   // selection, and explicit logical visibility retain their old semantics.
@@ -2465,6 +2487,35 @@ bool runBetaInvariantSmoke() {
       groupedTabs.addTab(new QWidget, QStringLiteral("Screen"),
                          QStringLiteral("screen_panel"),
                          QStringLiteral("process"));
+  QWidget *groupedDetailBar =
+      groupedTabs.findChild<QWidget *>(QStringLiteral("DetailedPanelTabBar"));
+  QWidget *groupedStageBar =
+      groupedTabs.findChild<QWidget *>(QStringLiteral("WorkflowStageBar"));
+  if (!groupedDetailBar || !groupedStageBar ||
+      groupedStageBar->styleSheet() != groupedDetailBar->styleSheet() ||
+      groupedDetailBar->isHidden())
+    return fail("grouped stage navigation styling or multi-tab display differs");
+
+  // At a width sufficient for exactly the Capture pair, hidden Process
+  // buttons must not produce a phantom second FlowLayout row.
+  QPushButton *capturePanelButton = nullptr;
+  QPushButton *tilesPanelButton = nullptr;
+  for (QPushButton *button : groupedTabs.findChildren<QPushButton *>()) {
+    const QString key = button->property("tabKey").toString();
+    if (key == QStringLiteral("capture_panel"))
+      capturePanelButton = button;
+    else if (key == QStringLiteral("tiles_panel"))
+      tilesPanelButton = button;
+  }
+  if (!capturePanelButton || !tilesPanelButton || !groupedDetailBar->layout())
+    return fail("grouped inspector lost its Capture tab buttons/layout");
+  const int pairWidth = capturePanelButton->sizeHint().width() +
+                        tilesPanelButton->sizeHint().width() + 10;
+  const int oneRowHeight = qMax(capturePanelButton->sizeHint().height(),
+                                tilesPanelButton->sizeHint().height()) + 4;
+  if (groupedDetailBar->layout()->heightForWidth(pairWidth) > oneRowHeight + 2)
+    return fail("hidden Process tab reserved a phantom FlowLayout row");
+
   if (groupedTabs.stageCount() != 2 ||
       groupedTabs.stageText(0) != QStringLiteral("Capture") ||
       groupedTabs.stageKey(1) != QStringLiteral("process") ||
@@ -2482,6 +2533,8 @@ bool runBetaInvariantSmoke() {
                    [&groupedActivations](int) { ++groupedActivations; });
 
   groupedTabs.setCurrentIndex(groupedScreen);
+  if (!groupedDetailBar->isHidden())
+    return fail("one-panel Process stage still displayed a redundant subtab");
   if (groupedTabs.currentIndex() != groupedScreen ||
       groupedTabs.currentStageKey() != QStringLiteral("process") ||
       groupedChanges != 1 || groupedActivations != 0)
@@ -2498,12 +2551,16 @@ bool runBetaInvariantSmoke() {
     return fail("workflow stage did not expose its stable key on the button");
 
   captureStageButton->click();
+  if (groupedDetailBar->isHidden())
+    return fail("Capture stage did not restore its two-panel subtab navigation");
   if (groupedTabs.currentIndex() != groupedCapture ||
       groupedTabs.currentStageKey() != QStringLiteral("capture") ||
       groupedChanges != 2 || groupedActivations != 1)
     return fail("user workflow-stage activation did not select its first panel");
 
   groupedTabs.setTabVisible(groupedCapture, false);
+  if (!groupedDetailBar->isHidden())
+    return fail("Capture stage kept a tab row after one panel became unavailable");
   if (groupedTabs.currentIndex() != groupedTiles ||
       groupedTabs.currentStageKey() != QStringLiteral("capture") ||
       groupedChanges != 3 || groupedActivations != 1)
@@ -2518,11 +2575,21 @@ bool runBetaInvariantSmoke() {
 
   groupedTabs.setTabVisible(groupedCapture, true);
   groupedTabs.setCurrentIndex(groupedCapture);
+  // Tiles remains explicitly hidden at this point; restoring *one* Capture
+  // panel must restore the stage but still suppress its redundant subtab.
+  if (!groupedDetailBar->isHidden())
+    return fail("restored single Capture panel exposed a redundant tab row");
   if (groupedTabs.currentIndex() != groupedCapture ||
       groupedTabs.currentStageKey() != QStringLiteral("capture") ||
       captureStageButton->isHidden() || groupedChanges != 5 ||
       groupedActivations != 1)
     return fail("restored workflow stage did not support programmatic navigation");
+
+  groupedTabs.setTabVisible(groupedTiles, true);
+  if (groupedDetailBar->isHidden() ||
+      groupedTabs.currentIndex() != groupedCapture ||
+      groupedChanges != 5 || groupedActivations != 1)
+    return fail("restoring the second Capture panel did not restore navigation");
 
   // Checkbox enabledCheck must match the rest of ParameterPanel: a missing
   // prerequisite disables a still-visible row. Logical disappearance is an
