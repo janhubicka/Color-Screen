@@ -1225,6 +1225,9 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
     QString loadedPath;
     bool loadedJsonV3 = false;
     colorscreen::parameter_source_image sourceImage;
+    // A successful load from a relocated scan changes the document's
+    // source-image provenance even when its render parameters are unchanged.
+    bool sourceWasRelocated = false;
     QString suggestedPath;
     bool suggestedJsonV3 = false;
     std::optional<ParameterState> baseline;
@@ -1247,6 +1250,17 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
     sidecarStaging->state = std::move(staged);
     sidecarStaging->loadedPath =
         QFileInfo(explicitParameterFile).absoluteFilePath();
+    const QString linkedSpelling =
+        QString::fromStdString(sidecarStaging->sourceImage.path);
+    const QString recordedScan = linkedSpelling.isEmpty()
+        ? QString()
+        : QFileInfo(linkedSpelling).isAbsolute()
+              ? QFileInfo(linkedSpelling).absoluteFilePath()
+              : QDir(QFileInfo(sidecarStaging->loadedPath).absolutePath())
+                    .absoluteFilePath(linkedSpelling);
+    sidecarStaging->sourceWasRelocated =
+        recordedScan.isEmpty() ||
+        QDir::cleanPath(recordedScan) != QDir::cleanPath(requestedImageFile);
   }
 
   // A failed older load may still have a non-blocking warning open. Starting a
@@ -1495,7 +1509,10 @@ void MainWindow::loadFile(const QString &fileName, bool suppressParamPrompt,
                 if (!sameImageDemosaic)
                   m_undoStack->clear();
                 if (!suppressParamPrompt)
-                  m_recoveryDirty = liveEditsWhileLoading;
+                  m_recoveryDirty = liveEditsWhileLoading ||
+                      (sidecarStaging->state.has_value() &&
+                       !sidecarStaging->loadedPath.isEmpty() &&
+                       sidecarStaging->sourceWasRelocated);
 
                 // Grid corrections are saved processing state; preserve them
                 // while background workers load tile image data. The renderer's
