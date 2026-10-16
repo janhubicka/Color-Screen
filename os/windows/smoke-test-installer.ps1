@@ -44,9 +44,14 @@ function Invoke-BoundedProcess {
                 if (Test-Path -LiteralPath $installDir) {
                     $files = @(Get-ChildItem -LiteralPath $installDir -File -Recurse -ErrorAction SilentlyContinue).Count
                 }
-                Write-Host ("$Phase pending: {0:n0}s elapsed, PID {1}, CPU {2:n1}s, {3} extracted files, window '{4}'" -f
+                $defaultDir = Join-Path $env:LOCALAPPDATA 'Programs\Color-Screen'
+                $defaultCount = 0
+                if (Test-Path -LiteralPath $defaultDir) {
+                    $defaultCount = @(Get-ChildItem -LiteralPath $defaultDir -File -Recurse -ErrorAction SilentlyContinue).Count
+                }
+                Write-Host ("$Phase pending: {0:n0}s elapsed, PID {1}, CPU {2:n1}s, {3} requested files, {4} default-target files, window '{5}'" -f
                     $watch.Elapsed.TotalSeconds, $process.Id, $process.TotalProcessorTime.TotalSeconds,
-                    $files, $process.MainWindowTitle)
+                    $files, $defaultCount, $process.MainWindowTitle)
             }
             if ($watch.Elapsed.TotalSeconds -ge $TimeoutSeconds) {
                 $processId = $process.Id
@@ -108,7 +113,11 @@ Write-Host "Installing $installer into $installDir"
 
 # /D must be the final NSIS argument. Avoid quoting ambiguities by using an
 # user-writable destination (this does not test the interactive wizard).
-Invoke-BoundedProcess -Path $installer -Arguments @('/S', "/D=$installDir") -Phase 'NSIS silent installation' -TimeoutSeconds 150
+# Diagnostic: the packaged x86-Unicode stub has consumed one full CPU for
+# 150 seconds before creating any files. Bypass only NSIS's executable CRC
+# preflight to distinguish self-integrity scanning from extraction/registry.
+# Do not treat this diagnostic as evidence that default double-click works.
+Invoke-BoundedProcess -Path $installer -Arguments @('/NCRC', '/S', "/D=$installDir") -Phase 'NSIS silent installation without CRC preflight' -TimeoutSeconds 150
 
 # A system installer may launch an elevated child and return before the last
 # file has been written. Poll the expected installed executable, not just the
