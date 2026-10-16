@@ -1032,6 +1032,10 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
           fail(QStringLiteral("Relinked chooser document refused Discard"));
           return;
         }
+        // Once the tab's close policy succeeds, explicit application close
+        // uses deleteLater() too: the MDI wrapper can otherwise retain an
+        // otherwise closed MainWindow through reparenting.
+        probe->deleteLater();
         schedule(-104, 50, 120);
         return;
       }
@@ -1076,6 +1080,7 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
           fail(QStringLiteral("Moved linked document refused Discard"));
           return;
         }
+        probe->deleteLater();
         schedule(-103, 50, 120);
         return;
       }
@@ -1107,7 +1112,11 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
           fail(QStringLiteral("Direct linked .cspar applied incorrect image/parameters"));
           return;
         }
-        probe->close();
+        if (!probe->close()) {
+          fail(QStringLiteral("Direct linked document refused close"));
+          return;
+        }
+        probe->deleteLater();
         schedule(-102, 50, 120);
         return;
       }
