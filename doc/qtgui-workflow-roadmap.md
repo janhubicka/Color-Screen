@@ -774,6 +774,13 @@ panel, omit its redundant secondary tab row; restore it as soon as another panel
 becomes applicable. Hidden buttons must not reserve wrapped FlowLayout rows.
 In Process, place Screen before Contact copy (Image Layer remains first): normally
 the physical screen is configured before optional simulated contact printing.
+Merely rearranging these panels did not set the landing page after returning
+from another stage. A stage-button transition into Process now selects Screen
+by stable semantic key, falling back if Screen is hidden. Re-clicking Process
+without leaving preserves a deliberate Contact copy choice; programmatic
+selection and the saved active-panel preference still select exact panels.
+The wrapped Workflow `Next:` guidance also uses font-metric line height
+rather than QLabel's inflated rich-text paragraph spacing observed on Windows.
 Keep the five-stage grouping under alpha field observation; changing it again
 should be driven by operator evidence, not by generic editor conventions.
 
