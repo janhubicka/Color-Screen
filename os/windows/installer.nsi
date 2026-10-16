@@ -5,6 +5,10 @@
 ; testing and avoids changing other users' file associations.
 
 Name "Color-Screen"
+; Build with the official Windows NSIS distribution, not the MSYS2
+; x86-Unicode stub which spins before file extraction on CI Windows 2025.
+; Standard compression keeps the installer conveniently small.
+SetCompressor zlib
 !ifdef OUTFILE
   OutFile "${OUTFILE}"
 !else
