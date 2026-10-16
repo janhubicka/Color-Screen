@@ -5,13 +5,11 @@
 ; testing and avoids changing other users' file associations.
 
 Name "Color-Screen"
-; The MSYS2 x86-Unicode NSIS stub on Windows Server 2025 currently spins at
-; 100% CPU before extracting any file from the zlib-compressed 55 MiB payload.
-; It also stalls with /NCRC, so the executable self-check is not the culprit.
-; Avoid data decompression entirely while qualifying a reliable 2.0 installer.
-; This increases the .exe size, but installed contents and signatures are
-; unchanged. Revisit an efficient compressor after installer smoke passes.
-SetCompress off
+; Compile this script with the official Windows NSIS compiler (3.11).
+; The MSYS2-provided stub on the Windows 2025 CI runner stalled before any
+; extraction, even with /NCRC, the default target, and compression disabled.
+; Use standard zlib payload compression again with the separate compiler.
+SetCompressor zlib
 !ifdef OUTFILE
   OutFile "${OUTFILE}"
 !else
