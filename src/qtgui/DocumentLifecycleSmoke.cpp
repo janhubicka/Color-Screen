@@ -482,18 +482,24 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
       colorscreen::parameter_source_image source;
       std::string error;
       const QString expectedScan = QFileInfo(first->currentImageFile())
-                                       .absoluteFilePath();
-      if (!colorscreen::read_parameter_json_v3_file(
-              state->firstParameters.toUtf8().constData(), &g, &d,
-              &r, &sol, &spots, &error, &source) ||
-          source.path.empty() ||
+                                       .canonicalFilePath();
+      const bool loaded = colorscreen::read_parameter_json_v3_file(
+          state->firstParameters.toUtf8().constData(), &g, &d, &r, &sol,
+          &spots, &error, &source);
+      const QString recordedPath = QString::fromStdString(source.path);
+      // Verify the *actual* file reachable through a canonical parent,
+      // not QDir::cleanPath's lexical view of a possibly symlinked /var.
+      const QString baseDir =
+          QFileInfo(QFileInfo(state->firstParameters).absolutePath())
+              .canonicalFilePath();
+      const QString resolvedPath = QFileInfo(recordedPath).isAbsolute()
+          ? recordedPath : QDir(baseDir).absoluteFilePath(recordedPath);
+      const QFileInfo actualSource(resolvedPath);
+      if (!loaded || source.path.empty() || expectedScan.isEmpty() ||
+          baseDir.isEmpty() || !actualSource.isFile() ||
+          actualSource.canonicalFilePath() != expectedScan ||
           source.width_px != first->m_scan->width ||
-          source.height_px != first->m_scan->height ||
-          QDir::cleanPath(
-              QDir(QFileInfo(state->firstParameters).absolutePath())
-                  .absoluteFilePath(
-                      QString::fromStdString(source.path))) !=
-              QDir::cleanPath(expectedScan)) {
+          source.height_px != first->m_scan->height) {
         qCritical() << "Native .cspar did not link its original scan"
                     << QString::fromStdString(error);
         app.exit(documentLifecycleFailure);
