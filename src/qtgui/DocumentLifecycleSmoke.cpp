@@ -1694,30 +1694,14 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
         const QString mismatchDocument =
             state->temporaryDirectory->filePath(
                 QStringLiteral("stale-source-confirmation.cspar"));
-        // This fixture moves a linked document to a new directory: its scan
-        // reference must be rebased exactly as production Save As would do.
-        // Otherwise the open correctly chooses Locate image instead of the
-        // file-size confirmation that this test intends to exercise.
-        if (!colorscreen::rebase_parameter_source_image(
-                &mismatched,
-                QFileInfo(state->firstParameters).absoluteFilePath()
-                    .toUtf8().toStdString(),
-                QFileInfo(mismatchDocument).absoluteFilePath()
-                    .toUtf8().toStdString(), &problem)) {
-          fail(QStringLiteral("Could not rebase size-mismatch test source: %1")
-                   .arg(QString::fromStdString(problem)));
-          return;
-        }
-        const QString recordedForMismatch =
-            QString::fromStdString(mismatched.path);
-        const QString resolvedForMismatch =
-            QFileInfo(recordedForMismatch).isAbsolute()
-                ? QFileInfo(recordedForMismatch).absoluteFilePath()
-                : QDir(QFileInfo(mismatchDocument).absolutePath())
-                      .absoluteFilePath(recordedForMismatch);
-        if (QDir::cleanPath(resolvedForMismatch) !=
-            QDir::cleanPath(QFileInfo(state->firstImageFile)
-                                .absoluteFilePath())) {
+        // This test probes ONLY the advisory file-size mismatch, not path
+        // relocation. Use an explicit absolute scan reference, which is a
+        // valid source_image base on every platform; the separate relocation
+        // tests cover portable relative references.
+        mismatched.path =
+            QFileInfo(state->firstImageFile).absoluteFilePath()
+                .toUtf8().toStdString();
+        if (!QFileInfo(QString::fromStdString(mismatched.path)).isFile()) {
           fail(QStringLiteral("Size-mismatch fixture lost its source image"));
           return;
         }
@@ -1937,6 +1921,12 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
         // test does not re-enter a platform QFileDialog during this phase.
         chooser->setDirectory(QFileInfo(chosenImage).absolutePath());
         chooser->selectFile(chosenImage);
+        const QStringList selected = chooser->selectedFiles();
+        if (selected.isEmpty() ||
+            QFileInfo(selected.constFirst()).absoluteFilePath() != chosenImage) {
+          fail(QStringLiteral("Scripted source Locate could not select the requested scan"));
+          return;
+        }
         QPointer<QFileDialog> dialogGuard = chooser;
         QTimer::singleShot(0, chooser, [dialogGuard]() {
           if (dialogGuard)
@@ -1956,9 +1946,20 @@ void startDocumentLifecycleSmoke(ColorScreenApplication &app,
         }
         MainWindow *relocated = docs.constFirst();
         if (relocated->m_imageLoad.pending || !relocated->sharedImageData()) {
-          if (retryOrFail(QStringLiteral(
-                  "Relocated image decode has not completed")))
-            return;
+          if (attemptsLeft == 150 || attemptsLeft == 100 || attemptsLeft == 1) {
+            qInfo() << "Relink decode waiting: pending"
+                    << relocated->m_imageLoad.pending
+                    << "scan" << static_cast<bool>(relocated->sharedImageData())
+                    << "chooser" << static_cast<bool>(relocated->m_sourceLocateDialog)
+                    << "mismatch warning"
+                    << static_cast<bool>(relocated->m_sourceMismatchPrompt)
+                    << "read failure" << (relocated->m_imageLoad.failurePrompt
+                           ? relocated->m_imageLoad.failurePrompt->text()
+                           : QString())
+                    << "image" << relocated->currentImageFile();
+          }
+          retryOrFail(QStringLiteral(
+              "Relocated image decode has not completed"));
           return;
         }
         const QString relocatedDocument =
