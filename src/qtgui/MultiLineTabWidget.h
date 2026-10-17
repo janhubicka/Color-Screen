@@ -19,6 +19,11 @@ public:
     /** Add a workflow stage with stable KEY used only for presentation. */
     int addStage(const QString &label, const QString &key);
 
+    /** Choose a preferred PANELKEY when the user enters STAGEKEY from another
+        stage. A hidden preferred panel falls back to the first visible one.
+        Explicit panel selection within the current stage remains untouched. */
+    void setStageDefaultPanel(const QString &stageKey, const QString &panelKey);
+
     /** Add a tab with optional stable KEY and workflow STAGEKEY. */
     int addTab(QWidget *page, const QString &label,
                const QString &key = QString(),
@@ -92,6 +97,7 @@ private:
     struct StageInfo {
         QPushButton *button;
         QString key;
+        QString defaultPanelKey;
     };
     QList<StageInfo> m_stages;
     int m_currentStage = -1;

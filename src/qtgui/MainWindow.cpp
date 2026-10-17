@@ -27,6 +27,7 @@
 #include "RenderDialog.h"
 #include "ScreenPanel.h"
 #include "mesh.h"
+#include <QAbstractTextDocumentLayout>
 #include <QAction>
 #include <QActionGroup>
 #include <QApplication>
@@ -50,6 +51,7 @@
 #include <QFile>
 #include <QFileDialog>
 #include <QFont>
+#include <QFontMetrics>
 #include <QFileInfo>
 #include <QFormLayout>
 #include <QFrame>
@@ -65,6 +67,7 @@
 #include <QMessageBox>
 #include <QProgressBar>
 #include <QPointer>
+#include <QPainter>
 #include <QPushButton>
 #include <QScreen>
 #include <QSettings>
@@ -77,6 +80,10 @@
 #include <QSvgRenderer>
 #include <QTabWidget>
 #include <QTableWidget>
+#include <QTextBlockFormat>
+#include <QTextCursor>
+#include <QTextDocument>
+#include <QTextOption>
 #include <QTextStream>
 #include <QTimer>
 #include <QToolBar>
@@ -85,6 +92,7 @@
 #include <QVBoxLayout>
 #include <QWindow>
 #include <QtConcurrent>
+#include <QtMath>
 
 #include <algorithm>
 #include <limits>
@@ -133,6 +141,76 @@ QString workflowParagraphHtml(const QString &plain) {
   }
   return formatted.join(QStringLiteral(" &#8226; "));
 }
+
+/** Render one wrapped Workflow recommendation at native font leading.
+
+    QLabel's Qt-rich-text backing document adds substantially more interline
+    space than an ordinary label on some platform/font combinations (notably
+    28 px instead of 19 px in the inspector). A QTextDocument preserves the
+    bold, escaped "Next:" caption, but an explicit fixed line height based on
+    the active font metrics makes wrapped lines match adjacent status labels.
+    Size calculation and painting use the *same* text layout; no manually
+    inserted line breaks or assumption about inspector width is needed. */
+class CompactWorkflowRecommendationLabel final : public QLabel {
+public:
+  using QLabel::QLabel;
+
+  QSize sizeHint() const override {
+    const int naturalWidth = qMax(1, QLabel::sizeHint().width());
+    return QSize(naturalWidth, heightForWidth(naturalWidth));
+  }
+
+  QSize minimumSizeHint() const override {
+    return QSize(0, fontMetrics().lineSpacing());
+  }
+
+  int heightForWidth(int width) const override {
+    if (text().isEmpty())
+      return 0;
+    QTextDocument document;
+    layoutDocument(document, width);
+    return qMax(fontMetrics().lineSpacing(),
+                qCeil(document.size().height()) + 1);
+  }
+
+protected:
+  void paintEvent(QPaintEvent *) override {
+    if (text().isEmpty())
+      return;
+    QTextDocument document;
+    const QRect area = contentsRect();
+    layoutDocument(document, area.width());
+
+    QPainter painter(this);
+    painter.setClipRect(area);
+    painter.translate(area.topLeft());
+    QAbstractTextDocumentLayout::PaintContext context;
+    context.palette = palette();
+    document.documentLayout()->draw(&painter, context);
+  }
+
+private:
+  /** Apply identical line metrics for painting and height-for-width layout. */
+  void layoutDocument(QTextDocument &document, int width) const {
+    document.setDocumentMargin(0);
+    document.setDefaultFont(font());
+    document.setHtml(text());
+    QTextOption option = document.defaultTextOption();
+    option.setWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
+    document.setDefaultTextOption(option);
+
+    QTextBlockFormat paragraph;
+    paragraph.setTopMargin(0);
+    paragraph.setBottomMargin(0);
+    paragraph.setLineHeight(
+        qCeil(QFontMetricsF(font()).lineSpacing()),
+        QTextBlockFormat::FixedHeight);
+    QTextCursor cursor(&document);
+    cursor.select(QTextCursor::Document);
+    cursor.mergeBlockFormat(paragraph);
+    document.setTextWidth(qMax(1, width));
+  }
+};
 
 /** Return the application-level document manager when MainWindow is running
     inside the normal Color-Screen Qt application.  */
@@ -757,7 +835,7 @@ void MainWindow::setupUi() {
   workflowNextLayout->setContentsMargins(0, 2, 0, 0);
   workflowNextLayout->setSpacing(2);
 
-  m_workflowNextStepLabel = new QLabel(workflowNextRow);
+  m_workflowNextStepLabel = new CompactWorkflowRecommendationLabel(workflowNextRow);
   m_workflowNextStepLabel->setObjectName(
       QStringLiteral("WorkflowNextStepSummary"));
   configureDynamicWorkflowLabel(m_workflowNextStepLabel);
@@ -1136,6 +1214,10 @@ void MainWindow::setupUi() {
   m_configTabs->addTab(m_contactCopyPanel, tr("Contact copy"),
                        QStringLiteral("contact_copy"),
                        QStringLiteral("process"));
+  // Entering Process is normally about choosing the physical screen.
+  // Contact copy remains an explicit optional panel, not the landing page.
+  m_configTabs->setStageDefaultPanel(QStringLiteral("process"),
+                                     QStringLiteral("screen"));
   m_configTabs->addTab(m_geometryPanel, tr("Geometry"),
                        QStringLiteral("geometry"),
                        QStringLiteral("register"));
