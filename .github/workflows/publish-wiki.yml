@@ -1,0 +1,67 @@
+name: Publish Color-Screen wiki
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'doc/wiki/**'
+      - '.github/workflows/publish-wiki.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: publish-colorscreen-wiki
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Publish new pages without deleting historical pages
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh auth setup-git
+          wiki_url="https://github.com/${GITHUB_REPOSITORY}.wiki.git"
+          if ! git ls-remote "$wiki_url" HEAD >/dev/null 2>&1; then
+            echo "::error::Wiki is not initialized or not accessible; no changes made."
+            exit 1
+          fi
+          source_dir="$GITHUB_WORKSPACE/doc/wiki"
+          work_dir="$(mktemp -d)"
+          git clone "$wiki_url" "$work_dir/wiki"
+          cd "$work_dir/wiki"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # Only copy explicitly listed documentation pages. Never delete other pages.
+          pages=(
+            Color-Screen-1.0-Documentation.md
+            Color-Screen-2.0-User-Manual.md
+            Color-Screen-2.0-Parameter-Format.md
+            Color-Screen-2.0-Project-Format.md
+          )
+          for page in "${pages[@]}"; do
+            test -f "$source_dir/$page"
+            cp "$source_dir/$page" "$page"
+          done
+          # The existing Home and Sidebar are deliberately untouched until
+          # their contents have been reviewed for safe additive navigation.
+          for page in "${pages[@]}"; do
+            git add -- "$page"
+          done
+          # Assert that no tracked wiki page is staged for deletion.
+          if git diff --cached --name-only --diff-filter=D | grep -q .; then
+            echo "::error::Refusing to delete existing wiki pages."
+            exit 1
+          fi
+          if git diff --cached --quiet; then
+            echo "Wiki documentation already up to date."
+            exit 0
+          fi
+          git commit -m "docs: publish Color-Screen 2.0 references and 1.0 index"
+          git push origin HEAD
