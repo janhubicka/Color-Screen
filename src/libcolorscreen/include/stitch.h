@@ -407,6 +407,9 @@ private:
   /* Per-project source generation ensures stale disk/project loads never
      satisfy another independently opened stitch document. */
   uint64_t m_tile_cache_id = 0;
+  /* Eager known-screen bitmaps are not core LRU entries; limit their
+     cumulative footprint while a project is being loaded. */
+  uint64_t m_loaded_screen_cells = 0;
   coord_t rotation_adjustment;
   friend stitch_image;
 
