@@ -5870,7 +5870,7 @@ stitch_json_dimensions (int columns, int rows, size_t tiles,
 bool
 stitch_json_number (coord_t number, json_value *out, std::string *error)
 {
-  if (!std::isfinite ((double)number))
+  if (!my_isfinite ((double)number))
     return archive_fail (error, "stitch project contains non-finite geometry");
   *out = v3_number (json_number ((double)number));
   return true;
@@ -5927,8 +5927,12 @@ encode_stitch_project_json_document (
   const std::vector<point_t> profile_spots;
   for (const auto &tile : project.tiles)
     {
-      if (!valid_utf8 (tile.filename))
-        return archive_fail (error, "invalid UTF-8 stitch tile filename");
+      if (!valid_utf8 (tile.filename)
+          || tile.filename.empty ()
+          || tile.filename.find ('\0') != std::string::npos
+          || tile.image_width <= 0 || tile.image_height <= 0
+          || tile.screen_width <= 0 || tile.screen_height <= 0)
+        return archive_fail (error, "invalid stitch tile filename or dimensions");
       json_value angle, ratio, pos_x, pos_y;
       if (!stitch_json_number (tile.angle, &angle, error)
           || !stitch_json_number (tile.ratio, &ratio, error)
@@ -6060,7 +6064,9 @@ decode_stitch_project_json_document (
           || image_size->array_value.size () != 2
           || screen_size->array_value.size () != 2
           || screen_shift->array_value.size () != 2
-          || !valid_utf8 (filename->text))
+          || !valid_utf8 (filename->text)
+          || filename->text.empty ()
+          || filename->text.find ('\0') != std::string::npos)
         return v3_mtf_fail (error, where, "invalid required tile fields");
 
       stitch_project_json_tile tile;
@@ -6074,7 +6080,9 @@ decode_stitch_project_json_document (
           || !v2_json_int (screen_size->array_value[0], &tile.screen_width)
           || !v2_json_int (screen_size->array_value[1], &tile.screen_height)
           || !v2_json_int (screen_shift->array_value[0], &tile.screen_shift_x)
-          || !v2_json_int (screen_shift->array_value[1], &tile.screen_shift_y))
+          || !v2_json_int (screen_shift->array_value[1], &tile.screen_shift_y)
+          || tile.image_width <= 0 || tile.image_height <= 0
+          || tile.screen_width <= 0 || tile.screen_height <= 0)
         return v3_mtf_fail (error, where, "invalid tile geometry");
 
       std::string parameter_json;
@@ -6083,10 +6091,11 @@ decode_stitch_project_json_document (
       render_parameters render;
       solver_parameters solver;
       std::vector<point_t> spots;
+      std::string nested_error;
       if (!decode_parameter_json_v3_document (
               parameter_json, &tile.geometry, &detection,
-              &render, &solver, &spots, error))
-        return false;
+              &render, &solver, &spots, &nested_error))
+        return archive_fail (error, where + ".parameters: " + nested_error);
       staged.tiles.push_back (std::move (tile));
     }
   *project = std::move (staged);
