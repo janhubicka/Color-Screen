@@ -1,0 +1,62 @@
+name: Publish Color-Screen 2.0
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_release:
+        description: "Type v2.0 to publish the final stable release"
+        required: true
+        type: string
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/release-2.0.yml
+      - .github/scripts/publish-final-release.py
+      - .github/scripts/test_final_release.py
+      - .github/RELEASE-2.0.md
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test final release promoter
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Test final-release gating and promotion
+        run: python3 .github/scripts/test_final_release.py -v
+
+  publish:
+    name: Promote tested current build to v2.0
+    needs: test
+    if: >-
+      github.repository == 'janhubicka/Color-Screen' &&
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
+      inputs.confirm_release == 'v2.0'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    # Serialize with the rolling current publisher as well as with another
+    # final promotion. This keeps the tested current tag/assets fixed while the
+    # promoter validates and copies them.
+    concurrency:
+      group: colorscreen-current-release
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Pin the trusted main revision selected by workflow_dispatch. API
+          # gates below still require main/current to remain at this exact SHA.
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Promote exact tested current packages
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: python3 .github/scripts/publish-final-release.py
