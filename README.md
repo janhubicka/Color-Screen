@@ -126,6 +126,22 @@ from the Library of Congress webpages and produce color renderings.
 
 # Usage
 
+## Native files for the 2.0 development series
+
+- **`.cspar`** stores non-destructive image-processing parameters in UTF-8
+  JSON schema 3, with an optional linked source image. Historical `.par`
+  text files remain readable.
+- **`.csprj`** stores a multi-image stitching project in UTF-8 JSON schema 2.
+  Tiles refer to external source images and store only screen geometry and
+  stitching metadata; the original keyword-text version-1 project reader
+  remains supported for migration.
+
+The [2.0 user manual](https://github.com/janhubicka/Color-Screen/wiki/Color-Screen-2.0-User-Manual),
+[parameter reference](https://github.com/janhubicka/Color-Screen/wiki/Color-Screen-2.0-Parameter-Format),
+and [stitch-project format reference](https://github.com/janhubicka/Color-Screen/wiki/Color-Screen-2.0-Project-Format)
+describe the current workflows and schemas. Older Java GUI and CLI articles
+remain under [historical 1.0 documentation](https://github.com/janhubicka/Color-Screen/wiki/Color-Screen-1.0-Documentation).
+
 There are two programs installed. 
 
 `colorscreen` is a command line utility to render into tiff files. See
