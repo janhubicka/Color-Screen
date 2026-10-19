@@ -13,9 +13,9 @@
 namespace colorscreen
 {
 
-/* One tile in row-major order. The complete schema-3 processing document
-   stored in JSON represents its geometric registration without a legacy
-   .par text block. Other per-tile parameter domains use their defaults. */
+/* One tile in row-major order. JSON stores only the screen type and
+   schema-3 geometric mapping rather than a full processing document.
+   Other per-tile parameter domains are not persistent stitch-project state. */
 struct stitch_project_json_tile
 {
   std::string filename;
