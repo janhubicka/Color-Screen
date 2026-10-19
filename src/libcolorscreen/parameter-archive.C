@@ -5924,6 +5924,7 @@ encode_stitch_project_json_document (
   if (!stitch_json_number (project.pixel_size, &pixel_size, error))
     return false;
   json_value tiles = v3_node (json_value::kind::array);
+  uint64_t total_cells = 0;
   scr_detect_parameters detection;
   render_parameters render;
   solver_parameters solver;
@@ -5936,6 +5937,12 @@ encode_stitch_project_json_document (
           || tile.image_width <= 0 || tile.image_height <= 0
           || tile.screen_width <= 0 || tile.screen_height <= 0)
         return archive_fail (error, "invalid stitch tile filename or dimensions");
+      const uint64_t cells
+          = (uint64_t)tile.screen_width * (uint64_t)tile.screen_height;
+      if (cells > stitch_json_max_screen_cells_per_tile
+          || total_cells > stitch_json_max_screen_cells_per_project - cells)
+        return archive_fail (error, "stitch project exceeds screen bitmap budget");
+      total_cells += cells;
       json_value angle, ratio, pos_x, pos_y;
       if (!stitch_json_number (tile.angle, &angle, error)
           || !stitch_json_number (tile.ratio, &ratio, error)
@@ -6067,6 +6074,7 @@ decode_stitch_project_json_document (
     return archive_fail (error, "internal default parameter JSON is invalid");
 
   staged.tiles.reserve (tiles->array_value.size ());
+  uint64_t total_cells = 0;
   for (size_t index = 0; index < tiles->array_value.size (); ++index)
     {
       const json_value &node = tiles->array_value[index];
@@ -6112,6 +6120,12 @@ decode_stitch_project_json_document (
           || tile.image_width <= 0 || tile.image_height <= 0
           || tile.screen_width <= 0 || tile.screen_height <= 0)
         return v3_mtf_fail (error, where, "invalid tile geometry");
+      const uint64_t cells
+          = (uint64_t)tile.screen_width * (uint64_t)tile.screen_height;
+      if (cells > stitch_json_max_screen_cells_per_tile
+          || total_cells > stitch_json_max_screen_cells_per_project - cells)
+        return v3_mtf_fail (error, where, "screen bitmap budget exceeded");
+      total_cells += cells;
 
       if (!v3_mtf_exact_keys (
             *screen_geometry, {"screen_type", "geometry"},
