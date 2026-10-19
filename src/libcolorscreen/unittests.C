@@ -82,7 +82,8 @@ test_stitch_json_project ()
   for (int x = 0; x != 2; ++x)
     {
       stitch_project_json_tile tile;
-      tile.filename = x ? "../tiles/second image.tiff"
+      /* UTF-8 names and relative paths are saved unchanged. */
+      tile.filename = x ? u8"../tiles/žlutá plate.tiff"
                         : "../tiles/first image.tiff";
       tile.angle = 1.5 + x;
       tile.ratio = 0.75;
@@ -223,6 +224,23 @@ test_stitch_json_project ()
       || reloaded->images[0][0].filename != tile.filename
       || !(reloaded->images[0][0].param == tile.param))
     return false;
+
+  /* Linked image paths are relative to the project directory; a drive-root
+     path is absolute on Windows, including the final alphabet letter Z. */
+#ifdef _WIN32
+  reloaded->params.path = "C:\\projects\\";
+  if (reloaded->add_path ("Z:\\scans\\plate.tif")
+          != "Z:\\scans\\plate.tif"
+      || reloaded->add_path ("c:") != "C:\\projects\\c:")
+    return false;
+#else
+  reloaded->params.path = "/tmp/stitch-project/";
+  if (reloaded->add_path ("../scans/plate.tif")
+          != "/tmp/stitch-project/../scans/plate.tif"
+      || reloaded->add_path ("/absolute/plate.tif")
+          != "/absolute/plate.tif")
+    return false;
+#endif
 
   /* A real old text project, including the embedded legacy CSP block,
      must still load. Re-saving it must produce JSON rather than text. */
