@@ -463,7 +463,7 @@ stitch_project::determine_angle ()
 #define HEADER "color_screen_stitch_project_version: 1"
 
 /* Only the legacy reader uses HEADER. All new .csprj files contain the
-   native JSON schema, with one typed schema-3 parameter document per tile. */
+   native JSON schema, with just the schema-3 screen type and mapping per tile. */
 /* Encode completely before any caller opens a destination for replacement. */
 bool
 stitch_project::serialize_json (std::string *output, std::string *error) const
@@ -538,10 +538,10 @@ absolute_filename_p (std::string name)
   if (is_dir_separator (name[0]))
     return true;
 #ifdef _WIN32
-  if (name.length () > 1
-      && ((name[0]>='a' && name [0]<'z')
-	  || (name[0]>='A' && name [0]<'Z'))
-      && name[1]==':' && is_dir_separator (name[2]))
+  if (name.length () >= 3
+      && ((name[0] >= 'a' && name[0] <= 'z')
+          || (name[0] >= 'A' && name[0] <= 'Z'))
+      && name[1] == ':' && is_dir_separator (name[2]))
     return true;
 #endif
   return false;
