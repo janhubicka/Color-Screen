@@ -13,6 +13,7 @@
 #include "analyze-base.h"
 #include "loadsave.h"
 #include "parameter-archive.h"
+#include "stitch-project-json.h"
 namespace colorscreen
 {
 
@@ -461,27 +462,47 @@ stitch_project::determine_angle ()
 }
 #define HEADER "color_screen_stitch_project_version: 1"
 
+/* Only the legacy reader uses HEADER. All new .csprj files contain the
+   native JSON schema, with one typed schema-3 parameter document per tile. */
 bool
 stitch_project::save (FILE *f)
 {
-  if (fprintf (f, "%s\n", HEADER) < 0)
+  if (!f || params.width < 1 || params.height < 1
+      || params.width > stitching_params::max_dim
+      || params.height > stitching_params::max_dim)
     return false;
-  /* TODO: hack.  */
-  setlocale(LC_NUMERIC, "C");
-  if (fprintf (f, "num_images: %i %i\n", params.width, params.height) < 0
-      || fprintf (f, "pixel_size: %f\n", pixel_size) < 0)
-    return false;
-  for (int y = 0; y < params.height; y++)
-    for (int x = 0; x < params.width; x++)
+
+  stitch_project_json_data document;
+  document.columns = params.width;
+  document.rows = params.height;
+  document.pixel_size = pixel_size;
+  document.tiles.reserve ((size_t)params.width * params.height);
+  for (int y = 0; y < params.height; ++y)
+    for (int x = 0; x < params.width; ++x)
       {
-	if (fprintf (f, "color_screen_stitch_image: %i %i\n", x, y) < 0)
-	  return false;
-	if (!images[y][x].save (f))
-	  return false;
+        const stitch_image &image = images[y][x];
+        stitch_project_json_tile tile;
+        tile.filename = image.filename;
+        tile.angle = image.angle;
+        tile.ratio = image.ratio;
+        tile.position = image.pos;
+        tile.image_width = image.img_width;
+        tile.image_height = image.img_height;
+        tile.screen_width = image.width;
+        tile.screen_height = image.height;
+        tile.screen_shift_x = image.xshift;
+        tile.screen_shift_y = image.yshift;
+        tile.geometry = image.param;
+        document.tiles.push_back (std::move (tile));
       }
-  if (fprintf (f, "color_screen_stitch_project_end\n") < 0)
-    return false;
-  return true;
+  std::string output, error;
+  if (!encode_stitch_project_json_document (document, &output, &error))
+    {
+      fprintf (stderr, "Can not serialize stitching project: %s\n",
+               error.c_str ());
+      return false;
+    }
+  return fwrite (output.data (), 1, output.size (), f) == output.size ();
 }
 
 static bool
@@ -530,6 +551,89 @@ stitch_project::set_path_by_filename (std::string filename)
 bool
 stitch_project::load (FILE *f, const char **error)
 {
+  /* Read the format signature without relying on the .csprj extension.
+     The historical keyword-based project remains a valid input. */
+  if (!f)
+    {
+      *error = "missing project file";
+      return false;
+    }
+  int first = getc (f);
+  while (first == ' ' || first == '\n' || first == '\r'
+         || first == '\t')
+    first = getc (f);
+  if (first == EOF)
+    {
+      *error = "empty project file";
+      return false;
+    }
+  ungetc (first, f);
+  if (first == '{')
+    {
+      /* Decode into a detached model, including each tile's schema-3
+         parameter document, before touching the live stitching project. */
+      std::string json;
+      char buffer[8192];
+      while (size_t count = fread (buffer, 1, sizeof (buffer), f))
+        {
+          if (json.size () > 256 * 1024 * 1024 - count)
+            {
+              *error = "stitch project JSON exceeds 256 MiB";
+              return false;
+            }
+          json.append (buffer, count);
+        }
+      if (ferror (f))
+        {
+          *error = "error reading stitch project JSON";
+          return false;
+        }
+      /* The returned error must survive destruction of failed project
+         objects in image_data_loader::init_loader. */
+      static thread_local std::string last_json_error;
+      stitch_project_json_data document;
+      if (!decode_stitch_project_json_document (
+              json, &document, &last_json_error))
+        {
+          *error = last_json_error.c_str ();
+          return false;
+        }
+      params.width = document.columns;
+      params.height = document.rows;
+      pixel_size = document.pixel_size;
+      for (int y = 0; y < params.height; ++y)
+        for (int x = 0; x < params.width; ++x)
+          {
+            stitch_image &image = images[y][x];
+            const stitch_project_json_tile &tile
+                = document.tiles[(size_t)y * params.width + x];
+            image.filename = tile.filename;
+            image.angle = tile.angle;
+            image.ratio = tile.ratio;
+            image.pos = tile.position;
+            image.img_width = tile.image_width;
+            image.img_height = tile.image_height;
+            image.width = tile.screen_width;
+            image.height = tile.screen_height;
+            image.xshift = tile.screen_shift_x;
+            image.yshift = tile.screen_shift_y;
+            image.param = tile.geometry;
+            image.left = !x;
+            image.top = !y;
+            image.right = x == params.width - 1;
+            image.bottom = y == params.height - 1;
+            if (!image.finish_loaded_parameters (this))
+              {
+                *error = "could not initialize JSON stitch tile geometry";
+                return false;
+              }
+            scr_param.type = image.param.type;
+          }
+      if (stitch_info_scale)
+        stitch_info_scale = images[0][0].param.coordinate1.length () + 1;
+      return true;
+    }
+  /* Legacy text reader: do not drop it when changing the writer. */
   /* TODO: hack.  */
   setlocale(LC_NUMERIC, "C");
   if (!expect_keyword (f, HEADER))
@@ -541,6 +645,13 @@ stitch_project::load (FILE *f, const char **error)
       || fscanf (f, "%i %i", &params.width, &params.height) != 2)
     {
       *error = "error parsing num_images";
+      return false;
+    }
+  if (params.width < 1 || params.height < 1
+      || params.width > stitching_params::max_dim
+      || params.height > stitching_params::max_dim)
+    {
+      *error = "legacy stitch project dimensions exceed supported grid";
       return false;
     }
   if (!expect_keyword (f, "pixel_size:"))
