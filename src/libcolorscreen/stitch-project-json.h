@@ -48,7 +48,7 @@ DLL_PUBLIC bool encode_stitch_project_json_document (
     std::string *error);
 
 /* Strict and bounded native project JSON reader. Unknown fields, malformed
-   nested parameters and incorrect tile counts leave PROJECT unchanged. */
+   screen geometry and incorrect tile counts leave PROJECT unchanged. */
 DLL_PUBLIC bool decode_stitch_project_json_document (
     const std::string &input, stitch_project_json_data *project,
     std::string *error);
