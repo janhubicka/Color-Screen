@@ -14,7 +14,7 @@ available. Early ZIP-v1 and JSON-v2 `.cspar` implementations were unreleased
 experiments. There are **no JSON parameter files requiring a compatibility
 reader, format-preserving rewrite, or downgrade converter**.
 
-ZIP-based `.csprj` stitching projects are separate and remain supported.
+`.csprj` stitching projects are separate from `.cspar`: they now have a native JSON project schema with nested schema-3 parameters. The legacy project reader accepts version-1 keyword text.
 
 ## Physical representation
 
