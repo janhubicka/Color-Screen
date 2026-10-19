@@ -464,14 +464,18 @@ stitch_project::determine_angle ()
 
 /* Only the legacy reader uses HEADER. All new .csprj files contain the
    native JSON schema, with one typed schema-3 parameter document per tile. */
+/* Encode completely before any caller opens a destination for replacement. */
 bool
-stitch_project::save (FILE *f)
+stitch_project::serialize_json (std::string *output, std::string *error) const
 {
-  if (!f || params.width < 1 || params.height < 1
+  if (!output || params.width < 1 || params.height < 1
       || params.width > stitching_params::max_dim
       || params.height > stitching_params::max_dim)
-    return false;
-
+    {
+      if (error)
+        *error = "invalid project grid or JSON destination";
+      return false;
+    }
   stitch_project_json_data document;
   document.columns = params.width;
   document.rows = params.height;
@@ -495,8 +499,17 @@ stitch_project::save (FILE *f)
         tile.geometry = image.param;
         document.tiles.push_back (std::move (tile));
       }
+  return encode_stitch_project_json_document (document, output, error);
+}
+
+/* Backwards-compatible stream API, now emitting only native JSON. */
+bool
+stitch_project::save (FILE *f)
+{
+  if (!f)
+    return false;
   std::string output, error;
-  if (!encode_stitch_project_json_document (document, &output, &error))
+  if (!serialize_json (&output, &error))
     {
       fprintf (stderr, "Can not serialize stitching project: %s\n",
                error.c_str ());
