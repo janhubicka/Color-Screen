@@ -7,7 +7,7 @@ the [parameter-file specification](parameter-archive-format.md).
 Only old plain-text `.par` files exist outside development. There is no
 compatibility requirement for the discarded ZIP archive or unreleased JSON-v1
 or JSON-v2 experiments. The first supported `.cspar` is a single UTF-8
-JSON document. Stitching `.csprj` projects are a separate format: the new project JSON schema embeds independent parameter schema-3 JSON objects per tile while retaining the older version-1 keyword-text project reader.
+JSON document. Stitching `.csprj` projects are a separate format: the new project JSON schema embeds only the schema-3 geometric mapping and screen type per tile, while retaining the older version-1 keyword-text project reader.
 
 ## Structural ownership
 
