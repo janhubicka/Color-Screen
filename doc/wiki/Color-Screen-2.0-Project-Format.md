@@ -1,6 +1,6 @@
 # Color-Screen 2.0 — stitching project JSON format
 
-A `.csprj` file is a **plain UTF-8 JSON document**, with no ZIP wrapper or embedded image pixels. The native writer uses the project identifier `org.colorscreen.stitch-project` and project `schema_version` **2**. Each tile contains a complete native [schema-3 processing-parameter document](Color-Screen-2.0-Parameter-Format.md).
+A `.csprj` file is a **plain UTF-8 JSON document**, with no ZIP wrapper or embedded image pixels. The native writer uses the project identifier `org.colorscreen.stitch-project` and project `schema_version` **2**. Each tile stores only its screen type and a **schema-3 geometric mapping subtree**, using the same typed codec as [`.cspar`](Color-Screen-2.0-Parameter-Format.md). It does not include irrelevant per-tile color, capture or MTF defaults.
 
 This is the source-controlled format reference for the 2.0 migration in [PR #561](https://github.com/janhubicka/Color-Screen/pull/561); the published rolling build may precede that change until it is merged and packaged.
 
@@ -24,9 +24,9 @@ Each entry of `tiles` contains precisely these fields:
 | `image_size` | array of 2 integers | Source image width and height in pixels |
 | `screen_size` | array of 2 integers | Tile width and height in screen coordinates |
 | `screen_shift` | array of 2 integers | Tile offset in screen coordinates; may be negative |
-| `parameters` | JSON object | Complete native `org.colorscreen.parameters` schema-3 document carrying registration geometry, including any mesh |
+| `screen_geometry` | JSON object | Exactly `screen_type` (string) and `geometry` (object); `geometry` uses the same keys and units as the `geometry` section of schema-3 `.cspar`, including any mesh |
 
-The same `.cspar` processing codec validates the nested `parameters` objects. Do **not** insert legacy `.par` text as a string; each tile's parameters are a real JSON object. Per-tile capture/render/detection sections use canonical defaults where the stitching project stores only registration geometry.
+The `.cspar` schema-3 codec validates the `screen_geometry` contents against its native typed geometric mapping. A file containing extra capture, color, calibration, MTF or reconstruction settings is **rejected**, rather than accepting values that the stitching project would silently discard. No legacy `.par` text or processing-document defaults are embedded.
 
 File keys are validated strictly: unknown or missing fields, unsupported versions, incorrect grid dimensions and invalid processing parameters cause a load error. Parsing is bounded to prevent unexpectedly large projects. The file is serialized in a consistent order.
 
