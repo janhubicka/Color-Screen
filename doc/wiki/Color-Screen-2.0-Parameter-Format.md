@@ -6,7 +6,7 @@ The current native `.cspar` parameter file is **UTF-8 JSON (schema 3)**, not a Z
 
 ## Compatibility policy
 
-There are no distributed legacy ZIP-based `.cspar` files that need write compatibility. New saves use JSON schema 3. `.csprj` stitching projects are a separate format; the new schema-2 JSON project document contains schema-3 parameter objects for each tile. Its historical reader accepts version-1 keyword text.
+There are no distributed legacy ZIP-based `.cspar` files that need write compatibility. New saves use JSON schema 3. `.csprj` stitching projects are a separate format; the new schema-2 JSON project document contains a compact, schema-3-compatible `screen_geometry` object for each tile, not a complete copy of the parameter document. Its historical reader accepts version-1 keyword text.
 
 ## What the file describes
 
