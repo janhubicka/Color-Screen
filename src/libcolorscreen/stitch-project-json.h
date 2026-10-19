@@ -6,6 +6,7 @@
 #define COLORSCREEN_STITCH_PROJECT_JSON_H
 
 #include "include/scr-to-img-parameters.h"
+#include "include/dllpublic.h"
 #include <string>
 #include <vector>
 
@@ -42,13 +43,13 @@ struct stitch_project_json_data
 
 /* Encode the canonical native project JSON document (schema 2), leaving
    OUTPUT untouched on error. */
-bool encode_stitch_project_json_document (
+DLL_PUBLIC bool encode_stitch_project_json_document (
     const stitch_project_json_data &project, std::string *output,
     std::string *error);
 
 /* Strict and bounded native project JSON reader. Unknown fields, malformed
    nested parameters and incorrect tile counts leave PROJECT unchanged. */
-bool decode_stitch_project_json_document (
+DLL_PUBLIC bool decode_stitch_project_json_document (
     const std::string &input, stitch_project_json_data *project,
     std::string *error);
 
