@@ -39,7 +39,8 @@ manifest, UI selection, recovery fallback, or compatibility fixture. The only
 supported input formats are historical plain-text `.par` and native JSON.
 Opening never rewrites a source file. Failed serialization, validation or
 file replacement preserves the original bytes and document target/dirty state.
-The ZIP-based `.csprj` stitching container is unrelated and remains supported.
+Stitching `.csprj` files are a separate format: the historical reader handles
+version-1 keyword text, and the new writer emits project JSON schema 2.
 
 Legacy `.par` export remains available with the existing loss-prevention
 checks. Unknown vendor/postamble metadata must never disappear in conversion:
