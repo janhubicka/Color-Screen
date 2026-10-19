@@ -282,6 +282,8 @@ public:
   bool initialize ();
   void determine_viewport (int &xmin, int &xmax, int &ymin, int &ymax);
   void determine_angle ();
+  /* Build a complete native project JSON document before writing any file. */
+  DLL_PUBLIC bool serialize_json (std::string *output, std::string *error) const;
   DLL_PUBLIC bool save (FILE *f);
   DLL_PUBLIC bool load (FILE *f, const char **error);
   std::string adjusted_filename (std::string filename, std::string suffix,
