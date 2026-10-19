@@ -3,6 +3,7 @@
 #include <gsl/gsl_multifit.h>
 #include <tiffio.h>
 #include "include/stitch.h"
+#include "stitch-project-json.h"
 #include "include/tiff-writer.h"
 #include "include/colorscreen.h"
 #include "include/screen-map.h"
@@ -1299,7 +1300,12 @@ stitch_image::load (stitch_project *prj, FILE *f, const char **error)
 	return false;
     }
 #endif
-  return finish_loaded_parameters (prj);
+  if (!finish_loaded_parameters (prj))
+    {
+      *error = "invalid tile geometry or project screen bitmap budget";
+      return false;
+    }
+  return true;
 }
 
 /* Reconstruct geometry-dependent tile state after either legacy or JSON load. */
@@ -1307,6 +1313,13 @@ bool
 stitch_image::finish_loaded_parameters (stitch_project *prj)
 {
   m_prj = prj;
+  if (!m_prj || width <= 0 || height <= 0)
+    return false;
+  const uint64_t cells = (uint64_t)width * (uint64_t)height;
+  if (cells > stitch_json_max_screen_cells_per_tile
+      || m_prj->m_loaded_screen_cells
+             > stitch_json_max_screen_cells_per_project - cells)
+    return false;
   image_data data;
   data.width=1000;
   data.height=1000;
@@ -1321,6 +1334,9 @@ stitch_image::finish_loaded_parameters (stitch_project *prj)
     return false;
   param.mesh_trans = mesh_trans;
   known_pixels = (std::unique_ptr<bitmap_2d>)(compute_known_pixels (scr_to_img_map, 0,0,0,0, NULL));
+  if (!known_pixels)
+    return false;
+  m_prj->m_loaded_screen_cells += cells;
   analyzed = true;
   return true;
 }
