@@ -5847,10 +5847,11 @@ rebase_parameter_source_image (
 }
 
 
-/* Stitch project JSON schema 2. The nested parameter documents are genuine
-   native schema-3 JSON values, not escaped legacy CSP/ZIP sidecars. Using
-   the existing bounded JSON tree keeps the project parser strict without
-   adding a second JSON implementation or a Qt dependency. */
+/* Stitch project JSON schema 2. Store only the native screen type and
+   geometric registration subtree of schema-3 processing parameters for each
+   tile: other .cspar fields are not stitch-project state and must not be
+   silently accepted and discarded by a project reader. Reuse the existing
+   bounded JSON tree rather than introducing a second parser or Qt dependency. */
 namespace
 {
 
@@ -5902,8 +5903,10 @@ stitch_json_position (const json_value &node, point_t *point,
 }
 } // anonymous namespace
 
-/* Serialize complete project geometry, plus one canonical parameter document
-   for each tile; reject anything which would not round-trip as valid JSON. */
+/* Serialize the exact persistent tile geometry. Compose its small payload
+   from a canonical .cspar document so screen and lens conventions have only
+   one implementation. No irrelevant capture, color or render settings are
+   written into project files. */
 bool
 encode_stitch_project_json_document (
     const stitch_project_json_data &project, std::string *output,
@@ -5951,6 +5954,11 @@ encode_stitch_project_json_document (
       if (!parser.parse (&parameters))
         return archive_fail (error, "invalid generated tile parameters: "
                                       + parser.error ());
+      json_value screen_geometry = v3_object ({
+        {"screen_type", v3_at (v3_at (v3_at (parameters, "process"),
+                                     "screen"), "type")},
+        {"geometry", v3_at (parameters, "geometry")}
+      });
 
       tiles.array_value.push_back (v3_object ({
         {"filename", v3_string (tile.filename)},
@@ -5966,7 +5974,7 @@ encode_stitch_project_json_document (
         {"screen_shift", v3_array ({
             v3_number (std::to_string (tile.screen_shift_x)),
             v3_number (std::to_string (tile.screen_shift_y))})},
-        {"parameters", std::move (parameters)}
+        {"screen_geometry", std::move (screen_geometry)}
       }));
     }
 
@@ -5989,9 +5997,10 @@ encode_stitch_project_json_document (
   return true;
 }
 
-/* Decode the entire JSON project into temporary typed values. No caller
-   state is modified until every tile, including its nested parameters,
-   passes the canonical schema-3 decoder. */
+/* Decode the entire JSON project into temporary typed values. The native
+   screen-geometry subtree is inserted into otherwise default .cspar state
+   solely for reuse of the strict typed schema-3 validation. No unrelated
+   .cspar setting is present in the project file or silently discarded. */
 bool
 decode_stitch_project_json_document (
     const std::string &input, stitch_project_json_data *project,
@@ -6038,6 +6047,25 @@ decode_stitch_project_json_document (
                                    tiles->array_value.size (), error))
     return false;
 
+  /* A default schema-3 document supplies non-geometric values only to the
+     existing typed decoder; the project file itself stores none of them. */
+  scr_to_img_parameters empty_geometry;
+  scr_detect_parameters detection;
+  render_parameters render;
+  solver_parameters solver;
+  std::vector<point_t> spots;
+  std::string defaults;
+  if (!encode_parameter_json_v3_document (
+          empty_geometry, detection, render, solver, spots,
+          &defaults, error))
+    return false;
+  json_parser defaults_parser (defaults.data (),
+                               defaults.data () + defaults.size (),
+                               v2_max_document_nodes);
+  json_value default_parameters;
+  if (!defaults_parser.parse (&default_parameters))
+    return archive_fail (error, "internal default parameter JSON is invalid");
+
   staged.tiles.reserve (tiles->array_value.size ());
   for (size_t index = 0; index < tiles->array_value.size (); ++index)
     {
@@ -6045,7 +6073,7 @@ decode_stitch_project_json_document (
       const std::string where = "project.tiles[" + std::to_string (index) + "]";
       if (!v3_mtf_exact_keys (
             node, {"filename", "angle", "ratio", "position", "image_size",
-                   "screen_size", "screen_shift", "parameters"}, where, error))
+                   "screen_size", "screen_shift", "screen_geometry"}, where, error))
         return false;
       const json_value *filename = v3_mtf_required (
           node, "filename", json_value::kind::string, where, error);
@@ -6057,10 +6085,10 @@ decode_stitch_project_json_document (
           node, "screen_size", json_value::kind::array, where, error);
       const json_value *screen_shift = v3_mtf_required (
           node, "screen_shift", json_value::kind::array, where, error);
-      const json_value *parameters = v3_mtf_required (
-          node, "parameters", json_value::kind::object, where, error);
+      const json_value *screen_geometry = v3_mtf_required (
+          node, "screen_geometry", json_value::kind::object, where, error);
       if (!filename || !position || !image_size || !screen_size
-          || !screen_shift || !parameters
+          || !screen_shift || !screen_geometry
           || image_size->array_value.size () != 2
           || screen_size->array_value.size () != 2
           || screen_shift->array_value.size () != 2
@@ -6085,17 +6113,34 @@ decode_stitch_project_json_document (
           || tile.screen_width <= 0 || tile.screen_height <= 0)
         return v3_mtf_fail (error, where, "invalid tile geometry");
 
+      if (!v3_mtf_exact_keys (
+            *screen_geometry, {"screen_type", "geometry"},
+            where + ".screen_geometry", error))
+        return false;
+      const json_value *screen_type = v3_mtf_required (
+          *screen_geometry, "screen_type", json_value::kind::string,
+          where + ".screen_geometry", error);
+      const json_value *mapping = v3_mtf_required (
+          *screen_geometry, "geometry", json_value::kind::object,
+          where + ".screen_geometry", error);
+      if (!screen_type || !mapping)
+        return false;
+      json_value patched = default_parameters;
+      patched.object_value["process"].object_value["screen"]
+        .object_value["type"] = *screen_type;
+      patched.object_value["geometry"] = *mapping;
       std::string parameter_json;
-      v3_json_text (*parameters, &parameter_json);
-      scr_detect_parameters detection;
-      render_parameters render;
-      solver_parameters solver;
-      std::vector<point_t> spots;
+      v3_json_text (patched, &parameter_json);
+      scr_detect_parameters tile_detection;
+      render_parameters tile_render;
+      solver_parameters tile_solver;
+      std::vector<point_t> tile_spots;
       std::string nested_error;
       if (!decode_parameter_json_v3_document (
-              parameter_json, &tile.geometry, &detection,
-              &render, &solver, &spots, &nested_error))
-        return archive_fail (error, where + ".parameters: " + nested_error);
+              parameter_json, &tile.geometry, &tile_detection,
+              &tile_render, &tile_solver, &tile_spots, &nested_error))
+        return archive_fail (
+            error, where + ".screen_geometry: " + nested_error);
       staged.tiles.push_back (std::move (tile));
     }
   *project = std::move (staged);
