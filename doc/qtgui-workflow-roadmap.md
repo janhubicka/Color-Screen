@@ -802,8 +802,9 @@ distinction remains ambiguous to operators.
 **15 October 2026 decision:** the only parameter files in circulation are old
 plain-text `.par` files. The ZIP-based parameter archive and both earlier
 JSON layouts were development experiments; there is no need to preserve or
-migrate from any of them. ZIP-based `.csprj` *stitching projects* remain
-supported and are unrelated to the parameter file format.
+migrate from any of them. Historical `.csprj` stitching projects use version-1 keyword text; the new
+JSON project writer retains the text reader. Project format is independent
+of `.cspar` parameter files.
 
 The first user-facing `.cspar` format for 2.0 is a single human-readable UTF-8
 JSON document with explicitly named, semantically grouped fields. The current
