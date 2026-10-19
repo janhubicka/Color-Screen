@@ -188,6 +188,25 @@ test_stitch_json_project ()
   if (!reject (bad_screen_type))
     return false;
 
+  /* A hostile geometry size would overflow bitmap_2d's int multiplication
+     and allocate an unbounded known-screen mask without this guard. */
+  std::string huge = json;
+  const std::string size_key = "\"screen_size\":[16,12]";
+  offset = huge.find (size_key);
+  if (offset == std::string::npos)
+    return false;
+  huge.replace (offset, size_key.size (),
+                "\"screen_size\":[200000,200000]");
+  if (!reject (huge))
+    return false;
+  stitch_project_json_data invalid = original;
+  invalid.tiles[0].screen_width = 200000;
+  invalid.tiles[0].screen_height = 200000;
+  std::string preserved = "unchanged";
+  if (encode_stitch_project_json_document (invalid, &preserved, &error)
+      || preserved != "unchanged" || error.empty ())
+    return false;
+
   /* Exercise the actual .csprj writer and JSON read dispatch. */
   auto project = std::make_unique<stitch_project> ();
   project->params.width = 1;
@@ -289,7 +308,34 @@ test_stitch_json_project ()
   reason = nullptr;
   bool accepted = oversized->load (bad_legacy, &reason);
   fclose (bad_legacy);
-  return !accepted && reason != nullptr;
+  if (accepted || !reason)
+    return false;
+
+  /* The old keyword reader must enforce the same eager bitmap ceiling
+     before it can allocate known pixels for a malicious tile. */
+  FILE *oversized_tile = tmpfile ();
+  if (!oversized_tile)
+    return false;
+  bool wrote_huge
+      = fprintf (oversized_tile,
+                 "color_screen_stitch_project_version: 1\n"
+                 "num_images: 1 1\npixel_size: 1.0\n"
+                 "color_screen_stitch_image: 0 0\n") >= 0;
+  const int old_width = tile.width, old_height = tile.height;
+  tile.width = 200000;
+  tile.height = 200000;
+  wrote_huge = wrote_huge && tile.save (oversized_tile);
+  tile.width = old_width;
+  tile.height = old_height;
+  if (wrote_huge)
+    wrote_huge = fprintf (oversized_tile,
+                          "color_screen_stitch_project_end\n") >= 0;
+  rewind (oversized_tile);
+  auto old_huge = std::make_unique<stitch_project> ();
+  reason = nullptr;
+  accepted = wrote_huge && old_huge->load (oversized_tile, &reason);
+  fclose (oversized_tile);
+  return wrote_huge && !accepted && reason != nullptr;
 }
 
 /* Test-only wavelength selection. Optical requests now pass wavelengths as
