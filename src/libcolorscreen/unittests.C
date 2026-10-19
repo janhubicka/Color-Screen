@@ -190,7 +190,55 @@ test_stitch_json_project ()
       || reloaded->images[0][0].filename != tile.filename
       || !(reloaded->images[0][0].param == tile.param))
     return false;
-  return true;
+
+  /* A real old text project, including the embedded legacy CSP block,
+     must still load. Re-saving it must produce JSON rather than text. */
+  FILE *legacy = tmpfile ();
+  if (!legacy)
+    return false;
+  bool wrote_old
+      = fprintf (legacy,
+                 "color_screen_stitch_project_version: 1\n"
+                 "num_images: 1 1\npixel_size: 1.250000\n"
+                 "color_screen_stitch_image: 0 0\n") >= 0
+        && tile.save (legacy)
+        && fprintf (legacy, "color_screen_stitch_project_end\n") >= 0;
+  rewind (legacy);
+  auto old_project = std::make_unique<stitch_project> ();
+  reason = nullptr;
+  bool read_old = wrote_old && old_project->load (legacy, &reason);
+  fclose (legacy);
+  if (!read_old)
+    {
+      fprintf (stderr, "Legacy stitch project load: %s\n",
+               reason ? reason : "invalid old writer");
+      return false;
+    }
+  FILE *converted = tmpfile ();
+  if (!converted)
+    return false;
+  bool converted_ok = old_project->save (converted);
+  rewind (converted);
+  bool is_json = getc (converted) == '{';
+  fclose (converted);
+  if (!converted_ok || !is_json
+      || old_project->params.width != 1
+      || old_project->images[0][0].filename != tile.filename)
+    return false;
+
+  /* Reject unsupported legacy dimensions before indexing fixed 10x10 tiles. */
+  FILE *bad_legacy = tmpfile ();
+  if (!bad_legacy)
+    return false;
+  fprintf (bad_legacy,
+           "color_screen_stitch_project_version: 1\n"
+           "num_images: 11 1\npixel_size: 1.0\n");
+  rewind (bad_legacy);
+  auto oversized = std::make_unique<stitch_project> ();
+  reason = nullptr;
+  bool accepted = oversized->load (bad_legacy, &reason);
+  fclose (bad_legacy);
+  return !accepted && reason != nullptr;
 }
 
 /* Test-only wavelength selection. Optical requests now pass wavelengths as
