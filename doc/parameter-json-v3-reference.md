@@ -1,6 +1,6 @@
 # Canonical parameter JSON schema 3 — implementation contract
 
-**Status: draft implementation under CI, not yet merged or released.**
+**Status: implemented schema-3 parameter format for the 2.0 development series.**
 See the [implementation tracker](parameter-json-migration-tracking.md) and
 the [parameter-file specification](parameter-archive-format.md).
 
