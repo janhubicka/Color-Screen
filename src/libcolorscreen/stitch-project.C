@@ -566,6 +566,7 @@ stitch_project::load (FILE *f, const char **error)
 {
   /* Read the format signature without relying on the .csprj extension.
      The historical keyword-based project remains a valid input. */
+  m_loaded_screen_cells = 0;
   if (!f)
     {
       *error = "missing project file";
