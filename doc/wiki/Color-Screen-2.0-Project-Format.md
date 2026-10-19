@@ -1,18 +1,55 @@
-# Color-Screen 2.0 — stitching project format and JSON migration
+# Color-Screen 2.0 — stitching project JSON format
 
-## Status: proposed change, not yet implemented
+A `.csprj` file is a **plain UTF-8 JSON document**, with no ZIP wrapper or embedded image pixels. The native writer uses the project identifier `org.colorscreen.stitch-project` and project `schema_version` **2**. Each tile contains a complete native [schema-3 processing-parameter document](Color-Screen-2.0-Parameter-Format.md).
 
-Stitching projects use the `.csprj` extension. The historical project representation is a ZIP archive. The planned 2.0 writer should instead emit **plain UTF-8 JSON** while preserving a reader for the original ZIP representation. No distributed legacy ZIP projects are known, so new writes need not retain the old container.
+This is the source-controlled format reference for the 2.0 migration in [PR #561](https://github.com/janhubicka/Color-Screen/pull/561); the published rolling build may precede that change until it is merged and packaged.
 
-## Migration requirements
+## Project JSON structure
 
-- Keep `.csprj` as the extension; detect legacy ZIP versus JSON by file signature/content, not filename alone.
-- Write new projects only as JSON once the migration lands.
-- Preserve project-wide settings, source-image references, per-image parameters, stitching geometry and relationships; do not embed large source images by default.
-- Support relative paths resolved from the project location; when an image has moved, allow reassociation without discarding the project.
-- Provide explicit schema/version identification and errors for unsupported versions or malformed data.
-- Retain the legacy ZIP reader, but do not silently reintroduce a ZIP writer.
+| Field | Type | Interpretation |
+|---|---|---|
+| `format` | string | Exactly `org.colorscreen.stitch-project` |
+| `schema_version` | integer | Exactly `2` |
+| `grid` | object | Required integer `columns` and `rows` (each 1–10) |
+| `pixel_size` | finite number | Pixel scale used by stitching/output |
+| `tiles` | array | Exactly `columns × rows` records, in row-major order |
 
-## Verification before documenting a normative schema
+Each entry of `tiles` contains precisely these fields:
 
-Test JSON save/load/save round trips, old ZIP load followed by JSON save, missing or moved images, relative and absolute paths, and representative multi-image stitching projects. Compare reconstructed project state, not merely text formatting. Only after implementation should this page list exact JSON keys and defaults as authoritative.
+| Field | Type | Interpretation |
+|---|---|---|
+| `filename` | UTF-8 string | Source-image filename or relative path |
+| `angle`, `ratio` | finite numbers | Detected screen angle and ratio |
+| `position` | array of 2 finite numbers | Tile's upper-left position in common screen coordinates |
+| `image_size` | array of 2 integers | Source image width and height in pixels |
+| `screen_size` | array of 2 integers | Tile width and height in screen coordinates |
+| `screen_shift` | array of 2 integers | Tile offset in screen coordinates; may be negative |
+| `parameters` | JSON object | Complete native `org.colorscreen.parameters` schema-3 document carrying registration geometry, including any mesh |
+
+The same `.cspar` processing codec validates the nested `parameters` objects. Do **not** insert legacy `.par` text as a string; each tile's parameters are a real JSON object. Per-tile capture/render/detection sections use canonical defaults where the stitching project stores only registration geometry.
+
+File keys are validated strictly: unknown or missing fields, unsupported versions, incorrect grid dimensions and invalid processing parameters cause a load error. Parsing is bounded to prevent unexpectedly large projects. The file is serialized in a consistent order.
+
+## Paths and portability
+
+Source images remain external to the project. Relative filenames are resolved from the project file's directory, not the process's current working directory. Moving a project together with its relative-path images therefore preserves the references.
+
+The project file does not contain the source scan itself. Keep your scans when archiving a project.
+
+## Older projects and migration
+
+The **actual historical stitching-project format in `libcolorscreen` is text**, starting with:
+
+```text
+color_screen_stitch_project_version: 1
+num_images: 2 1
+pixel_size: 1.0
+```
+
+It then stores tile geometry with `stitch_image_...` keywords and a legacy CSP parameter block per tile. The original text reader remains available; opening an old project and saving it with the new writer produces JSON. The reader chooses between JSON and legacy text by the first non-whitespace character, not by the `.csprj` extension. The former ZIP archives mentioned in some alpha-era parameter documentation were *parameter-file* experiments, not this core stitching project format.
+
+New files are JSON only; there is no legacy project writer.
+
+## Tests
+
+The implementation includes native JSON encode/decode, deterministic save/load/save, malformed-field rejection, project `FILE*` saving/loading, version-1 text import and conversion, and bounds checks on legacy grid dimensions. Exact test results are tracked with PR #561.
