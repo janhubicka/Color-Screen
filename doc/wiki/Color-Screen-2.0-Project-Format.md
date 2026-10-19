@@ -28,7 +28,7 @@ Each entry of `tiles` contains precisely these fields:
 
 The `.cspar` schema-3 codec validates the `screen_geometry` contents against its native typed geometric mapping. A file containing extra capture, color, calibration, MTF or reconstruction settings is **rejected**, rather than accepting values that the stitching project would silently discard. No legacy `.par` text or processing-document defaults are embedded.
 
-File keys are validated strictly: unknown or missing fields, unsupported versions, incorrect grid dimensions and invalid processing parameters cause a load error. Parsing is bounded to prevent unexpectedly large projects. The file is serialized in a consistent order.
+File keys are validated strictly: unknown or missing fields, unsupported versions, incorrect grid dimensions and invalid geometry cause a load error. Parsing is bounded to prevent unexpectedly large projects. Known-screen bitmaps are allocated eagerly on load, so the reader imposes a **resource-safety ceiling of 128 Mi screen cells per tile and 512 Mi cells per project**, in addition to the 10×10 grid limit. These are enforced limits, not recommended physical dimensions; source-image pixel counts are independent. The file is serialized in a consistent order.
 
 ## Paths and portability
 
