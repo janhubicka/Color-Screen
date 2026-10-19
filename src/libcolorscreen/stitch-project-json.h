@@ -7,11 +7,20 @@
 
 #include "include/scr-to-img-parameters.h"
 #include "include/dllpublic.h"
+#include <cstdint>
 #include <string>
 #include <vector>
 
 namespace colorscreen
 {
+
+/* Known-screen pixels use a bit per screen cell outside the global decoded
+   image cache. Guard both absurd single-tile allocations and aggregate
+   bitmap growth before any allocation or coordinate arithmetic. */
+constexpr uint64_t stitch_json_max_screen_cells_per_tile
+    = UINT64_C (128) * 1024 * 1024;
+constexpr uint64_t stitch_json_max_screen_cells_per_project
+    = UINT64_C (512) * 1024 * 1024;
 
 /* One tile in row-major order. JSON stores only the screen type and
    schema-3 geometric mapping rather than a full processing document.
