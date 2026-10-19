@@ -1299,6 +1299,14 @@ stitch_image::load (stitch_project *prj, FILE *f, const char **error)
 	return false;
     }
 #endif
+  return finish_loaded_parameters (prj);
+}
+
+/* Reconstruct geometry-dependent tile state after either legacy or JSON load. */
+bool
+stitch_image::finish_loaded_parameters (stitch_project *prj)
+{
+  m_prj = prj;
   image_data data;
   data.width=1000;
   data.height=1000;
