@@ -196,6 +196,8 @@ public:
   bool diff (stitch_image &other, progress_info *progress);
   bool save (FILE *f);
   bool load (stitch_project *, FILE *f, const char **error);
+  /* Rebuild maps and known-pixel mask after loading native JSON geometry. */
+  bool finish_loaded_parameters (stitch_project *project);
 
   inline analyze_base &get_analyzer ();
   static bool write_row (TIFF *out, int y, uint16_t *outrow,
