@@ -97,6 +97,11 @@ test_stitch_json_project ()
       tile.geometry.center = {2, 2};
       tile.geometry.coordinate1 = {4, 0};
       tile.geometry.coordinate2 = {0, 4};
+      tile.geometry.final_angle = 12.5 + x;
+      tile.geometry.final_ratio = 1.125;
+      tile.geometry.final_rotation = 0.25;
+      tile.geometry.final_mirror = true;
+      tile.geometry.lens_correction.kr[0] = 0.00025;
       original.tiles.push_back (std::move (tile));
     }
   std::string json, error;
@@ -107,7 +112,12 @@ test_stitch_json_project ()
     }
   if (json.find ("\"format\":\"org.colorscreen.stitch-project\"")
           == std::string::npos
-      || json.find ("\"parameters\":{\"calibration\"") == std::string::npos
+      || json.find ("\"screen_geometry\":{\"geometry\"")
+          == std::string::npos
+      || json.find ("\"screen_type\":") == std::string::npos
+      /* No unused capture/MTF/reconstruction defaults are stored in tiles. */
+      || json.find ("\"calibration\"") != std::string::npos
+      || json.find ("\"reconstruction\"") != std::string::npos
       || json.find ("color_screen_stitch_project_version: 1")
           != std::string::npos)
     return false;
@@ -152,6 +162,29 @@ test_stitch_json_project ()
                "\"pixel_size\":1,\"tiles\":[]}")
       || !reject (json.substr (0, json.size () - 2))
       || !reject (std::string ("{\"unknown\":null,") + json.substr (1)))
+    return false;
+  /* Introducing extraneous nested document domains must fail instead of
+     silently dropping user edits to fields which stitching does not own. */
+  std::string unwanted = json;
+  const std::string geometry_key = "\"screen_geometry\":{";
+  size_t offset = unwanted.find (geometry_key);
+  if (offset == std::string::npos)
+    return false;
+  unwanted.insert (offset + geometry_key.size (),
+                   "\"calibration\":{},");
+  if (!reject (unwanted))
+    return false;
+  std::string bad_screen_type = json;
+  const std::string type_key = "\"screen_type\":\"";
+  offset = bad_screen_type.find (type_key);
+  if (offset == std::string::npos)
+    return false;
+  const size_t first = offset + type_key.size ();
+  const size_t last = bad_screen_type.find ('"', first);
+  if (last == std::string::npos)
+    return false;
+  bad_screen_type.replace (first, last - first, "unknown-screen-type");
+  if (!reject (bad_screen_type))
     return false;
 
   /* Exercise the actual .csprj writer and JSON read dispatch. */
