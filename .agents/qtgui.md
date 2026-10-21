@@ -7,8 +7,9 @@ parameter files exist outside development. ZIP parameter archives and JSON-v2
 were temporary alpha experiments, not compatibility obligations. The first
 2.0 JSON `.cspar` format is the semantically grouped schema-3 design in
 [`doc/parameter-json-migration-tracking.md`](../doc/parameter-json-migration-tracking.md).
-Draft PR #556 switches the Qt GUI, CLI and recovery to native JSON schema 3,
-but it is **not yet merged or release-qualified**. The old JSON-v2 reader is
+The Qt GUI, CLI and recovery now use the native JSON schema-3 document;
+the project JSON schema and the legacy stitching reader are implemented in
+`libcolorscreen` independently of Qt. The old JSON-v2 reader is
 not a compatibility gate. Preserve historical `.par` reading and loss-checked
 export. MTF editors use immutable measurement IDs and capture-group IDs;
 source provenance must retain its physical interpretation through Save As,

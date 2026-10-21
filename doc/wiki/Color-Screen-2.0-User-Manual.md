@@ -26,6 +26,6 @@ The image/cache subsystem is designed for very large scans. Preferences include 
 
 - `.cspar`: current JSON processing parameters; see [format reference](Color-Screen-2.0-Parameter-Format.md).
 - `.par`: legacy parameter file, retained for reading.
-- `.csprj`: stitching project. The present ZIP-based representation is slated for JSON migration; see [project format](Color-Screen-2.0-Project-Format.md).
+- `.csprj`: stitching project. New projects use JSON; historical version-1 text files remain readable. See [project format](Color-Screen-2.0-Project-Format.md).
 
 This manual is a source-aligned development draft, not a guarantee that every GUI label is final. GUI testing and screenshots should be used to correct terminology before the 2.0 release.

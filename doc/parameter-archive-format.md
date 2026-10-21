@@ -1,6 +1,6 @@
 # Color-Screen parameter file format
 
-**Status: canonical pre-2.0 design, not yet the active writer.** This document
+**Status: implemented 2.0 schema-3 format.** This document
 replaces the historical ZIP-based alpha proposal, which was never used outside
 development. See [the current implementation tracker](parameter-json-migration-tracking.md),
 the [machine-readable schema](parameters-schema-v3.json), and the
@@ -14,7 +14,7 @@ available. Early ZIP-v1 and JSON-v2 `.cspar` implementations were unreleased
 experiments. There are **no JSON parameter files requiring a compatibility
 reader, format-preserving rewrite, or downgrade converter**.
 
-ZIP-based `.csprj` stitching projects are separate and remain supported.
+`.csprj` stitching projects are separate from `.cspar`: they now have a native JSON project schema with nested schema-3-compatible geometric mapping data only. The legacy project reader accepts version-1 keyword text.
 
 ## Physical representation
 
@@ -22,7 +22,7 @@ A `.cspar` file is one UTF-8 JSON document; no ZIP wrapper, manifest,
 embedded CSP text, or binary side payload is required. JSON is also valid
 YAML 1.2 syntax, without importing YAML aliases/tags into our input language.
 
-The current semantic design uses the `org.colorscreen.parameters` format
+The implemented schema uses the `org.colorscreen.parameters` format
 identifier and integer `schema_version` 3. Structural required fields,
 mode-tagged values and nested types are defined by the checked-in draft-2020-12
 JSON Schema. The library's typed decoder additionally verifies capture-ID

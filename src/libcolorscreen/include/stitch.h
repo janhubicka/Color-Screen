@@ -196,6 +196,8 @@ public:
   bool diff (stitch_image &other, progress_info *progress);
   bool save (FILE *f);
   bool load (stitch_project *, FILE *f, const char **error);
+  /* Rebuild maps and known-pixel mask after loading native JSON geometry. */
+  bool finish_loaded_parameters (stitch_project *project);
 
   inline analyze_base &get_analyzer ();
   static bool write_row (TIFF *out, int y, uint16_t *outrow,
@@ -280,6 +282,8 @@ public:
   bool initialize ();
   void determine_viewport (int &xmin, int &xmax, int &ymin, int &ymax);
   void determine_angle ();
+  /* Build a complete native project JSON document before writing any file. */
+  DLL_PUBLIC bool serialize_json (std::string *output, std::string *error) const;
   DLL_PUBLIC bool save (FILE *f);
   DLL_PUBLIC bool load (FILE *f, const char **error);
   std::string adjusted_filename (std::string filename, std::string suffix,
@@ -403,6 +407,9 @@ private:
   /* Per-project source generation ensures stale disk/project loads never
      satisfy another independently opened stitch document. */
   uint64_t m_tile_cache_id = 0;
+  /* Eager known-screen bitmaps are not core LRU entries; limit their
+     cumulative footprint while a project is being loaded. */
+  uint64_t m_loaded_screen_cells = 0;
   coord_t rotation_adjustment;
   friend stitch_image;
 

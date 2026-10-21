@@ -63,12 +63,281 @@
 #include "nmsimplex.h"
 #include "gsl-solver.h"
 #include "parameter-archive.h"
+#include "stitch-project-json.h"
 #include "parameter-json-budget.h"
 
 
 using namespace colorscreen;
 namespace
 {
+/* Native project JSON is lossless and strict; the FILE* entry points must
+   write JSON while keeping the historical version-1 text reader available. */
+static bool
+test_stitch_json_project ()
+{
+  stitch_project_json_data original;
+  original.columns = 2;
+  original.rows = 1;
+  original.pixel_size = 1.25;
+  for (int x = 0; x != 2; ++x)
+    {
+      stitch_project_json_tile tile;
+      /* UTF-8 names and relative paths are saved unchanged. */
+      tile.filename = x ? u8"../tiles/žlutá plate.tiff"
+                        : "../tiles/first image.tiff";
+      tile.angle = 1.5 + x;
+      tile.ratio = 0.75;
+      tile.position = {(coord_t)(12 + 7 * x), (coord_t)-3.25};
+      tile.image_width = 64;
+      tile.image_height = 48;
+      tile.screen_width = 16;
+      tile.screen_height = 12;
+      tile.screen_shift_x = -2;
+      tile.screen_shift_y = 3;
+      tile.geometry.type = Dufay;
+      tile.geometry.center = {2, 2};
+      tile.geometry.coordinate1 = {4, 0};
+      tile.geometry.coordinate2 = {0, 4};
+      tile.geometry.final_angle = 12.5 + x;
+      tile.geometry.final_ratio = 1.125;
+      tile.geometry.final_rotation = 0.25;
+      tile.geometry.final_mirror = true;
+      tile.geometry.lens_correction.kr[0] = 0.00025;
+      original.tiles.push_back (std::move (tile));
+    }
+  std::string json, error;
+  if (!encode_stitch_project_json_document (original, &json, &error))
+    {
+      fprintf (stderr, "Stitch JSON encode: %s\n", error.c_str ());
+      return false;
+    }
+  if (json.find ("\"format\":\"org.colorscreen.stitch-project\"")
+          == std::string::npos
+      || json.find ("\"screen_geometry\":{\"geometry\"")
+          == std::string::npos
+      || json.find ("\"screen_type\":") == std::string::npos
+      /* No unused capture/MTF/reconstruction defaults are stored in tiles. */
+      || json.find ("\"calibration\"") != std::string::npos
+      || json.find ("\"reconstruction\"") != std::string::npos
+      || json.find ("color_screen_stitch_project_version: 1")
+          != std::string::npos)
+    return false;
+  stitch_project_json_data parsed;
+  if (!decode_stitch_project_json_document (json, &parsed, &error)
+      || parsed.columns != original.columns
+      || parsed.rows != original.rows
+      || parsed.pixel_size != original.pixel_size
+      || parsed.tiles.size () != 2)
+    {
+      fprintf (stderr, "Stitch JSON decode: %s\n", error.c_str ());
+      return false;
+    }
+  for (size_t i = 0; i < parsed.tiles.size (); ++i)
+    if (parsed.tiles[i].filename != original.tiles[i].filename
+        || parsed.tiles[i].angle != original.tiles[i].angle
+        || parsed.tiles[i].ratio != original.tiles[i].ratio
+        || parsed.tiles[i].position.x != original.tiles[i].position.x
+        || parsed.tiles[i].position.y != original.tiles[i].position.y
+        || parsed.tiles[i].image_width != original.tiles[i].image_width
+        || parsed.tiles[i].image_height != original.tiles[i].image_height
+        || parsed.tiles[i].screen_shift_x != original.tiles[i].screen_shift_x
+        || !(parsed.tiles[i].geometry == original.tiles[i].geometry))
+    return false;
+
+  std::string canonical;
+  if (!encode_stitch_project_json_document (parsed, &canonical, &error)
+      || canonical != json)
+    return false;
+
+  /* Malformed content must not partly publish the decoded project. */
+  const auto reject = [&parsed] (std::string changed) -> bool
+    {
+      std::string problem;
+      return !decode_stitch_project_json_document (
+                 changed, &parsed, &problem)
+             && !problem.empty () && parsed.columns == 2
+             && parsed.tiles.size () == 2;
+    };
+  if (!reject ("{\"format\":\"org.colorscreen.stitch-project\","
+               "\"schema_version\":2,\"grid\":{\"columns\":2,\"rows\":1},"
+               "\"pixel_size\":1,\"tiles\":[]}")
+      || !reject (json.substr (0, json.size () - 2))
+      || !reject (std::string ("{\"unknown\":null,") + json.substr (1)))
+    return false;
+  /* Introducing extraneous nested document domains must fail instead of
+     silently dropping user edits to fields which stitching does not own. */
+  std::string unwanted = json;
+  const std::string geometry_key = "\"screen_geometry\":{";
+  size_t offset = unwanted.find (geometry_key);
+  if (offset == std::string::npos)
+    return false;
+  unwanted.insert (offset + geometry_key.size (),
+                   "\"calibration\":{},");
+  if (!reject (unwanted))
+    return false;
+  std::string bad_screen_type = json;
+  const std::string type_key = "\"screen_type\":\"";
+  offset = bad_screen_type.find (type_key);
+  if (offset == std::string::npos)
+    return false;
+  const size_t first = offset + type_key.size ();
+  const size_t last = bad_screen_type.find ('"', first);
+  if (last == std::string::npos)
+    return false;
+  bad_screen_type.replace (first, last - first, "unknown-screen-type");
+  if (!reject (bad_screen_type))
+    return false;
+
+  /* A hostile geometry size would overflow bitmap_2d's int multiplication
+     and allocate an unbounded known-screen mask without this guard. */
+  std::string huge = json;
+  const std::string size_key = "\"screen_size\":[16,12]";
+  offset = huge.find (size_key);
+  if (offset == std::string::npos)
+    return false;
+  huge.replace (offset, size_key.size (),
+                "\"screen_size\":[200000,200000]");
+  if (!reject (huge))
+    return false;
+  stitch_project_json_data invalid = original;
+  invalid.tiles[0].screen_width = 200000;
+  invalid.tiles[0].screen_height = 200000;
+  std::string preserved = "unchanged";
+  if (encode_stitch_project_json_document (invalid, &preserved, &error)
+      || preserved != "unchanged" || error.empty ())
+    return false;
+
+  /* Exercise the actual .csprj writer and JSON read dispatch. */
+  auto project = std::make_unique<stitch_project> ();
+  project->params.width = 1;
+  project->params.height = 1;
+  project->pixel_size = original.pixel_size;
+  auto &tile = project->images[0][0];
+  tile.filename = original.tiles[0].filename;
+  tile.angle = original.tiles[0].angle;
+  tile.ratio = original.tiles[0].ratio;
+  tile.pos = original.tiles[0].position;
+  tile.img_width = original.tiles[0].image_width;
+  tile.img_height = original.tiles[0].image_height;
+  tile.width = original.tiles[0].screen_width;
+  tile.height = original.tiles[0].screen_height;
+  tile.xshift = original.tiles[0].screen_shift_x;
+  tile.yshift = original.tiles[0].screen_shift_y;
+  tile.param = original.tiles[0].geometry;
+  FILE *file = tmpfile ();
+  if (!file)
+    return false;
+  bool saved = project->save (file);
+  rewind (file);
+  const int prefix = getc (file);
+  rewind (file);
+  auto reloaded = std::make_unique<stitch_project> ();
+  const char *reason = nullptr;
+  const bool loaded = saved && reloaded->load (file, &reason);
+  fclose (file);
+  if (!loaded)
+    fprintf (stderr, "Stitch project FILE* roundtrip: %s\n",
+             reason ? reason : "failed to save");
+  if (!loaded || prefix != '{'
+      || reloaded->params.width != 1 || reloaded->params.height != 1
+      || reloaded->images[0][0].filename != tile.filename
+      || !(reloaded->images[0][0].param == tile.param))
+    return false;
+
+  /* Linked image paths are relative to the project directory; a drive-root
+     path is absolute on Windows, including the final alphabet letter Z. */
+#ifdef _WIN32
+  reloaded->params.path = "C:\\projects\\";
+  if (reloaded->add_path ("Z:\\scans\\plate.tif")
+          != "Z:\\scans\\plate.tif"
+      || reloaded->add_path ("c:") != "C:\\projects\\c:")
+    return false;
+#else
+  reloaded->params.path = "/tmp/stitch-project/";
+  if (reloaded->add_path ("../scans/plate.tif")
+          != "/tmp/stitch-project/../scans/plate.tif"
+      || reloaded->add_path ("/absolute/plate.tif")
+          != "/absolute/plate.tif")
+    return false;
+#endif
+
+  /* A real old text project, including the embedded legacy CSP block,
+     must still load. Re-saving it must produce JSON rather than text. */
+  FILE *legacy = tmpfile ();
+  if (!legacy)
+    return false;
+  bool wrote_old
+      = fprintf (legacy,
+                 "color_screen_stitch_project_version: 1\n"
+                 "num_images: 1 1\npixel_size: 1.250000\n"
+                 "color_screen_stitch_image: 0 0\n") >= 0
+        && tile.save (legacy)
+        && fprintf (legacy, "color_screen_stitch_project_end\n") >= 0;
+  rewind (legacy);
+  auto old_project = std::make_unique<stitch_project> ();
+  reason = nullptr;
+  bool read_old = wrote_old && old_project->load (legacy, &reason);
+  fclose (legacy);
+  if (!read_old)
+    {
+      fprintf (stderr, "Legacy stitch project load: %s\n",
+               reason ? reason : "invalid old writer");
+      return false;
+    }
+  FILE *converted = tmpfile ();
+  if (!converted)
+    return false;
+  bool converted_ok = old_project->save (converted);
+  rewind (converted);
+  bool is_json = getc (converted) == '{';
+  fclose (converted);
+  if (!converted_ok || !is_json
+      || old_project->params.width != 1
+      || old_project->images[0][0].filename != tile.filename)
+    return false;
+
+  /* Reject unsupported legacy dimensions before indexing fixed 10x10 tiles. */
+  FILE *bad_legacy = tmpfile ();
+  if (!bad_legacy)
+    return false;
+  fprintf (bad_legacy,
+           "color_screen_stitch_project_version: 1\n"
+           "num_images: 11 1\npixel_size: 1.0\n");
+  rewind (bad_legacy);
+  auto oversized = std::make_unique<stitch_project> ();
+  reason = nullptr;
+  bool accepted = oversized->load (bad_legacy, &reason);
+  fclose (bad_legacy);
+  if (accepted || !reason)
+    return false;
+
+  /* The old keyword reader must enforce the same eager bitmap ceiling
+     before it can allocate known pixels for a malicious tile. */
+  FILE *oversized_tile = tmpfile ();
+  if (!oversized_tile)
+    return false;
+  bool wrote_huge
+      = fprintf (oversized_tile,
+                 "color_screen_stitch_project_version: 1\n"
+                 "num_images: 1 1\npixel_size: 1.0\n"
+                 "color_screen_stitch_image: 0 0\n") >= 0;
+  const int old_width = tile.width, old_height = tile.height;
+  tile.width = 200000;
+  tile.height = 200000;
+  wrote_huge = wrote_huge && tile.save (oversized_tile);
+  tile.width = old_width;
+  tile.height = old_height;
+  if (wrote_huge)
+    wrote_huge = fprintf (oversized_tile,
+                          "color_screen_stitch_project_end\n") >= 0;
+  rewind (oversized_tile);
+  auto old_huge = std::make_unique<stitch_project> ();
+  reason = nullptr;
+  accepted = wrote_huge && old_huge->load (oversized_tile, &reason);
+  fclose (oversized_tile);
+  return wrote_huge && !accepted && reason != nullptr;
+}
+
 /* Test-only wavelength selection. Optical requests now pass wavelengths as
    arguments, never through an unsaved scalar in mtf_parameters. */
 static void
@@ -13454,6 +13723,8 @@ main (int argc, char **argv)
       [] () { return test_lru_global_memory_budget (); } },
     { "cache_statistics_order", "global size/entry/name cache ordering",
       [] () { return test_cache_statistics_lexicographic_order (); } },
+    { "stitch_json_project", "native JSON csprj codec and FILE* project reader",
+       [] () { return test_stitch_json_project (); } },
     { "stitch_tile_global_cache", "decoded stitch tiles use the shared LRU",
       [] () { return test_stitch_tile_global_cache (); } },
     { "cache_memory_preferences", "adaptive and user-selected cache fractions",

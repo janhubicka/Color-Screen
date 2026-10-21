@@ -15,6 +15,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <lcms2.h>
 #include <tiffio.h>
 #include <turbojpeg.h>
@@ -1343,7 +1344,22 @@ stitch_image_data_loader::init_loader (const char *name, const char **error,
   m_demosaic = demosaic;
   if (progress)
     progress->set_task ("opening stitch project", 1);
-  FILE *f = fopen (name, "rt");
+  /* The GUI passes UTF-8 host paths. The Windows narrow CRT fopen uses
+     the active code page and fails for non-ASCII project filenames. Legacy
+     keyword text still needs Windows CRLF translation, hence text mode. */
+  FILE *f = nullptr;
+#ifdef _WIN32
+  try
+    {
+      f = _wfopen (std::filesystem::u8path (name).c_str (), L"rt");
+    }
+  catch (...)
+    {
+      f = nullptr;
+    }
+#else
+  f = fopen (name, "rt");
+#endif
   if (!f)
     {
       *error = "Can not open file";

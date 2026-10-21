@@ -4168,20 +4168,17 @@ stitch (int argc, char **argv)
   }
   if (save_project_filename)
     {
-      FILE *f = fopen (save_project_filename, "wt");
-      if (!f)
+      /* A failed JSON encode or interrupted write must not destroy an
+         existing project. The shared text-file writer stages and atomically
+         replaces the destination on success. */
+      std::string json, error;
+      if (!prj->serialize_json (&json, &error)
+          || !write_parameter_text_file (save_project_filename, json, &error))
         {
-          fprintf (stderr, "Error opening project file: %s\n",
-                   save_project_filename);
+          fprintf (stderr, "Error saving project file %s: %s\n",
+                   save_project_filename, error.c_str ());
           return 1;
         }
-      if (!prj->save (f))
-        {
-          fprintf (stderr, "Error saving project file: %s\n",
-                   save_project_filename);
-          return 1;
-        }
-      fclose (f);
     }
   return 0;
 }
