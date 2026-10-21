@@ -23,6 +23,7 @@ class WikiNavigationTests(unittest.TestCase):
         (self.src / '_Sidebar.md').write_text(START + '\n[manual](Color-Screen-2.0-User-Manual)\n' + END + '\n', encoding='utf-8')
         for name in ('Color-Screen-2.0-User-Manual.md',
                      'Color-Screen-2.0-Parameter-Format.md',
+                     'Color-Screen-2.0-Parameter-Fields.md',
                      'Color-Screen-2.0-Project-Format.md',
                      'Color-Screen-1.0-Documentation.md'):
             (self.wiki / name).write_text('Published reference\n', encoding='utf-8')
