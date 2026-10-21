@@ -7,6 +7,7 @@ Color-Screen reconstructs early additive colour-screen photographs from digitise
 
 - **[User manual](Color-Screen-2.0-User-Manual)** — installing, opening scans, capture and screen workflow, registration, sharpening, colour, export, preferences and recovery
 - **[Parameter format](Color-Screen-2.0-Parameter-Format)** — native `.cspar` processing documents (UTF-8 JSON schema 3)
+- [Complete parameter field reference](Color-Screen-2.0-Parameter-Fields) — all schema-3 JSON fields, types, variants and structural constraints
 - **[Stitch project format](Color-Screen-2.0-Project-Format)** — native `.csprj` projects (UTF-8 JSON schema 2), legacy project conversion and tile references
 - [Source repository and build instructions](https://github.com/janhubicka/Color-Screen)
 
