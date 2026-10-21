@@ -11,7 +11,7 @@ These Markdown files are the reviewed sources for user-facing
 - [2.0 stitching-project JSON format](Color-Screen-2.0-Project-Format.md)
 - [Historical 1.0 documentation](Color-Screen-1.0-Documentation.md)
 
-The GitHub Actions `publish-wiki.yml` workflow copies the four versioned
+The GitHub Actions `publish-wiki.yml` workflow copies the five versioned
 manual/reference pages to the wiki's separate Git repository. It uses
 `publish_navigation.py` to replace controlled navigation blocks in
 `Home.md` and `_Sidebar.md` while preserving manual edits outside them.
