@@ -7,6 +7,7 @@ These Markdown files are the reviewed sources for user-facing
 - [_Sidebar.md](_Sidebar.md) — current navigation block
 - [2.0 user manual](Color-Screen-2.0-User-Manual.md)
 - [2.0 parameter-file format](Color-Screen-2.0-Parameter-Format.md)
+- [Complete schema-3 parameter field reference](Color-Screen-2.0-Parameter-Fields.md)
 - [2.0 stitching-project JSON format](Color-Screen-2.0-Project-Format.md)
 - [Historical 1.0 documentation](Color-Screen-1.0-Documentation.md)
 
