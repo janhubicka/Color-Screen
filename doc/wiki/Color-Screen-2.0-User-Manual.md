@@ -139,7 +139,8 @@ Do not treat a `.cspar` file as a backup of the image.
 summary useful for scientific records and sharing workflow details.
 
 For manual JSON editing, consult the
-[format reference](Color-Screen-2.0-Parameter-Format). The reader checks its
+[format reference](Color-Screen-2.0-Parameter-Format) and
+[complete field dictionary](Color-Screen-2.0-Parameter-Fields). The reader checks its
 schema strictly; do not assume arbitrary added fields are accepted.
 
 ## Rendering to an image file
