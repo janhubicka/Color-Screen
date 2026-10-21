@@ -8,6 +8,12 @@ The current native `.cspar` parameter file is **UTF-8 JSON (schema 3)**, not a Z
 
 There are no distributed legacy ZIP-based `.cspar` files that need write compatibility. New saves use JSON schema 3. `.csprj` stitching projects are a separate format; the new schema-2 JSON project document contains a compact, schema-3-compatible `screen_geometry` object for each tile, not a complete copy of the parameter document. Its historical reader accepts version-1 keyword text.
 
+## Exact field reference
+
+The **[complete schema-3 field catalogue](Color-Screen-2.0-Parameter-Fields)** lists every declared field path, required member, data type, object variant and JSON Schema constraint. The authoritative [machine-readable schema](https://github.com/janhubicka/Color-Screen/blob/main/doc/parameters-schema-v3.json) and the [typed implementation reference](https://github.com/janhubicka/Color-Screen/blob/main/doc/parameter-json-v3-reference.md) give additional detail.
+
+A canonical document has the identity `org.colorscreen.parameters` and integer `schema_version` 3. Its processing data is grouped under `capture`, `process`, `geometry`, `registration`, `calibration`, `reconstruction` and `color`, plus optional `source_image` linkage. These are structured JSON objects, not legacy text records embedded in JSON.
+
 ## What the file describes
 
 The persistent configuration covers screen identification/geometry and registration, image-area selection, demosaicing and reconstruction, color/tone and relevant processing adjustments. Source-image association allows a saved parameter file to reopen its scan; if that scan has moved, a replacement may be selected.

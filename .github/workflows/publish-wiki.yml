@@ -1,6 +1,10 @@
 name: Publish Color-Screen wiki
 
 on:
+  pull_request:
+    paths:
+      - 'doc/wiki/**'
+      - '.github/workflows/publish-wiki.yml'
   push:
     branches: [main]
     paths:
@@ -9,18 +13,27 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: publish-colorscreen-wiki
+  group: publish-colorscreen-wiki-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
   contents: write
 
 jobs:
-  publish:
+  test-navigation:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Publish new pages without deleting historical pages
+      - name: Test archival and idempotent wiki navigation
+        run: python3 -m unittest discover -s doc/wiki/tests -v
+
+  publish:
+    if: github.event_name != 'pull_request'
+    needs: test-navigation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Publish documentation without deleting historical articles
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -29,7 +42,7 @@ jobs:
           gh auth setup-git
           wiki_url="https://github.com/${GITHUB_REPOSITORY}.wiki.git"
           if ! git ls-remote "$wiki_url" HEAD >/dev/null 2>&1; then
-            echo "::error::Wiki is not initialized or not accessible; no changes made."
+            echo "::error::Wiki is not initialized or accessible; no changes made."
             exit 1
           fi
           source_dir="$GITHUB_WORKSPACE/doc/wiki"
@@ -38,23 +51,29 @@ jobs:
           cd "$work_dir/wiki"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          # Only copy explicitly listed documentation pages. Never delete other pages.
+
+          # Copy only the five published documentation pages.
           pages=(
             Color-Screen-1.0-Documentation.md
             Color-Screen-2.0-User-Manual.md
             Color-Screen-2.0-Parameter-Format.md
+            Color-Screen-2.0-Parameter-Fields.md
             Color-Screen-2.0-Project-Format.md
           )
           for page in "${pages[@]}"; do
             test -f "$source_dir/$page"
             cp "$source_dir/$page" "$page"
           done
-          # The existing Home and Sidebar are deliberately untouched until
-          # their contents have been reviewed for safe additive navigation.
-          for page in "${pages[@]}"; do
-            git add -- "$page"
-          done
-          # Assert that no tracked wiki page is staged for deletion.
+
+          # First run archives the previous Home page. Subsequent runs only
+          # replace marked 2.0 navigation, preserving manual wiki edits outside
+          # those blocks. The complete set of old article URLs is preserved.
+          python3 "$source_dir/publish_navigation.py" \
+            --source "$source_dir" --wiki "$PWD"
+
+          # Stage only managed pages. No git add -A, rm, rename or force push.
+          git add -- "${pages[@]}" Home.md _Sidebar.md \
+            Color-Screen-1.0-Original-Home.md
           if git diff --cached --name-only --diff-filter=D | grep -q .; then
             echo "::error::Refusing to delete existing wiki pages."
             exit 1
@@ -63,5 +82,5 @@ jobs:
             echo "Wiki documentation already up to date."
             exit 0
           fi
-          git commit -m "docs: publish Color-Screen 2.0 references and 1.0 index"
+          git commit -m "docs: publish Color-Screen 2.0 manual and historical wiki navigation"
           git push origin HEAD
