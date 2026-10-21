@@ -1,7 +1,29 @@
 # Color-Screen 1.0 — historical documentation
 
-This page is an index for the historical 1.0-era Java GUI, command-line workflow, and rendering instructions. These pages should be preserved on the wiki, not silently rewritten as 2.0 instructions.
+These articles describe the **older Color-Screen 1.0 software**, including
+the Java/GTK graphical interfaces, older command-line workflows, and legacy
+rendering/registration tools. They are preserved for historical reference,
+reproducibility of older work, and users who still run 1.0.
 
-For the current Qt application see the [2.0 user manual](Color-Screen-2.0-User-Manual.md). For native files see the [2.0 parameter format](Color-Screen-2.0-Parameter-Format.md).
+**For current processing and the maintained Qt application, begin with the
+[Color-Screen 2.0 user manual](Color-Screen-2.0-User-Manual).**
+Its native files use [JSON processing parameters](Color-Screen-2.0-Parameter-Format)
+and [JSON stitching projects](Color-Screen-2.0-Project-Format).
+Version-1 text parameter and stitching-project readers are retained for migration.
 
-**Wiki migration note:** retain the original older articles and their URLs; add a prominent historical-version notice at the top of each. Move their links under the 1.0 historical index, and make the 2.0 manual the wiki's primary entry point.
+## Original 1.0 introduction
+
+The [original wiki Home page](Color-Screen-1.0-Original-Home) is preserved
+verbatim below a historical heading. All previously published articles stay
+at their existing wiki URLs; the 2.0 documentation publisher does **not**
+delete or rename any of them.
+
+## Older command-line and GUI information
+
+The wiki's earlier program guides and rendering pages continue to be useful
+for understanding old command-line options, demonstrations and photographic
+examples. However, Java/GTK application menus and old parameter-file examples
+may not match the Qt 2.0 workflow.
+
+The publishing workflow automatically appends a live alphabetical list of
+the historical wiki pages to this index without changing their bodies.
