@@ -3,7 +3,7 @@
 
 The wiki is cloned independently by the GitHub Actions workflow. Only the
 controlled Home/Sidebar navigation and the 1.0 historical index are edited;
-legacy pages retain their names and bodies. Run after copying the four 2.0
+legacy pages retain their names and bodies. Run after copying the five 2.0
 wiki pages from doc/wiki into the wiki checkout.
 """
 
