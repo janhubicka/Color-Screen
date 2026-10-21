@@ -52,7 +52,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          # Copy only the four published documentation pages.
+          # Copy only the five published documentation pages.
           pages=(
             Color-Screen-1.0-Documentation.md
             Color-Screen-2.0-User-Manual.md
