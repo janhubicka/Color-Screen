@@ -3,6 +3,7 @@
 
 - [User manual](Color-Screen-2.0-User-Manual)
 - [Parameter files (.cspar)](Color-Screen-2.0-Parameter-Format)
+- [Full .cspar field reference](Color-Screen-2.0-Parameter-Fields)
 - [Stitching projects (.csprj)](Color-Screen-2.0-Project-Format)
 
 **Earlier releases**
