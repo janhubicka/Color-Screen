@@ -22,6 +22,7 @@ HISTORICAL_INDEX = 'Color-Screen-1.0-Documentation.md'
 PUBLISHED = (
     'Color-Screen-2.0-User-Manual.md',
     'Color-Screen-2.0-Parameter-Format.md',
+    'Color-Screen-2.0-Parameter-Fields.md',
     'Color-Screen-2.0-Project-Format.md',
     HISTORICAL_INDEX,
 )
