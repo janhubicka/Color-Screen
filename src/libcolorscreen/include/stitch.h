@@ -15,6 +15,10 @@ typedef struct tiff TIFF;
 namespace colorscreen {
 class screen;
 
+/* Open a UTF-8 host project filename for reading on any supported OS.
+   Text mode retains CRLF compatibility with historical keyword projects. */
+DLL_PUBLIC FILE *open_stitch_project_file (const char *name);
+
 struct stitching_params
 {
   static const int max_dim = 10;
@@ -283,7 +287,11 @@ public:
   void determine_viewport (int &xmin, int &xmax, int &ymin, int &ymax);
   void determine_angle ();
   /* Build a complete native project JSON document before writing any file. */
-  DLL_PUBLIC bool serialize_json (std::string *output, std::string *error) const;
+  /* Preflight one project JSON file, optionally rebasing image references
+     from the current project directory (or process CWD for a new project)
+     to the destination file. The live project remains unchanged. */
+  DLL_PUBLIC bool serialize_json (std::string *output, std::string *error,
+                                  const char *destination_filename = nullptr) const;
   DLL_PUBLIC bool save (FILE *f);
   DLL_PUBLIC bool load (FILE *f, const char **error);
   std::string adjusted_filename (std::string filename, std::string suffix,
