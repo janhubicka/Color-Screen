@@ -85,6 +85,33 @@ entry point still requires successful push builds of the current main SHA; it
 cannot bypass the tests. If artifacts have expired, rerun their original push
 runs (or push a new main revision) before publishing again.
 
+## Diagnosing transient Windows installer failures
+
+Windows packages require **official NSIS 3.11** for installation and
+uninstallation smoke testing. The MSYS2-provided NSIS stub is intentionally
+not used for release installers because it has previously stalled before
+extracting any files on GitHub-hosted Windows runners. The Windows workflow
+first checks whether the official compiler is installed, then installs the
+pinned Chocolatey package with **three bounded attempts** to tolerate transient
+Chocolatey community feed HTTP 5xx/504 errors. After provisioning, the
+workflow still requires an actual `makensis.exe` and runs the usual installer
+and uninstaller smoke tests. This retry does not weaken any release checks.
+
+If just one Windows matrix job fails during dependency download while its
+build and `make check` have already passed, use **Re-run failed jobs** on
+that *original main-branch Windows workflow*. This preserves successful
+matrix jobs and their build artifacts while retrying the failing package step
+on a fresh runner. The rolling publisher requires the whole matching Windows
+workflow to conclude successfully; a publisher workflow reporting success
+while saying `Not publishing: build-windows.yml has not succeeded` is
+an intentional no-op, not evidence that the release is current.
+
+After a successful Windows rerun, the `workflow_run` publisher checks all
+three platform builds again, compares the selected attempts, validates every
+package/provenance and updates `current` only for the still-current main
+commit. If the automatic publisher does not run, the documented manual
+**Publish current release** dispatcher can apply the same checks.
+
 ## Testing and maintenance
 
 The following offline suite runs on publisher-related PRs and before publishing:
