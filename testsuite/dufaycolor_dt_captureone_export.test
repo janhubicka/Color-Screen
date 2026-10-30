@@ -8,7 +8,7 @@ if test -z "$srcdir"; then
     test -z "$srcdir" && srcdir=.
     test "${VERBOSE+set}" != set && VERBOSE=1
 fi
-echo 1..6
+echo 1..9
 . $srcdir/defs.sh
 NAME=dufaycolor_dt_captureone_export
 
@@ -56,3 +56,25 @@ test_all_render_modes out-${NAME}.csprj ${PARNAME}
 echo 'ok 5 - stitch project render'
 test_all_render_modes out-${NAME}-nomesh.csprj ${PARNAME}
 echo 'ok 6 - stitch project render'
+
+# A JSON project written to another directory must still point to the same
+# scans. Use files copied into the build directory and *relative* input names
+# rather than the source tree's absolute paths used by tests 1-6.
+PORTABLE=out-${NAME}-portable
+mkdir -p "$PORTABLE" || exit 1
+cp "$srcdir/${NAME}_tile1.jpg" "out-${NAME}-tile1.jpg" || exit 1
+cp "$srcdir/${NAME}_tile2.jpg" "out-${NAME}-tile2.jpg" || exit 1
+pexec $RUNCOLORSCREEN stitch --ncols 2 "out-${NAME}-tile1.jpg" "out-${NAME}-tile2.jpg" --out "$PORTABLE/moved.csprj" --no-cpfind --min-screen-percentage=80 --max-unknown-screen-range=10 || exit 1
+echo 'ok 7 - relocated JSON project with relative scan paths'
+
+# Opening it from the parent build directory exercises the project-directory
+# base rather than accidentally resolving the tile names against process CWD.
+pexec $RUNCOLORSCREEN autodetect "$PORTABLE/moved.csprj" "$PORTABLE/parameters.par" --gamma 2.2 || exit 1
+echo 'ok 8 - relocated project opens relative scan paths'
+
+# The CLI --load-project path must also establish the source directory before
+# constructing images and allow saving the project again without relinking.
+pexec $RUNCOLORSCREEN stitch --load-project "$PORTABLE/moved.csprj" --out "$PORTABLE/reopened.csprj" || exit 1
+( cd "$PORTABLE" && $RUNCOLORSCREEN autodetect reopened.csprj from-nested.par --gamma 2.2 ) || exit 1
+echo 'ok 9 - CLI load-project and reopen from another working directory'
+

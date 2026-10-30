@@ -261,6 +261,97 @@ test_stitch_json_project ()
     return false;
 #endif
 
+  /* Save As must preserve the identity of every source scan. A newly
+     constructed project starts with CWD-relative filenames; a loaded one
+     uses its saved project-directory base. No real image is required for
+     this lexical path check. */
+  std::error_code dir_error;
+  const std::filesystem::path tempdir
+      = std::filesystem::temp_directory_path (dir_error);
+  if (dir_error)
+    return false;
+  const std::filesystem::path source_dir
+      = tempdir / "colorscreen-stitch-path-source";
+  const std::filesystem::path destination_dir
+      = tempdir / "colorscreen-stitch-path-destination";
+  project->params.path = source_dir.u8string ();
+  const std::string destination
+      = (destination_dir / "moved.csprj").u8string ();
+  std::string relocated;
+  if (!project->serialize_json (&relocated, &error, destination.c_str ()))
+    {
+      fprintf (stderr, "Relocated stitch JSON: %s\n", error.c_str ());
+      return false;
+    }
+  stitch_project_json_data rebased;
+  if (!decode_stitch_project_json_document (relocated, &rebased, &error)
+      || rebased.tiles.size () != 1)
+    return false;
+  const std::filesystem::path source_scan
+      = (source_dir / std::filesystem::u8path (tile.filename))
+            .lexically_normal ();
+  const std::filesystem::path relocated_scan
+      = (destination_dir
+         / std::filesystem::u8path (rebased.tiles[0].filename))
+            .lexically_normal ();
+  if (source_scan != relocated_scan
+      || tile.filename != original.tiles[0].filename)
+    {
+      fprintf (stderr, "Stitch Save As changed scan identity or live state\n");
+      return false;
+    }
+
+  /* Ambiguous drive-relative Windows paths must fail before replacement,
+     including when testing the path validation on a POSIX build. */
+  const std::string saved_filename = tile.filename;
+  tile.filename = "C:ambiguous.tif";
+  std::string unchanged = "unchanged";
+  const bool allowed = project->serialize_json (
+      &unchanged, &error, destination.c_str ());
+  tile.filename = saved_filename;
+  if (allowed || unchanged != "unchanged" || error.empty ())
+    return false;
+
+  /* Verify that the same UTF-8 project opener used by GUI and CLI accepts
+     non-ASCII host filenames on Windows, not only JSON in an unnamed FILE*. */
+  const std::filesystem::path unicode_path
+      = tempdir
+        / std::filesystem::u8path (
+            std::string (u8"colorscreen-stitch-žlutá-")
+            + std::to_string (lru_caches::get ()) + ".csprj");
+  const std::string unicode_filename = unicode_path.u8string ();
+  struct remove_stitch_file
+  {
+    std::filesystem::path path;
+    ~remove_stitch_file ()
+    {
+      std::error_code ignored;
+      std::filesystem::remove (path, ignored);
+    }
+  } remove_file {unicode_path};
+  if (!write_parameter_text_file (unicode_filename.c_str (),
+                                   relocated, &error))
+    return false;
+  FILE *unicode_file = open_stitch_project_file (unicode_filename.c_str ());
+  if (!unicode_file)
+    {
+      fprintf (stderr, "Could not open UTF-8 .csprj filename\n");
+      return false;
+    }
+  auto unicode_project = std::make_unique<stitch_project> ();
+  const char *unicode_reason = nullptr;
+  const bool unicode_loaded
+      = unicode_project->load (unicode_file, &unicode_reason);
+  fclose (unicode_file);
+  if (!unicode_loaded
+      || unicode_project->images[0][0].filename
+           != rebased.tiles[0].filename)
+    {
+      fprintf (stderr, "UTF-8 .csprj open/decode failed: %s\n",
+               unicode_reason ? unicode_reason : "invalid tile reference");
+      return false;
+    }
+
   /* A real old text project, including the embedded legacy CSP block,
      must still load. Re-saving it must produce JSON rather than text. */
   FILE *legacy = tmpfile ();

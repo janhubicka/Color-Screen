@@ -1,5 +1,7 @@
 #include <vector>
 #include <locale>
+#include <filesystem>
+#include <exception>
 #include <climits>
 #include <limits>
 #define HAVE_INLINE
@@ -16,6 +18,27 @@
 #include "stitch-project-json.h"
 namespace colorscreen
 {
+
+/* Match the .cspar UTF-8 host path contract without treating a stitching
+   project as a parameter file. Keep text mode for historical CRLF archives. */
+FILE *
+open_stitch_project_file (const char *name)
+{
+  if (!name)
+    return nullptr;
+#ifdef _WIN32
+  try
+    {
+      return _wfopen (std::filesystem::u8path (name).c_str (), L"rt");
+    }
+  catch (...)
+    {
+      return nullptr;
+    }
+#else
+  return fopen (name, "rt");
+#endif
+}
 
 /* Load a user-supplied stitch parameter filename through the shared
    legacy .par reader.  */
@@ -466,7 +489,8 @@ stitch_project::determine_angle ()
    native JSON schema, with just the schema-3 screen type and mapping per tile. */
 /* Encode completely before any caller opens a destination for replacement. */
 bool
-stitch_project::serialize_json (std::string *output, std::string *error) const
+stitch_project::serialize_json (std::string *output, std::string *error,
+                                const char *destination_filename) const
 {
   if (!output || params.width < 1 || params.height < 1
       || params.width > stitching_params::max_dim
@@ -499,6 +523,48 @@ stitch_project::serialize_json (std::string *output, std::string *error) const
         tile.geometry = image.param;
         document.tiles.push_back (std::move (tile));
       }
+
+  if (destination_filename)
+    {
+      /* Project tile filenames are relative to their owning .csprj, not the
+         process working directory. New CLI projects originate in CWD; loaded
+         projects have params.path set by set_path_by_filename(). Work on
+         the private document only, so failed Save As does not relink the
+         active project or any ongoing image/cache worker. */
+      std::string old_project, new_project;
+      try
+        {
+          const std::filesystem::path directory =
+              params.path.empty () ? std::filesystem::current_path ()
+                                  : std::filesystem::u8path (params.path);
+          old_project = std::filesystem::absolute (
+                            directory / "source-project.csprj")
+                            .lexically_normal ().u8string ();
+          new_project = std::filesystem::absolute (
+                            std::filesystem::u8path (destination_filename))
+                            .lexically_normal ().u8string ();
+        }
+      catch (const std::exception &exception)
+        {
+          if (error)
+            *error = std::string ("invalid stitching project path: ")
+                     + exception.what ();
+          return false;
+        }
+      for (size_t i = 0; i < document.tiles.size (); ++i)
+        {
+          parameter_source_image source;
+          source.path = document.tiles[i].filename;
+          if (!rebase_parameter_source_image (
+                  &source, old_project, new_project, error))
+            {
+              if (error)
+                *error = "tile " + std::to_string (i) + ": " + *error;
+              return false;
+            }
+          document.tiles[i].filename = std::move (source.path);
+        }
+    }
   return encode_stitch_project_json_document (document, output, error);
 }
 
@@ -1634,8 +1700,7 @@ stitch_project::stitch (progress_info *progress, detect_regular_screen_params *d
     }
   else
     {
-      const char *error;
-      FILE *f = fopen (load_project_filename, "rt");
+      const char *error = nullptr;
       if (params.csp_filename.length ())
 	{
 	  const char *cspname = params.csp_filename.c_str ();
@@ -1649,17 +1714,23 @@ stitch_project::stitch (progress_info *progress, detect_regular_screen_params *d
 	    param.mesh_trans = NULL;
 	  solver_param.remove_points ();
 	}
+      FILE *f = open_stitch_project_file (load_project_filename);
       if (!f)
 	{
 	  fprintf (stderr, "Error opening project file: %s\n", load_project_filename);
 	  return false;
 	}
+      /* Resolve tile references from the source project directory, including
+         when the CLI is started from a completely different CWD. */
+      set_path_by_filename (load_project_filename);
       if (!load (f, &error))
 	{
-	  fprintf (stderr, "Error loading project file: %s %s\n", load_project_filename, error);
+	  fprintf (stderr, "Error loading project file: %s %s\n",
+                   load_project_filename, error ? error : "invalid project");
+          fclose (f);
 	  return false;
 	}
-      fclose(f);
+      fclose (f);
     }
 
   determine_angle ();
