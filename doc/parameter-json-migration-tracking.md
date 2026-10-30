@@ -1,9 +1,19 @@
 # Parameter JSON redesign: decisions, implementation and validation
 
-Status: **schema-3-first JSON format under active implementation**,
-Color-Screen **2.0alpha**. Baseline: `31298ba4`.
-Decision updated: **15 October 2026**. Only legacy `.par` parameter files exist
-outside development. JSON-v1 and JSON-v2 are unreleased development artefacts,
+Current status (30 October 2026): **schema-3 JSON `.cspar` is implemented
+on main**, first integrated through merged PR #556. The separate stitching
+project format uses native **schema-2 JSON `.csprj`** after merged PR #561,
+with the historical version-1 keyword-text reader retained. The version-2
+GUI manual and file-format wiki pages were published through PR #562
+and GitHub Actions. Color-Screen is still **2.0alpha**, not beta/final:
+operator acceptance, real large-scan/stitching tests and final installer
+packaging remain. Historical entries and their pending CI notes below
+record the *then-current* validation state; they must not be interpreted as
+the latest repository/CI status.
+
+Original design baseline: `31298ba4`. Decision updated
+15 October 2026: only legacy `.par` parameter files existed outside
+development. JSON-v1 and JSON-v2 were unreleased development artefacts,
 not compatibility contracts. `parameter-json-v2-plan.md` is obsolete history.
 
 ## 16 October 2026: linked-source regression and operator Open integration

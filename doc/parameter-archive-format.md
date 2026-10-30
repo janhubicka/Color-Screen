@@ -196,7 +196,10 @@ Undo state, dirty state, filename and previously saved bytes.
 - Test real 150+ MP images and stitched projects under memory pressure before
   beta.
 
-The schema-3 GUI/CLI/recovery switch is implemented on draft PR #556 but
-**not yet merged or release-qualified**. Full platform CI, canonical .par
-corpus, failure-atomic Save As/Undo and large real-image operator tests remain
-beta gates. The implementation deliberately rejects unreleased JSON-v2 files.
+The schema-3 GUI/CLI/recovery switch was merged through PR #556 on
+16 October 2026. The core, CLI and GUI use it in the 2.0alpha development
+series; prerelease test success does not by itself constitute a beta/final
+qualification. The canonical `.par` corpus, failure-atomic Save As/Undo,
+large real-image and stitching-project operator tests and the final
+platform/release packaging checks remain beta gates. The implementation
+deliberately rejects unreleased JSON-v2 files.

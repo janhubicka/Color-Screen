@@ -632,11 +632,15 @@ specialist stages.
 The current alpha baseline implements the original Phase A hardening, the Phase B
 workflow summaries/terminology, Phase C module grammar, Phase D navigation
 consolidation, and Phase E presets/provenance. Treat those sections below as
-maintained invariants rather than a backlog. Phase F now has the versioned
-`.cspar` container, cross-platform core/CLI/GUI read-write paths, archive-first
-sidecars, and archive-default new saves merged. Remaining alpha work is the
-structured-state migration inside that container, equivalent crash-recovery
-coverage for archive recovery, and field testing of the finished workflow.
+maintained invariants rather than a backlog. Phase F now uses **plain UTF-8
+schema-3 JSON `.cspar` files**, with a Qt-independent typed core reader/writer
+shared by CLI, Qt Open/Save/Save As, sidecars and crash recovery. Its historical
+`.par` reader remains supported; the unreleased ZIP/JSON-v2 archive proposals
+have been retired. Stitching `.csprj` projects now use separate schema-2 JSON
+while retaining their version-1 keyword-text reader (merged PR #561).
+Remaining alpha work is operator acceptance of the integrated GUI, real
+large-scan/stitching tests, release packaging and any defects those reveal,
+**not another switch away from ZIP `.cspar` storage**.
 
 ### Phase A — robustness hardening (implemented foundation; keep green)
 
@@ -835,12 +839,14 @@ malformed files atomically, without resetting the current document on failure.
 An unsupported future JSON version must fail visibly rather than be
 reinterpreted as a legacy `.par` input.
 
-The draft schema-3 runtime switch (PR #556) now routes Qt Open/Save/Save As,
-recovery and the CLI through the complete native schema-3 codec. **This remains
-unmerged alpha code until its final-head CI and real-project acceptance pass.**
-JSON-v2 readability is not required and old experimental adapters are removed
-from the release tests. Undoable source-path state also must be rebased across
-Save As; the draft stores staged changes and applies them only after success.
+The native schema-3 runtime switch was merged through PR #556 on
+16 October 2026. Qt Open/Save/Save As, sidecars, recovery and the CLI use
+the complete typed schema-3 codec. JSON-v2 readability is not required, and
+old experimental adapters have been removed from the release tests. Undoable
+source-path state is rebased across Save As through staged, failure-atomic
+changes. This is an **implemented alpha baseline**, not an unmerged draft;
+real-project/operator acceptance and subsequent release packaging still
+determine readiness for 2.0 beta/final.
 
 The beta gate is the whole checked-in historical `.par` corpus, full nested
 field/Undo/recovery validation, real large-project operator tests and the
