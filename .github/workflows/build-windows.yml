@@ -124,10 +124,28 @@ jobs:
         # Use a known official Windows NSIS stub rather than the MSYS2 stub,
         # which spins at full CPU before extracting a single installer file.
         $compiler = Join-Path ${env:ProgramFiles(x86)} 'NSIS\makensis.exe'
+        # Chocolatey's public package feed occasionally returns HTTP 5xx/504
+        # even though the package exists. The rest of the build is already
+        # complete here, so retry the *installer dependency only*, not the
+        # entire compilation. The final check is for the actual official NSIS
+        # executable; an install command's return code is not sufficient.
         if (-not (Test-Path -LiteralPath $compiler -PathType Leaf)) {
-          choco install nsis.install --version=3.11.0 --yes --no-progress
-          if ($LASTEXITCODE -ne 0) {
-            throw "Could not install official Windows NSIS 3.11"
+          $attempts = 3
+          for ($attempt = 1; $attempt -le $attempts; $attempt++) {
+            Write-Host "Installing official Windows NSIS 3.11 (attempt $attempt/$attempts)"
+            & choco install nsis.install --version=3.11.0 --yes --no-progress --limit-output
+            $result = $LASTEXITCODE
+            if ((Test-Path -LiteralPath $compiler -PathType Leaf) -and $result -eq 0) {
+              break
+            }
+            if ($attempt -eq $attempts) {
+              throw "Could not install official Windows NSIS 3.11 after $attempts attempts (last Chocolatey exit code $result). See package-feed diagnostics above."
+            }
+            # Bounded backoff, so transient Chocolatey 504s do not strand
+            # the tested source revision behind a missing installer asset.
+            $delay = 10 * $attempt
+            Write-Warning "NSIS installation not ready (Chocolatey exit code $result); retrying in $delay seconds."
+            Start-Sleep -Seconds $delay
           }
         }
         if (-not (Test-Path -LiteralPath $compiler -PathType Leaf)) {
