@@ -110,7 +110,7 @@ The native C++ core exposes a complete
 `encode_parameter_json_v3_document` /
 `decode_parameter_json_v3_document` pair and atomic UTF-8 path APIs.
 Qt document Open/Save/Save As/recovery and the CLI `adjust-par` now use
-these APIs on **draft PR #556**. A valid `.par` load supplies defaults
+these APIs on the **merged schema-3 implementation (PR #556)**. A valid `.par` load supplies defaults
 and imported calibration fields; a v3 input file must pass the exact
 format/version and strict field/ID checks before any live state is changed.
 
@@ -120,7 +120,7 @@ syntax-tree bridge is implementation detail, not a JSON-v2 reader,
 on-disk compatibility guarantee or Python translation. Refactoring it
 away without changing the first-public schema remains desirable.
 
-The only supported shipped root identity will be
+The native root identity is
 `format = "org.colorscreen.parameters"` and
 `schema_version = 3`. Unknown nested authoritative members,
 unsupported future versions, dangling/duplicate IDs, malformed scalars,
@@ -129,13 +129,15 @@ source provenance are rejected transactionally.
 
 ## Validation evidence and outstanding gates
 
-The first full PR #556 CI compiled the native code on normal Ubuntu and
-macOS and passed **73/73 core unit-test groups**. The same run's
-`make check` and `distcheck` failed because the generated
-`testsuite/Makefile.in` still listed a deleted v2 test, not because the
-73 core tests failed. That generated manifest has since been corrected;
-a separate NSIS `amd64-unicode` plugin-discovery issue was also patched.
-Final exact-head CI results remain pending.
+Historical validation: early PR #556 builds compiled on Ubuntu and macOS
+and passed 73/73 core unit-test groups before generated build metadata
+and NSIS packaging repairs. PR #556 subsequently merged; the later
+stitching-project JSON integration (PR #561) passed the full Ubuntu
+(including `distcheck`), Windows GCC/Clang, macOS and sanitizer matrix.
+The remaining 2.0 beta gates are integrated real-image/operator acceptance,
+large-scan memory/viewport behaviour and a complete published installer
+set built from the desired mainline revision. These are separate from the
+fact that schema-3 JSON is already implemented and used in 2.0alpha.
 
 The release checks are:
 
@@ -155,4 +157,5 @@ The release checks are:
 - Manual 150-megapixel-plus operator testing, stitching/large-memory use,
   and an authoritative JSON Schema with representative complete examples.
 
-**Do not declare schema 3 shipping or 2.0 beta until these pass.**
+**Do not declare 2.0 beta or final until the remaining operator and
+release-acceptance gates pass.**
