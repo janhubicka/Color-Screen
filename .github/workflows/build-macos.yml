@@ -422,12 +422,23 @@ jobs:
         
         cat gui_launch_debug.txt
 
+        echo "Opening relocated JSON stitching project in packaged Qt app..."
+        PROJECT="$(pwd)/testsuite/out-dufaycolor_dt_captureone_export-portable/moved.csprj"
+        test -s "$PROJECT"
+        "$APP_PATH/Contents/MacOS/Color-Screen" \
+          --smoke-test 30000 --smoke-test-expect-windows 1 \
+          --smoke-test-expect-stitch-tiles 2 "$PROJECT" \
+          > gui_stitch_launch_debug.txt 2>&1 || { cat gui_stitch_launch_debug.txt; exit 1; }
+        cat gui_stitch_launch_debug.txt
+
     - name: Upload GUI Launch Debug
       uses: actions/upload-artifact@v4
       if: always()
       with:
         name: gui_launch_debug
-        path: gui_launch_debug.txt
+        path: |
+          gui_launch_debug.txt
+          gui_stitch_launch_debug.txt
 
     - name: Upload GUI Screenshots
       uses: actions/upload-artifact@v4
