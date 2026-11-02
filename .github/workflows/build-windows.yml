@@ -187,7 +187,13 @@ jobs:
         $APP_BIN --debug-qt --smoke-test 30000 --smoke-test-expect-windows 2 \
           "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif" \
           "$(pwd)/testsuite/dufaycolor_nikon_coolsan9000ED_4000DPI_raw.tif" || { status=$?; echo "GUI exited with $status"; exit $status; }
-        
+
+        echo "Opening relocated JSON stitch project in installed Qt GUI..."
+        PROJECT="$(pwd)/testsuite/out-dufaycolor_dt_captureone_export-portable/moved.csprj"
+        test -s "$PROJECT"
+        $APP_BIN --smoke-test 30000 --smoke-test-expect-windows 1 \
+          --smoke-test-expect-stitch-tiles 2 "$PROJECT" || { status=$?; echo "Stitch GUI exited with $status"; exit $status; }
+
     - name: Upload GUI Screenshots
       uses: actions/upload-artifact@v4
       if: always() && matrix.suffix == ''
