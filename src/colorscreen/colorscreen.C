@@ -4172,7 +4172,7 @@ stitch (int argc, char **argv)
          existing project. The shared text-file writer stages and atomically
          replaces the destination on success. */
       std::string json, error;
-      if (!prj->serialize_json (&json, &error)
+      if (!prj->serialize_json (&json, &error, save_project_filename)
           || !write_parameter_text_file (save_project_filename, json, &error))
         {
           fprintf (stderr, "Error saving project file %s: %s\n",

@@ -32,9 +32,24 @@ File keys are validated strictly: unknown or missing fields, unsupported version
 
 ## Paths and portability
 
-Source images remain external to the project. Relative filenames are resolved from the project file's directory, not the process's current working directory. Moving a project together with its relative-path images therefore preserves the references.
+Source images remain external to the project. Relative filenames are
+resolved from the project file's directory, **not** from the process's current
+working directory. Moving a project together with its relative-path images
+therefore preserves the references.
 
-The project file does not contain the source scan itself. Keep your scans when archiving a project.
+The CLI `colorscreen stitch --out=directory/project.csprj` rebases input tile
+filenames before writing the project when the output is in another directory.
+`colorscreen stitch --load-project=directory/project.csprj` likewise resolves
+relative image paths against the directory containing the source project,
+independent of the command's current working directory. Saving that loaded
+project elsewhere preserves the same source-image identity. Absolute paths are
+kept absolute; Windows cross-volume references cannot be represented as
+relative paths and remain absolute. If the new path is ambiguous or invalid,
+serialization fails before replacing the destination or changing the live
+tile references.
+
+The project file does not contain the source scan itself. Keep your scans when
+archiving a project.
 
 ## Older projects and migration
 
@@ -52,4 +67,11 @@ New files are JSON only; there is no legacy project writer.
 
 ## Tests
 
-The implementation includes native JSON encode/decode, deterministic save/load/save, malformed-field rejection, project `FILE*` saving/loading, version-1 text import and conversion, and bounds checks on legacy grid dimensions. Exact test results are tracked with PR #561.
+The implementation includes native JSON encode/decode, deterministic
+save/load/save, malformed-field rejection, project `FILE*` saving/loading,
+version-1 text import and conversion, and bounds checks on legacy grid
+dimensions. Follow-up tests exercise saving to a different directory, reopening
+relative source-image links from a different working directory, invalid
+drive-relative path rejection and Unicode project filenames. See
+[PR #561](https://github.com/janhubicka/Color-Screen/pull/561) for the original
+format migration and the subsequent portability work for these extra checks.
