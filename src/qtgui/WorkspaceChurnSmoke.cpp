@@ -278,6 +278,25 @@ void startWorkspaceChurnSmoke(ColorScreenApplication &app,
 
       switch (phase) {
       case 0: {
+        /* The GUI advertises the supported on-disk formats, not the
+           unreleased ZIP archive from earlier development. This catches
+           stale menu help after a serialization-format migration. */
+        if (!first->m_saveAction || !first->m_saveAsAction ||
+            !first->m_saveAction->toolTip().contains(
+                QStringLiteral("native JSON")) ||
+            !first->m_saveAsAction->toolTip().contains(
+                QStringLiteral("native JSON")) ||
+            !first->m_saveAsAction->toolTip().contains(
+                QStringLiteral("historical text")) ||
+            first->m_saveAction->toolTip().contains(
+                QStringLiteral("archive"), Qt::CaseInsensitive) ||
+            first->m_saveAsAction->toolTip().contains(
+                QStringLiteral("archive"), Qt::CaseInsensitive)) {
+          fail(QStringLiteral(
+              "Parameter Save tooltips describe obsolete archive files or "
+              "omit native JSON and historical text formats"));
+          return;
+        }
         MainWindow::ParameterFileState parameterFileProbe;
         if (!parameterFileProbe.path.isEmpty() ||
             parameterFileProbe.suggested ||
