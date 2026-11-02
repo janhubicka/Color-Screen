@@ -44,6 +44,12 @@ Before changing the version, exercise at least:
 - one RGB+IR or monochrome capture, including the intended native/simulated
   image-layer workflow;
 - parameter save/load and failed-save recovery;
+- open a real two-or-more-tile native JSON `.csprj` project in the Qt GUI,
+  including relocated source images and a project stored in a separate
+  directory. Check progressive tile rendering and exported image geometry;
+  also open a historical version-1 text project before resaving it as JSON.
+  CI asserts successful Qt project loading and tile readiness, but cannot
+  replace visual/operator judgement of stitching alignment;
 - multiple documents, New View, detach/reattach and one slanted-edge reference;
 - cancellation/supersession of at least one long-running analysis;
 - installer/portable startup on Windows and the packaged app on macOS.

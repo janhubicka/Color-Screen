@@ -4022,6 +4022,12 @@ int main(int argc, char *argv[]) {
       "Fail smoke testing unless exactly N image tabs were created", "count");
   parser.addOption(expectedTabsOption);
 
+  QCommandLineOption expectedStitchTilesOption(
+      "smoke-test-expect-stitch-tiles",
+      "Fail smoke testing unless a single JSON stitching project has exactly "
+      "N fully decoded source tiles", "count");
+  parser.addOption(expectedStitchTilesOption);
+
   QCommandLineOption detachReattachOption(
       "smoke-test-detach-reattach",
       "Exercise detaching and reattaching the active image document");
@@ -4244,6 +4250,84 @@ int main(int argc, char *argv[]) {
         app.exit(3);
       }
     });
+  }
+
+  if (parser.isSet(expectedStitchTilesOption)) {
+    bool converted = false;
+    const int expected =
+        parser.value(expectedStitchTilesOption).toInt(&converted);
+    if (!parser.isSet(smokeTestOption) || !converted || expected <= 0 ||
+        expected > colorscreen::stitching_params::max_dim *
+                       colorscreen::stitching_params::max_dim) {
+      qCritical() << "Stitch project smoke requires --smoke-test and a valid "
+                     "positive tile count";
+      return 21;
+    }
+
+    /* A document-window count alone cannot detect a .csprj load failure:
+       the GUI creates its window before the asynchronous project reader runs.
+       Verify that the loaded document is actually stitched and that the
+       background tile decoders have each published their ready bit. */
+    const auto verify =
+        std::make_shared<std::function<void(int)>>();
+    const std::weak_ptr<std::function<void(int)>> weakVerify = verify;
+    *verify = [&app, expected, weakVerify](int attemptsLeft) {
+      const QList<MainWindow *> documents = app.documentWindows();
+      if (documents.size() != 1 || !documents.constFirst()) {
+        qCritical() << "Stitch project smoke requires exactly one document";
+        app.exit(21);
+        return;
+      }
+
+      const std::shared_ptr<colorscreen::image_data> scan =
+          documents.constFirst()->sharedImageData();
+      if (scan && !scan->stitch) {
+        qCritical() << "Stitch project smoke opened an ordinary image, "
+                       "not a .csprj document";
+        app.exit(21);
+        return;
+      }
+      if (scan && scan->stitch) {
+        const colorscreen::stitch_project *project = scan->stitch;
+        const int columns = project->params.width;
+        const int rows = project->params.height;
+        if (columns <= 0 || rows <= 0 ||
+            columns > colorscreen::stitching_params::max_dim ||
+            rows > colorscreen::stitching_params::max_dim ||
+            columns * rows != expected || scan->width <= 0 ||
+            scan->height <= 0) {
+          qCritical() << "Stitch project smoke found invalid project geometry"
+                      << columns << rows << scan->width << scan->height;
+          app.exit(21);
+          return;
+        }
+        int ready = 0;
+        for (int y = 0; y < rows; ++y)
+          for (int x = 0; x < columns; ++x)
+            ready += project->images[y][x].image_ready_p() ? 1 : 0;
+        if (ready == expected) {
+          qInfo() << "Stitch project GUI smoke loaded" << ready
+                  << "of" << expected << "source tiles";
+          app.exit(0);
+          return;
+        }
+      }
+
+      /* The independent --smoke-test watchdog expires after 30 s on CI,
+         while this assertion fails after about 20 s if images never load.
+         A stale asynchronous loader must never yield a false green exit. */
+      if (attemptsLeft <= 0) {
+        qCritical() << "Stitch project GUI smoke timed out waiting for"
+                    << expected << "decoded tiles";
+        app.exit(21);
+        return;
+      }
+      if (auto next = weakVerify.lock())
+        QTimer::singleShot(250, &app, [next, attemptsLeft]() {
+          (*next)(attemptsLeft - 1);
+        });
+    };
+    QTimer::singleShot(250, &app, [verify]() { (*verify)(80); });
   }
 
   if (parser.isSet(detachReattachOption)) {
