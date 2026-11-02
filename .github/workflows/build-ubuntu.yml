@@ -112,6 +112,16 @@ jobs:
           ./src/libcolorscreen/unittests finetune_focus_cache mtf_model || true
           exit 1
         fi
+    - name: Qt native JSON stitching-project open smoke
+      run: |
+        # The CLI integration suite produces this real 2-tile project inside
+        # a subdirectory, with relative JPEG source references outside it.
+        # Open it from a different CWD and require both background tile loads.
+        project="$(pwd)/testsuite/out-dufaycolor_dt_captureone_export-portable/moved.csprj"
+        test -s "$project"
+        QT_QPA_PLATFORM=offscreen ./src/qtgui/colorscreen-qt \
+          --smoke-test 30000 --smoke-test-expect-windows 1 \
+          --smoke-test-expect-stitch-tiles 2 "$project"
     - name: Upload Test Results
       uses: actions/upload-artifact@v4
       if: always()
